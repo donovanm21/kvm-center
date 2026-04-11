@@ -517,6 +517,202 @@ tbody td {
 .modal input:focus { border-color: #0091da; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 
+/* ── VM Detail View ─────────────────────────────────────── */
+.vm-detail-grid {
+  display: grid;
+  grid-template-columns: 200px 1fr 220px;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+.vm-thumbnail {
+  background: #000;
+  border: 1px solid #1a3a5c;
+  border-radius: 6px;
+  aspect-ratio: 4 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  overflow: hidden;
+}
+.vm-thumbnail .state-label {
+  font-size: 11px;
+  color: #7aa8cc;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 600;
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  text-align: left;
+}
+.vm-thumbnail svg { opacity: 0.3; }
+.vm-thumbnail .console-launch {
+  display: block;
+  margin-top: 10px;
+  color: #0091da;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-decoration: none;
+  padding: 6px 12px;
+  border: 1px solid #0091da;
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+.vm-thumbnail .console-launch:hover:not(:disabled) {
+  background: #0091da;
+  color: #fff;
+}
+.vm-thumbnail .console-launch:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.vm-info-card {
+  background: #0f2135;
+  border: 1px solid #1a3a5c;
+  border-radius: 6px;
+  padding: 16px 18px;
+}
+.vm-tools-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 12px;
+}
+.vm-tools-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; }
+.vm-tools-pill.running { background: #1a3d1a; color: #4caf50; }
+.vm-tools-pill.running::before { background: #4caf50; box-shadow: 0 0 5px #4caf5066; }
+.vm-tools-pill.missing { background: #2a1a0a; color: #ff9800; }
+.vm-tools-pill.missing::before { background: #ff9800; }
+
+.vm-info-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px 14px;
+  font-size: 12px;
+}
+.vm-info-grid .lbl { color: #5a8ab0; }
+.vm-info-grid .val { color: #e8f4ff; }
+.vm-info-grid .val.dim {
+  color: #3d6a8a;
+  font-style: italic;
+}
+
+.vm-usage-stack { display: flex; flex-direction: column; gap: 10px; }
+.vm-usage-card {
+  background: #0f2135;
+  border: 1px solid #1a3a5c;
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.vm-usage-card .icon {
+  width: 32px; height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0d2a45;
+  border-radius: 4px;
+  color: #0091da;
+}
+.vm-usage-card .txt { flex: 1; min-width: 0; }
+.vm-usage-card .lbl {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #3d6a8a;
+  margin-bottom: 2px;
+}
+.vm-usage-card .val { font-size: 17px; color: #e8f4ff; font-weight: 400; }
+.vm-usage-card.dim .val { color: #3d6a8a; font-style: italic; }
+
+.vm-collapsible {
+  background: #0f2135;
+  border: 1px solid #1a3a5c;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.vm-collapsible-head {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e8f4ff;
+  border-bottom: 1px solid transparent;
+}
+.vm-collapsible.open .vm-collapsible-head { border-bottom-color: #1a3a5c; }
+.vm-collapsible-head:hover { background: #112f4a; }
+.vm-collapsible-head .chevron { transition: transform 0.15s; color: #5a8ab0; }
+.vm-collapsible.open .vm-collapsible-head .chevron { transform: rotate(90deg); }
+.vm-collapsible-body { display: none; padding: 14px 16px; }
+.vm-collapsible.open .vm-collapsible-body { display: block; }
+
+.vm-notes-textarea {
+  width: 100%;
+  min-height: 80px;
+  background: #091828;
+  border: 1px solid #1a3a5c;
+  color: #c5daf0;
+  padding: 10px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+}
+.vm-notes-textarea:focus { border-color: #0091da; }
+.vm-notes-view {
+  font-size: 12px;
+  color: #c5daf0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  min-height: 40px;
+}
+.vm-notes-view.empty { color: #3d6a8a; font-style: italic; }
+
+.vm-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  background: #0a1825;
+  border-bottom: 1px solid #1a3a5c;
+  flex-shrink: 0;
+}
+.vm-actions-bar .vm-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e8f4ff;
+  margin-right: 12px;
+}
+.vm-actions-bar .vm-pill {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: auto;
+}
+
 /* ── Scrollbar ──────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #091828; }
@@ -630,13 +826,18 @@ let state = {
   storage: [],
   view: 'dashboard',
   selectedHost: null,
-  selectedVM: null,
+  selectedVM: null,        // VM uuid when view === 'vm'
+  vmTab: 'summary',
   hostTab: 'summary',
   searchQuery: '',
   snapshotTarget: null,
   selectedSnapshotVM: null, // { host_id, name }
   snapshotList: [],         // fetched for selectedSnapshotVM
   snapshotLoading: false,
+  notesDraft: null,         // string when editing, null when viewing
+  vmHardwareOpen: true,
+  vmRelatedOpen: true,
+  vmNetworksOpen: false,
 };
 
 // ── Bootstrap ──────────────────────────────────────────────
@@ -728,10 +929,14 @@ function renderSidebar() {
 
 // ── Breadcrumb ─────────────────────────────────────────────
 function renderBreadcrumb() {
-  const crumbs = { dashboard:'Dashboard', 'all-vms':'All VMs', storage:'Storage', host:'Hosts', snapshots:'Snapshots' };
+  const crumbs = { dashboard:'Dashboard', 'all-vms':'All VMs', storage:'Storage', host:'Hosts', snapshots:'Snapshots', vm:'Virtual Machines' };
   let html = `KVM Center <span>/ ${crumbs[state.view] || state.view}`;
   if (state.view === 'host' && state.selectedHost) html += ` / ${esc(state.selectedHost)}`;
   if (state.view === 'snapshots' && state.selectedSnapshotVM) html += ` / ${esc(state.selectedSnapshotVM.name)}`;
+  if (state.view === 'vm' && state.selectedVM) {
+    const vm = state.vms.find(v => v.uuid === state.selectedVM);
+    if (vm) html += ` / ${esc(vm.name)}`;
+  }
   html += '</span>';
   document.getElementById('breadcrumb').innerHTML = html;
 }
@@ -742,6 +947,12 @@ function renderTabs() {
   if (state.view === 'host') {
     tabBar.innerHTML = ['summary','vms','storage'].map(t => `
       <div class="tab ${state.hostTab===t?'active':''}" onclick="setTab('${t}')">
+        ${t.charAt(0).toUpperCase()+t.slice(1)}
+      </div>
+    `).join('');
+  } else if (state.view === 'vm') {
+    tabBar.innerHTML = ['summary','snapshots'].map(t => `
+      <div class="tab ${state.vmTab===t?'active':''}" onclick="setVMTab('${t}')">
         ${t.charAt(0).toUpperCase()+t.slice(1)}
       </div>
     `).join('');
@@ -764,6 +975,7 @@ function renderContent() {
     case 'storage':    body.innerHTML = renderStorageView(q); break;
     case 'host':       body.innerHTML = renderHostView();  break;
     case 'snapshots':  body.innerHTML = renderSnapshotsView(q); break;
+    case 'vm':         body.innerHTML = renderVMView(); break;
     default:           body.innerHTML = '';
   }
 }
@@ -925,13 +1137,24 @@ function openConsole(hostID, vmName) {
 }
 
 function selectVM(uuid, hostID) {
-  state.selectedVM = uuid;
   const vm = state.vms.find(v => v.uuid === uuid);
   if (!vm) return;
+  state.selectedVM = uuid;
   state.selectedHost = hostID;
-  state.view = 'host';
-  state.hostTab = 'vms';
+  state.view = 'vm';
+  state.vmTab = 'summary';
+  state.notesDraft = null;
+  ['dashboard','all-vms','storage','snapshots'].forEach(v => {
+    document.getElementById('nav-'+v)?.classList.remove('active');
+  });
   render();
+}
+
+function setVMTab(tab) {
+  state.vmTab = tab;
+  state.notesDraft = null;
+  renderTabs();
+  renderContent();
 }
 
 // ── Host view ──────────────────────────────────────────────
@@ -1077,6 +1300,370 @@ function storageTable(pools, showHost) {
       </tbody>
     </table>
   `;
+}
+
+// ── VM Detail view ─────────────────────────────────────────
+function renderVMView() {
+  const vm = state.vms.find(v => v.uuid === state.selectedVM);
+  if (!vm) return emptyState('VM not found', 'This VM is no longer in the inventory.');
+
+  if ((state.vmTab || 'summary') === 'snapshots') {
+    return renderVMSnapshotsTab(vm);
+  }
+  return renderVMSummaryTab(vm);
+}
+
+function renderVMSummaryTab(vm) {
+  const host = state.hosts.find(h => h.id === vm.host_id);
+  const hasTools = !!vm.guest_agent;
+  const running = vm.state === 'running';
+
+  // Action bar (power buttons + console + actions)
+  const actionBar = `
+    <div class="vm-actions-bar">
+      <span class="vm-title">${esc(vm.name)}</span>
+      <span class="vm-pill vm-state ${vm.state}">${vm.state}</span>
+      <button class="btn btn-primary btn-sm" ${vm.state==='stopped'?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','START')" title="Power on">▶ Start</button>
+      <button class="btn btn-warning btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','STOP')" title="Graceful shutdown">■ Shutdown</button>
+      <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','RESTART')" title="Restart">↺ Restart</button>
+      <button class="btn btn-danger btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','FORCESTOP')" title="Force power off">⚡ Force Off</button>
+      <button class="btn btn-secondary btn-sm" onclick="openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')" title="Create snapshot">📷 Snapshot</button>
+    </div>
+  `;
+
+  // Left column: thumbnail + launch console
+  const consoleDisabled = running && host && host.ip ? '' : 'disabled';
+  const leftCol = `
+    <div>
+      <div class="vm-thumbnail">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4db8ff" stroke-width="1.5">
+          <rect x="2" y="4" width="20" height="14" rx="2"/>
+          <path d="M8 22h8M12 18v4"/>
+        </svg>
+        <span class="state-label">${vm.state}</span>
+      </div>
+      <button class="console-launch" ${consoleDisabled} style="width:100%;margin-top:10px"
+        onclick="openConsole('${esc(vm.host_id)}','${esc(vm.name)}')">
+        🖥 Launch Console
+      </button>
+    </div>
+  `;
+
+  // Middle column: guest info card
+  const toolsPill = hasTools
+    ? `<span class="vm-tools-pill running">KVM Tools: ${esc(vm.guest_source || 'running')}</span>`
+    : `<span class="vm-tools-pill missing">KVM Tools: Not installed</span>`;
+
+  const dim = (val, fallback) => val
+    ? `<span class="val">${esc(val)}</span>`
+    : `<span class="val dim">${fallback || '—'}</span>`;
+  const dimList = (arr, fallback) => arr && arr.length
+    ? `<span class="val">${arr.map(esc).join(', ')}</span>`
+    : `<span class="val dim">${fallback || '—'}</span>`;
+
+  const middleCol = `
+    <div class="vm-info-card">
+      ${toolsPill}
+      <div class="vm-info-grid">
+        <span class="lbl">Guest OS:</span>
+        ${dim(vm.guest_os, 'KVM Tools required')}
+        <span class="lbl">Hostname:</span>
+        ${dim(vm.guest_hostname, 'KVM Tools required')}
+        <span class="lbl">Kernel:</span>
+        ${dim(vm.guest_kernel, 'KVM Tools required')}
+        <span class="lbl">IP Addresses:</span>
+        ${dimList(vm.guest_ips, 'KVM Tools required')}
+        <span class="lbl">Host:</span>
+        <span class="val">
+          <a href="#" onclick="showView('host','${esc(vm.host_id)}','summary');return false" style="color:#4db8ff;text-decoration:none">${esc(vm.host_id)}</a>
+          ${host && host.ip ? ` <span style="color:#5a8ab0">(${esc(host.ip)})</span>` : ''}
+        </span>
+        <span class="lbl">UUID:</span>
+        <span class="val" style="font-family:'SF Mono',monospace;font-size:11px;color:#7aa8cc">${esc(vm.uuid)}</span>
+        <span class="lbl">Power State:</span>
+        <span class="val"><span class="vm-state ${vm.state}">${vm.state}</span></span>
+      </div>
+    </div>
+  `;
+
+  // Right column: usage cards
+  const cpuUsage = (vm.cpu_usage || 0).toFixed(1) + '%';
+  const memPct = vm.mem_total_mb > 0 ? (vm.mem_usage_mb / vm.mem_total_mb * 100).toFixed(0) : '0';
+  const memUsed = fmt(vm.mem_usage_mb, 'MB');
+  const memTotal = fmt(vm.mem_total_mb, 'MB');
+  const diskUsed = vm.disk_usage_gb > 0 ? vm.disk_usage_gb.toFixed(1) + ' GB' : '—';
+  const diskTotal = vm.disk_total_gb > 0 ? vm.disk_total_gb.toFixed(0) + ' GB' : '—';
+
+  const rightCol = `
+    <div class="vm-usage-stack">
+      <div class="vm-usage-card">
+        <div class="icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M5 0a.5.5 0 0 1 .5.5V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2A2 2 0 0 1 14 4h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14a2 2 0 0 1-2 2v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14a2 2 0 0 1-2-2H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2V8H.5a.5.5 0 0 1 0-1H2V6H.5a.5.5 0 0 1 0-1H2a2 2 0 0 1 2-2V.5a.5.5 0 0 1 .5-.5zm7 3a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V3z"/>
+          </svg>
+        </div>
+        <div class="txt">
+          <div class="lbl">CPU Usage</div>
+          <div class="val">${cpuUsage}</div>
+        </div>
+      </div>
+      <div class="vm-usage-card">
+        <div class="icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M1 3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v4H1V3z"/>
+            <path d="M1 8h14v5a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V8zm12 1.5a.5.5 0 0 0-1 0v2a.5.5 0 0 0 1 0v-2z"/>
+          </svg>
+        </div>
+        <div class="txt">
+          <div class="lbl">Memory Usage</div>
+          <div class="val">${memUsed} <span style="font-size:11px;color:#5a8ab0">/ ${memTotal} (${memPct}%)</span></div>
+        </div>
+      </div>
+      <div class="vm-usage-card">
+        <div class="icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 1.5A6.5 6.5 0 1 0 14.5 8 6.507 6.507 0 0 0 8 1.5zm0 12A5.5 5.5 0 1 1 13.5 8 5.506 5.506 0 0 1 8 13.5z"/>
+            <path d="M8 2a6 6 0 1 0 5.996 6.33L8 8V2z"/>
+          </svg>
+        </div>
+        <div class="txt">
+          <div class="lbl">Storage Usage</div>
+          <div class="val">${diskUsed} <span style="font-size:11px;color:#5a8ab0">/ ${diskTotal}</span></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // VM Hardware collapsible
+  const netRows = (vm.networks || []).map(n => `
+    <tr>
+      <td style="color:#e8f4ff">${esc(n.interface || '—')}</td>
+      <td style="color:#7aa8cc">${esc(n.bridge || '—')}</td>
+      <td style="font-family:'SF Mono',monospace;font-size:11px;color:#7aa8cc">${esc(n.mac || '—')}</td>
+      <td style="color:#7aa8cc">${(n.rx_bytes/1048576).toFixed(1)} MB</td>
+      <td style="color:#7aa8cc">${(n.tx_bytes/1048576).toFixed(1)} MB</td>
+    </tr>
+  `).join('');
+
+  const guestFSTable = hasTools && vm.guest_fs && vm.guest_fs.length
+    ? `
+      <div style="margin-top:14px">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#3d6a8a;margin-bottom:6px">Guest Filesystems</div>
+        <table style="width:100%;font-size:12px">
+          <thead><tr><th>Mountpoint</th><th>Type</th><th>Used</th><th>Total</th><th>Usage</th></tr></thead>
+          <tbody>
+          ${vm.guest_fs.map(fs => {
+            const pct = fs.total_gb > 0 ? (fs.used_gb / fs.total_gb * 100) : 0;
+            const color = pct > 85 ? 'bar-danger' : pct > 65 ? 'bar-warn' : 'bar-disk';
+            return `
+              <tr>
+                <td style="font-family:'SF Mono',monospace;color:#c5daf0">${esc(fs.mountpoint)}</td>
+                <td style="color:#7aa8cc">${esc(fs.fstype)}</td>
+                <td>${fs.used_gb.toFixed(1)} GB</td>
+                <td>${fs.total_gb.toFixed(1)} GB</td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <div class="resource-bar" style="width:60px"><div class="resource-bar-fill ${color}" style="width:${Math.min(pct,100).toFixed(1)}%"></div></div>
+                    <span style="font-size:11px;color:#7aa8cc">${pct.toFixed(0)}%</span>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>`
+    : '';
+
+  const hardware = `
+    <div class="vm-collapsible ${state.vmHardwareOpen?'open':''}">
+      <div class="vm-collapsible-head" onclick="toggleVMSection('hardware')">
+        <span>VM Hardware</span>
+        <span class="chevron">▶</span>
+      </div>
+      <div class="vm-collapsible-body">
+        <div class="vm-info-grid" style="grid-template-columns:140px 1fr">
+          <span class="lbl">CPUs:</span>
+          <span class="val">${vm.cpu_count}</span>
+          <span class="lbl">Memory:</span>
+          <span class="val">${fmt(vm.mem_total_mb, 'MB')}</span>
+          <span class="lbl">Hard Disk:</span>
+          <span class="val" style="font-family:'SF Mono',monospace;font-size:11px">${esc(vm.disk_path || '—')}</span>
+          <span class="lbl">Disk Size:</span>
+          <span class="val">${vm.disk_total_gb > 0 ? vm.disk_total_gb.toFixed(1) + ' GB' : '—'}</span>
+        </div>
+        ${vm.networks && vm.networks.length ? `
+          <div style="margin-top:14px">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#3d6a8a;margin-bottom:6px">Network Adapters</div>
+            <table style="width:100%;font-size:12px">
+              <thead><tr><th>Interface</th><th>Bridge</th><th>MAC</th><th>RX</th><th>TX</th></tr></thead>
+              <tbody>${netRows}</tbody>
+            </table>
+          </div>
+        ` : ''}
+        ${guestFSTable}
+      </div>
+    </div>
+  `;
+
+  // Related Objects collapsible
+  const hostPools = state.storage.filter(p => p.host_id === vm.host_id);
+  const related = `
+    <div class="vm-collapsible ${state.vmRelatedOpen?'open':''}">
+      <div class="vm-collapsible-head" onclick="toggleVMSection('related')">
+        <span>Related Objects</span>
+        <span class="chevron">▶</span>
+      </div>
+      <div class="vm-collapsible-body">
+        <div class="vm-info-grid" style="grid-template-columns:140px 1fr">
+          <span class="lbl">Host:</span>
+          <span class="val"><a href="#" onclick="showView('host','${esc(vm.host_id)}','summary');return false" style="color:#4db8ff;text-decoration:none">${esc(vm.host_id)}</a></span>
+          <span class="lbl">Storage Pools:</span>
+          <span class="val">${hostPools.length
+            ? hostPools.map(p => `<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border:1px solid #1a3a5c;border-radius:3px;font-size:11px">${esc(p.name)}</span>`).join('')
+            : '<span class="dim">—</span>'}</span>
+          <span class="lbl">Snapshots:</span>
+          <span class="val">
+            ${vm.snapshot_count || 0}
+            ${vm.snapshot_count > 0 ? ` <a href="#" onclick="setVMTab('snapshots');return false" style="color:#4db8ff;margin-left:8px;font-size:11px">manage →</a>` : ''}
+          </span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Notes panel (editable)
+  const isEditing = state.notesDraft !== null;
+  const notesBody = isEditing
+    ? `
+      <textarea class="vm-notes-textarea" id="notes-draft" oninput="state.notesDraft=this.value">${esc(state.notesDraft || '')}</textarea>
+      <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px">
+        <button class="btn btn-secondary btn-sm" onclick="cancelNotesEdit()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="saveNotes('${esc(vm.uuid)}')">Save</button>
+      </div>
+    `
+    : `
+      <div class="vm-notes-view ${vm.notes ? '' : 'empty'}">${vm.notes ? esc(vm.notes) : 'No notes. Click Edit to add a description.'}</div>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px">
+        <button class="btn btn-secondary btn-sm" onclick="startNotesEdit('${esc(vm.notes || '')}')">✎ Edit Notes</button>
+      </div>
+    `;
+
+  const notesPanel = `
+    <div class="vm-collapsible open">
+      <div class="vm-collapsible-head">
+        <span>Notes</span>
+      </div>
+      <div class="vm-collapsible-body">
+        ${notesBody}
+      </div>
+    </div>
+  `;
+
+  return `<div style="margin:-20px -20px 20px -20px">${actionBar}</div>
+    <div class="vm-detail-grid">
+      ${leftCol}
+      ${middleCol}
+      ${rightCol}
+    </div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:start">
+      <div>${hardware}${related}</div>
+      <div>${notesPanel}</div>
+    </div>
+  `;
+}
+
+function renderVMSnapshotsTab(vm) {
+  const header = `
+    <div style="margin:-20px -20px 20px -20px">
+      <div class="vm-actions-bar">
+        <span class="vm-title">${esc(vm.name)}</span>
+        <span class="vm-pill vm-state ${vm.state}">${vm.state}</span>
+        <button class="btn btn-secondary btn-sm" onclick="openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')">📷 Create Snapshot</button>
+      </div>
+    </div>
+  `;
+  // Lazy-load: if selectedSnapshotVM mismatches, fetch.
+  const sel = state.selectedSnapshotVM;
+  if (!sel || sel.host_id !== vm.host_id || sel.name !== vm.name) {
+    state.selectedSnapshotVM = { host_id: vm.host_id, name: vm.name };
+    state.snapshotList = [];
+    state.snapshotLoading = true;
+    fetchSnapshots(vm.host_id, vm.name);
+    return header + `<div class="empty-state"><p style="color:#5a8ab0">Loading snapshots…</p></div>`;
+  }
+  if (state.snapshotLoading) {
+    return header + `<div class="empty-state"><p style="color:#5a8ab0">Loading snapshots…</p></div>`;
+  }
+  return header + renderSnapshotDetailTable(vm, state.snapshotList);
+}
+
+// renderSnapshotDetailTable is a header-less variant of renderSnapshotDetail for the VM view.
+function renderSnapshotDetailTable(vm, snaps) {
+  if (!snaps || snaps.length === 0) {
+    return emptyState('No snapshots', 'Create a snapshot to see it listed here.');
+  }
+  const rows = snaps.map(s => `
+    <tr>
+      <td style="font-weight:500;color:#e8f4ff">
+        ${esc(s.name)}
+        ${s.is_current ? '<span style="margin-left:8px;font-size:9px;padding:1px 6px;border-radius:10px;background:#0d3a5c;color:#4db8ff;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Current</span>' : ''}
+      </td>
+      <td style="color:#7aa8cc;font-size:11px;font-family:'SF Mono',monospace">${esc(s.creation_time)}</td>
+      <td><span class="vm-state ${s.state==='running'?'running':'stopped'}">${esc(s.state)}</span></td>
+      <td style="color:#5a8ab0;font-size:11px">${s.parent ? esc(s.parent) : '—'}</td>
+      <td>
+        <div class="actions-row">
+          <button class="btn btn-primary btn-sm" ${s.is_current ? 'disabled' : ''} onclick="revertSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')">↶ Revert</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')">🗑 Delete</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Snapshot</th><th>Created</th><th>State</th><th>Parent</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function toggleVMSection(which) {
+  if (which === 'hardware') state.vmHardwareOpen = !state.vmHardwareOpen;
+  else if (which === 'related') state.vmRelatedOpen = !state.vmRelatedOpen;
+  else if (which === 'networks') state.vmNetworksOpen = !state.vmNetworksOpen;
+  render();
+}
+
+function startNotesEdit(initial) {
+  state.notesDraft = initial || '';
+  render();
+  setTimeout(() => {
+    const el = document.getElementById('notes-draft');
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }, 0);
+}
+function cancelNotesEdit() {
+  state.notesDraft = null;
+  render();
+}
+async function saveNotes(uuid) {
+  const notes = state.notesDraft || '';
+  try {
+    const r = await fetch(API + '/api/vms/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uuid, notes }),
+    });
+    if (!r.ok) throw new Error(r.statusText);
+    toast('success', 'Notes saved');
+    state.notesDraft = null;
+    await refresh();
+  } catch (e) {
+    toast('error', `Failed to save notes: ${e.message}`);
+  }
 }
 
 // ── Snapshots view ─────────────────────────────────────────
