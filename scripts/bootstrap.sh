@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# bootstrap.sh — Operational launcher for KVM Center.
+# Manages: server, webui, build-server, deploy, and agent installation.
+#
+# Usage: ./scripts/bootstrap.sh [--server | --webui | --stack | --build | --deploy | --deploy-agent]
+#
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_DIR"
+
+usage() {
+  cat <<EOF
+KVM Center bootstrap
+
+Usage: $0 <mode> [options]
+
+Modes:
+  --server          Run the server locally (go run)
+  --agent           Run the agent locally (go run, for testing)
+  --stack           Build and start the full Docker stack (server + webui)
+  --build           Run the Dockerfile.build container (compiles + serves artifacts on :8080)
+  --deploy          Pull latest git and rebuild Docker stack
+  --logs            Tail Docker stack logs
+  --status          Show Docker container status
+  --stop            Stop Docker stack
+  --deploy-agent    Interactive: build agent binaries and guide installation
+
+Options for --server:
+  --addr  <addr>    Listen address (default: :8090)
+  --data  <path>    Data file path (default: ./data.json)
+
+Options for --agent:
+  --server-url <u>  Control plane URL (default: http://localhost:8090)
+  --port <port>     Command port (default: 8081)
+
+EOF
+  exit 1
+}
+
+[[ $# -eq 0 ]] && usage
+
+MODE="$1"; shift
+
+case "$MODE" in
+
+  --server)
+    ADDR="${1:-:8090}"
+    DATA="${2:-$REPO_DIR/data.json}"
+    echo "Starting KVM Center server on $ADDR..."
+    KVM_CENTER_ADDR="$ADDR" KVM_CENTER_DATA="$DATA" go run ./server
+    ;;
+
+  --agent)
+    SERVER="${1:-http://localhost:8090}"
+    PORT="${2:-8081}"
+    echo "Starting KVM Center agent → $SERVER..."
+    go run ./agent -server "$SERVER" -port "$PORT"
+    ;;
+
+  --stack)
+    echo "Building and starting KVM Center stack..."
+    docker compose build
+    docker compose up -d
+    echo ""
+    echo "  Web UI → http://$(hostname -I | awk '{print $1}'):8095"
+    echo "  API    → http://$(hostname -I | awk '{print $1}'):8090"
+    ;;
+
+  --build)
+    echo "Building artifact server (binaries will be served on :8080)..."
+    docker build -f Dockerfile.build -t kvm-center-build:latest .
+    docker run --rm -p 8080:8080 --name kvm-center-build kvm-center-build:latest
+    ;;
+
+  --deploy)
+    echo "Pulling latest changes and redeploying..."
+    git fetch origin
+    git reset --hard origin/main
+    docker compose build
+    docker compose up -d
+    echo "Deploy complete."
+    ;;
+
+  --logs)
+    docker compose logs -f
+    ;;
+
+  --status)
+    docker compose ps
+    ;;
+
+  --stop)
+    docker compose down
+    ;;
+
+  --deploy-agent)
+    echo "=== KVM Center Agent Deployment ==="
+    echo "Building agent binaries..."
+    mkdir -p dist
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/kvm-center-agent-amd64 ./agent
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64  go build -ldflags="-s -w" -o dist/kvm-center-agent-arm64  ./agent
+    cp scripts/install-agent.sh dist/
+
+    echo ""
+    echo "Binaries ready in dist/"
+    echo ""
+    echo "On each hypervisor, run:"
+    echo "  scp dist/kvm-center-agent-amd64 dist/install-agent.sh root@<hypervisor>:/tmp/"
+    echo "  ssh root@<hypervisor> 'chmod +x /tmp/kvm-center-agent-amd64 /tmp/install-agent.sh && /tmp/install-agent.sh --server http://<server-ip>:8090'"
+    ;;
+
+  --help|-h)
+    usage
+    ;;
+
+  *)
+    echo "Unknown mode: $MODE"
+    usage
+    ;;
+esac
