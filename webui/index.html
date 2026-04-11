@@ -882,12 +882,27 @@ function vmTable(vms, showHost) {
 function vmActions(v) {
   const running = v.state === 'running';
   const stopped = v.state === 'stopped';
+  const host = state.hosts.find(h => h.id === v.host_id);
+  const consoleOK = running && host && host.ip;
+  const consoleTitle = running ? 'Open VNC console' : 'Console available when VM is running';
   return `
-    <button class="btn btn-primary btn-sm" ${stopped?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','START')">▶</button>
-    <button class="btn btn-warning btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','STOP')">■</button>
-    <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','RESTART')">↺</button>
-    <button class="btn btn-secondary btn-sm" onclick="openSnapshot('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}')">📷</button>
+    <button class="btn btn-primary btn-sm" ${stopped?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','START')" title="Start">▶</button>
+    <button class="btn btn-warning btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','STOP')" title="Shutdown">■</button>
+    <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','RESTART')" title="Restart">↺</button>
+    <button class="btn btn-secondary btn-sm" onclick="openSnapshot('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}')" title="Snapshot">📷</button>
+    <button class="btn btn-secondary btn-sm" ${consoleOK?'':'disabled'} onclick="openConsole('${esc(v.host_id)}','${esc(v.name)}')" title="${consoleTitle}">🖥</button>
   `;
+}
+
+function openConsole(hostID, vmName) {
+  const host = state.hosts.find(h => h.id === hostID);
+  if (!host || !host.ip) {
+    toast('error', 'Host IP unknown — cannot open console');
+    return;
+  }
+  const port = host.agent_port || 8081;
+  const url = `http://${host.ip}:${port}/console/${encodeURIComponent(vmName)}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 function selectVM(uuid, hostID) {
