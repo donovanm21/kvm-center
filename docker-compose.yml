@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  kvm-center-server:
+    build: .
+    container_name: kvm-center-server
+    network_mode: host
+    volumes:
+      - kvm_center_data:/data
+      - ./app_code:/app
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+
+volumes:
+  kvm_center_data:
