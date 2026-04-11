@@ -1,0 +1,5 @@
+kvm-center-server
+kvm-center-agent
+dist/
+data.json
+*.tar.gz

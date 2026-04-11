@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KVM Center</title>
+<style>
+/* ── Reset & Base ────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #0d1b2a;
+  color: #c5daf0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+/* ── Top Navigation ─────────────────────────────────────── */
+#topbar {
+  height: 42px;
+  background: #09131c;
+  border-bottom: 1px solid #1a3a5c;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  flex-shrink: 0;
+  z-index: 100;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e8f4ff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.logo svg { flex-shrink: 0; }
+#search-bar {
+  flex: 1;
+  max-width: 340px;
+  background: #112233;
+  border: 1px solid #1a3a5c;
+  border-radius: 4px;
+  color: #c5daf0;
+  padding: 5px 10px 5px 30px;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='%235a8ab0' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 9px center;
+}
+#search-bar:focus { border-color: #0091da; }
+.spacer { flex: 1; }
+#conn-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #7aa8cc;
+}
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #4caf50;
+  box-shadow: 0 0 6px #4caf5088;
+}
+.status-dot.offline { background: #f44336; box-shadow: 0 0 6px #f4433688; }
+#refresh-btn {
+  background: none;
+  border: 1px solid #1a3a5c;
+  color: #7aa8cc;
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.15s;
+}
+#refresh-btn:hover { background: #112233; color: #c5daf0; border-color: #0091da; }
+
+/* ── Layout ─────────────────────────────────────────────── */
+#layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Sidebar ────────────────────────────────────────────── */
+#sidebar {
+  width: 220px;
+  background: #0a1825;
+  border-right: 1px solid #1a3a5c;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+.sidebar-section { margin-bottom: 4px; }
+.sidebar-header {
+  padding: 10px 12px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #3d6a8a;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px 7px 20px;
+  cursor: pointer;
+  color: #8ab4d4;
+  border-left: 3px solid transparent;
+  transition: all 0.15s;
+  user-select: none;
+}
+.nav-item:hover { background: #112233; color: #c5daf0; }
+.nav-item.active {
+  background: #0d2035;
+  color: #e8f4ff;
+  border-left-color: #0091da;
+}
+.nav-item .nav-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.8; }
+.nav-badge {
+  margin-left: auto;
+  background: #1a3a5c;
+  color: #7aa8cc;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+}
+.nav-item.active .nav-badge { background: #0d3a5c; color: #4db8ff; }
+
+.host-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 28px;
+  cursor: pointer;
+  color: #7aa8cc;
+  border-left: 3px solid transparent;
+  transition: all 0.15s;
+}
+.host-tree-item:hover { background: #112233; color: #c5daf0; }
+.host-tree-item.active { background: #0d2035; color: #e8f4ff; border-left-color: #0091da; }
+.host-tree-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.host-tree-dot.online { background: #4caf50; }
+.host-tree-dot.offline { background: #f44336; }
+.host-tree-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Main Content ───────────────────────────────────────── */
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Content header / breadcrumb ────────────────────────── */
+#content-header {
+  padding: 10px 20px;
+  background: #0a1825;
+  border-bottom: 1px solid #1a3a5c;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.breadcrumb { color: #3d6a8a; font-size: 12px; }
+.breadcrumb span { color: #c5daf0; }
+.content-actions { margin-left: auto; display: flex; gap: 8px; }
+.btn {
+  padding: 5px 14px;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.btn-primary { background: #0091da; color: #fff; }
+.btn-primary:hover { background: #007ab8; }
+.btn-secondary { background: #1a3a5c; color: #c5daf0; }
+.btn-secondary:hover { background: #1f4a72; }
+.btn-danger { background: #8b1c1c; color: #ffb3b3; }
+.btn-danger:hover { background: #a82222; }
+.btn-warning { background: #7a5200; color: #ffd080; }
+.btn-warning:hover { background: #995f00; }
+.btn-sm { padding: 3px 10px; font-size: 11px; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Tabs ───────────────────────────────────────────────── */
+#tabs {
+  display: flex;
+  background: #0a1825;
+  border-bottom: 1px solid #1a3a5c;
+  padding: 0 20px;
+  flex-shrink: 0;
+}
+.tab {
+  padding: 8px 16px;
+  cursor: pointer;
+  color: #7aa8cc;
+  border-bottom: 2px solid transparent;
+  font-size: 12px;
+  transition: all 0.15s;
+  margin-bottom: -1px;
+}
+.tab:hover { color: #c5daf0; }
+.tab.active { color: #e8f4ff; border-bottom-color: #0091da; }
+
+/* ── Scrollable content area ────────────────────────────── */
+#content-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* ── Summary Cards ──────────────────────────────────────── */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.summary-card {
+  background: #0f2135;
+  border: 1px solid #1a3a5c;
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+.summary-card .label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #3d6a8a;
+  margin-bottom: 6px;
+}
+.summary-card .value {
+  font-size: 28px;
+  font-weight: 300;
+  color: #e8f4ff;
+  line-height: 1;
+}
+.summary-card .sub {
+  font-size: 11px;
+  color: #5a8ab0;
+  margin-top: 4px;
+}
+.summary-card.accent { border-left: 3px solid #0091da; }
+.summary-card.green-accent { border-left: 3px solid #4caf50; }
+.summary-card.red-accent { border-left: 3px solid #f44336; }
+.summary-card.yellow-accent { border-left: 3px solid #ff9800; }
+
+/* ── Section Title ──────────────────────────────────────── */
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #3d6a8a;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #1a3a5c;
+}
+
+/* ── Host Cards Grid ────────────────────────────────────── */
+.host-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.host-card {
+  background: #0f2135;
+  border: 1px solid #1a3a5c;
+  border-radius: 6px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.host-card:hover { border-color: #0091da55; background: #102540; }
+.host-card.active { border-color: #0091da; }
+.host-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.host-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e8f4ff;
+}
+.host-card-ip { font-size: 11px; color: #5a8ab0; margin-top: 2px; }
+.status-pill {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.status-pill.online { background: #1a3d1a; color: #4caf50; }
+.status-pill.offline { background: #3d1a1a; color: #f44336; }
+
+/* ── Resource Bar ───────────────────────────────────────── */
+.resource-row { margin-bottom: 8px; }
+.resource-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #7aa8cc;
+  margin-bottom: 3px;
+}
+.resource-bar {
+  height: 5px;
+  background: #1a3a5c;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.resource-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s;
+}
+.bar-cpu { background: #0091da; }
+.bar-mem { background: #7c4dff; }
+.bar-disk { background: #00bcd4; }
+.bar-warn { background: #ff9800; }
+.bar-danger { background: #f44336; }
+
+.host-card-meta {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #1a3a5c;
+  font-size: 11px;
+  color: #5a8ab0;
+}
+.host-card-meta span strong { color: #c5daf0; }
+
+/* ── Tables ─────────────────────────────────────────────── */
+.table-wrap {
+  background: #0f2135;
+  border: 1px solid #1a3a5c;
+  border-radius: 6px;
+  overflow: hidden;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+thead th {
+  background: #091828;
+  padding: 9px 14px;
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #3d6a8a;
+  font-weight: 600;
+  white-space: nowrap;
+}
+tbody tr {
+  border-top: 1px solid #122030;
+  transition: background 0.1s;
+  cursor: pointer;
+}
+tbody tr:hover { background: #102540; }
+tbody tr.selected { background: #0d2a45; }
+tbody td {
+  padding: 9px 14px;
+  color: #c5daf0;
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+/* ── VM State Badge ─────────────────────────────────────── */
+.vm-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.vm-state::before {
+  content: '';
+  width: 7px; height: 7px;
+  border-radius: 50%;
+}
+.vm-state.running { color: #4caf50; }
+.vm-state.running::before { background: #4caf50; box-shadow: 0 0 5px #4caf5066; }
+.vm-state.stopped { color: #607d8b; }
+.vm-state.stopped::before { background: #607d8b; }
+.vm-state.paused { color: #ff9800; }
+.vm-state.paused::before { background: #ff9800; }
+.vm-state.crashed { color: #f44336; }
+.vm-state.crashed::before { background: #f44336; }
+.vm-state.unknown { color: #7aa8cc; }
+.vm-state.unknown::before { background: #7aa8cc; }
+
+/* ── Action Buttons Row ─────────────────────────────────── */
+.actions-row {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* ── Detail Panel ───────────────────────────────────────── */
+.detail-panel {
+  background: #091828;
+  border: 1px solid #1a3a5c;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.detail-item .detail-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #3d6a8a;
+  margin-bottom: 3px;
+}
+.detail-item .detail-value {
+  font-size: 13px;
+  color: #c5daf0;
+  word-break: break-all;
+}
+.detail-item .detail-value.mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
+
+/* ── Empty State ────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: #3d6a8a;
+}
+.empty-state svg { opacity: 0.3; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; }
+
+/* ── Toast Notifications ────────────────────────────────── */
+#toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+}
+.toast {
+  padding: 10px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  min-width: 240px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: slideIn 0.2s ease;
+  border-left: 4px solid;
+}
+.toast.success { background: #0f2a0f; border-color: #4caf50; color: #81c784; }
+.toast.error   { background: #2a0f0f; border-color: #f44336; color: #e57373; }
+.toast.info    { background: #0f1e2a; border-color: #0091da; color: #64b5f6; }
+@keyframes slideIn {
+  from { transform: translateX(30px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+/* ── Snapshot Modal ─────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: #00000088;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 500;
+}
+.modal {
+  background: #0f2135;
+  border: 1px solid #1a3a5c;
+  border-radius: 6px;
+  padding: 24px;
+  width: 380px;
+  box-shadow: 0 20px 60px #00000060;
+}
+.modal h3 { color: #e8f4ff; margin-bottom: 16px; font-size: 15px; }
+.modal label { display: block; font-size: 11px; color: #5a8ab0; margin-bottom: 4px; }
+.modal input {
+  width: 100%;
+  background: #091828;
+  border: 1px solid #1a3a5c;
+  color: #c5daf0;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+}
+.modal input:focus { border-color: #0091da; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #091828; }
+::-webkit-scrollbar-thumb { background: #1a3a5c; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2d5580; }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div id="topbar">
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <rect x="2" y="3" width="20" height="14" rx="2" stroke="#0091da" stroke-width="1.5"/>
+      <path d="M8 21h8M12 17v4" stroke="#0091da" stroke-width="1.5" stroke-linecap="round"/>
+      <rect x="5" y="6" width="4" height="3" rx="0.5" fill="#0091da" opacity="0.7"/>
+      <rect x="10" y="6" width="4" height="3" rx="0.5" fill="#0091da" opacity="0.7"/>
+      <rect x="15" y="6" width="4" height="3" rx="0.5" fill="#0091da" opacity="0.7"/>
+      <rect x="5" y="10" width="4" height="3" rx="0.5" fill="#0091da" opacity="0.4"/>
+      <rect x="10" y="10" width="4" height="3" rx="0.5" fill="#0091da" opacity="0.4"/>
+      <rect x="15" y="10" width="4" height="3" rx="0.5" fill="#0091da" opacity="0.4"/>
+    </svg>
+    KVM Center
+  </div>
+  <input id="search-bar" type="text" placeholder="Search VMs, hosts..." oninput="onSearch(this.value)">
+  <div class="spacer"></div>
+  <div id="conn-status">
+    <div class="status-dot" id="conn-dot"></div>
+    <span id="conn-text">Connecting…</span>
+  </div>
+  <button class="btn btn-secondary" id="refresh-btn" onclick="refresh()">↺ Refresh</button>
+</div>
+
+<!-- Main layout -->
+<div id="layout">
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-header">Navigation</div>
+      <div class="nav-item active" id="nav-dashboard" onclick="showView('dashboard')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2 11a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2zm6-9a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V2zm-5 3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5z"/>
+        </svg>
+        Dashboard
+      </div>
+      <div class="nav-item" id="nav-all-vms" onclick="showView('all-vms')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/>
+          <path d="M5 4a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v1H5V4zm-1 3h8v1H4V7zm0 3h8v1H4v-1z"/>
+        </svg>
+        All VMs
+        <span class="nav-badge" id="badge-vms">0</span>
+      </div>
+      <div class="nav-item" id="nav-storage" onclick="showView('storage')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M1 2a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2zm1 6a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1H2zm11 1a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM4 3a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm2 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm2 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm5 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
+        </svg>
+        Storage
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-header">Hosts</div>
+      <div id="host-tree"></div>
+    </div>
+  </div>
+
+  <!-- Main panel -->
+  <div id="main">
+    <div id="content-header">
+      <span class="breadcrumb" id="breadcrumb">KVM Center <span>/ Dashboard</span></span>
+      <div class="content-actions" id="content-actions"></div>
+    </div>
+    <div id="tabs"></div>
+    <div id="content-body"></div>
+  </div>
+
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- Snapshot modal -->
+<div class="modal-overlay" id="snapshot-modal" style="display:none">
+  <div class="modal">
+    <h3>Create Snapshot</h3>
+    <label>Snapshot Name</label>
+    <input type="text" id="snapshot-name" placeholder="e.g. pre-upgrade-2024">
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmSnapshot()">Create</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────
+const API = '';  // empty = same origin; nginx proxies /api/
+let state = {
+  hosts: [],
+  vms: [],
+  storage: [],
+  view: 'dashboard',
+  selectedHost: null,
+  selectedVM: null,
+  hostTab: 'summary',
+  searchQuery: '',
+  snapshotTarget: null,
+};
+
+// ── Bootstrap ──────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  refresh();
+  setInterval(refresh, 15000);
+});
+
+async function refresh() {
+  try {
+    const [hosts, vms, storage] = await Promise.all([
+      fetchJSON('/api/hosts'),
+      fetchJSON('/api/vms'),
+      fetchJSON('/api/storage'),
+    ]);
+    state.hosts   = hosts   || [];
+    state.vms     = vms     || [];
+    state.storage = storage || [];
+    setConnected(true);
+    render();
+  } catch (e) {
+    setConnected(false);
+    console.error('refresh failed:', e);
+  }
+}
+
+async function fetchJSON(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(r.statusText);
+  return r.json();
+}
+
+// ── Connection indicator ───────────────────────────────────
+function setConnected(ok) {
+  document.getElementById('conn-dot').className = 'status-dot' + (ok ? '' : ' offline');
+  document.getElementById('conn-text').textContent = ok ? 'Connected' : 'Disconnected';
+}
+
+// ── Navigation ─────────────────────────────────────────────
+function showView(view, hostID, tab) {
+  state.view = view;
+  if (hostID !== undefined) state.selectedHost = hostID;
+  if (tab     !== undefined) state.hostTab     = tab;
+  state.selectedVM = null;
+  ['dashboard','all-vms','storage'].forEach(v => {
+    document.getElementById('nav-'+v)?.classList.toggle('active', v === view);
+  });
+  render();
+}
+
+function setTab(tab) {
+  state.hostTab = tab;
+  renderTabs();
+  renderContent();
+}
+
+function onSearch(q) {
+  state.searchQuery = q.toLowerCase();
+  render();
+}
+
+// ── Main render dispatcher ─────────────────────────────────
+function render() {
+  renderSidebar();
+  renderBreadcrumb();
+  renderTabs();
+  renderContent();
+}
+
+// ── Sidebar ────────────────────────────────────────────────
+function renderSidebar() {
+  document.getElementById('badge-vms').textContent = state.vms.length;
+
+  const tree = document.getElementById('host-tree');
+  tree.innerHTML = state.hosts.map(h => `
+    <div class="host-tree-item ${state.selectedHost===h.id && state.view==='host' ? 'active' : ''}"
+         onclick="showView('host','${esc(h.id)}','summary')">
+      <div class="host-tree-dot ${h.status}"></div>
+      <span class="host-tree-name" title="${esc(h.id)}">${esc(h.id)}</span>
+    </div>
+  `).join('');
+}
+
+// ── Breadcrumb ─────────────────────────────────────────────
+function renderBreadcrumb() {
+  const crumbs = { dashboard:'Dashboard', 'all-vms':'All VMs', storage:'Storage', host:'Hosts' };
+  let html = `KVM Center <span>/ ${crumbs[state.view] || state.view}`;
+  if (state.view === 'host' && state.selectedHost) html += ` / ${esc(state.selectedHost)}`;
+  html += '</span>';
+  document.getElementById('breadcrumb').innerHTML = html;
+}
+
+// ── Tabs ───────────────────────────────────────────────────
+function renderTabs() {
+  const tabBar = document.getElementById('tabs');
+  if (state.view === 'host') {
+    tabBar.innerHTML = ['summary','vms','storage'].map(t => `
+      <div class="tab ${state.hostTab===t?'active':''}" onclick="setTab('${t}')">
+        ${t.charAt(0).toUpperCase()+t.slice(1)}
+      </div>
+    `).join('');
+  } else {
+    tabBar.innerHTML = '';
+  }
+}
+
+// ── Content ────────────────────────────────────────────────
+function renderContent() {
+  const body   = document.getElementById('content-body');
+  const actions = document.getElementById('content-actions');
+  actions.innerHTML = '';
+
+  const q = state.searchQuery;
+
+  switch (state.view) {
+    case 'dashboard':  body.innerHTML = renderDashboard(); break;
+    case 'all-vms':    body.innerHTML = renderAllVMs(q);   break;
+    case 'storage':    body.innerHTML = renderStorageView(q); break;
+    case 'host':       body.innerHTML = renderHostView();  break;
+    default:           body.innerHTML = '';
+  }
+}
+
+// ── Dashboard ──────────────────────────────────────────────
+function renderDashboard() {
+  const onlineHosts = state.hosts.filter(h => h.status === 'online').length;
+  const runningVMs  = state.vms.filter(v => v.state === 'running').length;
+  const stoppedVMs  = state.vms.filter(v => v.state === 'stopped').length;
+
+  const avgCPU = state.hosts.length
+    ? (state.hosts.filter(h=>h.status==='online').reduce((a,h)=>a+h.cpu_usage,0) / Math.max(onlineHosts,1)).toFixed(1)
+    : 0;
+
+  return `
+    <div class="summary-grid">
+      <div class="summary-card accent">
+        <div class="label">Hypervisors</div>
+        <div class="value">${state.hosts.length}</div>
+        <div class="sub">${onlineHosts} online · ${state.hosts.length - onlineHosts} offline</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Total VMs</div>
+        <div class="value">${state.vms.length}</div>
+        <div class="sub">across all hosts</div>
+      </div>
+      <div class="summary-card green-accent">
+        <div class="label">Running</div>
+        <div class="value">${runningVMs}</div>
+        <div class="sub">${stoppedVMs} stopped</div>
+      </div>
+      <div class="summary-card yellow-accent">
+        <div class="label">Avg CPU</div>
+        <div class="value">${avgCPU}<small style="font-size:14px;color:#7aa8cc">%</small></div>
+        <div class="sub">online hosts</div>
+      </div>
+    </div>
+
+    <div class="section-title">Hypervisors</div>
+    <div class="host-grid">
+      ${state.hosts.length === 0 ? '<p style="color:#3d6a8a">No hosts have reported yet. Deploy the agent on your hypervisors.</p>' : ''}
+      ${state.hosts.map(h => renderHostCard(h)).join('')}
+    </div>
+
+    ${state.vms.length > 0 ? `
+    <div class="section-title">Recent VMs</div>
+    <div class="table-wrap">
+      ${vmTable(state.vms.slice(0, 10))}
+    </div>` : ''}
+  `;
+}
+
+function renderHostCard(h) {
+  const cpuColor = h.cpu_usage > 85 ? 'bar-danger' : h.cpu_usage > 65 ? 'bar-warn' : 'bar-cpu';
+  const memColor = h.mem_usage > 85 ? 'bar-danger' : h.mem_usage > 65 ? 'bar-warn' : 'bar-mem';
+  return `
+    <div class="host-card ${state.selectedHost===h.id && state.view==='host' ? 'active' : ''}"
+         onclick="showView('host','${esc(h.id)}','summary')">
+      <div class="host-card-header">
+        <div>
+          <div class="host-card-name">${esc(h.id)}</div>
+          <div class="host-card-ip">${esc(h.ip || '—')}</div>
+        </div>
+        <span class="status-pill ${h.status}">${h.status}</span>
+      </div>
+      <div class="resource-row">
+        <div class="resource-label"><span>CPU</span><span>${h.cpu_usage.toFixed(1)}%</span></div>
+        <div class="resource-bar"><div class="resource-bar-fill ${cpuColor}" style="width:${Math.min(h.cpu_usage,100)}%"></div></div>
+      </div>
+      <div class="resource-row">
+        <div class="resource-label"><span>Memory</span><span>${h.mem_usage.toFixed(1)}% of ${fmt(h.mem_total_mb, 'MB')}</span></div>
+        <div class="resource-bar"><div class="resource-bar-fill ${memColor}" style="width:${Math.min(h.mem_usage,100)}%"></div></div>
+      </div>
+      <div class="host-card-meta">
+        <span>VMs: <strong>${h.vm_count}</strong></span>
+        <span>CPUs: <strong>${h.cpu_count}</strong></span>
+        <span>Up: <strong>${h.uptime || '—'}</strong></span>
+      </div>
+    </div>
+  `;
+}
+
+// ── All VMs view ───────────────────────────────────────────
+function renderAllVMs(q) {
+  let vms = state.vms;
+  if (q) vms = vms.filter(v => v.name.toLowerCase().includes(q) || v.host_id.toLowerCase().includes(q));
+  if (!vms.length) return emptyState('No VMs found', 'Deploy VMs on your hypervisors or check your search query.');
+  return `<div class="table-wrap">${vmTable(vms, true)}</div>`;
+}
+
+function vmTable(vms, showHost) {
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          ${showHost ? '<th>Host</th>' : ''}
+          <th>State</th>
+          <th>CPUs</th>
+          <th>Memory</th>
+          <th>Disk</th>
+          <th>CPU Usage</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${vms.map(v => `
+          <tr onclick="selectVM('${esc(v.uuid)}','${esc(v.host_id)}')">
+            <td style="font-weight:500;color:#e8f4ff">${esc(v.name)}</td>
+            ${showHost ? `<td style="color:#7aa8cc">${esc(v.host_id)}</td>` : ''}
+            <td><span class="vm-state ${v.state}">${v.state}</span></td>
+            <td>${v.cpu_count}</td>
+            <td>${fmt(v.mem_total_mb,'MB')}</td>
+            <td>${v.disk_total_gb > 0 ? v.disk_total_gb.toFixed(0)+' GB' : '—'}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div class="resource-bar" style="width:60px">
+                  <div class="resource-bar-fill bar-cpu" style="width:${Math.min(v.cpu_usage||0,100)}%"></div>
+                </div>
+                <span style="font-size:11px;color:#7aa8cc">${(v.cpu_usage||0).toFixed(1)}%</span>
+              </div>
+            </td>
+            <td onclick="event.stopPropagation()">
+              <div class="actions-row">
+                ${vmActions(v)}
+              </div>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function vmActions(v) {
+  const running = v.state === 'running';
+  const stopped = v.state === 'stopped';
+  return `
+    <button class="btn btn-primary btn-sm" ${stopped?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','START')">▶</button>
+    <button class="btn btn-warning btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','STOP')">■</button>
+    <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','RESTART')">↺</button>
+    <button class="btn btn-secondary btn-sm" onclick="openSnapshot('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}')">📷</button>
+  `;
+}
+
+function selectVM(uuid, hostID) {
+  state.selectedVM = uuid;
+  const vm = state.vms.find(v => v.uuid === uuid);
+  if (!vm) return;
+  state.selectedHost = hostID;
+  state.view = 'host';
+  state.hostTab = 'vms';
+  render();
+}
+
+// ── Host view ──────────────────────────────────────────────
+function renderHostView() {
+  const h = state.hosts.find(h => h.id === state.selectedHost);
+  if (!h) return emptyState('Host not found', '');
+
+  const hostVMs   = state.vms.filter(v => v.host_id === state.selectedHost);
+  const hostPools = state.storage.filter(p => p.host_id === state.selectedHost);
+
+  switch (state.hostTab) {
+    case 'summary': return renderHostSummary(h, hostVMs, hostPools);
+    case 'vms':     return renderHostVMs(h, hostVMs);
+    case 'storage': return renderHostStorage(h, hostPools);
+  }
+  return '';
+}
+
+function renderHostSummary(h, hostVMs, hostPools) {
+  const running = hostVMs.filter(v=>v.state==='running').length;
+  const cpuColor = h.cpu_usage>85?'bar-danger':h.cpu_usage>65?'bar-warn':'bar-cpu';
+  const memColor = h.mem_usage>85?'bar-danger':h.mem_usage>65?'bar-warn':'bar-mem';
+
+  return `
+    <div class="detail-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div>
+          <div style="font-size:18px;font-weight:600;color:#e8f4ff">${esc(h.id)}</div>
+          <div style="font-size:12px;color:#5a8ab0;margin-top:2px">${esc(h.ip||'')}</div>
+        </div>
+        <span class="status-pill ${h.status}">${h.status}</span>
+      </div>
+      <div class="detail-grid">
+        <div class="detail-item"><div class="detail-label">Operating System</div><div class="detail-value">${esc(h.os||'—')}</div></div>
+        <div class="detail-item"><div class="detail-label">Kernel</div><div class="detail-value mono">${esc(h.kernel_ver||'—')}</div></div>
+        <div class="detail-item"><div class="detail-label">Libvirt</div><div class="detail-value mono">${esc(h.libvirt_ver||'—')}</div></div>
+        <div class="detail-item"><div class="detail-label">Uptime</div><div class="detail-value">${esc(h.uptime||'—')}</div></div>
+        <div class="detail-item"><div class="detail-label">Agent Port</div><div class="detail-value mono">${h.agent_port||8081}</div></div>
+        <div class="detail-item"><div class="detail-label">Last Seen</div><div class="detail-value">${relTime(h.last_seen)}</div></div>
+      </div>
+    </div>
+
+    <div class="summary-grid" style="margin-bottom:20px">
+      <div class="summary-card accent">
+        <div class="label">CPUs</div>
+        <div class="value">${h.cpu_count||'—'}</div>
+        <div class="sub">logical cores</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Memory</div>
+        <div class="value">${fmt(h.mem_total_mb,'MB')}</div>
+        <div class="sub">${fmt(h.mem_free_mb,'MB')} free</div>
+      </div>
+      <div class="summary-card green-accent">
+        <div class="label">VMs</div>
+        <div class="value">${h.vm_count}</div>
+        <div class="sub">${running} running</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Storage Pools</div>
+        <div class="value">${hostPools.length}</div>
+        <div class="sub">libvirt pools</div>
+      </div>
+    </div>
+
+    <div class="section-title">Resource Utilisation</div>
+    <div class="detail-panel" style="padding:16px 20px">
+      <div class="resource-row" style="margin-bottom:16px">
+        <div class="resource-label" style="font-size:13px"><span>CPU Usage</span><span style="font-size:20px;color:#e8f4ff;font-weight:300">${h.cpu_usage.toFixed(1)}%</span></div>
+        <div class="resource-bar" style="height:8px"><div class="resource-bar-fill ${cpuColor}" style="width:${Math.min(h.cpu_usage,100)}%"></div></div>
+      </div>
+      <div class="resource-row">
+        <div class="resource-label" style="font-size:13px"><span>Memory Usage</span><span style="font-size:20px;color:#e8f4ff;font-weight:300">${h.mem_usage.toFixed(1)}%</span></div>
+        <div class="resource-bar" style="height:8px"><div class="resource-bar-fill ${memColor}" style="width:${Math.min(h.mem_usage,100)}%"></div></div>
+      </div>
+    </div>
+
+    ${hostVMs.length > 0 ? `
+    <div class="section-title" style="margin-top:20px">Virtual Machines</div>
+    <div class="table-wrap">${vmTable(hostVMs, false)}</div>` : ''}
+  `;
+}
+
+function renderHostVMs(h, hostVMs) {
+  if (!hostVMs.length) return emptyState('No VMs', 'No virtual machines found on this host.');
+  return `<div class="table-wrap">${vmTable(hostVMs, false)}</div>`;
+}
+
+function renderHostStorage(h, hostPools) {
+  if (!hostPools.length) return emptyState('No Storage Pools', 'No libvirt storage pools found on this host.');
+  return `<div class="table-wrap">${storageTable(hostPools)}</div>`;
+}
+
+// ── Storage view ───────────────────────────────────────────
+function renderStorageView(q) {
+  let pools = state.storage;
+  if (q) pools = pools.filter(p => p.name.toLowerCase().includes(q) || p.host_id.toLowerCase().includes(q));
+  if (!pools.length) return emptyState('No Storage Pools', 'Storage pool data will appear here once agents report in.');
+  return `<div class="table-wrap">${storageTable(pools, true)}</div>`;
+}
+
+function storageTable(pools, showHost) {
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>Pool Name</th>
+          ${showHost ? '<th>Host</th>' : ''}
+          <th>Type</th>
+          <th>State</th>
+          <th>Capacity</th>
+          <th>Used</th>
+          <th>Available</th>
+          <th>Utilisation</th>
+          <th>Path</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${pools.map(p => {
+          const pct = p.capacity_gb > 0 ? (p.allocation_gb / p.capacity_gb * 100) : 0;
+          const barColor = pct > 85 ? 'bar-danger' : pct > 65 ? 'bar-warn' : 'bar-disk';
+          return `
+            <tr>
+              <td style="font-weight:500;color:#e8f4ff">${esc(p.name)}</td>
+              ${showHost ? `<td style="color:#7aa8cc">${esc(p.host_id)}</td>` : ''}
+              <td>${esc(p.pool_type||'—')}</td>
+              <td><span class="vm-state ${p.state==='running'?'running':'stopped'}">${esc(p.state)}</span></td>
+              <td>${p.capacity_gb.toFixed(1)} GB</td>
+              <td>${p.allocation_gb.toFixed(1)} GB</td>
+              <td>${p.available_gb.toFixed(1)} GB</td>
+              <td>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div class="resource-bar" style="width:80px">
+                    <div class="resource-bar-fill ${barColor}" style="width:${Math.min(pct,100).toFixed(1)}%"></div>
+                  </div>
+                  <span style="font-size:11px;color:#7aa8cc">${pct.toFixed(0)}%</span>
+                </div>
+              </td>
+              <td style="font-family:monospace;font-size:11px;color:#5a8ab0">${esc(p.path||'—')}</td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ── Commands ───────────────────────────────────────────────
+async function sendCmd(hostID, vmUUID, vmName, action) {
+  toast(`info`, `Sending ${action} to ${vmName}…`);
+  try {
+    const r = await fetch(API + '/api/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host_id: hostID, vm_uuid: vmUUID, vm_name: vmName, action }),
+    });
+    const data = await r.json();
+    if (data.success || r.ok) {
+      toast('success', `${action} sent to ${vmName}: ${data.message || 'OK'}`);
+      setTimeout(refresh, 2000);
+    } else {
+      toast('error', `${action} failed: ${data.message || data.error}`);
+    }
+  } catch (e) {
+    toast('error', `Command failed: ${e.message}`);
+  }
+}
+
+function openSnapshot(hostID, vmUUID, vmName) {
+  state.snapshotTarget = { hostID, vmUUID, vmName };
+  const d = new Date();
+  document.getElementById('snapshot-name').value =
+    `snap-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+  document.getElementById('snapshot-modal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('snapshot-modal').style.display = 'none';
+  state.snapshotTarget = null;
+}
+
+async function confirmSnapshot() {
+  const name = document.getElementById('snapshot-name').value.trim();
+  if (!name) { toast('error','Snapshot name required'); return; }
+  const t = state.snapshotTarget;
+  closeModal();
+  toast('info', `Creating snapshot "${name}" for ${t.vmName}…`);
+  try {
+    const r = await fetch(API + '/api/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host_id: t.hostID, vm_uuid: t.vmUUID, vm_name: t.vmName, action: 'SNAPSHOT', params: { name } }),
+    });
+    const data = await r.json();
+    if (data.success || r.ok) {
+      toast('success', `Snapshot "${name}" created`);
+    } else {
+      toast('error', `Snapshot failed: ${data.message || data.error}`);
+    }
+  } catch (e) {
+    toast('error', `Snapshot failed: ${e.message}`);
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────
+function emptyState(title, msg) {
+  return `<div class="empty-state">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+    </svg>
+    <p style="color:#5a8ab0;font-size:15px;margin-bottom:4px">${title}</p>
+    <p style="color:#3d6a8a;font-size:12px">${msg}</p>
+  </div>`;
+}
+
+function toast(type, msg) {
+  const c = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmt(mb, unit) {
+  if (!mb) return '—';
+  if (mb >= 1024) return (mb/1024).toFixed(1) + ' GB';
+  return mb + ' MB';
+}
+
+function relTime(iso) {
+  if (!iso) return '—';
+  const diff = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (diff < 60)  return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  return `${Math.floor(diff/3600)}h ago`;
+}
+
+function pad(n) { return String(n).padStart(2,'0'); }
+</script>
+</body>
+</html>

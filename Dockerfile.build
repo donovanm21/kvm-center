@@ -1,0 +1,63 @@
+# Builds both server and agent binaries, packages them with install scripts,
+# and serves a download portal on port 8080 (python3 http.server).
+FROM golang:1.22-alpine
+
+RUN apk --no-cache add python3 tar
+
+WORKDIR /src
+COPY go.mod .
+RUN go mod download
+
+COPY . .
+
+# Build server (linux/amd64 — runs in container)
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-s -w" -o /out/kvm-center-server ./server
+
+# Build agent for common hypervisor targets
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-s -w" -o /out/kvm-center-agent-amd64 ./agent
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+    go build -ldflags="-s -w" -o /out/kvm-center-agent-arm64 ./agent
+
+# Bundle artifacts
+RUN mkdir -p /dist && \
+    cp /out/kvm-center-agent-amd64 /dist/ && \
+    cp /out/kvm-center-agent-arm64 /dist/ && \
+    cp /src/scripts/install-agent.sh /dist/ && \
+    chmod +x /dist/install-agent.sh && \
+    cd /out && tar czf /dist/kvm-center-server.tar.gz kvm-center-server
+
+# Generate simple download portal
+RUN cat > /dist/index.html << 'EOF'
+<!DOCTYPE html>
+<html>
+<head><title>KVM Center — Downloads</title>
+<style>body{font-family:monospace;background:#0d1b2a;color:#c5daf0;padding:40px}
+a{color:#0091da}table{border-collapse:collapse;margin-top:20px}
+td,th{padding:10px 20px;border:1px solid #1a3a5c;text-align:left}</style>
+</head>
+<body>
+<h2>KVM Center Build Artifacts</h2>
+<table>
+<tr><th>File</th><th>Description</th></tr>
+<tr><td><a href="kvm-center-agent-amd64">kvm-center-agent-amd64</a></td><td>Agent binary (Linux x86_64)</td></tr>
+<tr><td><a href="kvm-center-agent-arm64">kvm-center-agent-arm64</a></td><td>Agent binary (Linux ARM64)</td></tr>
+<tr><td><a href="install-agent.sh">install-agent.sh</a></td><td>One-shot agent installer (systemd)</td></tr>
+<tr><td><a href="kvm-center-server.tar.gz">kvm-center-server.tar.gz</a></td><td>Server binary archive</td></tr>
+</table>
+<h3 style="margin-top:30px">Quick Install (agent)</h3>
+<pre style="background:#091828;padding:16px;border-radius:4px">
+# On each hypervisor:
+curl -O http://&lt;this-host&gt;:8080/kvm-center-agent-amd64
+curl -O http://&lt;this-host&gt;:8080/install-agent.sh
+chmod +x install-agent.sh kvm-center-agent-amd64
+sudo ./install-agent.sh --server http://&lt;server-ip&gt;:8090
+</pre>
+</body></html>
+EOF
+
+WORKDIR /dist
+EXPOSE 8080
+CMD ["python3", "-m", "http.server", "8080"]

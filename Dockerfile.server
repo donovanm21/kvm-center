@@ -1,0 +1,26 @@
+# ── Stage 1: Build ────────────────────────────────────────────────────────────
+FROM golang:1.22-alpine AS builder
+
+WORKDIR /src
+COPY go.mod .
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/kvm-center-server ./server
+
+# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates tzdata
+
+WORKDIR /app
+COPY --from=builder /out/kvm-center-server .
+
+RUN mkdir -p /var/lib/kvm-center
+
+EXPOSE 8090
+
+ENV KVM_CENTER_ADDR=:8090
+ENV KVM_CENTER_DATA=/var/lib/kvm-center/data.json
+
+ENTRYPOINT ["/app/kvm-center-server"]
