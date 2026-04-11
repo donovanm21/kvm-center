@@ -58,6 +58,11 @@ done
 
 info "Installing from: $BIN_SRC"
 mkdir -p "$INSTALL_DIR"
+# Stop existing service first so we can overwrite the running binary.
+if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+  info "Stopping existing $SERVICE_NAME for upgrade"
+  systemctl stop "$SERVICE_NAME"
+fi
 cp "$BIN_SRC" "$INSTALL_DIR/$BIN_NAME"
 chmod +x "$INSTALL_DIR/$BIN_NAME"
 info "Binary installed to $INSTALL_DIR/$BIN_NAME"
