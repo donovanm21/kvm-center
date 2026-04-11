@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,26 +13,41 @@ import (
 
 // persistData is the on-disk JSON structure.
 type persistData struct {
-	Hosts   map[string]*models.Host            `json:"hosts"`
-	VMs     map[string][]*models.VM            `json:"vms"`
-	Storage map[string][]*models.StoragePool   `json:"storage"`
+	Hosts     map[string]*models.Host             `json:"hosts"`
+	VMs       map[string][]*models.VM             `json:"vms"`
+	Storage   map[string][]*models.StoragePool    `json:"storage"`
+	VMNotes   map[string]string                   `json:"vm_notes"`    // keyed by VM UUID
+	GuestData map[string]*guestEntry              `json:"guest_data"`  // keyed by VM UUID
 }
+
+// guestEntry is one cached report from a kvm-tools daemon running in a guest.
+type guestEntry struct {
+	Payload   models.GuestTelemetryPayload `json:"payload"`
+	UpdatedAt time.Time                    `json:"updated_at"`
+}
+
+// guestToolsFreshness is the window after which a kvm-tools report is considered stale.
+const guestToolsFreshness = 5 * time.Minute
 
 // Store is the in-memory data store backed by a JSON file.
 type Store struct {
-	mu       sync.RWMutex
-	hosts    map[string]*models.Host
-	vms      map[string][]*models.VM          // keyed by host_id
-	storage  map[string][]*models.StoragePool // keyed by host_id
-	dataFile string
+	mu        sync.RWMutex
+	hosts     map[string]*models.Host
+	vms       map[string][]*models.VM          // keyed by host_id
+	storage   map[string][]*models.StoragePool // keyed by host_id
+	vmNotes   map[string]string                // keyed by VM UUID (lowercased)
+	guestData map[string]*guestEntry           // keyed by VM UUID (lowercased)
+	dataFile  string
 }
 
 func NewStore(dataFile string) *Store {
 	s := &Store{
-		hosts:    make(map[string]*models.Host),
-		vms:      make(map[string][]*models.VM),
-		storage:  make(map[string][]*models.StoragePool),
-		dataFile: dataFile,
+		hosts:     make(map[string]*models.Host),
+		vms:       make(map[string][]*models.VM),
+		storage:   make(map[string][]*models.StoragePool),
+		vmNotes:   make(map[string]string),
+		guestData: make(map[string]*guestEntry),
+		dataFile:  dataFile,
 	}
 	s.load()
 	return s
@@ -70,6 +86,7 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 		if v.Networks == nil {
 			v.Networks = []models.VMNetwork{}
 		}
+		s.applyVMSideData(&v)
 		vms[i] = &v
 	}
 	s.vms[p.HostID] = vms
@@ -82,6 +99,81 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 		pools[i] = &pool
 	}
 	s.storage[p.HostID] = pools
+}
+
+// applyVMSideData rehydrates notes and merges guest-tools data onto a VM record.
+// Called under the write lock.
+func (s *Store) applyVMSideData(v *models.VM) {
+	uuid := strings.ToLower(v.UUID)
+	if notes, ok := s.vmNotes[uuid]; ok {
+		v.Notes = notes
+	}
+	entry, ok := s.guestData[uuid]
+	if !ok {
+		return
+	}
+	if time.Since(entry.UpdatedAt) > guestToolsFreshness {
+		return // stale — don't report tools as present
+	}
+	// Prefer the richer kvm-tools source over qemu-ga when both are present.
+	p := entry.Payload
+	v.GuestAgent = true
+	v.GuestSource = "kvm-tools"
+	if p.OS != "" {
+		v.GuestOS = p.OS
+	}
+	if p.Hostname != "" {
+		v.GuestHostname = p.Hostname
+	}
+	if p.Kernel != "" {
+		v.GuestKernel = p.Kernel
+	}
+	if p.Uptime != "" {
+		v.GuestUptime = p.Uptime
+	}
+	if len(p.IPs) > 0 {
+		v.GuestIPs = p.IPs
+	}
+	if len(p.FS) > 0 {
+		v.GuestFS = p.FS
+	}
+}
+
+// SetVMNotes updates the note for the given VM UUID and rewrites any in-memory copies.
+func (s *Store) SetVMNotes(uuid, notes string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := strings.ToLower(uuid)
+	if notes == "" {
+		delete(s.vmNotes, key)
+	} else {
+		s.vmNotes[key] = notes
+	}
+	for _, vms := range s.vms {
+		for _, v := range vms {
+			if strings.EqualFold(v.UUID, uuid) {
+				v.Notes = notes
+			}
+		}
+	}
+}
+
+// ApplyGuestTelemetry stores a kvm-tools report and re-merges it onto any live VM.
+func (s *Store) ApplyGuestTelemetry(p *models.GuestTelemetryPayload) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p.Timestamp.IsZero() {
+		p.Timestamp = time.Now()
+	}
+	key := strings.ToLower(p.VMUUID)
+	s.guestData[key] = &guestEntry{Payload: *p, UpdatedAt: time.Now()}
+	for _, vms := range s.vms {
+		for _, v := range vms {
+			if strings.EqualFold(v.UUID, p.VMUUID) {
+				s.applyVMSideData(v)
+			}
+		}
+	}
 }
 
 // GetHosts returns a snapshot of all hosts, with offline detection applied.
@@ -175,9 +267,11 @@ func (s *Store) MarkOfflineHosts() {
 func (s *Store) Save() {
 	s.mu.RLock()
 	d := persistData{
-		Hosts:   s.hosts,
-		VMs:     s.vms,
-		Storage: s.storage,
+		Hosts:     s.hosts,
+		VMs:       s.vms,
+		Storage:   s.storage,
+		VMNotes:   s.vmNotes,
+		GuestData: s.guestData,
 	}
 	s.mu.RUnlock()
 
@@ -209,6 +303,12 @@ func (s *Store) load() {
 	}
 	if d.Storage != nil {
 		s.storage = d.Storage
+	}
+	if d.VMNotes != nil {
+		s.vmNotes = d.VMNotes
+	}
+	if d.GuestData != nil {
+		s.guestData = d.GuestData
 	}
 	log.Printf("store: loaded %d hosts from %s", len(s.hosts), s.dataFile)
 }

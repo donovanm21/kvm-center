@@ -185,6 +185,52 @@ func handleCommand(store *Store) http.HandlerFunc {
 	}
 }
 
+// POST /api/vms/notes — update the editable notes field for a VM, keyed by UUID.
+func handleVMNotes(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		var req struct {
+			UUID  string `json:"uuid"`
+			Notes string `json:"notes"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+			return
+		}
+		if req.UUID == "" {
+			writeError(w, http.StatusBadRequest, "uuid required")
+			return
+		}
+		store.SetVMNotes(req.UUID, req.Notes)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
+}
+
+// POST /api/guest-telemetry — receives a report from a kvm-tools daemon running in a guest.
+func handleGuestTelemetry(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		var p models.GuestTelemetryPayload
+		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+			return
+		}
+		if p.VMUUID == "" {
+			writeError(w, http.StatusBadRequest, "vm_uuid required")
+			return
+		}
+		store.ApplyGuestTelemetry(&p)
+		log.Printf("guest-telemetry: uuid=%s host=%s os=%q", p.VMUUID, p.Hostname, p.OS)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
+}
+
 // GET /api/vms/snapshots?host=<id>&vm=<name> — proxy the agent's snapshot list.
 func handleVMSnapshots(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

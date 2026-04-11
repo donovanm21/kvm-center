@@ -64,6 +64,44 @@ type VM struct {
 	DiskTotalGB   float64     `json:"disk_total_gb"`
 	Networks      []VMNetwork `json:"networks"`
 	SnapshotCount int         `json:"snapshot_count"`
+
+	// Guest-side fields. Populated by qemu-guest-agent (via hypervisor) or
+	// kvm-tools daemon (via POST /api/guest-telemetry). Empty when no agent.
+	GuestAgent    bool      `json:"guest_agent"`            // true if any guest source responded
+	GuestSource   string    `json:"guest_source,omitempty"` // "qemu-ga" | "kvm-tools"
+	GuestOS       string    `json:"guest_os,omitempty"`
+	GuestHostname string    `json:"guest_hostname,omitempty"`
+	GuestKernel   string    `json:"guest_kernel,omitempty"`
+	GuestUptime   string    `json:"guest_uptime,omitempty"`
+	GuestIPs      []string  `json:"guest_ips,omitempty"`
+	GuestFS       []GuestFS `json:"guest_fs,omitempty"`
+
+	// User-editable, persisted in server store (rehydrated by UUID).
+	Notes string `json:"notes,omitempty"`
+}
+
+// GuestFS is one filesystem mount reported by a guest agent.
+type GuestFS struct {
+	Mountpoint string  `json:"mountpoint"`
+	FSType     string  `json:"fstype"`
+	TotalGB    float64 `json:"total_gb"`
+	UsedGB     float64 `json:"used_gb"`
+}
+
+// GuestTelemetryPayload is sent by the kvm-tools daemon running inside a VM
+// directly to POST /api/guest-telemetry on the kvm-center server.
+type GuestTelemetryPayload struct {
+	VMUUID     string    `json:"vm_uuid"`
+	Hostname   string    `json:"hostname"`
+	OS         string    `json:"os"`
+	Kernel     string    `json:"kernel"`
+	Uptime     string    `json:"uptime"`
+	CPUCount   int       `json:"cpu_count"`
+	MemTotalMB uint64    `json:"mem_total_mb"`
+	MemUsedMB  uint64    `json:"mem_used_mb"`
+	IPs        []string  `json:"ips"`
+	FS         []GuestFS `json:"fs"`
+	Timestamp  time.Time `json:"timestamp"`
 }
 
 // Snapshot represents a libvirt domain snapshot.

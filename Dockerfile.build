@@ -21,12 +21,22 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
     go build -ldflags="-s -w" -o /out/kvm-center-agent-arm64 ./agent
 
+# Build kvm-tools guest daemon for common guest targets
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-s -w" -o /out/kvm-tools-amd64 ./kvm-tools
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+    go build -ldflags="-s -w" -o /out/kvm-tools-arm64 ./kvm-tools
+
 # Bundle artifacts
 RUN mkdir -p /dist && \
     cp /out/kvm-center-agent-amd64 /dist/ && \
     cp /out/kvm-center-agent-arm64 /dist/ && \
+    cp /out/kvm-tools-amd64 /dist/ && \
+    cp /out/kvm-tools-arm64 /dist/ && \
     cp /src/scripts/install-agent.sh /dist/ && \
-    chmod +x /dist/install-agent.sh && \
+    cp /src/kvm-tools/install.sh /dist/install-kvm-tools.sh && \
+    chmod +x /dist/install-agent.sh /dist/install-kvm-tools.sh && \
     cd /out && tar czf /dist/kvm-center-server.tar.gz kvm-center-server
 
 # Generate simple download portal
@@ -42,9 +52,12 @@ td,th{padding:10px 20px;border:1px solid #1a3a5c;text-align:left}</style>
 <h2>KVM Center Build Artifacts</h2>
 <table>
 <tr><th>File</th><th>Description</th></tr>
-<tr><td><a href="kvm-center-agent-amd64">kvm-center-agent-amd64</a></td><td>Agent binary (Linux x86_64)</td></tr>
-<tr><td><a href="kvm-center-agent-arm64">kvm-center-agent-arm64</a></td><td>Agent binary (Linux ARM64)</td></tr>
+<tr><td><a href="kvm-center-agent-amd64">kvm-center-agent-amd64</a></td><td>Hypervisor agent binary (Linux x86_64)</td></tr>
+<tr><td><a href="kvm-center-agent-arm64">kvm-center-agent-arm64</a></td><td>Hypervisor agent binary (Linux ARM64)</td></tr>
 <tr><td><a href="install-agent.sh">install-agent.sh</a></td><td>One-shot agent installer (systemd)</td></tr>
+<tr><td><a href="kvm-tools-amd64">kvm-tools-amd64</a></td><td>Guest VM tools daemon (Linux x86_64)</td></tr>
+<tr><td><a href="kvm-tools-arm64">kvm-tools-arm64</a></td><td>Guest VM tools daemon (Linux ARM64)</td></tr>
+<tr><td><a href="install-kvm-tools.sh">install-kvm-tools.sh</a></td><td>One-shot kvm-tools installer (run inside a VM)</td></tr>
 <tr><td><a href="kvm-center-server.tar.gz">kvm-center-server.tar.gz</a></td><td>Server binary archive</td></tr>
 </table>
 <h3 style="margin-top:30px">Quick Install (agent)</h3>
