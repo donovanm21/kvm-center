@@ -2,9 +2,9 @@ FROM nginx:alpine
 
 RUN apk --no-cache add bash
 
-# Copy static assets
-COPY nginx.conf.template /etc/nginx/templates/default.conf.template
-COPY docker-entrypoint.sh /docker-entrypoint-custom.sh
+# Copy static assets (paths relative to repo root build context)
+COPY webui/nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY webui/docker-entrypoint.sh /docker-entrypoint-custom.sh
 RUN chmod +x /docker-entrypoint-custom.sh
 
 # The HTML lives in server/static so it stays in sync with the embedded version.
