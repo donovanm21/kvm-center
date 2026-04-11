@@ -331,7 +331,128 @@ func buildVM(name, stateStr string) models.VM {
 	// Snapshot count (fast metadata read; 0 on error or unsupported disk format).
 	vm.SnapshotCount = countSnapshots(name)
 
+	// Guest-agent info. Only attempt on running VMs — qemu-ga is unreachable otherwise.
+	if vm.State == models.VMRunning {
+		collectGuestInfo(&vm, name)
+	}
+
 	return vm
+}
+
+// collectGuestInfo populates the guest-side fields of vm using qemu-guest-agent
+// via virsh. Fields remain empty when qemu-ga is not installed or not responding.
+func collectGuestInfo(vm *models.VM, name string) {
+	info := virshGuestInfo(name)
+	if len(info) == 0 {
+		return
+	}
+
+	vm.GuestAgent = true
+	vm.GuestSource = "qemu-ga"
+	vm.GuestOS = firstNonEmpty(info["os.pretty-name"], info["os.name"])
+	if vm.GuestOS != "" && info["os.version-id"] != "" && !strings.Contains(vm.GuestOS, info["os.version-id"]) {
+		vm.GuestOS = vm.GuestOS + " " + info["os.version-id"]
+	}
+	vm.GuestHostname = info["hostname"]
+	vm.GuestKernel = firstNonEmpty(info["os.kernel-release"], info["os.kernel-version"])
+
+	// Filesystems: scan for fs.<N>.* keys.
+	seenFS := make(map[string]*models.GuestFS)
+	for k, v := range info {
+		if !strings.HasPrefix(k, "fs.") {
+			continue
+		}
+		rest := strings.TrimPrefix(k, "fs.")
+		dot := strings.Index(rest, ".")
+		if dot < 0 {
+			continue
+		}
+		idx, prop := rest[:dot], rest[dot+1:]
+		fs, ok := seenFS[idx]
+		if !ok {
+			fs = &models.GuestFS{}
+			seenFS[idx] = fs
+		}
+		switch prop {
+		case "mountpoint":
+			fs.Mountpoint = v
+		case "fstype":
+			fs.FSType = v
+		case "total-bytes":
+			n, _ := strconv.ParseUint(v, 10, 64)
+			fs.TotalGB = math.Round(float64(n)/(1024*1024*1024)*100) / 100
+		case "used-bytes":
+			n, _ := strconv.ParseUint(v, 10, 64)
+			fs.UsedGB = math.Round(float64(n)/(1024*1024*1024)*100) / 100
+		}
+	}
+	for _, fs := range seenFS {
+		// Skip pseudo/virtual filesystems with no size info.
+		if fs.TotalGB == 0 && fs.Mountpoint == "" {
+			continue
+		}
+		vm.GuestFS = append(vm.GuestFS, *fs)
+	}
+
+	// Guest IPs via qemu-ga (not DHCP lease cache).
+	vm.GuestIPs = virshDomIfAddrAgent(name)
+}
+
+// virshGuestInfo runs `virsh guestinfo <vm>` and returns parsed key/value pairs.
+// Returns empty map if the guest agent is not responding.
+func virshGuestInfo(name string) map[string]string {
+	out, err := exec.Command("virsh", "guestinfo", name).Output()
+	if err != nil {
+		return map[string]string{}
+	}
+	m := make(map[string]string)
+	for _, line := range strings.Split(string(out), "\n") {
+		idx := strings.Index(line, ":")
+		if idx < 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:idx])
+		val := strings.TrimSpace(line[idx+1:])
+		if key != "" {
+			m[key] = val
+		}
+	}
+	return m
+}
+
+// virshDomIfAddrAgent returns non-loopback IPs reported by the qemu-guest-agent.
+func virshDomIfAddrAgent(name string) []string {
+	out, err := exec.Command("virsh", "domifaddr", name, "--source", "agent").Output()
+	if err != nil {
+		return nil
+	}
+	var ips []string
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		// columns: Name MAC Protocol Address
+		addr := fields[3]
+		if slash := strings.Index(addr, "/"); slash >= 0 {
+			addr = addr[:slash]
+		}
+		if addr == "" || strings.HasPrefix(addr, "127.") || addr == "::1" || strings.HasPrefix(addr, "fe80:") {
+			continue
+		}
+		ips = append(ips, addr)
+	}
+	return ips
+}
+
+func firstNonEmpty(vs ...string) string {
+	for _, v := range vs {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // countSnapshots returns the number of snapshots for the given VM.
