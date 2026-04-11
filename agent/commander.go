@@ -16,6 +16,8 @@ import (
 func StartCommandServer(addr string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/command", handleCommand)
+	mux.HandleFunc("/console/", handleConsolePage)
+	mux.HandleFunc("/ws/", handleConsoleWS)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
