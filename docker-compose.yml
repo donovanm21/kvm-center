@@ -1,15 +1,56 @@
-version: '3.8'
+# Full stack: server + nginx web UI
+# Usage: docker compose up -d
+version: "3.8"
+
 services:
   kvm-center-server:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    image: kvm-center-server:latest
     container_name: kvm-center-server
-    network_mode: host
-    volumes:
-      - kvm_center_data:/data
-      - ./app_code:/app
     restart: unless-stopped
+    ports:
+      - "8090:8090"   # Agents on the LAN post telemetry here.
     environment:
-      - PYTHONUNBUFFERED=1
+      - KVM_CENTER_ADDR=:8090
+      - KVM_CENTER_DATA=/var/lib/kvm-center/data.json
+    volumes:
+      - kvm-center-data:/var/lib/kvm-center
+    networks:
+      - kvm-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  kvm-center-webui:
+    build:
+      context: .
+      dockerfile: webui/Dockerfile
+    image: kvm-center-webui:latest
+    container_name: kvm-center-webui
+    restart: unless-stopped
+    ports:
+      - "8096:80"     # Browse to http://<host>:8096 (8095 used by host-monitor-ui)
+    environment:
+      - KVM_CENTER_SERVER_HOST=kvm-center-server   # Service name on internal network.
+      - KVM_CENTER_SERVER_PORT=8090
+    depends_on:
+      - kvm-center-server
+    networks:
+      - kvm-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+networks:
+  kvm-net:
+    driver: bridge
 
 volumes:
-  kvm_center_data:
+  kvm-center-data:
+    driver: local

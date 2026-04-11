@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-pydantic
-requests
-psutil
-# We remove python-libvirt from the server requirements since the server 
-# only handles API/DB and doesn't actually talk to libvirt itself.
-# The AGENT is the one that needs libvirt.
