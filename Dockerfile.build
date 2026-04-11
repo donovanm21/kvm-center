@@ -21,23 +21,30 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
     go build -ldflags="-s -w" -o /out/kvm-center-agent-arm64 ./agent
 
-# Build kvm-tools guest daemon for common guest targets
+# Build kvm-tools guest daemon for Linux (amd64 + arm64) and Windows (amd64)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-s -w" -o /out/kvm-tools-amd64 ./kvm-tools
+    go build -ldflags="-s -w" -o /out/kvm-tools-linux-amd64 ./kvm-tools
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
-    go build -ldflags="-s -w" -o /out/kvm-tools-arm64 ./kvm-tools
+    go build -ldflags="-s -w" -o /out/kvm-tools-linux-arm64 ./kvm-tools
+
+RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+    go build -ldflags="-s -w" -o /out/kvm-tools-windows-amd64.exe ./kvm-tools
 
 # Bundle artifacts
 RUN mkdir -p /dist && \
     cp /out/kvm-center-agent-amd64 /dist/ && \
     cp /out/kvm-center-agent-arm64 /dist/ && \
-    cp /out/kvm-tools-amd64 /dist/ && \
-    cp /out/kvm-tools-arm64 /dist/ && \
+    cp /out/kvm-tools-linux-amd64 /dist/ && \
+    cp /out/kvm-tools-linux-arm64 /dist/ && \
+    cp /out/kvm-tools-windows-amd64.exe /dist/ && \
     cp /src/scripts/install-agent.sh /dist/ && \
     cp /src/kvm-tools/install.sh /dist/install-kvm-tools.sh && \
+    cp /src/kvm-tools/install.ps1 /dist/install-kvm-tools.ps1 && \
     chmod +x /dist/install-agent.sh /dist/install-kvm-tools.sh && \
-    cd /out && tar czf /dist/kvm-center-server.tar.gz kvm-center-server
+    cd /out && tar czf /dist/kvm-center-server.tar.gz kvm-center-server && \
+    ln -s kvm-tools-linux-amd64 /dist/kvm-tools-amd64 && \
+    ln -s kvm-tools-linux-arm64 /dist/kvm-tools-arm64
 
 # Generate simple download portal
 RUN cat > /dist/index.html << 'EOF'
@@ -55,9 +62,11 @@ td,th{padding:10px 20px;border:1px solid #1a3a5c;text-align:left}</style>
 <tr><td><a href="kvm-center-agent-amd64">kvm-center-agent-amd64</a></td><td>Hypervisor agent binary (Linux x86_64)</td></tr>
 <tr><td><a href="kvm-center-agent-arm64">kvm-center-agent-arm64</a></td><td>Hypervisor agent binary (Linux ARM64)</td></tr>
 <tr><td><a href="install-agent.sh">install-agent.sh</a></td><td>One-shot agent installer (systemd)</td></tr>
-<tr><td><a href="kvm-tools-amd64">kvm-tools-amd64</a></td><td>Guest VM tools daemon (Linux x86_64)</td></tr>
-<tr><td><a href="kvm-tools-arm64">kvm-tools-arm64</a></td><td>Guest VM tools daemon (Linux ARM64)</td></tr>
-<tr><td><a href="install-kvm-tools.sh">install-kvm-tools.sh</a></td><td>One-shot kvm-tools installer (run inside a VM)</td></tr>
+<tr><td><a href="kvm-tools-linux-amd64">kvm-tools-linux-amd64</a></td><td>Guest VM tools daemon (Linux x86_64)</td></tr>
+<tr><td><a href="kvm-tools-linux-arm64">kvm-tools-linux-arm64</a></td><td>Guest VM tools daemon (Linux ARM64)</td></tr>
+<tr><td><a href="kvm-tools-windows-amd64.exe">kvm-tools-windows-amd64.exe</a></td><td>Guest VM tools daemon (Windows x86_64)</td></tr>
+<tr><td><a href="install-kvm-tools.sh">install-kvm-tools.sh</a></td><td>One-shot kvm-tools installer (Linux, bash)</td></tr>
+<tr><td><a href="install-kvm-tools.ps1">install-kvm-tools.ps1</a></td><td>One-shot kvm-tools installer (Windows, PowerShell)</td></tr>
 <tr><td><a href="kvm-center-server.tar.gz">kvm-center-server.tar.gz</a></td><td>Server binary archive</td></tr>
 </table>
 <h3 style="margin-top:30px">Quick Install (agent)</h3>

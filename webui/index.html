@@ -713,6 +713,166 @@ tbody td {
   margin-right: auto;
 }
 
+/* ── Deployment Page ────────────────────────────────────── */
+.deploy-intro {
+  background: #0f2135;
+  border: 1px solid #1a3a5c;
+  border-left: 3px solid #0091da;
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #c5daf0;
+}
+.deploy-intro strong { color: #e8f4ff; }
+.deploy-intro code {
+  background: #091828;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: #4db8ff;
+}
+
+.deploy-package {
+  background: #0f2135;
+  border: 1px solid #1a3a5c;
+  border-radius: 6px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+}
+.deploy-package h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e8f4ff;
+  margin: 0 0 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.deploy-package .deploy-desc {
+  font-size: 11px;
+  color: #5a8ab0;
+  margin-bottom: 14px;
+}
+
+.deploy-os-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #1a3a5c;
+  padding-bottom: 0;
+}
+.deploy-os-tab {
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  color: #7aa8cc;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: all 0.15s;
+  user-select: none;
+}
+.deploy-os-tab:hover { color: #c5daf0; }
+.deploy-os-tab.active { color: #e8f4ff; border-bottom-color: #0091da; }
+
+.deploy-code-wrap {
+  position: relative;
+  background: #091828;
+  border: 1px solid #1a3a5c;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+.deploy-code-wrap pre {
+  margin: 0;
+  padding: 14px 16px;
+  padding-right: 90px;
+  color: #c5daf0;
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre;
+}
+.deploy-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #0d3a5c;
+  border: 1px solid #0091da;
+  color: #e8f4ff;
+  padding: 5px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.deploy-copy-btn:hover { background: #0091da; color: #fff; }
+.deploy-copy-btn.copied { background: #1a3d1a; border-color: #4caf50; color: #4caf50; }
+
+.deploy-note {
+  font-size: 11px;
+  color: #5a8ab0;
+  margin-top: 8px;
+  padding-left: 4px;
+}
+
+.deploy-files-table {
+  width: 100%;
+  font-size: 11px;
+  margin-top: 6px;
+}
+.deploy-files-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #3d6a8a;
+  border-bottom: 1px solid #1a3a5c;
+}
+.deploy-files-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #112030;
+  color: #c5daf0;
+}
+.deploy-files-table td a {
+  color: #4db8ff;
+  text-decoration: none;
+  font-family: 'SF Mono', monospace;
+}
+.deploy-files-table td a:hover { text-decoration: underline; }
+.deploy-files-table td .size { color: #5a8ab0; font-size: 10px; }
+
+.deploy-portal-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: #1a3d1a;
+  color: #4caf50;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-radius: 10px;
+  margin-left: auto;
+}
+.deploy-portal-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #4caf50; }
+.deploy-portal-pill.offline { background: #3d1a1a; color: #f44336; }
+.deploy-portal-pill.offline::before { background: #f44336; }
+
 /* ── Scrollbar ──────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #091828; }
@@ -781,6 +941,13 @@ tbody td {
         Snapshots
         <span class="nav-badge" id="badge-snapshots">0</span>
       </div>
+      <div class="nav-item" id="nav-deployment" onclick="showView('deployment')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+          <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
+        </svg>
+        Deployment
+      </div>
     </div>
 
     <div class="sidebar-section">
@@ -838,6 +1005,9 @@ let state = {
   vmHardwareOpen: true,
   vmRelatedOpen: true,
   vmNetworksOpen: false,
+  deployOS: { 'kvm-tools': 'rhel', 'agent': 'rhel' }, // OS tab per package
+  deployPortalOnline: null, // null=unknown, true/false probed
+  deployPortalFiles: [],
 };
 
 // ── Bootstrap ──────────────────────────────────────────────
@@ -886,9 +1056,10 @@ function showView(view, hostID, tab) {
     state.selectedSnapshotVM = null;
     state.snapshotList = [];
   }
-  ['dashboard','all-vms','storage','snapshots'].forEach(v => {
+  ['dashboard','all-vms','storage','snapshots','deployment'].forEach(v => {
     document.getElementById('nav-'+v)?.classList.toggle('active', v === view);
   });
+  if (view === 'deployment') probeDeployPortal();
   render();
 }
 
@@ -929,7 +1100,7 @@ function renderSidebar() {
 
 // ── Breadcrumb ─────────────────────────────────────────────
 function renderBreadcrumb() {
-  const crumbs = { dashboard:'Dashboard', 'all-vms':'All VMs', storage:'Storage', host:'Hosts', snapshots:'Snapshots', vm:'Virtual Machines' };
+  const crumbs = { dashboard:'Dashboard', 'all-vms':'All VMs', storage:'Storage', host:'Hosts', snapshots:'Snapshots', vm:'Virtual Machines', deployment:'Deployment' };
   let html = `KVM Center <span>/ ${crumbs[state.view] || state.view}`;
   if (state.view === 'host' && state.selectedHost) html += ` / ${esc(state.selectedHost)}`;
   if (state.view === 'snapshots' && state.selectedSnapshotVM) html += ` / ${esc(state.selectedSnapshotVM.name)}`;
@@ -976,6 +1147,7 @@ function renderContent() {
     case 'host':       body.innerHTML = renderHostView();  break;
     case 'snapshots':  body.innerHTML = renderSnapshotsView(q); break;
     case 'vm':         body.innerHTML = renderVMView(); break;
+    case 'deployment': body.innerHTML = renderDeploymentView(); break;
     default:           body.innerHTML = '';
   }
 }
@@ -1299,6 +1471,258 @@ function storageTable(pools, showHost) {
         }).join('')}
       </tbody>
     </table>
+  `;
+}
+
+// ── Deployment view ────────────────────────────────────────
+function deployPortalURL() {
+  // Same hostname as the kvm-center UI; build container is on port 8097.
+  return `${location.protocol}//${location.hostname}:8097`;
+}
+function deployServerURL() {
+  return `http://${location.hostname}:8090`;
+}
+
+async function probeDeployPortal() {
+  try {
+    const r = await fetch(deployPortalURL() + '/', { method: 'GET', mode: 'no-cors' });
+    state.deployPortalOnline = true;
+  } catch (e) {
+    state.deployPortalOnline = false;
+  }
+  render();
+}
+
+function setDeployOS(pkg, os) {
+  state.deployOS[pkg] = os;
+  renderContent();
+}
+
+function copyDeploySnippet(btnId, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.classList.remove('copied');
+    }, 1800);
+  }).catch(() => {
+    toast('error', 'Clipboard write failed');
+  });
+}
+
+function renderDeploymentView() {
+  const portal = deployPortalURL();
+  const server = deployServerURL();
+
+  const portalPill = state.deployPortalOnline === true
+    ? `<span class="deploy-portal-pill">portal online</span>`
+    : state.deployPortalOnline === false
+      ? `<span class="deploy-portal-pill offline">portal offline</span>`
+      : `<span class="deploy-portal-pill" style="background:#1a3a5c;color:#7aa8cc">probing…</span>`;
+  // Note: portalPill style without ::before for unknown state
+  const portalPillNoDot = state.deployPortalOnline === null
+    ? `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#1a3a5c;color:#7aa8cc;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border-radius:10px;margin-left:auto">probing…</span>`
+    : portalPill;
+
+  // ── Snippets ─────────────────────────────────────────────
+  const snippets = {
+    // KVM Tools — Linux RHEL/CentOS/Rocky/Fedora
+    'kvm-tools-rhel': `# Run as root on the guest VM (Rocky / RHEL / CentOS / Fedora)
+curl -fsSL ${portal}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
+curl -fsSL ${portal}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
+chmod +x /tmp/install-kvm-tools.sh /tmp/kvm-tools-amd64
+sudo /tmp/install-kvm-tools.sh --server ${server}`,
+
+    // KVM Tools — Linux Debian/Ubuntu
+    'kvm-tools-debian': `# Run as root on the guest VM (Debian / Ubuntu / Mint)
+curl -fsSL ${portal}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
+curl -fsSL ${portal}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
+chmod +x /tmp/install-kvm-tools.sh /tmp/kvm-tools-amd64
+sudo /tmp/install-kvm-tools.sh --server ${server}`,
+
+    // KVM Tools — Windows PowerShell
+    'kvm-tools-windows': `# Run from an elevated PowerShell prompt on the guest VM
+$ErrorActionPreference = 'Stop'
+$portal = '${portal}'
+$server = '${server}'
+$tmp = Join-Path $env:TEMP 'kvm-tools-install'
+New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+Invoke-WebRequest -Uri "$portal/kvm-tools-windows-amd64.exe" -OutFile "$tmp\\kvm-tools.exe" -UseBasicParsing
+Invoke-WebRequest -Uri "$portal/install-kvm-tools.ps1"      -OutFile "$tmp\\install-kvm-tools.ps1" -UseBasicParsing
+Set-Location $tmp
+.\\install-kvm-tools.ps1 -Server $server`,
+
+    // Hypervisor agent — RHEL/Rocky
+    'agent-rhel': `# Run as root on the new KVM hypervisor (Rocky / RHEL / CentOS)
+curl -fsSL ${portal}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
+curl -fsSL ${portal}/install-agent.sh       -o /tmp/install-agent.sh
+chmod +x /tmp/install-agent.sh /tmp/kvm-center-agent-amd64
+# Open the agent command port (only required if firewalld is active)
+sudo firewall-cmd --add-port=8081/tcp --permanent && sudo firewall-cmd --reload
+sudo /tmp/install-agent.sh --server ${server}`,
+
+    // Hypervisor agent — Debian/Ubuntu
+    'agent-debian': `# Run as root on the new KVM hypervisor (Debian / Ubuntu)
+curl -fsSL ${portal}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
+curl -fsSL ${portal}/install-agent.sh       -o /tmp/install-agent.sh
+chmod +x /tmp/install-agent.sh /tmp/kvm-center-agent-amd64
+# Open the agent command port (only required if ufw is active)
+sudo ufw allow 8081/tcp || true
+sudo /tmp/install-agent.sh --server ${server}`,
+  };
+
+  // ── KVM Tools card ───────────────────────────────────────
+  const kvmToolsOS = state.deployOS['kvm-tools'] || 'rhel';
+  const kvmToolsKey = `kvm-tools-${kvmToolsOS}`;
+  const kvmToolsSnippet = snippets[kvmToolsKey];
+
+  const kvmToolsCard = `
+    <div class="deploy-package">
+      <h3>
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="#0091da"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zM4.5 7.5a.5.5 0 0 1 .5-.5h2V5a.5.5 0 0 1 1 0v2h2a.5.5 0 0 1 0 1H8v2a.5.5 0 0 1-1 0V8H5a.5.5 0 0 1-.5-.5z"/></svg>
+        KVM Tools (Guest VM Daemon)
+        ${portalPillNoDot}
+      </h3>
+      <div class="deploy-desc">
+        Install inside a guest VM to surface guest OS, hostname, IP addresses, and per-mountpoint
+        filesystem usage in the kvm-center UI. Reports to <code style="background:#091828;padding:1px 6px;border-radius:3px;color:#4db8ff;font-family:'SF Mono',monospace;font-size:11px">${esc(server)}</code>
+        every 30 seconds. Once installed, the VM's pill in the Summary tab flips to
+        <span style="color:#4caf50;font-weight:600">KVM Tools: running</span>.
+      </div>
+
+      <div class="deploy-os-tabs">
+        <div class="deploy-os-tab ${kvmToolsOS==='rhel'?'active':''}"    onclick="setDeployOS('kvm-tools','rhel')">🐧 RHEL / Rocky</div>
+        <div class="deploy-os-tab ${kvmToolsOS==='debian'?'active':''}"  onclick="setDeployOS('kvm-tools','debian')">🐧 Debian / Ubuntu</div>
+        <div class="deploy-os-tab ${kvmToolsOS==='windows'?'active':''}" onclick="setDeployOS('kvm-tools','windows')">⊞ Windows (PowerShell)</div>
+      </div>
+
+      <div class="deploy-code-wrap">
+        <button class="deploy-copy-btn" id="copy-kvm-tools" onclick='copyDeploySnippet("copy-kvm-tools", ${JSON.stringify(kvmToolsSnippet)})'>Copy</button>
+        <pre>${esc(kvmToolsSnippet)}</pre>
+      </div>
+      <div class="deploy-note">
+        ${kvmToolsOS === 'windows'
+          ? 'Registers a Scheduled Task running as SYSTEM at boot. Requires elevated PowerShell.'
+          : 'Installs <code>/opt/kvm-tools/kvm-tools</code> and a systemd unit. Requires root.'}
+      </div>
+    </div>
+  `;
+
+  // ── Agent card ───────────────────────────────────────────
+  const agentOS = state.deployOS['agent'] || 'rhel';
+  const agentKey = `agent-${agentOS}`;
+  const agentSnippet = snippets[agentKey];
+
+  const agentCard = `
+    <div class="deploy-package">
+      <h3>
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="#7c4dff"><path d="M11 2a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3h6zm0 1H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm-3 3a.5.5 0 0 1 .5.5v3.793l1.146-1.147a.5.5 0 0 1 .708.708l-2 2a.5.5 0 0 1-.708 0l-2-2a.5.5 0 1 1 .708-.708L7.5 10.293V6.5A.5.5 0 0 1 8 6z"/></svg>
+        KVM Center Agent (Hypervisor)
+        ${portalPillNoDot}
+      </h3>
+      <div class="deploy-desc">
+        Install on a new KVM hypervisor (Rocky / RHEL / Debian etc.) to add it to the kvm-center
+        fleet. Collects host metrics, lists VMs/snapshots/storage pools, and serves the per-VM
+        VNC console + power actions. Listens on port <code style="background:#091828;padding:1px 6px;border-radius:3px;color:#4db8ff;font-family:'SF Mono',monospace;font-size:11px">8081</code>
+        for command routing from the server.
+      </div>
+
+      <div class="deploy-os-tabs">
+        <div class="deploy-os-tab ${agentOS==='rhel'?'active':''}"   onclick="setDeployOS('agent','rhel')">🐧 RHEL / Rocky</div>
+        <div class="deploy-os-tab ${agentOS==='debian'?'active':''}" onclick="setDeployOS('agent','debian')">🐧 Debian / Ubuntu</div>
+      </div>
+
+      <div class="deploy-code-wrap">
+        <button class="deploy-copy-btn" id="copy-agent" onclick='copyDeploySnippet("copy-agent", ${JSON.stringify(agentSnippet)})'>Copy</button>
+        <pre>${esc(agentSnippet)}</pre>
+      </div>
+      <div class="deploy-note">
+        Requires <code>libvirtd</code> running and <code>virsh</code> in PATH. The installer writes
+        <code>/etc/systemd/system/kvm-center-agent.service</code> and enables it at boot.
+      </div>
+    </div>
+  `;
+
+  // ── Direct downloads card ────────────────────────────────
+  const downloads = [
+    { f: 'kvm-tools-linux-amd64',       d: 'KVM Tools — Linux x86_64' },
+    { f: 'kvm-tools-linux-arm64',       d: 'KVM Tools — Linux ARM64' },
+    { f: 'kvm-tools-windows-amd64.exe', d: 'KVM Tools — Windows x86_64' },
+    { f: 'install-kvm-tools.sh',        d: 'KVM Tools installer (Linux)' },
+    { f: 'install-kvm-tools.ps1',       d: 'KVM Tools installer (Windows)' },
+    { f: 'kvm-center-agent-amd64',      d: 'Hypervisor agent — Linux x86_64' },
+    { f: 'kvm-center-agent-arm64',      d: 'Hypervisor agent — Linux ARM64' },
+    { f: 'install-agent.sh',            d: 'Hypervisor agent installer' },
+  ];
+
+  const downloadsCard = `
+    <div class="deploy-package">
+      <h3>
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="#4caf50"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+        Direct Downloads
+      </h3>
+      <div class="deploy-desc">
+        Cross-compiled from the latest commit by the build container at
+        <code style="background:#091828;padding:1px 6px;border-radius:3px;color:#4db8ff;font-family:'SF Mono',monospace;font-size:11px">${esc(portal)}</code>
+      </div>
+      <table class="deploy-files-table">
+        <thead><tr><th>File</th><th>Description</th></tr></thead>
+        <tbody>
+          ${downloads.map(d => `
+            <tr>
+              <td><a href="${portal}/${d.f}" target="_blank" rel="noopener">${esc(d.f)}</a></td>
+              <td>${esc(d.d)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  // ── Verification card ────────────────────────────────────
+  const verifyCard = `
+    <div class="deploy-package">
+      <h3>
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="#ff9800"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM5.354 7.146a.5.5 0 1 0-.708.708l2 2a.5.5 0 0 0 .708 0l4-4a.5.5 0 0 0-.708-.708L7 8.793 5.354 7.146z"/></svg>
+        Verifying a Successful Install
+      </h3>
+      <div class="deploy-desc">
+        After running the installer the new agent or kvm-tools should appear in the kvm-center
+        inventory within 30 seconds. Use these checks to confirm.
+      </div>
+      <div class="deploy-code-wrap">
+        <button class="deploy-copy-btn" id="copy-verify" onclick='copyDeploySnippet("copy-verify", ${JSON.stringify('# 1. Server liveness\ncurl -s ' + server + '/health\n\n# 2. List all hosts the server knows about\ncurl -s ' + server + '/api/hosts | python3 -m json.tool\n\n# 3. List all VMs (look for guest_agent: true after kvm-tools install)\ncurl -s ' + server + '/api/vms | python3 -m json.tool')})'>Copy</button>
+<pre># 1. Server liveness
+curl -s ${server}/health
+
+# 2. List all hosts the server knows about
+curl -s ${server}/api/hosts | python3 -m json.tool
+
+# 3. List all VMs (look for guest_agent: true after kvm-tools install)
+curl -s ${server}/api/vms | python3 -m json.tool</pre>
+      </div>
+      <div class="deploy-note">
+        The kvm-tools daemon waits for the next 30 s tick before its first telemetry burst, then
+        reports every 30 s thereafter. After 5 minutes of silence the UI will flag the VM as
+        <span style="color:#ff9800">KVM Tools: Not installed</span> again.
+      </div>
+    </div>
+  `;
+
+  return `
+    <div class="deploy-intro">
+      <strong>One-shot installs.</strong> Copy a snippet, paste it on the target host, done.
+      The download portal is hosted at <code>${esc(portal)}</code> and serves the latest
+      cross-compiled binaries built from this repository.
+    </div>
+    ${kvmToolsCard}
+    ${agentCard}
+    ${downloadsCard}
+    ${verifyCard}
   `;
 }
 
