@@ -1,277 +1,161 @@
-# KVM-Center
+# KVM Center
 
-A lightweight, centralized management platform for KVM hypervisor fleets. Inspired by VMware vCenter, built for homelabs.
+A lightweight, centralised management platform for KVM hypervisor fleets. Designed for homelabs — a single pane of glass for your VMs, inspired by VMware vCenter.
 
-## 🎯 Project Overview
+Built in Go. Zero external dependencies. Single static binaries.
 
-KVM-Center provides a **single pane of glass** web UI to manage multiple KVM hypervisors from one central location. It consists of:
-
-- **Control Plane Server**: FastAPI-based web server with SQLite backend
-- **Node Agents**: Lightweight Python agents deployed on each hypervisor
-- **Web Dashboard**: Real-time VM and host monitoring with power controls
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    KVM-Center Server                         │
-│                  (FastAPI + SQLite)                          │
-│                  Port: 8090 (HTTP)                           │
-│                                                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │  Web Dashboard │  │  REST API   │  │  Command Router   │  │
-│  │  (HTML/JS)   │  │  /api/*     │  │  (to agents)       │  │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-         ┌────────────────────┼────────────────────┐
-         │                    │                    │
-         ▼                    ▼                    ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│   hvnode01      │ │   hvnode02      │ │   hvnode03      │
-│  (REDACTED-HOST-11) │ │  (REDACTED-HOST-12) │ │  (REDACTED-HOST-13) │
-│                 │ │                 │ │                 │
-│  ┌───────────┐  │ │  ┌───────────┐  │ │  ┌───────────┐  │
-│  │  Agent    │  │ │  │  Agent    │  │ │  │  Agent    │  │
-│  │ Port 8081 │  │ │  │ Port 8081 │  │ │  │ Port 8081 │  │
-│  └───────────┘  │ │  └───────────┘  │ │  └───────────┘  │
-│                 │ │                 │ │                 │
-│  ┌───────────┐  │ │  ┌───────────┐  │ │  ┌───────────┐  │
-│  │  libvirt  │  │ │  │  libvirt  │  │ │  │  libvirt  │  │
-│  │  (KVM)    │  │ │  │  (KVM)    │  │ │  │  (KVM)    │  │
-│  └───────────┘  │ │  └───────────┘  │ │  └───────────┘  │
-└─────────────────┘ └─────────────────┘ └─────────────────┘
-```
-
-## 🚀 Features
-
-### Current (v1.0)
-- ✅ Real-time host monitoring (CPU, RAM, uptime)
-- ✅ VM inventory across all hosts
-- ✅ VM power state tracking (RUNNING, SHUTOFF, PAUSED)
-- ✅ Remote power control (Start, Stop, Restart)
-- ✅ Searchable VM list
-- ✅ Responsive web UI (mobile-friendly)
-- ✅ Automatic telemetry collection (10-second intervals)
-
-### Planned (v2.0)
-- [ ] VM console access (VNC/SPICE integration)
-- [ ] Snapshot management
-- [ ] VM migration between hosts
-- [ ] Storage pool monitoring
-- [ ] Network interface management
-- [ ] Alerting and notifications
-- [ ] User authentication & RBAC
-- [ ] VM creation wizard
-- [ ] Resource scheduling & DRS-like features
-
-## 📁 Project Structure
-
-```
-kvm-center/
-├── server.py              # FastAPI control plane server
-├── agent.py               # Node agent (deployed to hypervisors)
-├── docker-compose.yml     # Docker deployment configuration
-├── Dockerfile             # Server container build
-├── requirements.txt       # Python dependencies
-├── onboard_agent.sh       # Agent deployment script
-└── docs/
-    └── DEPLOYMENT.md      # Detailed deployment guide
-```
-
-## 🛠️ Deployment
-
-### Prerequisites
-
-**Control Plane Server:**
-- Docker & Docker Compose
-- Network access to all hypervisors
-
-**Hypervisor Nodes:**
-- Rocky Linux 9+ (or Ubuntu/Debian)
-- KVM/libvirt installed and running
-- Python 3.9+
-- SSH access from control plane
-
-### Quick Start
-
-#### 1. Deploy Control Plane Server
-
-```bash
-cd /opt/kvm-center
-docker compose up -d
-```
-
-Server will be available at: `http://<server-ip>:8090`
-
-#### 2. Deploy Agents to Hypervisors
-
-```bash
-# From the control plane host
-./onboard_agent.sh hvnode01
-./onboard_agent.sh hvnode02
-./onboard_agent.sh hvnode03
-```
-
-Or manually on each hypervisor:
-
-```bash
-# Install dependencies
-dnf install -y python3-libvirt python3-pip python3-devel gcc
-
-# Deploy agent
-mkdir -p /opt/kvm-center-agent
-# Copy agent.py to /opt/kvm-center-agent/
-
-# Install Python deps
-pip3 install requests psutil flask
-
-# Create systemd service (see onboard_agent.sh for template)
-systemctl enable --now kvm-center-agent
-```
-
-### Configuration
-
-**Server Environment Variables:**
-- `PYTHONUNBUFFERED=1` (default)
-
-**Agent Configuration:**
-Edit `agent.py` to change:
-- `SERVER_URL`: Control plane endpoint
-- `COMMAND_PORT`: Agent command listener port (default: 8081)
-- `CHECK_INTERVAL`: Telemetry frequency (default: 10 seconds)
-
-## 🔌 API Reference
-
-### Telemetry Ingestion
-
-```http
-POST /api/telemetry
-Content-Type: application/json
-
-{
-  "host_id": "hvnode01.example.lan",
-  "cpu_usage": 45.2,
-  "mem_usage": 62.1,
-  "vms": [
-    {
-      "name": "Web-Server",
-      "id": "7e0141bcd78448f6b0904cb34cd9c85d",
-      "state": "RUNNING",
-      "cpu": 4,
-      "mem": 8388608
-    }
-  ],
-  "timestamp": "2026-04-11T01:30:00.000000"
-}
-```
-
-### List Hosts
-
-```http
-GET /api/hosts
-```
-
-### List VMs
-
-```http
-GET /api/vms
-```
-
-### Execute VM Command
-
-```http
-POST /api/command
-Content-Type: application/json
-
-{
-  "vm_id": "7e0141bcd78448f6b0904cb34cd9c85d",
-  "action": "STOP"
-}
-```
-
-**Supported Actions:**
-- `START` - Power on VM
-- `STOP` - Hard power off (immediate)
-- `RESTART` - Stop then start
-- `SHUTDOWN` - Graceful ACPI shutdown
-
-## 🔧 Troubleshooting
-
-### Agents Not Reporting
-
-1. Check agent status:
-   ```bash
-   systemctl status kvm-center-agent
-   journalctl -u kvm-center-agent -f
-   ```
-
-2. Verify connectivity:
-   ```bash
-   curl http://<server-ip>:8090/api/hosts
-   ```
-
-3. Check libvirt connection:
-   ```bash
-   virsh list --all
-   ```
-
-### Commands Not Executing
-
-1. Verify agent command port is open:
-   ```bash
-   netstat -tlnp | grep 8081
-   ```
-
-2. Test command endpoint from server:
-   ```bash
-   curl -X POST http://<agent-ip>:8081/command \
-     -H "Content-Type: application/json" \
-     -d '{"vm_id": "<uuid>", "action": "STOP"}'
-   ```
-
-3. Check firewall rules on hypervisors
-
-### Database Issues
-
-Reset database (will repopulate from agents):
-```bash
-docker exec kvm-center-server rm /data/kvm_center.db
-docker compose restart
-```
-
-## 📝 Development
-
-### Running Locally
-
-```bash
-# Server
-pip install -r requirements.txt
-python server.py
-
-# Agent (on hypervisor or test VM)
-pip install requests psutil flask python-libvirt
-python agent.py
-```
-
-### Building Docker Image
-
-```bash
-docker build -t kvm-center-server .
-```
-
-## 📄 License
-
-MIT License - See LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- Inspired by VMware vCenter's centralized management approach
-- Built with FastAPI, Flask, and libvirt
-- Designed for homelab and small-scale deployments
+**Live at:** `http://docker.example.lan:8096`
 
 ---
 
-**Version:** 1.0.0  
-**Last Updated:** 2026-04-11  
-**Author:** Donovan Muskett-Yetts
+## What It Does
+
+- **Dashboard** — host grid with real-time CPU and memory bars
+- **VM inventory** — all VMs across all hypervisors in one table, searchable
+- **Power control** — Start, Stop, Restart, Snapshot from the UI
+- **Storage pools** — capacity and utilisation per hypervisor
+- **Offline detection** — hosts marked offline if no telemetry for 2 minutes
+- **Dark theme** — vCenter-inspired layout that isn't painful to look at
+
+---
+
+## Architecture at a Glance
+
+```
+Browser → :8096 → nginx (webui container)
+                     └─ /api/* → :8090 → kvm-center-server (Go)
+                                              ↑ POST /api/telemetry (every 30s)
+                                              ↓ POST /command (on user action)
+                                   hvnode01:8081  hvnode02:8081  hvnode03:8081
+                                   (kvm-center-agent systemd service)
+```
+
+Two binaries. One Docker Compose stack. Three systemd services.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
+
+---
+
+## Quick Start
+
+### Server Stack (Docker)
+
+```bash
+# Clone
+git clone http://jeff:Access2Git@REDACTED-HOST:9001/Homelab/kvm-center.git /opt/kvm-center
+cd /opt/kvm-center
+
+# Build and start
+docker compose build
+docker compose up -d
+
+# Verify
+curl http://localhost:8090/health
+```
+
+**UI:** `http://REDACTED-HOST:8096`  
+**API:** `http://REDACTED-HOST:8090`
+
+### Agents (on each hypervisor)
+
+```bash
+# Build agent binary on the docker host
+docker build -f Dockerfile.build -t kvm-center-build:latest .
+docker create --name kvm-builder kvm-center-build:latest
+docker cp kvm-builder:/dist/kvm-center-agent-amd64 ./kvm-center-agent-amd64
+docker rm kvm-builder
+
+# Deploy to all hypervisors
+for NODE in REDACTED-HOST-11 REDACTED-HOST-12 REDACTED-HOST-13; do
+  scp kvm-center-agent-amd64 scripts/install-agent.sh root@$NODE:/tmp/
+  ssh root@$NODE "chmod +x /tmp/kvm-center-agent-amd64 /tmp/install-agent.sh && \
+    /tmp/install-agent.sh --server http://REDACTED-HOST:8090"
+done
+```
+
+Agents will start reporting within 30 seconds. Refresh the UI to see your hosts and VMs.
+
+---
+
+## Deployment Summary
+
+| Component | Host | Port | Container / Service |
+|---|---|---|---|
+| API server | docker.example.lan | 8090 | `kvm-center-server` |
+| Web UI (nginx) | docker.example.lan | 8096 | `kvm-center-webui` |
+| Agent | hvnode01 | 8081 | `kvm-center-agent.service` |
+| Agent | hvnode02 | 8081 | `kvm-center-agent.service` |
+| Agent | hvnode03 | 8081 | `kvm-center-agent.service` |
+
+Data persists in Docker volume `kvm-center_kvm-center-data` as a JSON file.  
+Code lives in Gitea at `http://REDACTED-HOST:9001/Homelab/kvm-center`.
+
+---
+
+## Useful Commands
+
+```bash
+# Server logs
+docker logs kvm-center-server -f
+
+# Restart stack
+docker compose restart
+
+# Check what the API sees
+curl -s http://REDACTED-HOST:8090/api/hosts | python3 -m json.tool
+curl -s http://REDACTED-HOST:8090/api/vms   | python3 -m json.tool
+
+# Agent logs on a hypervisor
+ssh root@REDACTED-HOST-11 "journalctl -u kvm-center-agent -f"
+
+# Rebuild after code change
+cd /opt/kvm-center && git pull && docker compose build && docker compose up -d
+
+# Bootstrap script modes
+./scripts/bootstrap.sh --status        # docker compose ps
+./scripts/bootstrap.sh --logs          # tail logs
+./scripts/bootstrap.sh --deploy        # git pull + rebuild
+./scripts/bootstrap.sh --stop          # docker compose down
+./scripts/bootstrap.sh --deploy-agent  # cross-compile agent + print deploy commands
+```
+
+---
+
+## Documentation
+
+| Doc | Contents |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Design decisions, data flow diagrams, component overview, persistence model |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Full deployment guide, firewall config, updating, backup/restore, troubleshooting |
+| [docs/AGENT.md](docs/AGENT.md) | Metrics collected, virsh commands, CPU calculation, systemd reference |
+| [docs/API.md](docs/API.md) | Complete REST API reference with request/response examples |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Building from source, running locally, code walkthrough, adding features |
+
+---
+
+## Project Structure
+
+```
+kvm-center/
+├── internal/models/     Shared Go types (Host, VM, StoragePool, payloads)
+├── server/              Control plane binary + embedded web UI
+│   ├── main.go          HTTP server, routes, background goroutines
+│   ├── store.go         In-memory store, JSON persistence
+│   ├── handlers.go      API handlers
+│   └── static/index.html  Single-page vCenter-style dashboard
+├── agent/               Hypervisor agent binary
+│   ├── main.go          Telemetry loop, signal handling
+│   ├── collector.go     /proc + virsh metric collection
+│   └── commander.go     Command HTTP server (virsh execution)
+├── webui/               nginx container for the UI
+├── scripts/             bootstrap.sh, install-agent.sh
+├── Dockerfile.server    Two-stage Go build → ~15 MB alpine image
+├── Dockerfile.build     Cross-compile both binaries + download portal
+├── docker-compose.yml   Full stack
+└── Makefile             Build targets
+```
+
+---
+
+**Gitea:** `http://REDACTED-HOST:9001/Homelab/kvm-center`  
+**Last deployed:** 2026-04-11
