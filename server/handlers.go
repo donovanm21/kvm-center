@@ -147,7 +147,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 
 		action := strings.ToUpper(req.Action)
 		switch action {
-		case "START", "STOP", "RESTART", "SNAPSHOT", "MIGRATE":
+		case "START", "STOP", "FORCESTOP", "RESTART", "SNAPSHOT", "REVERT_SNAPSHOT", "DELETE_SNAPSHOT", "MIGRATE":
 		default:
 			writeError(w, http.StatusBadRequest, "unknown action: "+req.Action)
 			return
@@ -182,6 +182,42 @@ func handleCommand(store *Store) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
 		w.Write(respBody)
+	}
+}
+
+// GET /api/vms/snapshots?host=<id>&vm=<name> — proxy the agent's snapshot list.
+func handleVMSnapshots(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "GET only")
+			return
+		}
+		hostID := r.URL.Query().Get("host")
+		vmName := r.URL.Query().Get("vm")
+		if hostID == "" || vmName == "" {
+			writeError(w, http.StatusBadRequest, "host and vm query params required")
+			return
+		}
+
+		agentAddr := store.GetHostAgentAddr(hostID)
+		if agentAddr == "" {
+			writeError(w, http.StatusNotFound, "host not found or no agent address")
+			return
+		}
+
+		url := fmt.Sprintf("http://%s/snapshots/%s", agentAddr, vmName)
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Get(url)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
+			return
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		w.Write(body)
 	}
 }
 

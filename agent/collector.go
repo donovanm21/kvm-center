@@ -328,7 +328,26 @@ func buildVM(name, stateStr string) models.VM {
 	// CPU usage via domstats delta.
 	vm.CPUUsage = vmCPUUsage(name, vm.CPUCount)
 
+	// Snapshot count (fast metadata read; 0 on error or unsupported disk format).
+	vm.SnapshotCount = countSnapshots(name)
+
 	return vm
+}
+
+// countSnapshots returns the number of snapshots for the given VM.
+// Returns 0 if the VM has no snapshots or the disk format doesn't support them.
+func countSnapshots(name string) int {
+	out, err := exec.Command("virsh", "snapshot-list", name, "--name").Output()
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.TrimSpace(line) != "" {
+			n++
+		}
+	}
+	return n
 }
 
 func virshDomInfo(name string) map[string]string {
