@@ -421,22 +421,30 @@ func virshGuestInfo(name string) map[string]string {
 }
 
 // virshDomIfAddrAgent returns non-loopback IPs reported by the qemu-guest-agent.
+// Parses tolerantly: skips header/separator rows and continuation lines, and
+// takes the last token of each line only when it looks like an IP/CIDR literal.
 func virshDomIfAddrAgent(name string) []string {
 	out, err := exec.Command("virsh", "domifaddr", name, "--source", "agent").Output()
 	if err != nil {
 		return nil
 	}
 	var ips []string
-	lines := strings.Split(string(out), "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(string(out), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 4 {
+		if len(fields) == 0 {
 			continue
 		}
-		// columns: Name MAC Protocol Address
-		addr := fields[3]
-		if slash := strings.Index(addr, "/"); slash >= 0 {
-			addr = addr[:slash]
+		last := fields[len(fields)-1]
+		// Must be CIDR-shaped; filters the header ("Address"), separator ("----"),
+		// and "N/A" entries.
+		slash := strings.Index(last, "/")
+		if slash < 0 {
+			continue
+		}
+		addr := last[:slash]
+		// Reject anything that isn't a plausible v4 or v6 literal.
+		if strings.Count(addr, ".") != 3 && !strings.Contains(addr, ":") {
+			continue
 		}
 		if addr == "" || strings.HasPrefix(addr, "127.") || addr == "::1" || strings.HasPrefix(addr, "fe80:") {
 			continue
