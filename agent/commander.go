@@ -18,6 +18,7 @@ func StartCommandServer(addr string) {
 	mux.HandleFunc("/command", handleCommand)
 	mux.HandleFunc("/console/", handleConsolePage)
 	mux.HandleFunc("/ws/", handleConsoleWS)
+	mux.HandleFunc("/snapshots/", handleSnapshotList)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
@@ -72,6 +73,20 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			snapName = fmt.Sprintf("snap-%d", timeNow())
 		}
 		out, err = exec.Command("virsh", "snapshot-create-as", vmTarget, snapName).CombinedOutput()
+	case "REVERT_SNAPSHOT":
+		snapName := req.Params["name"]
+		if snapName == "" {
+			respond(w, false, "REVERT_SNAPSHOT requires params.name")
+			return
+		}
+		out, err = exec.Command("virsh", "snapshot-revert", vmTarget, snapName, "--force").CombinedOutput()
+	case "DELETE_SNAPSHOT":
+		snapName := req.Params["name"]
+		if snapName == "" {
+			respond(w, false, "DELETE_SNAPSHOT requires params.name")
+			return
+		}
+		out, err = exec.Command("virsh", "snapshot-delete", vmTarget, snapName).CombinedOutput()
 	case "MIGRATE":
 		dest := req.Params["destination"]
 		if dest == "" {
