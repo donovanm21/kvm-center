@@ -577,6 +577,14 @@ tbody td {
         </svg>
         Storage
       </div>
+      <div class="nav-item" id="nav-snapshots" onclick="showView('snapshots')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M15 12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h1.172a3 3 0 0 0 2.12-.879l.83-.828A1 1 0 0 1 6.828 3h2.344a1 1 0 0 1 .707.293l.828.828A3 3 0 0 0 12.828 5H14a1 1 0 0 1 1 1v6zM2 4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1.172a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 9.172 2H6.828a2 2 0 0 0-1.414.586l-.828.828A2 2 0 0 1 3.172 4H2z"/>
+          <path d="M8 11a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zm0 1a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 6.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0z"/>
+        </svg>
+        Snapshots
+        <span class="nav-badge" id="badge-snapshots">0</span>
+      </div>
     </div>
 
     <div class="sidebar-section">
@@ -626,6 +634,9 @@ let state = {
   hostTab: 'summary',
   searchQuery: '',
   snapshotTarget: null,
+  selectedSnapshotVM: null, // { host_id, name }
+  snapshotList: [],         // fetched for selectedSnapshotVM
+  snapshotLoading: false,
 };
 
 // ── Bootstrap ──────────────────────────────────────────────
@@ -670,7 +681,11 @@ function showView(view, hostID, tab) {
   if (hostID !== undefined) state.selectedHost = hostID;
   if (tab     !== undefined) state.hostTab     = tab;
   state.selectedVM = null;
-  ['dashboard','all-vms','storage'].forEach(v => {
+  if (view !== 'snapshots') {
+    state.selectedSnapshotVM = null;
+    state.snapshotList = [];
+  }
+  ['dashboard','all-vms','storage','snapshots'].forEach(v => {
     document.getElementById('nav-'+v)?.classList.toggle('active', v === view);
   });
   render();
@@ -698,6 +713,8 @@ function render() {
 // ── Sidebar ────────────────────────────────────────────────
 function renderSidebar() {
   document.getElementById('badge-vms').textContent = state.vms.length;
+  const snapTotal = state.vms.reduce((a, v) => a + (v.snapshot_count || 0), 0);
+  document.getElementById('badge-snapshots').textContent = snapTotal;
 
   const tree = document.getElementById('host-tree');
   tree.innerHTML = state.hosts.map(h => `
@@ -711,9 +728,10 @@ function renderSidebar() {
 
 // ── Breadcrumb ─────────────────────────────────────────────
 function renderBreadcrumb() {
-  const crumbs = { dashboard:'Dashboard', 'all-vms':'All VMs', storage:'Storage', host:'Hosts' };
+  const crumbs = { dashboard:'Dashboard', 'all-vms':'All VMs', storage:'Storage', host:'Hosts', snapshots:'Snapshots' };
   let html = `KVM Center <span>/ ${crumbs[state.view] || state.view}`;
   if (state.view === 'host' && state.selectedHost) html += ` / ${esc(state.selectedHost)}`;
+  if (state.view === 'snapshots' && state.selectedSnapshotVM) html += ` / ${esc(state.selectedSnapshotVM.name)}`;
   html += '</span>';
   document.getElementById('breadcrumb').innerHTML = html;
 }
@@ -745,6 +763,7 @@ function renderContent() {
     case 'all-vms':    body.innerHTML = renderAllVMs(q);   break;
     case 'storage':    body.innerHTML = renderStorageView(q); break;
     case 'host':       body.innerHTML = renderHostView();  break;
+    case 'snapshots':  body.innerHTML = renderSnapshotsView(q); break;
     default:           body.innerHTML = '';
   }
 }
@@ -1058,6 +1077,187 @@ function storageTable(pools, showHost) {
       </tbody>
     </table>
   `;
+}
+
+// ── Snapshots view ─────────────────────────────────────────
+function renderSnapshotsView(q) {
+  const vmsWithSnaps = state.vms.filter(v => (v.snapshot_count || 0) > 0);
+  const filtered = q
+    ? vmsWithSnaps.filter(v => v.name.toLowerCase().includes(q) || v.host_id.toLowerCase().includes(q))
+    : vmsWithSnaps;
+
+  const sel = state.selectedSnapshotVM;
+  const selectedVM = sel ? state.vms.find(v => v.host_id === sel.host_id && v.name === sel.name) : null;
+
+  const leftPanel = `
+    <div class="detail-panel" style="padding:0;margin:0;min-width:280px;max-width:320px;flex-shrink:0">
+      <div style="padding:12px 14px;border-bottom:1px solid #1a3a5c;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#3d6a8a">
+        VMs with Snapshots (${vmsWithSnaps.length})
+      </div>
+      ${filtered.length === 0
+        ? '<div style="padding:16px;color:#3d6a8a;font-size:12px">No VMs with snapshots.</div>'
+        : filtered.map(v => `
+            <div class="host-tree-item ${sel && sel.host_id===v.host_id && sel.name===v.name ? 'active' : ''}"
+                 style="padding:10px 14px;border-left:3px solid transparent"
+                 onclick="selectSnapshotVM('${esc(v.host_id)}','${esc(v.name)}')">
+              <div style="flex:1;min-width:0">
+                <div style="color:#e8f4ff;font-weight:500;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.name)}</div>
+                <div style="color:#5a8ab0;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.host_id)}</div>
+              </div>
+              <span class="nav-badge">${v.snapshot_count}</span>
+            </div>
+          `).join('')}
+    </div>
+  `;
+
+  let rightPanel;
+  if (!sel) {
+    rightPanel = emptyState('Select a VM', 'Pick a VM from the list to view and manage its snapshots.');
+  } else if (!selectedVM) {
+    rightPanel = emptyState('VM not found', 'The selected VM is no longer in the inventory.');
+  } else if (state.snapshotLoading) {
+    rightPanel = `<div class="empty-state"><p style="color:#5a8ab0">Loading snapshots…</p></div>`;
+  } else {
+    rightPanel = renderSnapshotDetail(selectedVM, state.snapshotList);
+  }
+
+  return `
+    <div style="display:flex;gap:16px;align-items:flex-start">
+      ${leftPanel}
+      <div style="flex:1;min-width:0">${rightPanel}</div>
+    </div>
+  `;
+}
+
+function renderSnapshotDetail(vm, snaps) {
+  const header = `
+    <div class="detail-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:16px;font-weight:600;color:#e8f4ff">${esc(vm.name)}</div>
+          <div style="font-size:11px;color:#5a8ab0;margin-top:2px">${esc(vm.host_id)} · <span class="vm-state ${vm.state}">${vm.state}</span></div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-secondary btn-sm" onclick="openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')">📷 Create Snapshot</button>
+          <button class="btn btn-secondary btn-sm" onclick="refreshSnapshots()">↺ Refresh</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (!snaps || snaps.length === 0) {
+    return header + emptyState('No snapshots', 'Create a snapshot to see it listed here.');
+  }
+
+  const rows = snaps.map(s => `
+    <tr>
+      <td style="font-weight:500;color:#e8f4ff">
+        ${esc(s.name)}
+        ${s.is_current ? '<span style="margin-left:8px;font-size:9px;padding:1px 6px;border-radius:10px;background:#0d3a5c;color:#4db8ff;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Current</span>' : ''}
+      </td>
+      <td style="color:#7aa8cc;font-size:11px;font-family:'SF Mono',monospace">${esc(s.creation_time)}</td>
+      <td><span class="vm-state ${s.state==='running'?'running':'stopped'}">${esc(s.state)}</span></td>
+      <td style="color:#5a8ab0;font-size:11px">${s.parent ? esc(s.parent) : '—'}</td>
+      <td>
+        <div class="actions-row">
+          <button class="btn btn-primary btn-sm" ${s.is_current ? 'disabled title="Already current"' : ''} onclick="revertSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')">↶ Revert</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')">🗑 Delete</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+
+  return header + `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Snapshot</th>
+            <th>Created</th>
+            <th>State</th>
+            <th>Parent</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function selectSnapshotVM(hostID, vmName) {
+  state.selectedSnapshotVM = { host_id: hostID, name: vmName };
+  state.snapshotList = [];
+  state.snapshotLoading = true;
+  render();
+  await fetchSnapshots(hostID, vmName);
+}
+
+async function refreshSnapshots() {
+  const sel = state.selectedSnapshotVM;
+  if (!sel) return;
+  state.snapshotLoading = true;
+  render();
+  await fetchSnapshots(sel.host_id, sel.name);
+}
+
+async function fetchSnapshots(hostID, vmName) {
+  try {
+    const r = await fetch(`${API}/api/vms/snapshots?host=${encodeURIComponent(hostID)}&vm=${encodeURIComponent(vmName)}`);
+    if (!r.ok) throw new Error(r.statusText);
+    const data = await r.json();
+    state.snapshotList = data.snapshots || [];
+  } catch (e) {
+    toast('error', `Failed to load snapshots: ${e.message}`);
+    state.snapshotList = [];
+  } finally {
+    state.snapshotLoading = false;
+    render();
+  }
+}
+
+async function revertSnapshot(hostID, vmName, snapName) {
+  if (!confirm(`Revert ${vmName} to snapshot "${snapName}"?\n\nThis will discard the VM's current state.`)) return;
+  toast('info', `Reverting ${vmName} to ${snapName}…`);
+  try {
+    const r = await fetch(API + '/api/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host_id: hostID, vm_name: vmName, action: 'REVERT_SNAPSHOT', params: { name: snapName } }),
+    });
+    const data = await r.json();
+    if (data.success || r.ok) {
+      toast('success', `Reverted to "${snapName}"`);
+      setTimeout(refreshSnapshots, 1500);
+      setTimeout(refresh, 2500);
+    } else {
+      toast('error', `Revert failed: ${data.message || data.error}`);
+    }
+  } catch (e) {
+    toast('error', `Revert failed: ${e.message}`);
+  }
+}
+
+async function deleteSnapshot(hostID, vmName, snapName) {
+  if (!confirm(`Delete snapshot "${snapName}" from ${vmName}?\n\nThis cannot be undone.`)) return;
+  toast('info', `Deleting snapshot "${snapName}"…`);
+  try {
+    const r = await fetch(API + '/api/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host_id: hostID, vm_name: vmName, action: 'DELETE_SNAPSHOT', params: { name: snapName } }),
+    });
+    const data = await r.json();
+    if (data.success || r.ok) {
+      toast('success', `Snapshot "${snapName}" deleted`);
+      setTimeout(refreshSnapshots, 500);
+      setTimeout(refresh, 2000);
+    } else {
+      toast('error', `Delete failed: ${data.message || data.error}`);
+    }
+  } catch (e) {
+    toast('error', `Delete failed: ${e.message}`);
+  }
 }
 
 // ── Commands ───────────────────────────────────────────────

@@ -51,18 +51,29 @@ type VMNetwork struct {
 
 // VM represents a virtual machine managed by libvirt.
 type VM struct {
-	UUID      string      `json:"uuid"`
-	Name      string      `json:"name"`
-	HostID    string      `json:"host_id"`
-	State     VMState     `json:"state"`
-	CPUCount  int         `json:"cpu_count"`
-	CPUUsage  float64     `json:"cpu_usage"`
-	MemTotalMB uint64     `json:"mem_total_mb"`
-	MemUsageMB uint64     `json:"mem_usage_mb"`
-	DiskPath  string      `json:"disk_path"`
-	DiskUsageGB float64   `json:"disk_usage_gb"`
-	DiskTotalGB float64   `json:"disk_total_gb"`
-	Networks  []VMNetwork `json:"networks"`
+	UUID          string      `json:"uuid"`
+	Name          string      `json:"name"`
+	HostID        string      `json:"host_id"`
+	State         VMState     `json:"state"`
+	CPUCount      int         `json:"cpu_count"`
+	CPUUsage      float64     `json:"cpu_usage"`
+	MemTotalMB    uint64      `json:"mem_total_mb"`
+	MemUsageMB    uint64      `json:"mem_usage_mb"`
+	DiskPath      string      `json:"disk_path"`
+	DiskUsageGB   float64     `json:"disk_usage_gb"`
+	DiskTotalGB   float64     `json:"disk_total_gb"`
+	Networks      []VMNetwork `json:"networks"`
+	SnapshotCount int         `json:"snapshot_count"`
+}
+
+// Snapshot represents a libvirt domain snapshot.
+type Snapshot struct {
+	Name         string `json:"name"`
+	Domain       string `json:"domain"`
+	CreationTime string `json:"creation_time"`
+	State        string `json:"state"`
+	Parent       string `json:"parent,omitempty"`
+	IsCurrent    bool   `json:"is_current"`
 }
 
 // StoragePool represents a libvirt storage pool on a host.
