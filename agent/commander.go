@@ -105,11 +105,13 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			respond(w, false, "MIGRATE requires params.destination")
 			return
 		}
-		uri := fmt.Sprintf("qemu+ssh://%s/system", dest)
-		out, err = exec.Command(
-			"virsh", "migrate", "--live", "--persistent",
-			vmTarget, uri,
-		).CombinedOutput()
+		uri := fmt.Sprintf("qemu+ssh://kvm-migrator@%s/system", dest)
+		args := []string{"migrate", "--live", "--persistent", "--verbose"}
+		if req.Params["copy_storage"] == "true" {
+			args = append(args, "--copy-storage-all")
+		}
+		args = append(args, vmTarget, uri)
+		out, err = exec.Command("virsh", args...).CombinedOutput()
 	default:
 		respond(w, false, "unknown action: "+req.Action)
 		return
