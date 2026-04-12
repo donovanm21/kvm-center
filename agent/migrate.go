@@ -216,20 +216,13 @@ func offlineMigrate(vmName, dest string) error {
 		logStep(fmt.Sprintf("transferring %s to %s:%s", flatName, dest, destPath))
 		start = time.Now()
 
-		// Try xz pipe for better compression ratio; fall back to scp.
-		_, xzErr := exec.LookPath("xz")
-		if xzErr == nil {
-			pipeCmd := fmt.Sprintf(
-				"xz -1 -T0 -c %s | ssh -i %s -o StrictHostKeyChecking=no %s@%s 'xz -d -T0 > %s'",
-				tmpPath, migratorKey, migratorUser, dest, destPath)
-			out, err = exec.Command("bash", "-c", pipeCmd).CombinedOutput()
-		} else {
-			out, err = exec.Command(
-				"scp", "-i", migratorKey, "-o", "StrictHostKeyChecking=no",
-				tmpPath,
-				fmt.Sprintf("%s@%s:%s", migratorUser, dest, destPath),
-			).CombinedOutput()
-		}
+		// Direct scp for the already-compressed qcow2. (qemu-img convert -c
+		// already applies zlib; xz on top adds overhead with no benefit.)
+		out, err = exec.Command(
+			"scp", "-i", migratorKey, "-o", "StrictHostKeyChecking=no",
+			tmpPath,
+			fmt.Sprintf("%s@%s:%s", migratorUser, dest, destPath),
+		).CombinedOutput()
 		os.Remove(tmpPath)
 		if err != nil {
 			return fmt.Errorf("transfer failed for %s: %s", d.Target.Dev, strings.TrimSpace(string(out)))
@@ -262,7 +255,8 @@ func offlineMigrate(vmName, dest string) error {
 	// ── 6. Prepare target environment ─────────────────────────
 	setMigStatus("define", 88, "Preparing target environment")
 	logStep("preparing target")
-	sshMigrator(dest, "sudo mkdir -p /etc/qemu && grep -q 'allow br0' /etc/qemu/bridge.conf 2>/dev/null || echo 'allow br0' | sudo tee -a /etc/qemu/bridge.conf >/dev/null", "")
+	// RHEL/Rocky uses /etc/qemu-kvm/bridge.conf; Debian/Ubuntu uses /etc/qemu/bridge.conf.
+	sshMigrator(dest, "for f in /etc/qemu-kvm/bridge.conf /etc/qemu/bridge.conf; do [ -d $(dirname $f) ] && grep -q 'allow br0' $f 2>/dev/null || echo 'allow br0' >> $f; done", "")
 
 	// ── 7. Define VM on target ────────────────────────────────
 	setMigStatus("define", 90, "Defining VM on target")
