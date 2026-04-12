@@ -47,6 +47,7 @@ func main() {
 	mux.HandleFunc("/api/storage", handleGetStorage(store))
 	mux.HandleFunc("/api/command", handleCommand(store))
 	mux.HandleFunc("/api/guest-telemetry", handleGuestTelemetry(store))
+	mux.HandleFunc("/api/migrate-status", handleMigrateStatus(store))
 	mux.HandleFunc("/health", handleHealth)
 
 	// Serve embedded web UI for everything else.
