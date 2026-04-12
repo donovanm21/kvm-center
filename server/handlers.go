@@ -272,6 +272,33 @@ func handleVMSnapshots(store *Store) http.HandlerFunc {
 	}
 }
 
+// GET /api/migrate-status?host=<id> — proxy the agent's migration progress.
+func handleMigrateStatus(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		hostID := r.URL.Query().Get("host")
+		if hostID == "" {
+			writeError(w, http.StatusBadRequest, "host query param required")
+			return
+		}
+		agentAddr := store.GetHostAgentAddr(hostID)
+		if agentAddr == "" {
+			writeError(w, http.StatusNotFound, "host not found")
+			return
+		}
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Get(fmt.Sprintf("http://%s/migrate-status", agentAddr))
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "agent unreachable")
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		w.Write(body)
+	}
+}
+
 // GET /health — liveness probe.
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
