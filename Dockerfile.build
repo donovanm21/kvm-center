@@ -12,7 +12,7 @@ RUN go mod download
 
 COPY . .
 
-# Build server (linux/amd64 — runs in container)
+# Build server (linux/amd64 - runs in container)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -ldflags="-s -w -X main.Version=${VERSION}" -o /out/kvm-center-server ./server
 
@@ -55,6 +55,7 @@ RUN cat > /dist/index.html << EOF_PORTAL
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>KVM Center Downloads</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
@@ -171,13 +172,13 @@ Set-Location \$tmp
     <div class="package">
         <h3>Package Contents</h3>
         <ul class="file-list">
-            <li><code>kvm-center-agent-amd64</code> / <code>-arm64</code> — Hypervisor agent (Go static binary, ~7 MB)</li>
-            <li><code>install-agent.sh</code> — Systemd installer; creates the kvm-migrator user and installs the shared migration SSH keypair</li>
-            <li><code>kvm-tools-linux-amd64</code> / <code>-arm64</code> / <code>-windows-amd64.exe</code> — Guest telemetry daemon (~5 MB)</li>
-            <li><code>install-kvm-tools.sh</code> — Linux systemd installer for the guest daemon</li>
-            <li><code>install-kvm-tools.ps1</code> — Windows PowerShell installer (registers as a scheduled task running as SYSTEM)</li>
-            <li><code>kvm-migrator-key</code> / <code>-key.pub</code> — Shared ed25519 keypair trusted across hypervisors for live / offline migrations</li>
-            <li><code>kvm-center-server.tar.gz</code> — Control plane binary (bare-metal only; use docker-compose for production)</li>
+            <li><code>kvm-center-agent-amd64</code> / <code>-arm64</code> - Hypervisor agent (Go static binary, ~7 MB)</li>
+            <li><code>install-agent.sh</code> - Systemd installer; creates the kvm-migrator user and installs the shared migration SSH keypair</li>
+            <li><code>kvm-tools-linux-amd64</code> / <code>-arm64</code> / <code>-windows-amd64.exe</code> - Guest telemetry daemon (~5 MB)</li>
+            <li><code>install-kvm-tools.sh</code> - Linux systemd installer for the guest daemon</li>
+            <li><code>install-kvm-tools.ps1</code> - Windows PowerShell installer (registers as a scheduled task running as SYSTEM)</li>
+            <li><code>kvm-migrator-key</code> / <code>-key.pub</code> - Shared ed25519 keypair trusted across hypervisors for live / offline migrations</li>
+            <li><code>kvm-center-server.tar.gz</code> - Control plane binary (bare-metal only; use docker-compose for production)</li>
         </ul>
     </div>
 
@@ -195,7 +196,7 @@ curl -s http://SERVER_IP:8090/api/hosts | python3 -m json.tool
 # 3. List all VMs (look for guest_agent: true after kvm-tools install)
 curl -s http://SERVER_IP:8090/api/vms | python3 -m json.tool</pre>
         <p style="font-size: 0.9em; color: #666; margin-top: 12px;">
-            Or just open the web UI at <code>http://SERVER_IP:8096</code> — new hypervisors appear on the Dashboard and new VMs with tools flip to a green
+            Or just open the web UI at <code>http://SERVER_IP:8096</code> - new hypervisors appear on the Dashboard and new VMs with tools flip to a green
             <strong>KVM Tools: running</strong> pill on their detail page.
         </p>
     </div>
