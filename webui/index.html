@@ -1423,6 +1423,7 @@ let state = {
 
 // ── Bootstrap ──────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
+  restoreRoute();
   refresh();
   setInterval(refresh, 15000);
   // Fetch version once on load.
@@ -1430,6 +1431,47 @@ window.addEventListener('DOMContentLoaded', () => {
     const el = document.getElementById('version-text');
     if (el && d.version) el.textContent = 'KVM Center ' + d.version;
   }).catch(() => {});
+});
+
+// Route persistence: encode current view into the URL hash so that a
+// page refresh returns the user to the same page they were viewing.
+function persistRoute() {
+  const parts = [state.view];
+  if (state.view === 'host' && state.selectedHost) {
+    parts.push(encodeURIComponent(state.selectedHost));
+    parts.push(state.hostTab || 'summary');
+  } else if (state.view === 'vm' && state.selectedVM) {
+    parts.push(encodeURIComponent(state.selectedVM));
+    parts.push(state.vmTab || 'summary');
+  }
+  const newHash = '#/' + parts.join('/');
+  if (location.hash !== newHash) history.replaceState(null, '', newHash);
+}
+
+function restoreRoute() {
+  const hash = location.hash.replace(/^#\/?/, '');
+  if (!hash) return;
+  const [view, a, b] = hash.split('/').map(decodeURIComponent);
+  if (!view) return;
+  state.view = view;
+  if (view === 'host') {
+    state.selectedHost = a || null;
+    state.hostTab = b || 'summary';
+  } else if (view === 'vm') {
+    state.selectedVM = a || null;
+    state.hostTab = 'summary';
+    state.vmTab = b || 'summary';
+  }
+  // Update active nav highlight without calling showView (avoid re-render before data loads).
+  ['dashboard','all-vms','storage','snapshots','migrations','deployment'].forEach(v => {
+    document.getElementById('nav-'+v)?.classList.toggle('active', v === view);
+  });
+}
+
+// Handle back/forward browser navigation.
+window.addEventListener('hashchange', () => {
+  restoreRoute();
+  render();
 });
 
 async function refresh() {
@@ -1478,12 +1520,14 @@ function showView(view, hostID, tab) {
     document.getElementById('nav-'+v)?.classList.toggle('active', v === view);
   });
   closeSidebar();
+  persistRoute();
   if (view === 'deployment') probeDeployPortal();
   render();
 }
 
 function setTab(tab) {
   state.hostTab = tab;
+  persistRoute();
   renderTabs();
   renderContent();
 }
@@ -1821,12 +1865,14 @@ function selectVM(uuid, hostID) {
   ['dashboard','all-vms','storage','snapshots'].forEach(v => {
     document.getElementById('nav-'+v)?.classList.remove('active');
   });
+  persistRoute();
   render();
 }
 
 function setVMTab(tab) {
   state.vmTab = tab;
   state.notesDraft = null;
+  persistRoute();
   renderTabs();
   renderContent();
 }
