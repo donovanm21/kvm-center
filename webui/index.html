@@ -2463,89 +2463,122 @@ function openMigrateDialog(hostID, vmUUID, vmName) {
   const otherHosts = state.hosts.filter(h => h.id !== hostID && h.status === 'online');
   if (!otherHosts.length) { toast('error', 'No other online hosts available for migration'); return; }
 
-  // Pre-flight checks generator.
-  function checks(targetID) {
+  window._migrateVM = { hostID, vmUUID, vmName, vm, sourceHost };
+  window._migrateMode = 'offline'; // default to offline (faster)
+
+  function liveChecks(targetID) {
     const target = state.hosts.find(h => h.id === targetID);
     if (!target) return [];
-    const results = [];
-    // 1. Target is online.
-    results.push({ ok: target.status === 'online', label: 'Target host is online', detail: target.status });
-    // 2. Enough free memory.
-    const neededMB = vm.mem_total_mb || 0;
-    const freeMB = target.mem_free_mb || 0;
-    results.push({ ok: freeMB >= neededMB, label: 'Sufficient free memory', detail: fmt(freeMB,'MB')+' free, VM needs '+fmt(neededMB,'MB') });
-    // 3. CPU compatibility (both host-passthrough = compatible same-arch migration).
-    const srcModel = sourceHost?.cpu_model || '';
-    const dstModel = target.cpu_model || '';
-    const cpuOk = srcModel === dstModel || vm.cpu_mode === 'host-model' || vm.cpu_mode === 'custom';
-    results.push({ ok: cpuOk, label: 'CPU compatibility', detail: cpuOk ? 'Same CPU model or VM uses portable CPU mode' : 'Source: '+srcModel+' vs Target: '+dstModel+' (host-passthrough requires matching CPUs)' });
-    // 4. No PCI passthrough.
-    const hasPCI = vm.pci_devices && vm.pci_devices.length > 0;
-    results.push({ ok: !hasPCI, label: 'No PCI passthrough devices', detail: hasPCI ? vm.pci_devices.length+' device(s) block live migration' : 'None attached' });
-    // 5. Disk format.
-    const rawDisk = vm.disk_type === 'raw';
-    results.push({ ok: !rawDisk, label: 'Disk format supports migration', detail: (vm.disk_type||'qcow2')+' — '+(rawDisk ? 'raw on local storage may need shared storage' : 'OK') });
-    // 6. No snapshots.
-    const hasSnaps = (vm.snapshot_count || 0) > 0;
-    results.push({ ok: !hasSnaps, label: 'No snapshots', detail: hasSnaps ? vm.snapshot_count+' snapshot(s) — delete or merge all snapshots before migrating' : 'None' });
-    return results;
+    return [
+      { ok: target.status === 'online', label: 'Target host is online', detail: target.status },
+      { ok: (target.mem_free_mb||0) >= (vm.mem_total_mb||0), label: 'Sufficient free memory', detail: fmt(target.mem_free_mb,'MB')+' free, VM needs '+fmt(vm.mem_total_mb,'MB') },
+      { ok: (sourceHost?.cpu_model||'') === (target.cpu_model||'') || vm.cpu_mode !== 'host-passthrough', label: 'CPU compatibility', detail: (sourceHost?.cpu_model||'') === (target.cpu_model||'') ? 'Same CPU model' : 'host-passthrough requires matching CPUs' },
+      { ok: !(vm.pci_devices && vm.pci_devices.length > 0), label: 'No PCI passthrough devices', detail: (vm.pci_devices||[]).length ? vm.pci_devices.length+' device(s) block live migration' : 'None' },
+      { ok: vm.disk_type !== 'raw', label: 'Disk format supports migration', detail: (vm.disk_type||'qcow2') },
+      { ok: !(vm.snapshot_count > 0), label: 'No snapshots', detail: (vm.snapshot_count||0) > 0 ? vm.snapshot_count+' snapshot(s) — delete first' : 'None' },
+    ];
   }
 
-  const defaultTarget = otherHosts[0].id;
-  const initialChecks = checks(defaultTarget);
+  function offlineChecks(targetID) {
+    const target = state.hosts.find(h => h.id === targetID);
+    if (!target) return [];
+    return [
+      { ok: target.status === 'online', label: 'Target host is online', detail: target.status },
+      { ok: (target.mem_free_mb||0) >= (vm.mem_total_mb||0), label: 'Sufficient free memory', detail: fmt(target.mem_free_mb,'MB')+' free, VM needs '+fmt(vm.mem_total_mb,'MB') },
+      { ok: true, label: 'CPU compatibility', detail: 'Not required for offline migration (no live state transfer)' },
+      { ok: true, label: 'PCI passthrough', detail: 'OK — VM will be shut down during migration' },
+      { ok: true, label: 'Disk format', detail: 'qemu-img convert handles all formats including raw' },
+      { ok: true, label: 'Snapshots', detail: (vm.snapshot_count||0) > 0 ? 'Backing chain will be flattened during conversion' : 'None' },
+    ];
+  }
 
-  const modalHTML = `
-    <div class="modal-overlay" id="migrate-modal" style="display:flex">
-      <div class="modal" style="width:520px">
-        <h3>Live Migrate — ${esc(vmName)}</h3>
-        <label>Source Host</label>
-        <div style="padding:6px 0;font-weight:600;color:#e8f4ff;font-size:13px">${esc(hostID)}</div>
-        <label style="margin-top:12px">Target Host</label>
-        <select id="migrate-target" onchange="updateMigrateChecks()" style="width:100%;background:#091828;border:1px solid #1a3a5c;color:#c5daf0;padding:8px;border-radius:4px;font-size:12px;font-family:inherit">
-          ${otherHosts.map(h => `<option value="${esc(h.id)}">${esc(h.id)} (${esc(h.ip)}) — ${fmt(h.mem_free_mb,'MB')} free</option>`).join('')}
-        </select>
-        <label style="margin-top:12px;display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" id="migrate-copy-storage" checked style="accent-color:#0091da">
-          <span style="font-size:12px;color:#c5daf0">Copy storage (required without shared NFS/GlusterFS)</span>
-        </label>
-        <div style="font-size:10px;color:#5a8ab0;margin-top:2px;padding-left:24px">Copies the full disk image to the target host during migration. Disable only if both hosts share the same storage pool.</div>
-        <div style="margin-top:14px">
-          <label>Pre-flight Checks</label>
-          <div id="migrate-checks" style="margin-top:6px">
-            ${initialChecks.map(c => `
-              <div style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12px">
-                <span style="color:${c.ok?'#4caf50':'#f44336'};flex-shrink:0">${c.ok?'✓':'✗'}</span>
-                <div>
-                  <div style="color:#e8f4ff">${esc(c.label)}</div>
-                  <div style="color:#5a8ab0;font-size:11px">${esc(c.detail)}</div>
+  window._migrateChecks = { live: liveChecks, offline: offlineChecks };
+
+  const defaultTarget = otherHosts[0].id;
+
+  function renderModal() {
+    const mode = window._migrateMode;
+    const targetID = document.getElementById('migrate-target')?.value || defaultTarget;
+    const checks = window._migrateChecks[mode](targetID);
+    const allOk = checks.every(c => c.ok);
+
+    const modeDesc = mode === 'offline'
+      ? `<div style="font-size:11px;color:#5a8ab0;margin:8px 0;padding:10px 12px;background:#091828;border:1px solid #1a3a5c;border-radius:4px;border-left:3px solid #0091da">
+          <strong style="color:#e8f4ff">Offline migration:</strong> Shuts down the VM, compresses the disk image with <code style="color:#4db8ff">qemu-img convert -c</code> (dramatically smaller transfer), copies to target, defines and starts the VM there. <strong style="color:#4caf50">Recommended for local storage</strong> — a 80 GB disk with 18 MB allocated transfers in seconds.
+        </div>`
+      : `<div style="font-size:11px;color:#5a8ab0;margin:8px 0;padding:10px 12px;background:#091828;border:1px solid #1a3a5c;border-radius:4px;border-left:3px solid #ff9800">
+          <strong style="color:#e8f4ff">Live migration:</strong> Copies the full disk image while the VM keeps running. <strong style="color:#ff9800">Very slow without shared storage</strong> — copies the entire virtual disk size (not just allocated blocks). A 80 GB disk takes ~2 hours at 10 MB/s.
+        </div>`;
+
+    return `
+      <div class="modal-overlay" id="migrate-modal" style="display:flex" onclick="if(event.target===this)closeMigrateModal()">
+        <div class="modal" style="width:560px">
+          <h3>Migrate — ${esc(vmName)}</h3>
+
+          <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid #1a3a5c;padding-bottom:0">
+            <div class="tab ${mode==='offline'?'active':''}" onclick="setMigrateMode('offline')" style="cursor:pointer;padding:6px 14px;font-size:12px;border-bottom:2px solid ${mode==='offline'?'#0091da':'transparent'};color:${mode==='offline'?'#e8f4ff':'#7aa8cc'}">Offline (Recommended)</div>
+            <div class="tab ${mode==='live'?'active':''}" onclick="setMigrateMode('live')" style="cursor:pointer;padding:6px 14px;font-size:12px;border-bottom:2px solid ${mode==='live'?'#ff9800':'transparent'};color:${mode==='live'?'#e8f4ff':'#7aa8cc'}">Live</div>
+          </div>
+
+          ${modeDesc}
+
+          <label>Source Host</label>
+          <div style="padding:4px 0;font-weight:600;color:#e8f4ff;font-size:13px">${esc(hostID)}</div>
+          <label style="margin-top:10px">Target Host</label>
+          <select id="migrate-target" onchange="updateMigrateChecks()" style="width:100%;background:#091828;border:1px solid #1a3a5c;color:#c5daf0;padding:8px;border-radius:4px;font-size:12px;font-family:inherit">
+            ${otherHosts.map(h => `<option value="${esc(h.id)}" ${h.id===targetID?'selected':''}>${esc(h.id)} (${esc(h.ip)}) — ${fmt(h.mem_free_mb,'MB')} free</option>`).join('')}
+          </select>
+
+          ${mode==='live' ? `
+          <label style="margin-top:10px;display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="migrate-copy-storage" checked style="accent-color:#0091da">
+            <span style="font-size:12px;color:#c5daf0">Copy storage (required without shared NFS)</span>
+          </label>` : ''}
+
+          <div style="margin-top:12px">
+            <label>Pre-flight Checks</label>
+            <div id="migrate-checks" style="margin-top:6px">
+              ${checks.map(c => `
+                <div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12px">
+                  <span style="color:${c.ok?'#4caf50':'#f44336'};flex-shrink:0">${c.ok?'✓':'✗'}</span>
+                  <div>
+                    <div style="color:#e8f4ff">${esc(c.label)}</div>
+                    <div style="color:#5a8ab0;font-size:11px">${esc(c.detail)}</div>
+                  </div>
                 </div>
-              </div>
-            `).join('')}
+              `).join('')}
+            </div>
+          </div>
+          <div class="modal-actions" style="margin-top:14px">
+            <button class="btn btn-secondary" onclick="closeMigrateModal()">Cancel</button>
+            <button class="btn btn-primary" id="migrate-btn" ${allOk?'':'disabled'} onclick="executeMigrate('${esc(hostID)}','${esc(vmUUID)}','${esc(vmName)}')">${mode==='offline' ? 'Shut Down & Migrate' : 'Live Migrate'}</button>
           </div>
         </div>
-        <div class="modal-actions" style="margin-top:16px">
-          <button class="btn btn-secondary" onclick="closeMigrateModal()">Cancel</button>
-          <button class="btn btn-primary" id="migrate-btn" ${initialChecks.every(c=>c.ok)?'':'disabled'} onclick="executeMigrate('${esc(hostID)}','${esc(vmUUID)}','${esc(vmName)}')">Migrate</button>
-        </div>
       </div>
-    </div>
-  `;
+    `;
+  }
 
-  // Inject modal HTML and store checks function for updates.
+  window._renderMigrateModal = renderModal;
+
   const existing = document.getElementById('migrate-modal');
   if (existing) existing.remove();
-  document.body.insertAdjacentHTML('beforeend', modalHTML);
+  document.body.insertAdjacentHTML('beforeend', renderModal());
+}
 
-  window._migrateChecks = checks;
-  window._migrateVM = { hostID, vmUUID, vmName };
+function setMigrateMode(mode) {
+  window._migrateMode = mode;
+  const existing = document.getElementById('migrate-modal');
+  if (existing) existing.remove();
+  document.body.insertAdjacentHTML('beforeend', window._renderMigrateModal());
 }
 
 function updateMigrateChecks() {
+  const mode = window._migrateMode || 'offline';
   const targetID = document.getElementById('migrate-target').value;
-  const checks = window._migrateChecks(targetID);
+  const checks = window._migrateChecks[mode](targetID);
   const container = document.getElementById('migrate-checks');
   container.innerHTML = checks.map(c => `
-    <div style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12px">
+    <div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12px">
       <span style="color:${c.ok?'#4caf50':'#f44336'};flex-shrink:0">${c.ok?'✓':'✗'}</span>
       <div>
         <div style="color:#e8f4ff">${esc(c.label)}</div>
@@ -2562,29 +2595,51 @@ function closeMigrateModal() {
 }
 
 async function executeMigrate(hostID, vmUUID, vmName) {
+  const mode = window._migrateMode || 'offline';
   const targetID = document.getElementById('migrate-target').value;
   const target = state.hosts.find(h => h.id === targetID);
   if (!target) return;
-  const copyStorage = document.getElementById('migrate-copy-storage').checked;
   closeMigrateModal();
-  toast('info', `Migrating ${vmName} to ${targetID}${copyStorage ? ' (copying storage)' : ''}…`);
-  try {
-    const params = { destination: target.ip };
-    if (copyStorage) params.copy_storage = 'true';
-    const r = await fetch(API + '/api/command', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ host_id: hostID, vm_uuid: vmUUID, vm_name: vmName, action: 'MIGRATE', params }),
-    });
-    const data = await r.json();
-    if (data.success || r.ok) {
-      toast('success', `Migration of ${vmName} to ${targetID} completed`);
-      setTimeout(refresh, 3000);
-    } else {
-      toast('error', `Migration failed: ${data.message || data.error}`);
+
+  if (mode === 'offline') {
+    toast('info', `Offline migrating ${vmName} to ${targetID} (shutdown → compress → transfer → start)…`);
+    try {
+      const r = await fetch(API + '/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host_id: hostID, vm_uuid: vmUUID, vm_name: vmName, action: 'OFFLINE_MIGRATE', params: { destination: target.ip } }),
+      });
+      const data = await r.json();
+      if (data.success || r.ok) {
+        toast('success', `Offline migration of ${vmName} to ${targetID} completed`);
+        setTimeout(refresh, 3000);
+      } else {
+        toast('error', `Migration failed: ${data.message || data.error}`);
+      }
+    } catch (e) {
+      toast('error', `Migration failed: ${e.message}`);
     }
-  } catch (e) {
-    toast('error', `Migration failed: ${e.message}`);
+  } else {
+    const copyStorage = document.getElementById('migrate-copy-storage')?.checked;
+    toast('info', `Live migrating ${vmName} to ${targetID}${copyStorage ? ' (copying storage)' : ''}…`);
+    try {
+      const params = { destination: target.ip };
+      if (copyStorage) params.copy_storage = 'true';
+      const r = await fetch(API + '/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host_id: hostID, vm_uuid: vmUUID, vm_name: vmName, action: 'MIGRATE', params }),
+      });
+      const data = await r.json();
+      if (data.success || r.ok) {
+        toast('success', `Live migration of ${vmName} to ${targetID} completed`);
+        setTimeout(refresh, 3000);
+      } else {
+        toast('error', `Migration failed: ${data.message || data.error}`);
+      }
+    } catch (e) {
+      toast('error', `Migration failed: ${e.message}`);
+    }
   }
 }
 
