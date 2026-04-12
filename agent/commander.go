@@ -23,6 +23,8 @@ func StartCommandServer(addr string) {
 	mux.HandleFunc("/storage-browse", handleStorageBrowse)
 	mux.HandleFunc("/storage-upload", handleStorageUpload)
 	mux.HandleFunc("/storage-file", handleStorageDelete)
+	mux.HandleFunc("/vm-create-info", handleVMCreateInfo)
+	mux.HandleFunc("/vm-create", handleVMCreate)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
