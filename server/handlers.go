@@ -393,6 +393,66 @@ func handleStorageDelete(store *Store) http.HandlerFunc {
 	}
 }
 
+// GET /api/vm-create-info?host=<id> — proxy VM creation capabilities from agent.
+func handleVMCreateInfo(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		hostID := r.URL.Query().Get("host")
+		if hostID == "" {
+			writeError(w, http.StatusBadRequest, "host required")
+			return
+		}
+		agentAddr := store.GetHostAgentAddr(hostID)
+		if agentAddr == "" {
+			writeError(w, http.StatusNotFound, "host not found")
+			return
+		}
+		client := &http.Client{Timeout: 15 * time.Second}
+		resp, err := client.Get(fmt.Sprintf("http://%s/vm-create-info", agentAddr))
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "agent unreachable")
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		w.Write(body)
+	}
+}
+
+// POST /api/vm-create?host=<id> — proxy VM creation to agent.
+func handleVMCreate(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		hostID := r.URL.Query().Get("host")
+		if hostID == "" {
+			writeError(w, http.StatusBadRequest, "host required")
+			return
+		}
+		agentAddr := store.GetHostAgentAddr(hostID)
+		if agentAddr == "" {
+			writeError(w, http.StatusNotFound, "host not found")
+			return
+		}
+		client := &http.Client{Timeout: 5 * time.Minute}
+		resp, err := client.Post(
+			fmt.Sprintf("http://%s/vm-create", agentAddr),
+			"application/json", r.Body)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		w.Write(body)
+	}
+}
+
 // GET /api/migrate-status?host=<id> — proxy the agent's migration progress.
 func handleMigrateStatus(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

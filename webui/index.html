@@ -28,18 +28,26 @@ body {
 
 /* ── Top Navigation ─────────────────────────────────────── */
 #topbar {
-  min-height: 42px;
+  height: 42px;
   background: #09131c;
   border-bottom: 1px solid #1a3a5c;
   display: flex;
   align-items: center;
   padding: 0 16px;
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
   gap: 16px;
   flex-shrink: 0;
   z-index: 100;
+}
+@supports (padding-top: env(safe-area-inset-top)) {
+  @media (display-mode: standalone) {
+    #topbar {
+      height: auto;
+      min-height: 42px;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-left: max(16px, env(safe-area-inset-left, 0px));
+      padding-right: max(16px, env(safe-area-inset-right, 0px));
+    }
+  }
 }
 .logo {
   display: flex;
@@ -1203,6 +1211,7 @@ let state = {
   vmNetworksOpen: false,
   migrations: [],           // migration history from server
   fileBrowser: null,        // { host_id, path, entries, loading, uploading }
+  createVM: null,           // { host_id, info, mode, loading }
   deployOS: { 'kvm-tools': 'rhel', 'agent': 'rhel' }, // OS tab per package
   deployPortalOnline: null, // null=unknown, true/false probed
   deployPortalFiles: [],
@@ -1343,6 +1352,11 @@ function renderContent() {
   actions.innerHTML = '';
 
   const q = state.searchQuery;
+
+  // Show "Create VM" button on relevant views.
+  if (['dashboard','all-vms','host'].includes(state.view) && state.hosts.length > 0) {
+    actions.innerHTML = `<button class="btn btn-primary" onclick="openCreateVM()">+ Create VM</button>`;
+  }
 
   switch (state.view) {
     case 'dashboard':  body.innerHTML = renderDashboard(); break;
@@ -1722,6 +1736,201 @@ function storageTable(pools, showHost) {
       </tbody>
     </table>
   `;
+}
+
+// ── Create VM dialog ───────────────────────────────────────
+async function openCreateVM(preselectedHost) {
+  const hostID = preselectedHost || (state.selectedHost && state.view === 'host' ? state.selectedHost : state.hosts[0]?.id);
+  if (!hostID) { toast('error', 'No hosts available'); return; }
+  state.createVM = { host_id: hostID, info: null, mode: 'create', loading: true };
+  renderCreateVMModal();
+  try {
+    const r = await fetch(`${API}/api/vm-create-info?host=${encodeURIComponent(hostID)}`);
+    state.createVM.info = await r.json();
+  } catch (e) {
+    toast('error', 'Failed to load host info: ' + e.message);
+  }
+  state.createVM.loading = false;
+  renderCreateVMModal();
+}
+
+function closeCreateVM() {
+  state.createVM = null;
+  const el = document.getElementById('create-vm-modal');
+  if (el) el.remove();
+}
+
+function switchCreateVMHost() {
+  const sel = document.getElementById('cvm-host');
+  if (sel) openCreateVM(sel.value);
+}
+
+function switchCreateVMMode(mode) {
+  state.createVM.mode = mode;
+  renderCreateVMModal();
+}
+
+function renderCreateVMModal() {
+  const cv = state.createVM;
+  if (!cv) return;
+  const existing = document.getElementById('create-vm-modal');
+  if (existing) existing.remove();
+
+  const onlineHosts = state.hosts.filter(h => h.status === 'online');
+  const info = cv.info || {};
+  const pools = info.pools || [];
+  const bridges = info.bridges || [];
+  const isos = info.isos || [];
+  const mode = cv.mode || 'create';
+
+  // Popular OS variants for quick selection.
+  const popularOS = [
+    {label:'Rocky Linux 9', value:'rocky9'},
+    {label:'Rocky Linux 8', value:'rocky8'},
+    {label:'Ubuntu 24.04', value:'ubuntu24.04'},
+    {label:'Ubuntu 22.04', value:'ubuntu22.04'},
+    {label:'Debian 12', value:'debian12'},
+    {label:'Fedora 41', value:'fedora41'},
+    {label:'CentOS Stream 9', value:'centos-stream9'},
+    {label:'AlmaLinux 9', value:'almalinux9'},
+    {label:'Windows 11', value:'win11'},
+    {label:'Windows 10', value:'win10'},
+    {label:'Windows Server 2022', value:'win2k22'},
+    {label:'FreeBSD 14', value:'freebsd14.0'},
+  ];
+
+  const formField = (label, id, content) => `
+    <div style="margin-bottom:12px">
+      <label for="${id}" style="display:block;font-size:11px;color:#5a8ab0;margin-bottom:4px">${label}</label>
+      ${content}
+    </div>
+  `;
+  const sel = (id, opts, selected) => `<select id="${id}" style="width:100%;background:#091828;border:1px solid #1a3a5c;color:#c5daf0;padding:8px;border-radius:4px;font-size:12px;font-family:inherit">${opts.map(o => {
+    const v = typeof o === 'string' ? o : o.value;
+    const l = typeof o === 'string' ? o : o.label;
+    return `<option value="${esc(v)}" ${v===selected?'selected':''}>${esc(l)}</option>`;
+  }).join('')}</select>`;
+  const inp = (id, type, val, ph, extra) => `<input type="${type||'text'}" id="${id}" value="${esc(val||'')}" placeholder="${esc(ph||'')}" ${extra||''} style="width:100%;background:#091828;border:1px solid #1a3a5c;color:#c5daf0;padding:8px;border-radius:4px;font-size:12px;font-family:inherit;box-sizing:border-box">`;
+
+  const createForm = `
+    ${formField('VM Name', 'cvm-name', inp('cvm-name','text','','e.g. my-new-vm'))}
+    ${formField('Operating System', 'cvm-os', sel('cvm-os', [{label:'(select)',value:''}, ...popularOS], ''))}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      ${formField('Memory (MB)', 'cvm-mem', inp('cvm-mem','number','2048','','min=256 step=256'))}
+      ${formField('vCPUs', 'cvm-vcpus', inp('cvm-vcpus','number','2','','min=1 max=128'))}
+    </div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">
+      ${formField('Disk Size (GB)', 'cvm-disk', inp('cvm-disk','number','20','','min=1'))}
+      ${formField('Disk Format', 'cvm-diskfmt', sel('cvm-diskfmt', ['qcow2','raw'], 'qcow2'))}
+    </div>
+    ${formField('Install Media (ISO)', 'cvm-iso', sel('cvm-iso', [{label:'(none — PXE boot)',value:''}, ...isos.map(i => ({label:i.split('/').pop(),value:i}))], ''))}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      ${formField('Network Bridge', 'cvm-bridge', sel('cvm-bridge', bridges.length ? bridges : ['br0'], bridges[0]||'br0'))}
+      ${formField('Firmware', 'cvm-firmware', sel('cvm-firmware', [{label:'BIOS (SeaBIOS)',value:'bios'},{label:'UEFI (OVMF)',value:'efi'}], 'bios'))}
+    </div>
+    ${formField('Storage Pool', 'cvm-pool', sel('cvm-pool', pools.map(p=>({label:p.name+' ('+p.path+')',value:p.path})), pools[0]?.path||'/var/lib/libvirt/images'))}
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:12px">
+      <input type="checkbox" id="cvm-autostart" style="accent-color:#0091da">
+      <span style="font-size:12px;color:#c5daf0">Start on host boot (autostart)</span>
+    </label>
+  `;
+
+  const importForm = `
+    ${formField('VM Name', 'cvm-name', inp('cvm-name','text','','e.g. imported-vm'))}
+    ${formField('Operating System', 'cvm-os', sel('cvm-os', [{label:'(select)',value:''}, ...popularOS], ''))}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      ${formField('Memory (MB)', 'cvm-mem', inp('cvm-mem','number','2048','','min=256 step=256'))}
+      ${formField('vCPUs', 'cvm-vcpus', inp('cvm-vcpus','number','2','','min=1 max=128'))}
+    </div>
+    ${formField('Existing Disk Image Path', 'cvm-import', inp('cvm-import','text','','/var/lib/libvirt/images/existing.qcow2'))}
+    <div style="font-size:10px;color:#5a8ab0;margin:-8px 0 12px 0">Full path to an existing qcow2, raw, or vmdk disk image on this hypervisor</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      ${formField('Network Bridge', 'cvm-bridge', sel('cvm-bridge', bridges.length ? bridges : ['br0'], bridges[0]||'br0'))}
+      ${formField('Firmware', 'cvm-firmware', sel('cvm-firmware', [{label:'BIOS (SeaBIOS)',value:'bios'},{label:'UEFI (OVMF)',value:'efi'}], 'bios'))}
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:12px">
+      <input type="checkbox" id="cvm-autostart" style="accent-color:#0091da">
+      <span style="font-size:12px;color:#c5daf0">Start on host boot (autostart)</span>
+    </label>
+  `;
+
+  const html = `
+    <div class="modal-overlay" id="create-vm-modal" style="display:flex" onclick="if(event.target===this)closeCreateVM()">
+      <div class="modal" style="width:560px;max-width:calc(100vw - 32px);max-height:90vh;overflow-y:auto">
+        <h3>Create Virtual Machine</h3>
+
+        ${formField('Hypervisor', 'cvm-host', sel('cvm-host', onlineHosts.map(h => ({label:h.id+' ('+h.ip+')',value:h.id})), cv.host_id) + `<script>document.getElementById('cvm-host').onchange=switchCreateVMHost<\/script>`)}
+
+        <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid #1a3a5c">
+          <div class="tab ${mode==='create'?'active':''}" onclick="switchCreateVMMode('create')" style="cursor:pointer;padding:6px 14px;font-size:12px;border-bottom:2px solid ${mode==='create'?'#0091da':'transparent'};color:${mode==='create'?'#e8f4ff':'#7aa8cc'}">New VM</div>
+          <div class="tab ${mode==='import'?'active':''}" onclick="switchCreateVMMode('import')" style="cursor:pointer;padding:6px 14px;font-size:12px;border-bottom:2px solid ${mode==='import'?'#0091da':'transparent'};color:${mode==='import'?'#e8f4ff':'#7aa8cc'}">Import Existing Disk</div>
+        </div>
+
+        ${cv.loading ? '<div style="text-align:center;padding:24px;color:#5a8ab0">Loading host capabilities…</div>' : (mode === 'create' ? createForm : importForm)}
+
+        <div class="modal-actions" style="margin-top:16px">
+          <button class="btn btn-secondary" onclick="closeCreateVM()">Cancel</button>
+          <button class="btn btn-primary" id="cvm-submit" onclick="submitCreateVM()" ${cv.loading?'disabled':''}>
+            ${mode === 'create' ? 'Create & Start' : 'Import & Start'}
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function submitCreateVM() {
+  const cv = state.createVM;
+  const mode = cv.mode;
+  const hostID = document.getElementById('cvm-host')?.value || cv.host_id;
+
+  const name = document.getElementById('cvm-name')?.value?.trim();
+  if (!name) { toast('error', 'VM name is required'); return; }
+
+  const body = {
+    name,
+    memory_mb: parseInt(document.getElementById('cvm-mem')?.value) || 2048,
+    vcpus: parseInt(document.getElementById('cvm-vcpus')?.value) || 2,
+    os_variant: document.getElementById('cvm-os')?.value || '',
+    bridge: document.getElementById('cvm-bridge')?.value || 'br0',
+    firmware: document.getElementById('cvm-firmware')?.value || 'bios',
+    autostart: document.getElementById('cvm-autostart')?.checked || false,
+  };
+
+  if (mode === 'create') {
+    body.disk_size_gb = parseInt(document.getElementById('cvm-disk')?.value) || 20;
+    body.disk_format = document.getElementById('cvm-diskfmt')?.value || 'qcow2';
+    body.iso_path = document.getElementById('cvm-iso')?.value || '';
+    body.pool_path = document.getElementById('cvm-pool')?.value || '/var/lib/libvirt/images';
+  } else {
+    body.import_disk = document.getElementById('cvm-import')?.value?.trim() || '';
+    if (!body.import_disk) { toast('error', 'Disk image path is required for import'); return; }
+  }
+
+  const btn = document.getElementById('cvm-submit');
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+  toast('info', `Creating VM "${name}" on ${hostID}…`);
+
+  try {
+    const r = await fetch(`${API}/api/vm-create?host=${encodeURIComponent(hostID)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (data.success) {
+      closeCreateVM();
+      toast('success', data.message || `VM "${name}" created`);
+      setTimeout(refresh, 3000);
+    } else {
+      toast('error', `Failed: ${data.error || 'unknown error'}`);
+      if (btn) { btn.disabled = false; btn.textContent = mode === 'create' ? 'Create & Start' : 'Import & Start'; }
+    }
+  } catch (e) {
+    toast('error', `Failed: ${e.message}`);
+    if (btn) { btn.disabled = false; btn.textContent = mode === 'create' ? 'Create & Start' : 'Import & Start'; }
+  }
 }
 
 // ── File Browser ───────────────────────────────────────────
