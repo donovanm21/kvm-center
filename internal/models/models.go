@@ -222,6 +222,41 @@ type User struct {
 	// the login flow demands the second factor.
 	TOTPSecret  string `json:"totp_secret,omitempty"`  // omitted from API responses via sanitizeUser
 	TOTPEnabled bool   `json:"totp_enabled"`
+
+	// External identities linked to this account (OIDC / OAuth2 / SAML / LDAP).
+	// Each entry is the (provider_id, subject) pair returned by the IdP and
+	// lets the same local account sign in via multiple sources.
+	ExternalIDs []ExternalIdentity `json:"external_ids,omitempty"`
+}
+
+// ExternalIdentity is a single federated-login binding.
+type ExternalIdentity struct {
+	ProviderID string    `json:"provider_id"`
+	Subject    string    `json:"subject"`
+	Email      string    `json:"email,omitempty"`
+	LinkedAt   time.Time `json:"linked_at"`
+}
+
+// IdentityProvider configures one external authentication source. Kind
+// hints at the UI preset (Google / GitHub / Microsoft / OIDC) but all
+// federated login flows currently share the OAuth2 + userinfo code path.
+type IdentityProvider struct {
+	ID            string    `json:"id"`
+	Kind          string    `json:"kind"`           // "google" | "github" | "microsoft" | "oidc"
+	Name          string    `json:"name"`           // display label on the login button
+	Enabled       bool      `json:"enabled"`
+	Issuer        string    `json:"issuer,omitempty"` // if set, discovery fills the URLs below
+	AuthURL       string    `json:"auth_url,omitempty"`
+	TokenURL      string    `json:"token_url,omitempty"`
+	UserinfoURL   string    `json:"userinfo_url,omitempty"`
+	ClientID      string    `json:"client_id"`
+	ClientSecret  string    `json:"client_secret,omitempty"` // omitted from API responses
+	Scopes        string    `json:"scopes,omitempty"`        // space-separated, e.g. "openid email profile"
+	DefaultRoleID string    `json:"default_role_id,omitempty"`
+	SubjectClaim  string    `json:"subject_claim,omitempty"`  // default "sub"; GitHub uses "id"
+	EmailClaim    string    `json:"email_claim,omitempty"`    // default "email"
+	UsernameClaim string    `json:"username_claim,omitempty"` // default "preferred_username" then "email"
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // Group is a collection of users that share a common set of role assignments.

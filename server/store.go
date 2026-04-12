@@ -23,6 +23,7 @@ type persistData struct {
 	Groups     map[string]*models.Group            `json:"groups,omitempty"`
 	Roles      map[string]*models.Role             `json:"roles,omitempty"`
 	Sessions   map[string]*models.Session          `json:"sessions,omitempty"`
+	IDPs       map[string]*models.IdentityProvider `json:"idps,omitempty"`
 }
 
 // guestEntry is one cached report from a kvm-tools daemon running in a guest.
@@ -47,6 +48,7 @@ type Store struct {
 	groups     map[string]*models.Group // keyed by group ID
 	roles      map[string]*models.Role  // keyed by role ID
 	sessions   map[string]*models.Session // keyed by session token (memory-only)
+	idps       map[string]*models.IdentityProvider // keyed by provider ID
 	dataFile   string
 }
 
@@ -61,6 +63,7 @@ func NewStore(dataFile string) *Store {
 		groups:    make(map[string]*models.Group),
 		roles:     make(map[string]*models.Role),
 		sessions:  make(map[string]*models.Session),
+		idps:      make(map[string]*models.IdentityProvider),
 		dataFile:  dataFile,
 	}
 	s.load()
@@ -360,6 +363,7 @@ func (s *Store) Save() {
 		Groups:     s.groups,
 		Roles:      s.roles,
 		Sessions:   s.sessions,
+		IDPs:       s.idps,
 	}
 	s.mu.RUnlock()
 
@@ -419,6 +423,9 @@ func (s *Store) load() {
 			}
 		}
 		s.sessions = d.Sessions
+	}
+	if d.IDPs != nil {
+		s.idps = d.IDPs
 	}
 	log.Printf("store: loaded %d hosts, %d users, %d groups, %d roles from %s",
 		len(s.hosts), len(s.users), len(s.groups), len(s.roles), s.dataFile)
