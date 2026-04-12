@@ -38,6 +38,24 @@ type Host struct {
 	KernelVer  string     `json:"kernel_ver"`
 	LibvirtVer string     `json:"libvirt_ver"`
 	Uptime     string     `json:"uptime"`
+
+	// Hardware details collected from virsh nodeinfo, lspci, /sys/kernel/iommu_groups/.
+	CPUModel       string          `json:"cpu_model,omitempty"`
+	Sockets        int             `json:"sockets,omitempty"`
+	CoresPerSocket int             `json:"cores_per_socket,omitempty"`
+	ThreadsPerCore int             `json:"threads_per_core,omitempty"`
+	NUMANodes      int             `json:"numa_nodes,omitempty"`
+	PCIDevices     []HostPCIDevice `json:"host_pci_devices,omitempty"`
+	GPUs           []string        `json:"gpus,omitempty"`
+}
+
+// HostPCIDevice is one PCI device on the hypervisor (from lspci -nn).
+type HostPCIDevice struct {
+	Address     string `json:"address"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
+	IOMMUGroup  int    `json:"iommu_group"`
+	InUseByVM   string `json:"in_use_by_vm,omitempty"`
 }
 
 // VMNetwork represents a single virtual NIC attached to a VM.
@@ -65,6 +83,19 @@ type VM struct {
 	Networks      []VMNetwork `json:"networks"`
 	SnapshotCount int         `json:"snapshot_count"`
 
+	// Hardware config from virsh dumpxml + dominfo.
+	DiskType    string           `json:"disk_type,omitempty"`    // "qcow2", "raw"
+	Firmware    string           `json:"firmware,omitempty"`     // "bios", "efi", "efi+secureboot"
+	MachineType string           `json:"machine_type,omitempty"` // "pc-q35-rhel9.6.0"
+	CPUMode     string           `json:"cpu_mode,omitempty"`     // "host-passthrough", "custom"
+	Autostart   bool             `json:"autostart"`
+	HasTPM      bool             `json:"has_tpm"`
+	TPMVersion  string           `json:"tpm_version,omitempty"`
+	VideoModel  string           `json:"video_model,omitempty"`
+	BootDev     string           `json:"boot_dev,omitempty"`
+	AllDisks    []VMDisk         `json:"all_disks,omitempty"`
+	PCIDevices  []VMPCIDevice    `json:"pci_devices,omitempty"`
+
 	// Guest-side fields. Populated by qemu-guest-agent (via hypervisor) or
 	// kvm-tools daemon (via POST /api/guest-telemetry). Empty when no agent.
 	GuestAgent    bool      `json:"guest_agent"`            // true if any guest source responded
@@ -86,6 +117,23 @@ type GuestFS struct {
 	FSType     string  `json:"fstype"`
 	TotalGB    float64 `json:"total_gb"`
 	UsedGB     float64 `json:"used_gb"`
+}
+
+// VMDisk is one disk attached to a VM (from virsh dumpxml).
+type VMDisk struct {
+	Target     string  `json:"target"`      // "vda", "sda"
+	Device     string  `json:"device"`      // "disk", "cdrom"
+	DiskType   string  `json:"disk_type"`   // "qcow2", "raw"
+	Bus        string  `json:"bus"`         // "virtio", "scsi", "sata"
+	Path       string  `json:"path"`
+	CapacityGB float64 `json:"capacity_gb"`
+	AllocGB    float64 `json:"alloc_gb"`
+}
+
+// VMPCIDevice is one PCI device passed through to a VM via VFIO.
+type VMPCIDevice struct {
+	SourceAddr string `json:"source_addr"` // "0000:05:00.0"
+	HostDesc   string `json:"host_desc"`   // resolved lspci description
 }
 
 // GuestTelemetryPayload is sent by the kvm-tools daemon running inside a VM
@@ -143,6 +191,15 @@ type TelemetryPayload struct {
 	VMs        []VM          `json:"vms"`
 	Storage    []StoragePool `json:"storage"`
 	Timestamp  time.Time     `json:"timestamp"`
+
+	// Host hardware (collected once or on change).
+	CPUModel       string          `json:"cpu_model,omitempty"`
+	Sockets        int             `json:"sockets,omitempty"`
+	CoresPerSocket int             `json:"cores_per_socket,omitempty"`
+	ThreadsPerCore int             `json:"threads_per_core,omitempty"`
+	NUMANodes      int             `json:"numa_nodes,omitempty"`
+	PCIDevices     []HostPCIDevice `json:"host_pci_devices,omitempty"`
+	GPUs           []string        `json:"gpus,omitempty"`
 }
 
 // CommandRequest is sent by the server to an agent's POST /command endpoint.

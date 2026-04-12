@@ -78,6 +78,16 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 	host.LastSeen = p.Timestamp
 	host.Status = models.HostOnline
 
+	if p.CPUModel != "" {
+		host.CPUModel = p.CPUModel
+		host.Sockets = p.Sockets
+		host.CoresPerSocket = p.CoresPerSocket
+		host.ThreadsPerCore = p.ThreadsPerCore
+		host.NUMANodes = p.NUMANodes
+		host.PCIDevices = p.PCIDevices
+		host.GPUs = p.GPUs
+	}
+
 	// Stamp host_id onto VMs coming from agent (it may omit it).
 	vms := make([]*models.VM, len(p.VMs))
 	for i := range p.VMs {
