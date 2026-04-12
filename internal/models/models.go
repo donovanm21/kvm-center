@@ -215,6 +215,13 @@ type User struct {
 	GroupIDs     []string  `json:"group_ids"` // group memberships (inherits group roles)
 	CreatedAt    time.Time `json:"created_at"`
 	LastLoginAt  time.Time `json:"last_login_at,omitempty"`
+
+	// Optional TOTP (RFC 6238) second factor. TOTPSecret is a base32-encoded
+	// 20-byte secret; it is populated only after the user completes enrollment
+	// (scans the code + verifies with a live TOTP). TOTPEnabled gates whether
+	// the login flow demands the second factor.
+	TOTPSecret  string `json:"totp_secret,omitempty"`  // omitted from API responses via sanitizeUser
+	TOTPEnabled bool   `json:"totp_enabled"`
 }
 
 // Group is a collection of users that share a common set of role assignments.
