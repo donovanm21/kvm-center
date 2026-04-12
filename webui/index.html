@@ -14,11 +14,40 @@
 <meta name="mobile-web-app-capable" content="yes">
 <style>
 /* ── Reset & Base ────────────────────────────────────────── */
+:root {
+  --text-strong: #F0F6FC;
+  --text-body: #C9D1D9;
+  --text-muted: #8B949E;
+  --text-faded: #6E7681;
+  --text-disabled: #484F58;
+  --surface: #161B22;
+  --surface-2: #1C2128;
+  --surface-3: #21262D;
+  --bg: #0B0E13;
+  --bg-input: #0D1117;
+  --border: #30363D;
+  --border-subtle: #21262D;
+}
+body.light-mode {
+  --text-strong: #1F2328;
+  --text-body: #3D434D;
+  --text-muted: #656D76;
+  --text-faded: #8B95A1;
+  --text-disabled: #B1BAC4;
+  --surface: #FFFFFF;
+  --surface-2: #F6F8FA;
+  --surface-3: #EAEEF2;
+  --bg: #F6F8FA;
+  --bg-input: #FFFFFF;
+  --border: #D0D7DE;
+  --border-subtle: #EAEEF2;
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
   background: #0B0E13;
-  color: #C9D1D9;
+  color: var(--text-body);
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -28,7 +57,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
-::selection { background: #E3571E44; color: #F0F6FC; }
+::selection { background: #E3571E44; color: var(--text-strong); }
 
 /* ── Top Navigation ─────────────────────────────────────── */
 #topbar {
@@ -68,7 +97,7 @@ body {
   letter-spacing: -0.01em;
   line-height: 1;
 }
-.brand-primary { color: #F0F6FC; }
+.brand-primary { color: var(--text-strong); }
 .brand-accent {
   color: #E3571E;
   margin-left: 2px;
@@ -79,7 +108,7 @@ body {
   background: #1C2128;
   border: 1px solid #30363D;
   border-radius: 4px;
-  color: #C9D1D9;
+  color: var(--text-body);
   padding: 5px 10px 5px 30px;
   font-size: 12px;
   outline: none;
@@ -95,7 +124,7 @@ body {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: #8B949E;
+  color: var(--text-muted);
 }
 .status-dot {
   width: 8px; height: 8px;
@@ -107,7 +136,7 @@ body {
 .icon-btn {
   background: none;
   border: 1px solid #30363D;
-  color: #8B949E;
+  color: var(--text-muted);
   padding: 6px 8px;
   border-radius: 5px;
   cursor: pointer;
@@ -128,10 +157,10 @@ body {
 .view-search input {
   width: 100%;
   height: 36px;
-  background: #0D1117;
+  background: var(--bg-input);
   border: 1px solid #30363D;
   border-radius: 5px;
-  color: #C9D1D9;
+  color: var(--text-body);
   padding: 0 12px 0 34px;
   font-size: 12px;
   font-family: inherit;
@@ -186,7 +215,7 @@ body {
   gap: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: #F0F6FC;
+  color: var(--text-strong);
   flex-shrink: 0;
 }
 .sidebar-cluster-pill svg { flex-shrink: 0; }
@@ -194,8 +223,8 @@ body {
   margin-left: auto;
   font-size: 10px;
   font-weight: 400;
-  color: #8B949E;
-  background: #0D1117;
+  color: var(--text-muted);
+  background: var(--bg-input);
   padding: 2px 8px;
   border-radius: 10px;
 }
@@ -207,7 +236,7 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1.2px;
-  color: #484F58;
+  color: var(--text-disabled);
   border-top: 1px solid #30363D;
   flex-shrink: 0;
 }
@@ -217,7 +246,7 @@ body {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: #484F58;
+  color: var(--text-disabled);
 }
 .nav-item {
   display: flex;
@@ -230,17 +259,17 @@ body {
   transition: all 0.15s;
   user-select: none;
 }
-.nav-item:hover { background: #1C2128; color: #C9D1D9; }
+.nav-item:hover { background: #1C2128; color: var(--text-body); }
 .nav-item.active {
   background: linear-gradient(90deg, rgba(227,87,30,0.12) 0%, rgba(227,87,30,0) 100%);
-  color: #F0F6FC;
+  color: var(--text-strong);
   border-left-color: #E3571E;
 }
 .nav-item .nav-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.8; }
 .nav-badge {
   margin-left: auto;
   background: #30363D;
-  color: #8B949E;
+  color: var(--text-muted);
   padding: 1px 6px;
   border-radius: 10px;
   font-size: 10px;
@@ -253,12 +282,12 @@ body {
   gap: 8px;
   padding: 6px 12px 6px 28px;
   cursor: pointer;
-  color: #8B949E;
+  color: var(--text-muted);
   border-left: 3px solid transparent;
   transition: all 0.15s;
 }
-.host-tree-item:hover { background: #1C2128; color: #C9D1D9; }
-.host-tree-item.active { background: #21262D; color: #F0F6FC; border-left-color: #E3571E; }
+.host-tree-item:hover { background: #1C2128; color: var(--text-body); }
+.host-tree-item.active { background: #21262D; color: var(--text-strong); border-left-color: #E3571E; }
 .host-tree-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .host-tree-dot.online { background: #4caf50; }
 .host-tree-dot.offline { background: #f44336; }
@@ -268,13 +297,13 @@ body {
   margin-top: auto;
   padding: 10px 14px;
   font-size: 10px;
-  color: #484F58;
+  color: var(--text-disabled);
   border-top: 1px solid #30363D;
   letter-spacing: 0.5px;
   font-family: 'SF Mono', 'Fira Code', monospace;
   flex-shrink: 0;
 }
-#version-footer #version-text { color: #6E7681; }
+#version-footer #version-text { color: var(--text-faded); }
 
 /* ── Main Content ───────────────────────────────────────── */
 #main {
@@ -294,8 +323,8 @@ body {
   gap: 10px;
   flex-shrink: 0;
 }
-.breadcrumb { color: #484F58; font-size: 12px; }
-.breadcrumb span { color: #C9D1D9; }
+.breadcrumb { color: var(--text-disabled); font-size: 12px; }
+.breadcrumb span { color: var(--text-body); }
 .content-actions { margin-left: auto; display: flex; gap: 8px; }
 .btn {
   padding: 6px 14px;
@@ -315,8 +344,8 @@ body {
   border-color: #C04512;
 }
 .btn-primary:hover:not(:disabled) { background: linear-gradient(180deg, #FF7B3C 0%, #F26419 100%); }
-.btn-secondary { background: #21262D; color: #C9D1D9; border-color: #30363D; }
-.btn-secondary:hover:not(:disabled) { background: #30363D; color: #F0F6FC; }
+.btn-secondary { background: #21262D; color: var(--text-body); border-color: #30363D; }
+.btn-secondary:hover:not(:disabled) { background: #30363D; color: var(--text-strong); }
 .btn-danger { background: #7A1C1C; color: #FFB3B3; border-color: #A02929; }
 .btn-danger:hover:not(:disabled) { background: #A02929; color: #fff; }
 .btn-warning { background: #5A3A0A; color: #FFCC66; border-color: #8A5A10; }
@@ -335,14 +364,14 @@ body {
 .tab {
   padding: 8px 16px;
   cursor: pointer;
-  color: #8B949E;
+  color: var(--text-muted);
   border-bottom: 2px solid transparent;
   font-size: 12px;
   transition: all 0.15s;
   margin-bottom: -1px;
 }
-.tab:hover { color: #C9D1D9; }
-.tab.active { color: #F0F6FC; border-bottom-color: #E3571E; }
+.tab:hover { color: var(--text-body); }
+.tab.active { color: var(--text-strong); border-bottom-color: #E3571E; }
 
 /* ── Scrollable content area ────────────────────────────── */
 #content-body {
@@ -359,7 +388,7 @@ body {
   margin-bottom: 20px;
 }
 .summary-card {
-  background: #161B22;
+  background: var(--surface);
   border: 1px solid #30363D;
   border-radius: 6px;
   padding: 14px 16px;
@@ -368,18 +397,18 @@ body {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  color: #484F58;
+  color: var(--text-disabled);
   margin-bottom: 6px;
 }
 .summary-card .value {
   font-size: 28px;
   font-weight: 300;
-  color: #F0F6FC;
+  color: var(--text-strong);
   line-height: 1;
 }
 .summary-card .sub {
   font-size: 11px;
-  color: #6E7681;
+  color: var(--text-faded);
   margin-top: 4px;
 }
 .summary-card.accent { border-left: 3px solid #E3571E; }
@@ -393,7 +422,7 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: #484F58;
+  color: var(--text-disabled);
   margin-bottom: 12px;
   display: flex;
   align-items: center;
@@ -412,7 +441,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  background: #161B22;
+  background: var(--surface);
   border: 1px solid #30363D;
   border-bottom: none;
   border-radius: 6px 6px 0 0;
@@ -422,7 +451,7 @@ body {
   border-radius: 0 0 6px 6px;
   overflow: hidden;
   margin-bottom: 24px;
-  background: #0D1117;
+  background: var(--bg-input);
 }
 .env-row {
   display: flex;
@@ -431,7 +460,7 @@ body {
   gap: 16px;
   cursor: pointer;
   border-top: 1px solid #30363D;
-  background: #161B22;
+  background: var(--surface);
   transition: background 0.15s;
 }
 .env-row:first-child { border-top: none; }
@@ -463,24 +492,24 @@ body {
 .env-row-name {
   font-size: 15px;
   font-weight: 600;
-  color: #F0F6FC;
+  color: var(--text-strong);
 }
 .env-row-meta {
   display: flex;
   gap: 14px;
   font-size: 11px;
-  color: #8B949E;
+  color: var(--text-muted);
   flex-wrap: wrap;
 }
 .env-row-stats {
   display: flex;
   gap: 16px;
   font-size: 12px;
-  color: #C9D1D9;
+  color: var(--text-body);
   flex-wrap: wrap;
   margin-top: 2px;
 }
-.env-stat strong { color: #F0F6FC; font-weight: 600; }
+.env-stat strong { color: var(--text-strong); font-weight: 600; }
 .env-row-usage {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -493,7 +522,7 @@ body {
   display: flex;
   justify-content: space-between;
   font-size: 10px;
-  color: #8B949E;
+  color: var(--text-muted);
   margin-bottom: 3px;
 }
 .env-row-bar-track {
@@ -539,7 +568,7 @@ body {
   margin-bottom: 24px;
 }
 .host-card {
-  background: #161B22;
+  background: var(--surface);
   border: 1px solid #30363D;
   border-radius: 6px;
   padding: 16px;
@@ -557,9 +586,9 @@ body {
 .host-card-name {
   font-size: 14px;
   font-weight: 600;
-  color: #F0F6FC;
+  color: var(--text-strong);
 }
-.host-card-ip { font-size: 11px; color: #6E7681; margin-top: 2px; }
+.host-card-ip { font-size: 11px; color: var(--text-faded); margin-top: 2px; }
 .status-pill {
   padding: 2px 8px;
   border-radius: 10px;
@@ -576,7 +605,7 @@ body {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #8B949E;
+  color: var(--text-muted);
   margin-bottom: 3px;
 }
 .resource-bar {
@@ -603,13 +632,13 @@ body {
   padding-top: 10px;
   border-top: 1px solid #30363D;
   font-size: 11px;
-  color: #6E7681;
+  color: var(--text-faded);
 }
-.host-card-meta span strong { color: #C9D1D9; }
+.host-card-meta span strong { color: var(--text-body); }
 
 /* ── Tables ─────────────────────────────────────────────── */
 .table-wrap {
-  background: #161B22;
+  background: var(--surface);
   border: 1px solid #30363D;
   border-radius: 6px;
   overflow: hidden;
@@ -619,13 +648,13 @@ table {
   border-collapse: collapse;
 }
 thead th {
-  background: #0D1117;
+  background: var(--bg-input);
   padding: 9px 14px;
   text-align: left;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  color: #484F58;
+  color: var(--text-disabled);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -638,7 +667,7 @@ tbody tr:hover { background: #1C2128; }
 tbody tr.selected { background: #2D1810; }
 tbody td {
   padding: 9px 14px;
-  color: #C9D1D9;
+  color: var(--text-body);
   font-size: 12px;
   vertical-align: middle;
 }
@@ -662,7 +691,7 @@ thead th.sortable::after {
 thead th.sortable.asc::after  { content: '▲'; opacity: 0.9; color: #E3571E; }
 thead th.sortable.desc::after { content: '▼'; opacity: 0.9; color: #E3571E; }
 thead th.sortable.asc,
-thead th.sortable.desc { color: #C9D1D9; }
+thead th.sortable.desc { color: var(--text-body); }
 
 /* ── VM State Badge ─────────────────────────────────────── */
 .vm-state {
@@ -685,7 +714,7 @@ thead th.sortable.desc { color: #C9D1D9; }
 .vm-state.paused::before { background: #ff9800; }
 .vm-state.crashed { color: #f44336; }
 .vm-state.crashed::before { background: #f44336; }
-.vm-state.unknown { color: #8B949E; }
+.vm-state.unknown { color: var(--text-muted); }
 .vm-state.unknown::before { background: #8B949E; }
 
 /* ── Action Buttons Row ─────────────────────────────────── */
@@ -697,7 +726,7 @@ thead th.sortable.desc { color: #C9D1D9; }
 
 /* ── Detail Panel ───────────────────────────────────────── */
 .detail-panel {
-  background: #0D1117;
+  background: var(--bg-input);
   border: 1px solid #30363D;
   border-radius: 6px;
   padding: 16px;
@@ -712,12 +741,12 @@ thead th.sortable.desc { color: #C9D1D9; }
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  color: #484F58;
+  color: var(--text-disabled);
   margin-bottom: 3px;
 }
 .detail-item .detail-value {
   font-size: 13px;
-  color: #C9D1D9;
+  color: var(--text-body);
   word-break: break-all;
 }
 .detail-item .detail-value.mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
@@ -726,7 +755,7 @@ thead th.sortable.desc { color: #C9D1D9; }
 .empty-state {
   text-align: center;
   padding: 48px 20px;
-  color: #484F58;
+  color: var(--text-disabled);
 }
 .empty-state svg { opacity: 0.3; margin-bottom: 12px; }
 .empty-state p { font-size: 14px; }
@@ -754,7 +783,7 @@ thead th.sortable.desc { color: #C9D1D9; }
 }
 .toast.success { background: #1E3D23; border-color: #4caf50; color: #81c784; }
 .toast.error   { background: #3D1E1E; border-color: #f44336; color: #e57373; }
-.toast.info    { background: #0D1117; border-color: #E3571E; color: #FFB380; }
+.toast.info    { background: var(--bg-input); border-color: #E3571E; color: #FFB380; }
 @keyframes slideIn {
   from { transform: translateX(30px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
@@ -768,15 +797,15 @@ thead th.sortable.desc { color: #C9D1D9; }
   z-index: 500;
 }
 .modal {
-  background: #161B22;
+  background: var(--surface);
   border: 1px solid #30363D;
   border-radius: 6px;
   padding: 24px;
   width: 380px;
   box-shadow: 0 20px 60px #00000060;
 }
-.modal h3 { color: #F0F6FC; margin-bottom: 16px; font-size: 15px; }
-.modal label { display: block; font-size: 11px; color: #6E7681; margin-bottom: 4px; }
+.modal h3 { color: var(--text-strong); margin-bottom: 16px; font-size: 15px; }
+.modal label { display: block; font-size: 11px; color: var(--text-faded); margin-bottom: 4px; }
 /* Consistent form controls across all modals and views */
 .modal input[type="text"],
 .modal input[type="password"],
@@ -785,9 +814,9 @@ thead th.sortable.desc { color: #C9D1D9; }
 .modal textarea {
   width: 100%;
   height: 36px;
-  background: #0D1117;
+  background: var(--bg-input);
   border: 1px solid #30363D;
-  color: #C9D1D9;
+  color: var(--text-body);
   padding: 0 10px;
   border-radius: 4px;
   font-size: 12px;
@@ -829,7 +858,7 @@ thead th.sortable.desc { color: #C9D1D9; }
 }
 .vm-thumbnail .state-label {
   font-size: 11px;
-  color: #8B949E;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.8px;
   font-weight: 600;
@@ -863,7 +892,7 @@ thead th.sortable.desc { color: #C9D1D9; }
 .vm-thumbnail .console-launch:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .vm-info-card {
-  background: #161B22;
+  background: var(--surface);
   border: 1px solid #30363D;
   border-radius: 6px;
   padding: 16px 18px;
@@ -892,16 +921,16 @@ thead th.sortable.desc { color: #C9D1D9; }
   gap: 8px 14px;
   font-size: 12px;
 }
-.vm-info-grid .lbl { color: #6E7681; }
-.vm-info-grid .val { color: #F0F6FC; }
+.vm-info-grid .lbl { color: var(--text-faded); }
+.vm-info-grid .val { color: var(--text-strong); }
 .vm-info-grid .val.dim {
-  color: #484F58;
+  color: var(--text-disabled);
   font-style: italic;
 }
 
 .vm-usage-stack { display: flex; flex-direction: column; gap: 10px; }
 .vm-usage-card {
-  background: #161B22;
+  background: var(--surface);
   border: 1px solid #30363D;
   border-radius: 6px;
   padding: 12px 14px;
@@ -924,14 +953,14 @@ thead th.sortable.desc { color: #C9D1D9; }
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  color: #484F58;
+  color: var(--text-disabled);
   margin-bottom: 2px;
 }
-.vm-usage-card .val { font-size: 17px; color: #F0F6FC; font-weight: 400; }
-.vm-usage-card.dim .val { color: #484F58; font-style: italic; }
+.vm-usage-card .val { font-size: 17px; color: var(--text-strong); font-weight: 400; }
+.vm-usage-card.dim .val { color: var(--text-disabled); font-style: italic; }
 
 .vm-collapsible {
-  background: #161B22;
+  background: var(--surface);
   border: 1px solid #30363D;
   border-radius: 6px;
   margin-bottom: 12px;
@@ -945,12 +974,12 @@ thead th.sortable.desc { color: #C9D1D9; }
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
-  color: #F0F6FC;
+  color: var(--text-strong);
   border-bottom: 1px solid transparent;
 }
 .vm-collapsible.open .vm-collapsible-head { border-bottom-color: #30363D; }
 .vm-collapsible-head:hover { background: #21262D; }
-.vm-collapsible-head .chevron { transition: transform 0.15s; color: #6E7681; }
+.vm-collapsible-head .chevron { transition: transform 0.15s; color: var(--text-faded); }
 .vm-collapsible.open .vm-collapsible-head .chevron { transform: rotate(90deg); }
 .vm-collapsible-body { display: none; padding: 14px 16px; }
 .vm-collapsible.open .vm-collapsible-body { display: block; }
@@ -958,9 +987,9 @@ thead th.sortable.desc { color: #C9D1D9; }
 .vm-notes-textarea {
   width: 100%;
   min-height: 80px;
-  background: #0D1117;
+  background: var(--bg-input);
   border: 1px solid #30363D;
-  color: #C9D1D9;
+  color: var(--text-body);
   padding: 10px 12px;
   border-radius: 4px;
   font-size: 12px;
@@ -971,12 +1000,12 @@ thead th.sortable.desc { color: #C9D1D9; }
 .vm-notes-textarea:focus { border-color: #E3571E; }
 .vm-notes-view {
   font-size: 12px;
-  color: #C9D1D9;
+  color: var(--text-body);
   line-height: 1.6;
   white-space: pre-wrap;
   min-height: 40px;
 }
-.vm-notes-view.empty { color: #484F58; font-style: italic; }
+.vm-notes-view.empty { color: var(--text-disabled); font-style: italic; }
 
 .vm-actions-bar {
   display: flex;
@@ -990,7 +1019,7 @@ thead th.sortable.desc { color: #C9D1D9; }
 .vm-actions-bar .vm-title {
   font-size: 15px;
   font-weight: 600;
-  color: #F0F6FC;
+  color: var(--text-strong);
   margin-right: 12px;
 }
 .vm-actions-bar .vm-pill {
@@ -1005,7 +1034,7 @@ thead th.sortable.desc { color: #C9D1D9; }
 
 /* ── Deployment Page ────────────────────────────────────── */
 .deploy-intro {
-  background: #161B22;
+  background: var(--surface);
   border: 1px solid #30363D;
   border-left: 3px solid #E3571E;
   border-radius: 6px;
@@ -1013,11 +1042,11 @@ thead th.sortable.desc { color: #C9D1D9; }
   margin-bottom: 18px;
   font-size: 12px;
   line-height: 1.6;
-  color: #C9D1D9;
+  color: var(--text-body);
 }
-.deploy-intro strong { color: #F0F6FC; }
+.deploy-intro strong { color: var(--text-strong); }
 .deploy-intro code {
-  background: #0D1117;
+  background: var(--bg-input);
   padding: 2px 6px;
   border-radius: 3px;
   font-family: 'SF Mono', 'Fira Code', monospace;
@@ -1026,7 +1055,7 @@ thead th.sortable.desc { color: #C9D1D9; }
 }
 
 .deploy-package {
-  background: #161B22;
+  background: var(--surface);
   border: 1px solid #30363D;
   border-radius: 6px;
   padding: 18px 20px;
@@ -1035,7 +1064,7 @@ thead th.sortable.desc { color: #C9D1D9; }
 .deploy-package h3 {
   font-size: 14px;
   font-weight: 600;
-  color: #F0F6FC;
+  color: var(--text-strong);
   margin: 0 0 4px 0;
   display: flex;
   align-items: center;
@@ -1043,7 +1072,7 @@ thead th.sortable.desc { color: #C9D1D9; }
 }
 .deploy-package .deploy-desc {
   font-size: 11px;
-  color: #6E7681;
+  color: var(--text-faded);
   margin-bottom: 14px;
 }
 
@@ -1059,7 +1088,7 @@ thead th.sortable.desc { color: #C9D1D9; }
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
-  color: #8B949E;
+  color: var(--text-muted);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   display: flex;
@@ -1070,12 +1099,12 @@ thead th.sortable.desc { color: #C9D1D9; }
   transition: all 0.15s;
   user-select: none;
 }
-.deploy-os-tab:hover { color: #C9D1D9; }
-.deploy-os-tab.active { color: #F0F6FC; border-bottom-color: #E3571E; }
+.deploy-os-tab:hover { color: var(--text-body); }
+.deploy-os-tab.active { color: var(--text-strong); border-bottom-color: #E3571E; }
 
 .deploy-code-wrap {
   position: relative;
-  background: #0D1117;
+  background: var(--bg-input);
   border: 1px solid #30363D;
   border-radius: 4px;
   margin-top: 10px;
@@ -1084,7 +1113,7 @@ thead th.sortable.desc { color: #C9D1D9; }
   margin: 0;
   padding: 14px 16px;
   padding-right: 90px;
-  color: #C9D1D9;
+  color: var(--text-body);
   font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.55;
@@ -1097,7 +1126,7 @@ thead th.sortable.desc { color: #C9D1D9; }
   right: 8px;
   background: #3D2510;
   border: 1px solid #E3571E;
-  color: #F0F6FC;
+  color: var(--text-strong);
   padding: 5px 12px;
   font-size: 10px;
   font-weight: 600;
@@ -1113,7 +1142,7 @@ thead th.sortable.desc { color: #C9D1D9; }
 
 .deploy-note {
   font-size: 11px;
-  color: #6E7681;
+  color: var(--text-faded);
   margin-top: 8px;
   padding-left: 4px;
 }
@@ -1129,13 +1158,13 @@ thead th.sortable.desc { color: #C9D1D9; }
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  color: #484F58;
+  color: var(--text-disabled);
   border-bottom: 1px solid #30363D;
 }
 .deploy-files-table td {
   padding: 6px 10px;
   border-bottom: 1px solid #112030;
-  color: #C9D1D9;
+  color: var(--text-body);
 }
 .deploy-files-table td a {
   color: #FF8A3C;
@@ -1143,7 +1172,7 @@ thead th.sortable.desc { color: #C9D1D9; }
   font-family: 'SF Mono', monospace;
 }
 .deploy-files-table td a:hover { text-decoration: underline; }
-.deploy-files-table td .size { color: #6E7681; font-size: 10px; }
+.deploy-files-table td .size { color: var(--text-faded); font-size: 10px; }
 
 .deploy-portal-pill {
   display: inline-flex;
@@ -1178,7 +1207,7 @@ thead th.sortable.desc { color: #C9D1D9; }
   display: none;
   background: none;
   border: none;
-  color: #8B949E;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 4px;
   flex-shrink: 0;
@@ -1284,7 +1313,7 @@ thead th.sortable.desc { color: #C9D1D9; }
   .summary-card .value { font-size: 22px; }
 
   .vm-info-grid { grid-template-columns: 1fr !important; }
-  .vm-info-grid .lbl { color: #484F58; font-size: 10px; margin-top: 6px; }
+  .vm-info-grid .lbl { color: var(--text-disabled); font-size: 10px; margin-top: 6px; }
 
   .vm-usage-stack { flex-direction: column; }
   .vm-usage-card { min-width: auto; }
@@ -1454,7 +1483,7 @@ body.light-mode #sidebar-overlay { background: rgba(0,0,0,0.3); }
 
 /* ── Scrollbar ──────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #0D1117; }
+::-webkit-scrollbar-track { background: var(--bg-input); }
 ::-webkit-scrollbar-thumb { background: #30363D; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #3D444D; }
 </style>
@@ -1877,7 +1906,7 @@ function renderDashboard() {
       </div>
       <div class="summary-card yellow-accent">
         <div class="label">Avg CPU</div>
-        <div class="value">${avgCPU}<small style="font-size:14px;color:#8B949E">%</small></div>
+        <div class="value">${avgCPU}<small style="font-size:14px;color:var(--text-muted)">%</small></div>
         <div class="sub">online hosts</div>
       </div>
     </div>
@@ -1885,9 +1914,9 @@ function renderDashboard() {
     <div class="env-list-header">
       <div style="display:flex;align-items:center;gap:10px">
         <svg width="18" height="18" viewBox="0 0 16 16" fill="#FF8A3C"><path d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3zm14 0H2v10h12V3z"/><path d="M3 4h10v1H3V4zm0 2h10v1H3V6zm0 2h6v1H3V8z"/></svg>
-        <span style="font-size:14px;font-weight:600;color:#F0F6FC">Hypervisors</span>
+        <span style="font-size:14px;font-weight:600;color:var(--text-strong)">Hypervisors</span>
       </div>
-      <div style="font-size:11px;color:#6E7681">Click a hypervisor to manage</div>
+      <div style="font-size:11px;color:var(--text-faded)">Click a hypervisor to manage</div>
     </div>
     <div class="env-list">
       ${[...state.hosts].sort((a,b) => a.id.toLowerCase().localeCompare(b.id.toLowerCase())).map(h => renderHypervisorRow(h)).join('')}
@@ -1932,7 +1961,7 @@ function renderHypervisorRow(h) {
         <div class="env-row-stats">
           <span class="env-stat"><strong>${h.vm_count}</strong> VMs</span>
           <span class="env-stat" style="color:#4caf50"><strong>${runningVMs}</strong> running</span>
-          <span class="env-stat" style="color:#8B949E"><strong>${stoppedVMs}</strong> stopped</span>
+          <span class="env-stat" style="color:var(--text-muted)"><strong>${stoppedVMs}</strong> stopped</span>
           <span class="env-stat"><strong>${hostPools.length}</strong> storage pool${hostPools.length===1?'':'s'}</span>
           <span class="env-stat">⚙ <strong>${h.cpu_count}</strong> CPU</span>
           <span class="env-stat">▤ <strong>${memGB}</strong> GB RAM</span>
@@ -2033,8 +2062,8 @@ function vmTable(vms, showHost) {
       <tbody>
         ${sorted.map(v => `
           <tr onclick="selectVM('${esc(v.uuid)}','${esc(v.host_id)}')">
-            <td style="font-weight:500;color:#F0F6FC">${esc(v.name)}</td>
-            ${showHost ? `<td style="color:#8B949E">${esc(v.host_id)}</td>` : ''}
+            <td style="font-weight:500;color:var(--text-strong)">${esc(v.name)}</td>
+            ${showHost ? `<td style="color:var(--text-muted)">${esc(v.host_id)}</td>` : ''}
             <td><span class="vm-state ${v.state}">${v.state}</span></td>
             <td>${v.cpu_count}</td>
             <td>${fmt(v.mem_total_mb,'MB')}</td>
@@ -2044,7 +2073,7 @@ function vmTable(vms, showHost) {
                 <div class="resource-bar" style="width:60px">
                   <div class="resource-bar-fill bar-cpu" style="width:${Math.min(v.cpu_usage||0,100)}%"></div>
                 </div>
-                <span style="font-size:11px;color:#8B949E">${(v.cpu_usage||0).toFixed(1)}%</span>
+                <span style="font-size:11px;color:var(--text-muted)">${(v.cpu_usage||0).toFixed(1)}%</span>
               </div>
             </td>
             <td onclick="event.stopPropagation()">
@@ -2136,8 +2165,8 @@ function renderHostSummary(h, hostVMs, hostPools) {
     <div class="detail-panel">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <div>
-          <div style="font-size:18px;font-weight:600;color:#F0F6FC">${esc(h.id)}</div>
-          <div style="font-size:12px;color:#6E7681;margin-top:2px">${esc(h.ip||'')}</div>
+          <div style="font-size:18px;font-weight:600;color:var(--text-strong)">${esc(h.id)}</div>
+          <div style="font-size:12px;color:var(--text-faded);margin-top:2px">${esc(h.ip||'')}</div>
         </div>
         <span class="status-pill ${h.status}">${h.status}</span>
       </div>
@@ -2177,11 +2206,11 @@ function renderHostSummary(h, hostVMs, hostPools) {
     <div class="section-title">Resource Utilisation</div>
     <div class="detail-panel" style="padding:16px 20px">
       <div class="resource-row" style="margin-bottom:16px">
-        <div class="resource-label" style="font-size:13px"><span>CPU Usage</span><span style="font-size:20px;color:#F0F6FC;font-weight:300">${h.cpu_usage.toFixed(1)}%</span></div>
+        <div class="resource-label" style="font-size:13px"><span>CPU Usage</span><span style="font-size:20px;color:var(--text-strong);font-weight:300">${h.cpu_usage.toFixed(1)}%</span></div>
         <div class="resource-bar" style="height:8px"><div class="resource-bar-fill ${cpuColor}" style="width:${Math.min(h.cpu_usage,100)}%"></div></div>
       </div>
       <div class="resource-row">
-        <div class="resource-label" style="font-size:13px"><span>Memory Usage</span><span style="font-size:20px;color:#F0F6FC;font-weight:300">${h.mem_usage.toFixed(1)}%</span></div>
+        <div class="resource-label" style="font-size:13px"><span>Memory Usage</span><span style="font-size:20px;color:var(--text-strong);font-weight:300">${h.mem_usage.toFixed(1)}%</span></div>
         <div class="resource-bar" style="height:8px"><div class="resource-bar-fill ${memColor}" style="width:${Math.min(h.mem_usage,100)}%"></div></div>
       </div>
     </div>
@@ -2235,8 +2264,8 @@ function storageTable(pools, showHost) {
           const barColor = pct > 85 ? 'bar-danger' : pct > 65 ? 'bar-warn' : 'bar-disk';
           return `
             <tr>
-              <td style="font-weight:500;color:#F0F6FC">${esc(p.name)}</td>
-              ${showHost ? `<td style="color:#8B949E">${esc(p.host_id)}</td>` : ''}
+              <td style="font-weight:500;color:var(--text-strong)">${esc(p.name)}</td>
+              ${showHost ? `<td style="color:var(--text-muted)">${esc(p.host_id)}</td>` : ''}
               <td>${esc(p.pool_type||'—')}</td>
               <td><span class="vm-state ${p.state==='running'?'running':'stopped'}">${esc(p.state)}</span></td>
               <td>${p.capacity_gb.toFixed(1)} GB</td>
@@ -2247,10 +2276,10 @@ function storageTable(pools, showHost) {
                   <div class="resource-bar" style="width:80px">
                     <div class="resource-bar-fill ${barColor}" style="width:${Math.min(pct,100).toFixed(1)}%"></div>
                   </div>
-                  <span style="font-size:11px;color:#8B949E">${pct.toFixed(0)}%</span>
+                  <span style="font-size:11px;color:var(--text-muted)">${pct.toFixed(0)}%</span>
                 </div>
               </td>
-              <td style="font-family:monospace;font-size:11px;color:#6E7681">${esc(p.path||'—')}</td>
+              <td style="font-family:monospace;font-size:11px;color:var(--text-faded)">${esc(p.path||'—')}</td>
               <td onclick="event.stopPropagation()">
                 <button class="btn btn-secondary btn-sm" ${p.path?'':'disabled'} onclick="openFileBrowser('${esc(p.host_id)}','${esc(p.path)}')">Browse</button>
               </td>
@@ -2325,7 +2354,7 @@ function renderCreateVMModal() {
 
   const formField = (label, id, content) => `
     <div style="margin-bottom:12px">
-      <label for="${id}" style="display:block;font-size:11px;color:#6E7681;margin-bottom:4px">${label}</label>
+      <label for="${id}" style="display:block;font-size:11px;color:var(--text-faded);margin-bottom:4px">${label}</label>
       ${content}
     </div>
   `;
@@ -2355,7 +2384,7 @@ function renderCreateVMModal() {
     ${formField('Storage Pool', 'cvm-pool', sel('cvm-pool', pools.map(p=>({label:p.name+' ('+p.path+')',value:p.path})), pools[0]?.path||'/var/lib/libvirt/images'))}
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:12px">
       <input type="checkbox" id="cvm-autostart" style="accent-color:#E3571E">
-      <span style="font-size:12px;color:#C9D1D9">Start on host boot (autostart)</span>
+      <span style="font-size:12px;color:var(--text-body)">Start on host boot (autostart)</span>
     </label>
   `;
 
@@ -2367,14 +2396,14 @@ function renderCreateVMModal() {
       ${formField('vCPUs', 'cvm-vcpus', inp('cvm-vcpus','number','2','','min=1 max=128'))}
     </div>
     ${formField('Existing Disk Image Path', 'cvm-import', inp('cvm-import','text','','/var/lib/libvirt/images/existing.qcow2'))}
-    <div style="font-size:10px;color:#6E7681;margin:-8px 0 12px 0">Full path to an existing qcow2, raw, or vmdk disk image on this hypervisor</div>
+    <div style="font-size:10px;color:var(--text-faded);margin:-8px 0 12px 0">Full path to an existing qcow2, raw, or vmdk disk image on this hypervisor</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       ${formField('Network Bridge', 'cvm-bridge', sel('cvm-bridge', bridges.length ? bridges : ['br0'], bridges[0]||'br0'))}
       ${formField('Firmware', 'cvm-firmware', sel('cvm-firmware', [{label:'BIOS (SeaBIOS)',value:'bios'},{label:'UEFI (OVMF)',value:'efi'}], 'bios'))}
     </div>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:12px">
       <input type="checkbox" id="cvm-autostart" style="accent-color:#E3571E">
-      <span style="font-size:12px;color:#C9D1D9">Start on host boot (autostart)</span>
+      <span style="font-size:12px;color:var(--text-body)">Start on host boot (autostart)</span>
     </label>
   `;
 
@@ -2390,7 +2419,7 @@ function renderCreateVMModal() {
           <div class="tab ${mode==='import'?'active':''}" onclick="switchCreateVMMode('import')" style="cursor:pointer;padding:6px 14px;font-size:12px;border-bottom:2px solid ${mode==='import'?'#E3571E':'transparent'};color:${mode==='import'?'#F0F6FC':'#8B949E'}">Import Existing Disk</div>
         </div>
 
-        ${cv.loading ? '<div style="text-align:center;padding:24px;color:#6E7681">Loading host capabilities…</div>' : (mode === 'create' ? createForm : importForm)}
+        ${cv.loading ? '<div style="text-align:center;padding:24px;color:var(--text-faded)">Loading host capabilities…</div>' : (mode === 'create' ? createForm : importForm)}
 
         <div class="modal-actions" style="margin-top:16px">
           <button class="btn btn-secondary" onclick="closeCreateVM()">Cancel</button>
@@ -2569,8 +2598,8 @@ function fileIcon(entry) {
   if (['iso','img'].includes(ext)) return '<span style="color:#ff9800">&#128191;</span>';
   if (['qcow2','vmdk','vdi','vhd','raw'].includes(ext)) return '<span style="color:#7c4dff">&#128190;</span>';
   if (['xml','conf','cfg'].includes(ext)) return '<span style="color:#4caf50">&#128196;</span>';
-  if (['log','txt'].includes(ext)) return '<span style="color:#8B949E">&#128196;</span>';
-  return '<span style="color:#6E7681">&#128196;</span>';
+  if (['log','txt'].includes(ext)) return '<span style="color:var(--text-muted)">&#128196;</span>';
+  return '<span style="color:var(--text-faded)">&#128196;</span>';
 }
 
 function renderFileBrowser() {
@@ -2588,19 +2617,19 @@ function renderFileBrowser() {
     const p = crumbPath;
     const isLast = i === segments.length - 1;
     return isLast
-      ? `<span style="color:#F0F6FC">${esc(seg)}</span>`
+      ? `<span style="color:var(--text-strong)">${esc(seg)}</span>`
       : `<a href="#" onclick="fetchBrowse('${esc(fb.host_id)}','${esc(p)}');return false" style="color:#FF8A3C;text-decoration:none">${esc(seg)}</a>`;
   });
 
   const fileRows = fb.loading
-    ? `<tr><td colspan="4" style="text-align:center;color:#6E7681;padding:24px">Loading…</td></tr>`
+    ? `<tr><td colspan="4" style="text-align:center;color:var(--text-faded);padding:24px">Loading…</td></tr>`
     : fb.entries.length === 0
-      ? `<tr><td colspan="4" style="text-align:center;color:#484F58;padding:24px">Empty directory</td></tr>`
+      ? `<tr><td colspan="4" style="text-align:center;color:var(--text-disabled);padding:24px">Empty directory</td></tr>`
       : fb.entries.map((e, idx) => `
         <tr${e.is_dir ? ` onclick="browseNavigate(${idx})" style="cursor:pointer"` : ''}>
           <td style="white-space:nowrap">${fileIcon(e)} <span style="color:${e.is_dir ? '#FF8A3C' : '#F0F6FC'};font-weight:${e.is_dir ? '600' : '400'}">${esc(e.name)}</span></td>
-          <td style="color:#8B949E;font-size:11px;white-space:nowrap">${e.is_dir ? '—' : fmtFileSize(e.size)}</td>
-          <td style="color:#6E7681;font-size:11px;white-space:nowrap">${e.modified ? new Date(e.modified).toLocaleString([], {dateStyle:'short',timeStyle:'short'}) : '—'}</td>
+          <td style="color:var(--text-muted);font-size:11px;white-space:nowrap">${e.is_dir ? '—' : fmtFileSize(e.size)}</td>
+          <td style="color:var(--text-faded);font-size:11px;white-space:nowrap">${e.modified ? new Date(e.modified).toLocaleString([], {dateStyle:'short',timeStyle:'short'}) : '—'}</td>
           <td onclick="event.stopPropagation()">
             ${!e.is_dir ? `<button class="btn btn-danger btn-sm" onclick="deleteStorageFile(${idx})">Delete</button>` : ''}
           </td>
@@ -2611,13 +2640,13 @@ function renderFileBrowser() {
     <div class="detail-panel" style="margin-top:16px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
         <div style="min-width:0">
-          <div style="font-size:14px;font-weight:600;color:#F0F6FC;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div style="font-size:14px;font-weight:600;color:var(--text-strong);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             File Browser
-            <span style="font-size:11px;font-weight:400;color:#6E7681">${esc(hostLabel)}</span>
+            <span style="font-size:11px;font-weight:400;color:var(--text-faded)">${esc(hostLabel)}</span>
           </div>
-          <div style="font-size:12px;color:#8B949E;margin-top:4px;font-family:'SF Mono',monospace;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px;font-family:'SF Mono',monospace;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
             <a href="#" onclick="fetchBrowse('${esc(fb.host_id)}','/');return false" style="color:#FF8A3C;text-decoration:none">/</a>
-            ${crumbs.map(c => `<span style="color:#484F58">/</span> ${c}`).join(' ')}
+            ${crumbs.map(c => `<span style="color:var(--text-disabled)">/</span> ${c}`).join(' ')}
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0">
@@ -2670,17 +2699,17 @@ function renderMigrationsView() {
         <div class="detail-panel" style="border-left:3px solid #E3571E;margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
             <div>
-              <div style="font-size:15px;font-weight:600;color:#F0F6FC">${esc(m.vm_name)}</div>
-              <div style="font-size:11px;color:#6E7681">${esc(m.source_host)} → ${esc(m.dest_host)} · ${esc(m.mode)}</div>
+              <div style="font-size:15px;font-weight:600;color:var(--text-strong)">${esc(m.vm_name)}</div>
+              <div style="font-size:11px;color:var(--text-faded)">${esc(m.source_host)} → ${esc(m.dest_host)} · ${esc(m.mode)}</div>
             </div>
             ${statusPill(m.status)}
           </div>
           <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-            <span style="font-size:12px;color:#C9D1D9">${esc(m.phase || 'starting')}</span>
-            <span style="font-size:12px;color:#F0F6FC">${pct}%</span>
+            <span style="font-size:12px;color:var(--text-body)">${esc(m.phase || 'starting')}</span>
+            <span style="font-size:12px;color:var(--text-strong)">${pct}%</span>
           </div>
           <div class="resource-bar" style="height:8px"><div class="resource-bar-fill bar-cpu" style="width:${pct}%;transition:width 0.5s"></div></div>
-          <div style="font-size:11px;color:#6E7681;margin-top:6px">${esc(m.detail || '')} · Started ${fmtTime(m.started_at)}</div>
+          <div style="font-size:11px;color:var(--text-faded);margin-top:6px">${esc(m.detail || '')} · Started ${fmtTime(m.started_at)}</div>
         </div>
       `;
     }).join('')}
@@ -2706,16 +2735,16 @@ function renderMigrationsView() {
         <tbody>
           ${past.map(m => `
             <tr>
-              <td style="font-weight:500;color:#F0F6FC">${esc(m.vm_name)}</td>
-              <td style="color:#8B949E;font-size:11px">${esc(m.source_host)}</td>
-              <td style="color:#8B949E;font-size:11px">${esc(m.dest_host)}</td>
+              <td style="font-weight:500;color:var(--text-strong)">${esc(m.vm_name)}</td>
+              <td style="color:var(--text-muted);font-size:11px">${esc(m.source_host)}</td>
+              <td style="color:var(--text-muted);font-size:11px">${esc(m.dest_host)}</td>
               <td>
                 <span style="padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;background:${m.mode==='offline'?'#2D1810':'#2D1810'};color:${m.mode==='offline'?'#FF8A3C':'#ff9800'}">${esc(m.mode)}</span>
               </td>
               <td>${statusPill(m.status)}</td>
-              <td style="font-size:11px;color:#8B949E;white-space:nowrap">${fmtTime(m.started_at)}</td>
-              <td style="font-size:11px;color:#C9D1D9">${fmtDuration(m.elapsed_sec)}</td>
-              <td style="font-size:11px;color:#6E7681;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(m.error || m.detail || '')}">${esc(m.error || m.detail || '—')}</td>
+              <td style="font-size:11px;color:var(--text-muted);white-space:nowrap">${fmtTime(m.started_at)}</td>
+              <td style="font-size:11px;color:var(--text-body)">${fmtDuration(m.elapsed_sec)}</td>
+              <td style="font-size:11px;color:var(--text-faded);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(m.error || m.detail || '')}">${esc(m.error || m.detail || '—')}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -2821,10 +2850,10 @@ function renderDeploymentView() {
     ? `<span class="deploy-portal-pill">portal online</span>`
     : state.deployPortalOnline === false
       ? `<span class="deploy-portal-pill offline">portal offline</span>`
-      : `<span class="deploy-portal-pill" style="background:#30363D;color:#8B949E">probing…</span>`;
+      : `<span class="deploy-portal-pill" style="background:#30363D;color:var(--text-muted)">probing…</span>`;
   // Note: portalPill style without ::before for unknown state
   const portalPillNoDot = state.deployPortalOnline === null
-    ? `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#30363D;color:#8B949E;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border-radius:10px;margin-left:auto">probing…</span>`
+    ? `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#30363D;color:var(--text-muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border-radius:10px;margin-left:auto">probing…</span>`
     : portalPill;
 
   // ── Snippets ─────────────────────────────────────────────
@@ -2888,7 +2917,7 @@ sudo /tmp/install-agent.sh --server ${server}`,
       </h3>
       <div class="deploy-desc">
         Install inside a guest VM to surface guest OS, hostname, IP addresses, and per-mountpoint
-        filesystem usage in the kvm-center UI. Reports to <code style="background:#0D1117;padding:1px 6px;border-radius:3px;color:#FF8A3C;font-family:'SF Mono',monospace;font-size:11px">${esc(server)}</code>
+        filesystem usage in the kvm-center UI. Reports to <code style="background:var(--bg-input);padding:1px 6px;border-radius:3px;color:#FF8A3C;font-family:'SF Mono',monospace;font-size:11px">${esc(server)}</code>
         every 30 seconds. Once installed, the VM's pill in the Summary tab flips to
         <span style="color:#4caf50;font-weight:600">KVM Tools: running</span>.
       </div>
@@ -2926,7 +2955,7 @@ sudo /tmp/install-agent.sh --server ${server}`,
       <div class="deploy-desc">
         Install on a new KVM hypervisor (Rocky / RHEL / Debian etc.) to add it to the kvm-center
         fleet. Collects host metrics, lists VMs/snapshots/storage pools, and serves the per-VM
-        VNC console + power actions. Listens on port <code style="background:#0D1117;padding:1px 6px;border-radius:3px;color:#FF8A3C;font-family:'SF Mono',monospace;font-size:11px">8081</code>
+        VNC console + power actions. Listens on port <code style="background:var(--bg-input);padding:1px 6px;border-radius:3px;color:#FF8A3C;font-family:'SF Mono',monospace;font-size:11px">8081</code>
         for command routing from the server.
       </div>
 
@@ -2966,7 +2995,7 @@ sudo /tmp/install-agent.sh --server ${server}`,
       </h3>
       <div class="deploy-desc">
         Cross-compiled from the latest commit by the build container at
-        <code style="background:#0D1117;padding:1px 6px;border-radius:3px;color:#FF8A3C;font-family:'SF Mono',monospace;font-size:11px">${esc(portal)}</code>
+        <code style="background:var(--bg-input);padding:1px 6px;border-radius:3px;color:#FF8A3C;font-family:'SF Mono',monospace;font-size:11px">${esc(portal)}</code>
       </div>
       <table class="deploy-files-table">
         <thead><tr><th>File</th><th>Description</th></tr></thead>
@@ -3067,10 +3096,10 @@ function renderVMMonitorTab(vm) {
     <div class="detail-panel" style="padding:18px 22px">
       <div class="resource-label" style="font-size:13px;margin-bottom:6px">
         <span>${title}</span>
-        <span style="font-size:22px;color:#F0F6FC;font-weight:300">${value}</span>
+        <span style="font-size:22px;color:var(--text-strong);font-weight:300">${value}</span>
       </div>
       <div class="resource-bar" style="height:10px"><div class="resource-bar-fill ${color}" style="width:${bar}%"></div></div>
-      <div style="font-size:11px;color:#6E7681;margin-top:6px">${sub}</div>
+      <div style="font-size:11px;color:var(--text-faded);margin-top:6px">${sub}</div>
     </div>
   `;
 
@@ -3090,7 +3119,7 @@ function renderVMMonitorTab(vm) {
     ? ''
     : `<div class="detail-panel" style="border-left:3px solid #ff9800;padding:12px 16px">
          <span style="color:#ffb74d">⚠ KVM Tools not installed — guest filesystem metrics unavailable.</span>
-         <span style="color:#6E7681;font-size:11px;display:block;margin-top:4px">Install kvm-tools inside the VM to see per-mountpoint usage.</span>
+         <span style="color:var(--text-faded);font-size:11px;display:block;margin-top:4px">Install kvm-tools inside the VM to see per-mountpoint usage.</span>
        </div>`;
 
   return vmDetailHeader(vm) + `
@@ -3100,7 +3129,7 @@ function renderVMMonitorTab(vm) {
     ${bigPanel('Host Disk (image storage)', hostDiskPct.toFixed(1) + '%', `${vm.disk_usage_gb.toFixed(1)} GB of ${vm.disk_total_gb.toFixed(1)} GB on <code style="font-size:11px">${esc(vm.disk_path || '—')}</code>`, hostDiskPct, hostDiskPct > 85 ? 'bar-danger' : hostDiskPct > 65 ? 'bar-warn' : 'bar-disk')}
     ${fsPanels}
     ${toolsNote}
-    <div style="margin-top:14px;padding:10px 14px;background:#0D1117;border:1px solid #30363D;border-radius:4px;font-size:11px;color:#6E7681">
+    <div style="margin-top:14px;padding:10px 14px;background:var(--bg-input);border:1px solid #30363D;border-radius:4px;font-size:11px;color:var(--text-faded)">
       ℹ Values refresh every 15 seconds from the hypervisor agent. Historical charts are not retained.
     </div>
   `;
@@ -3121,8 +3150,8 @@ function renderVMNetworksTab(vm) {
       <div class="detail-panel">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <div>
-            <div style="font-size:14px;font-weight:600;color:#F0F6FC">Network Adapter ${i+1}</div>
-            <div style="font-size:11px;color:#6E7681;font-family:'SF Mono',monospace">${esc(n.interface || 'host-side tap')}</div>
+            <div style="font-size:14px;font-weight:600;color:var(--text-strong)">Network Adapter ${i+1}</div>
+            <div style="font-size:11px;color:var(--text-faded);font-family:'SF Mono',monospace">${esc(n.interface || 'host-side tap')}</div>
           </div>
           <span class="vm-pill" style="background:#3D2510;color:#FF8A3C">BRIDGED</span>
         </div>
@@ -3147,7 +3176,7 @@ function renderVMNetworksTab(vm) {
       <div class="section-title" style="margin-top:18px">Guest IP Addresses (from KVM Tools)</div>
       <div class="detail-panel">
         <div style="display:flex;flex-wrap:wrap;gap:8px">
-          ${guestIPs.map(ip => `<span style="padding:5px 12px;border:1px solid #30363D;border-radius:3px;font-family:'SF Mono',monospace;font-size:12px;color:#C9D1D9;background:#0D1117">${esc(ip)}</span>`).join('')}
+          ${guestIPs.map(ip => `<span style="padding:5px 12px;border:1px solid #30363D;border-radius:3px;font-family:'SF Mono',monospace;font-size:12px;color:var(--text-body);background:var(--bg-input)">${esc(ip)}</span>`).join('')}
         </div>
       </div>
     `
@@ -3155,7 +3184,7 @@ function renderVMNetworksTab(vm) {
       <div class="section-title" style="margin-top:18px">Guest IP Addresses</div>
       <div class="detail-panel" style="border-left:3px solid #ff9800">
         <span style="color:#ffb74d">⚠ KVM Tools not installed</span>
-        <span style="color:#6E7681;font-size:11px;display:block;margin-top:4px">Guest-side IP addresses require KVM Tools or qemu-guest-agent inside the VM.</span>
+        <span style="color:var(--text-faded);font-size:11px;display:block;margin-top:4px">Guest-side IP addresses require KVM Tools or qemu-guest-agent inside the VM.</span>
       </div>
     `;
 
@@ -3229,10 +3258,10 @@ function renderVMSummaryTab(vm) {
         <span class="lbl">Host:</span>
         <span class="val">
           <a href="#" onclick="showView('host','${esc(vm.host_id)}','summary');return false" style="color:#FF8A3C;text-decoration:none">${esc(vm.host_id)}</a>
-          ${host && host.ip ? ` <span style="color:#6E7681">(${esc(host.ip)})</span>` : ''}
+          ${host && host.ip ? ` <span style="color:var(--text-faded)">(${esc(host.ip)})</span>` : ''}
         </span>
         <span class="lbl">UUID:</span>
-        <span class="val" style="font-family:'SF Mono',monospace;font-size:11px;color:#8B949E">${esc(vm.uuid)}</span>
+        <span class="val" style="font-family:'SF Mono',monospace;font-size:11px;color:var(--text-muted)">${esc(vm.uuid)}</span>
         <span class="lbl">Power State:</span>
         <span class="val"><span class="vm-state ${vm.state}">${vm.state}</span></span>
       </div>
@@ -3269,7 +3298,7 @@ function renderVMSummaryTab(vm) {
         </div>
         <div class="txt">
           <div class="lbl">Memory Usage</div>
-          <div class="val">${memUsed} <span style="font-size:11px;color:#6E7681">/ ${memTotal} (${memPct}%)</span></div>
+          <div class="val">${memUsed} <span style="font-size:11px;color:var(--text-faded)">/ ${memTotal} (${memPct}%)</span></div>
         </div>
       </div>
       <div class="vm-usage-card">
@@ -3281,7 +3310,7 @@ function renderVMSummaryTab(vm) {
         </div>
         <div class="txt">
           <div class="lbl">Storage Usage</div>
-          <div class="val">${diskUsed} <span style="font-size:11px;color:#6E7681">/ ${diskTotal}</span></div>
+          <div class="val">${diskUsed} <span style="font-size:11px;color:var(--text-faded)">/ ${diskTotal}</span></div>
         </div>
       </div>
     </div>
@@ -3290,18 +3319,18 @@ function renderVMSummaryTab(vm) {
   // VM Hardware collapsible
   const netRows = (vm.networks || []).map(n => `
     <tr>
-      <td style="color:#F0F6FC">${esc(n.interface || '—')}</td>
-      <td style="color:#8B949E">${esc(n.bridge || '—')}</td>
-      <td style="font-family:'SF Mono',monospace;font-size:11px;color:#8B949E">${esc(n.mac || '—')}</td>
-      <td style="color:#8B949E">${(n.rx_bytes/1048576).toFixed(1)} MB</td>
-      <td style="color:#8B949E">${(n.tx_bytes/1048576).toFixed(1)} MB</td>
+      <td style="color:var(--text-strong)">${esc(n.interface || '—')}</td>
+      <td style="color:var(--text-muted)">${esc(n.bridge || '—')}</td>
+      <td style="font-family:'SF Mono',monospace;font-size:11px;color:var(--text-muted)">${esc(n.mac || '—')}</td>
+      <td style="color:var(--text-muted)">${(n.rx_bytes/1048576).toFixed(1)} MB</td>
+      <td style="color:var(--text-muted)">${(n.tx_bytes/1048576).toFixed(1)} MB</td>
     </tr>
   `).join('');
 
   const guestFSTable = hasTools && vm.guest_fs && vm.guest_fs.length
     ? `
       <div style="margin-top:14px">
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#484F58;margin-bottom:6px">Guest Filesystems</div>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-disabled);margin-bottom:6px">Guest Filesystems</div>
         <table style="width:100%;font-size:12px">
           <thead><tr><th>Mountpoint</th><th>Type</th><th>Used</th><th>Total</th><th>Usage</th></tr></thead>
           <tbody>
@@ -3310,14 +3339,14 @@ function renderVMSummaryTab(vm) {
             const color = pct > 85 ? 'bar-danger' : pct > 65 ? 'bar-warn' : 'bar-disk';
             return `
               <tr>
-                <td style="font-family:'SF Mono',monospace;color:#C9D1D9">${esc(fs.mountpoint)}</td>
-                <td style="color:#8B949E">${esc(fs.fstype)}</td>
+                <td style="font-family:'SF Mono',monospace;color:var(--text-body)">${esc(fs.mountpoint)}</td>
+                <td style="color:var(--text-muted)">${esc(fs.fstype)}</td>
                 <td>${fs.used_gb.toFixed(1)} GB</td>
                 <td>${fs.total_gb.toFixed(1)} GB</td>
                 <td>
                   <div style="display:flex;align-items:center;gap:6px">
                     <div class="resource-bar" style="width:60px"><div class="resource-bar-fill ${color}" style="width:${Math.min(pct,100).toFixed(1)}%"></div></div>
-                    <span style="font-size:11px;color:#8B949E">${pct.toFixed(0)}%</span>
+                    <span style="font-size:11px;color:var(--text-muted)">${pct.toFixed(0)}%</span>
                   </div>
                 </td>
               </tr>
@@ -3347,7 +3376,7 @@ function renderVMSummaryTab(vm) {
         </div>
         ${vm.networks && vm.networks.length ? `
           <div style="margin-top:14px">
-            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#484F58;margin-bottom:6px">Network Adapters</div>
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-disabled);margin-bottom:6px">Network Adapters</div>
             <table style="width:100%;font-size:12px">
               <thead><tr><th>Interface</th><th>Bridge</th><th>MAC</th><th>RX</th><th>TX</th></tr></thead>
               <tbody>${netRows}</tbody>
@@ -3443,10 +3472,10 @@ function renderVMSnapshotsTab(vm) {
     state.snapshotList = [];
     state.snapshotLoading = true;
     fetchSnapshots(vm.host_id, vm.name);
-    return header + `<div class="empty-state"><p style="color:#6E7681">Loading snapshots…</p></div>`;
+    return header + `<div class="empty-state"><p style="color:var(--text-faded)">Loading snapshots…</p></div>`;
   }
   if (state.snapshotLoading) {
-    return header + `<div class="empty-state"><p style="color:#6E7681">Loading snapshots…</p></div>`;
+    return header + `<div class="empty-state"><p style="color:var(--text-faded)">Loading snapshots…</p></div>`;
   }
   return header + renderSnapshotDetailTable(vm, state.snapshotList);
 }
@@ -3458,13 +3487,13 @@ function renderSnapshotDetailTable(vm, snaps) {
   }
   const rows = snaps.map(s => `
     <tr>
-      <td style="font-weight:500;color:#F0F6FC">
+      <td style="font-weight:500;color:var(--text-strong)">
         ${esc(s.name)}
         ${s.is_current ? '<span style="margin-left:8px;font-size:9px;padding:1px 6px;border-radius:10px;background:#3D2510;color:#FF8A3C;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Current</span>' : ''}
       </td>
-      <td style="color:#8B949E;font-size:11px;font-family:'SF Mono',monospace">${esc(s.creation_time)}</td>
+      <td style="color:var(--text-muted);font-size:11px;font-family:'SF Mono',monospace">${esc(s.creation_time)}</td>
       <td><span class="vm-state ${s.state==='running'?'running':'stopped'}">${esc(s.state)}</span></td>
-      <td style="color:#6E7681;font-size:11px">${s.parent ? esc(s.parent) : '—'}</td>
+      <td style="color:var(--text-faded);font-size:11px">${s.parent ? esc(s.parent) : '—'}</td>
       <td>
         <div class="actions-row">
           <button class="btn btn-primary btn-sm" ${s.is_current ? 'disabled' : ''} onclick="revertSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')">↶ Revert</button>
@@ -3526,7 +3555,7 @@ function renderVMHardwareTab(vm) {
 
   const configGrid = `
     <div class="detail-panel">
-      <div style="font-size:13px;font-weight:600;color:#F0F6FC;margin-bottom:12px">System Configuration</div>
+      <div style="font-size:13px;font-weight:600;color:var(--text-strong);margin-bottom:12px">System Configuration</div>
       <div class="vm-info-grid" style="grid-template-columns:180px 1fr;gap:10px 16px">
         <span class="lbl">Firmware:</span>
         <span class="val">${fwIcon} ${fwLabel}</span>
@@ -3547,7 +3576,7 @@ function renderVMHardwareTab(vm) {
         <span class="lbl">Video Adapter:</span>
         <span class="val">${esc(vm.video_model || '—')}</span>
         <span class="lbl">Auto Start:</span>
-        <span class="val">${vm.autostart ? '<span style="color:#4caf50">✓ Enabled</span>' : '<span style="color:#8B949E">✗ Disabled</span>'}</span>
+        <span class="val">${vm.autostart ? '<span style="color:#4caf50">✓ Enabled</span>' : '<span style="color:var(--text-muted)">✗ Disabled</span>'}</span>
       </div>
     </div>
   `;
@@ -3557,11 +3586,11 @@ function renderVMHardwareTab(vm) {
     const snapOK = d.disk_type === 'qcow2';
     return `
       <tr>
-        <td style="font-weight:500;color:#F0F6FC">${esc(d.target)}</td>
+        <td style="font-weight:500;color:var(--text-strong)">${esc(d.target)}</td>
         <td>${esc(d.device)}</td>
         <td><span style="padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;background:${snapOK?'#1E3D23':'#3d2a00'};color:${snapOK?'#4caf50':'#ff9800'}">${esc(d.disk_type||'—')}</span></td>
         <td>${esc(d.bus || '—')}</td>
-        <td style="font-family:'SF Mono',monospace;font-size:11px;color:#8B949E;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(d.path)}">${esc(d.path || '—')}</td>
+        <td style="font-family:'SF Mono',monospace;font-size:11px;color:var(--text-muted);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(d.path)}">${esc(d.path || '—')}</td>
         <td>${d.capacity_gb > 0 ? d.capacity_gb.toFixed(1)+' GB' : '—'}</td>
         <td>${d.alloc_gb > 0 ? d.alloc_gb.toFixed(1)+' GB' : '—'}</td>
       </tr>
@@ -3570,10 +3599,10 @@ function renderVMHardwareTab(vm) {
 
   const disksPanel = `
     <div class="detail-panel">
-      <div style="font-size:13px;font-weight:600;color:#F0F6FC;margin-bottom:10px">Storage Devices (${(vm.all_disks||[]).length})</div>
+      <div style="font-size:13px;font-weight:600;color:var(--text-strong);margin-bottom:10px">Storage Devices (${(vm.all_disks||[]).length})</div>
       <div class="table-wrap" style="border:none">
         <table><thead><tr><th>Target</th><th>Device</th><th>Format</th><th>Bus</th><th>Path</th><th>Capacity</th><th>Allocated</th></tr></thead>
-        <tbody>${diskRows || '<tr><td colspan="7" style="color:#484F58">No disks</td></tr>'}</tbody></table>
+        <tbody>${diskRows || '<tr><td colspan="7" style="color:var(--text-disabled)">No disks</td></tr>'}</tbody></table>
       </div>
     </div>
   `;
@@ -3581,7 +3610,7 @@ function renderVMHardwareTab(vm) {
   // PCI passthrough.
   const pciPanel = (vm.pci_devices && vm.pci_devices.length) ? `
     <div class="detail-panel">
-      <div style="font-size:13px;font-weight:600;color:#F0F6FC;margin-bottom:10px">PCI Passthrough Devices (${vm.pci_devices.length})</div>
+      <div style="font-size:13px;font-weight:600;color:var(--text-strong);margin-bottom:10px">PCI Passthrough Devices (${vm.pci_devices.length})</div>
       <div class="table-wrap" style="border:none">
         <table><thead><tr><th>Host Address</th><th>Description</th></tr></thead>
         <tbody>
@@ -3600,7 +3629,7 @@ function renderVMHardwareTab(vm) {
   // Network adapters summary.
   const netPanel = (vm.networks && vm.networks.length) ? `
     <div class="detail-panel">
-      <div style="font-size:13px;font-weight:600;color:#F0F6FC;margin-bottom:10px">Network Adapters (${vm.networks.length})</div>
+      <div style="font-size:13px;font-weight:600;color:var(--text-strong);margin-bottom:10px">Network Adapters (${vm.networks.length})</div>
       <div class="table-wrap" style="border:none">
         <table><thead><tr><th>Interface</th><th>Bridge</th><th>MAC</th></tr></thead>
         <tbody>
@@ -3608,7 +3637,7 @@ function renderVMHardwareTab(vm) {
             <tr>
               <td>${esc(n.interface || '—')}</td>
               <td>${esc(n.bridge || '—')}</td>
-              <td style="font-family:'SF Mono',monospace;font-size:11px;color:#8B949E">${esc(n.mac || '—')}</td>
+              <td style="font-family:'SF Mono',monospace;font-size:11px;color:var(--text-muted)">${esc(n.mac || '—')}</td>
             </tr>
           `).join('')}
         </tbody></table>
@@ -3629,7 +3658,7 @@ function renderHostHardware(h) {
   // CPU topology.
   const cpuPanel = `
     <div class="detail-panel">
-      <div style="font-size:13px;font-weight:600;color:#F0F6FC;margin-bottom:12px">CPU / Topology</div>
+      <div style="font-size:13px;font-weight:600;color:var(--text-strong);margin-bottom:12px">CPU / Topology</div>
       <div class="vm-info-grid" style="grid-template-columns:180px 1fr;gap:10px 16px">
         <span class="lbl">CPU Model:</span>
         <span class="val">${esc(h.cpu_model || '—')}</span>
@@ -3652,9 +3681,9 @@ function renderHostHardware(h) {
   // GPUs.
   const gpuPanel = (h.gpus && h.gpus.length) ? `
     <div class="detail-panel">
-      <div style="font-size:13px;font-weight:600;color:#F0F6FC;margin-bottom:10px">Graphics / GPU (${h.gpus.length})</div>
+      <div style="font-size:13px;font-weight:600;color:var(--text-strong);margin-bottom:10px">Graphics / GPU (${h.gpus.length})</div>
       ${h.gpus.map(g => `
-        <div style="padding:6px 0;font-size:12px;color:#C9D1D9;border-bottom:1px solid #21262D">${esc(g)}</div>
+        <div style="padding:6px 0;font-size:12px;color:var(--text-body);border-bottom:1px solid #21262D">${esc(g)}</div>
       `).join('')}
     </div>
   ` : '';
@@ -3663,7 +3692,7 @@ function renderHostHardware(h) {
   const pciDevs = h.host_pci_devices || [];
   const pciPanel = pciDevs.length ? `
     <div class="detail-panel">
-      <div style="font-size:13px;font-weight:600;color:#F0F6FC;margin-bottom:10px">PCI Devices (${pciDevs.length})</div>
+      <div style="font-size:13px;font-weight:600;color:var(--text-strong);margin-bottom:10px">PCI Devices (${pciDevs.length})</div>
       <div class="table-wrap" style="border:none;max-height:400px;overflow-y:auto">
         <table><thead><tr><th>Address</th><th>IOMMU</th><th>Type</th><th>Description</th></tr></thead>
         <tbody>
@@ -3673,9 +3702,9 @@ function renderHostHardware(h) {
             return `
               <tr style="${rowStyle}">
                 <td style="font-family:'SF Mono',monospace;font-size:11px;color:#FF8A3C">${esc(d.address)}</td>
-                <td style="font-size:11px;color:#8B949E">${d.iommu_group >= 0 ? d.iommu_group : '—'}</td>
+                <td style="font-size:11px;color:var(--text-muted)">${d.iommu_group >= 0 ? d.iommu_group : '—'}</td>
                 <td style="font-size:11px">${esc(d.type || '—')}</td>
-                <td style="font-size:11px;color:#C9D1D9">${esc(d.description || '—')}</td>
+                <td style="font-size:11px;color:var(--text-body)">${esc(d.description || '—')}</td>
               </tr>
             `;
           }).join('')}
@@ -3740,11 +3769,11 @@ function openMigrateDialog(hostID, vmUUID, vmName) {
     const allOk = checks.every(c => c.ok);
 
     const modeDesc = mode === 'offline'
-      ? `<div style="font-size:11px;color:#6E7681;margin:8px 0;padding:10px 12px;background:#0D1117;border:1px solid #30363D;border-radius:4px;border-left:3px solid #E3571E;line-height:1.5;word-wrap:break-word">
-          <strong style="color:#F0F6FC">Offline migration:</strong> Shuts down the VM, compresses the disk with qemu-img convert (dramatically smaller transfer), copies to target, defines and starts the VM there. <strong style="color:#4caf50">Recommended for local storage.</strong>
+      ? `<div style="font-size:11px;color:var(--text-faded);margin:8px 0;padding:10px 12px;background:var(--bg-input);border:1px solid #30363D;border-radius:4px;border-left:3px solid #E3571E;line-height:1.5;word-wrap:break-word">
+          <strong style="color:var(--text-strong)">Offline migration:</strong> Shuts down the VM, compresses the disk with qemu-img convert (dramatically smaller transfer), copies to target, defines and starts the VM there. <strong style="color:#4caf50">Recommended for local storage.</strong>
         </div>`
-      : `<div style="font-size:11px;color:#6E7681;margin:8px 0;padding:10px 12px;background:#0D1117;border:1px solid #30363D;border-radius:4px;border-left:3px solid #ff9800;line-height:1.5;word-wrap:break-word">
-          <strong style="color:#F0F6FC">Live migration:</strong> Copies the full disk image while the VM keeps running. <strong style="color:#ff9800">Very slow without shared storage</strong> — copies the entire virtual disk size, not just allocated blocks.
+      : `<div style="font-size:11px;color:var(--text-faded);margin:8px 0;padding:10px 12px;background:var(--bg-input);border:1px solid #30363D;border-radius:4px;border-left:3px solid #ff9800;line-height:1.5;word-wrap:break-word">
+          <strong style="color:var(--text-strong)">Live migration:</strong> Copies the full disk image while the VM keeps running. <strong style="color:#ff9800">Very slow without shared storage</strong> — copies the entire virtual disk size, not just allocated blocks.
         </div>`;
 
     return `
@@ -3760,33 +3789,33 @@ function openMigrateDialog(hostID, vmUUID, vmName) {
           ${modeDesc}
 
           <label>Source Host</label>
-          <div style="padding:4px 0;font-weight:600;color:#F0F6FC;font-size:13px">${esc(hostID)}</div>
+          <div style="padding:4px 0;font-weight:600;color:var(--text-strong);font-size:13px">${esc(hostID)}</div>
           <label style="margin-top:10px">Target Host</label>
           <select id="migrate-target" onchange="updateMigrateChecks()"
             ${otherHosts.map(h => `<option value="${esc(h.id)}" ${h.id===targetID?'selected':''}>${esc(h.id)} (${esc(h.ip)}) — ${fmt(h.mem_free_mb,'MB')} free</option>`).join('')}
           </select>
 
           ${mode==='live' ? `
-          <div style="margin-top:12px;padding:10px 14px;background:#0D1117;border:1px solid #30363D;border-radius:4px;overflow:hidden">
-            <div style="font-size:11px;font-weight:600;color:#F0F6FC;margin-bottom:8px">Storage Transfer</div>
+          <div style="margin-top:12px;padding:10px 14px;background:var(--bg-input);border:1px solid #30363D;border-radius:4px;overflow:hidden">
+            <div style="font-size:11px;font-weight:600;color:var(--text-strong);margin-bottom:8px">Storage Transfer</div>
             <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-bottom:6px">
               <input type="checkbox" id="migrate-copy-storage" checked style="accent-color:#E3571E;flex-shrink:0;margin-top:2px">
-              <span style="font-size:12px;color:#C9D1D9;min-width:0"><strong>Copy storage</strong></span>
+              <span style="font-size:12px;color:var(--text-body);min-width:0"><strong>Copy storage</strong></span>
             </label>
-            <div style="font-size:11px;color:#6E7681;line-height:1.5;padding-left:24px">Copies the full virtual disk to the target during migration. Required when hypervisors do not share a common storage backend (NFS, GlusterFS, Ceph). Disable only if both hosts mount the same storage pool.</div>
+            <div style="font-size:11px;color:var(--text-faded);line-height:1.5;padding-left:24px">Copies the full virtual disk to the target during migration. Required when hypervisors do not share a common storage backend (NFS, GlusterFS, Ceph). Disable only if both hosts mount the same storage pool.</div>
           </div>` : ''}
 
           ${mode==='offline' && vm.disk_type === 'raw' ? `
-          <div style="margin-top:12px;padding:10px 14px;background:#0D1117;border:1px solid #30363D;border-radius:4px;overflow:hidden">
-            <div style="font-size:11px;font-weight:600;color:#F0F6FC;margin-bottom:8px">Disk Format After Migration</div>
-            <div style="font-size:11px;color:#6E7681;margin-bottom:10px">This VM uses <strong style="color:#ff9800">raw</strong> disk images. The disk is always transferred as compressed qcow2 for speed. Choose the final format on the target:</div>
+          <div style="margin-top:12px;padding:10px 14px;background:var(--bg-input);border:1px solid #30363D;border-radius:4px;overflow:hidden">
+            <div style="font-size:11px;font-weight:600;color:var(--text-strong);margin-bottom:8px">Disk Format After Migration</div>
+            <div style="font-size:11px;color:var(--text-faded);margin-bottom:10px">This VM uses <strong style="color:#ff9800">raw</strong> disk images. The disk is always transferred as compressed qcow2 for speed. Choose the final format on the target:</div>
             <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-bottom:8px">
               <input type="radio" name="migrate-disk-fmt" value="qcow2" checked style="accent-color:#E3571E;flex-shrink:0;margin-top:2px">
-              <span style="font-size:12px;color:#C9D1D9;min-width:0"><strong>Convert to qcow2</strong><br><span style="color:#6E7681;font-size:11px">Enables snapshots, thin provisioning, smaller footprint</span></span>
+              <span style="font-size:12px;color:var(--text-body);min-width:0"><strong>Convert to qcow2</strong><br><span style="color:var(--text-faded);font-size:11px">Enables snapshots, thin provisioning, smaller footprint</span></span>
             </label>
             <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">
               <input type="radio" name="migrate-disk-fmt" value="raw" style="accent-color:#E3571E;flex-shrink:0;margin-top:2px">
-              <span style="font-size:12px;color:#C9D1D9;min-width:0"><strong>Keep raw</strong><br><span style="color:#6E7681;font-size:11px">Converted back to raw on the target after transfer (slightly slower)</span></span>
+              <span style="font-size:12px;color:var(--text-body);min-width:0"><strong>Keep raw</strong><br><span style="color:var(--text-faded);font-size:11px">Converted back to raw on the target after transfer (slightly slower)</span></span>
             </label>
           </div>
           ` : ''}
@@ -3798,8 +3827,8 @@ function openMigrateDialog(hostID, vmUUID, vmName) {
                 <div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12px">
                   <span style="color:${c.ok?'#4caf50':'#f44336'};flex-shrink:0">${c.ok?'✓':'✗'}</span>
                   <div>
-                    <div style="color:#F0F6FC">${esc(c.label)}</div>
-                    <div style="color:#6E7681;font-size:11px">${esc(c.detail)}</div>
+                    <div style="color:var(--text-strong)">${esc(c.label)}</div>
+                    <div style="color:var(--text-faded);font-size:11px">${esc(c.detail)}</div>
                   </div>
                 </div>
               `).join('')}
@@ -3837,8 +3866,8 @@ function updateMigrateChecks() {
     <div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12px">
       <span style="color:${c.ok?'#4caf50':'#f44336'};flex-shrink:0">${c.ok?'✓':'✗'}</span>
       <div>
-        <div style="color:#F0F6FC">${esc(c.label)}</div>
-        <div style="color:#6E7681;font-size:11px">${esc(c.detail)}</div>
+        <div style="color:var(--text-strong)">${esc(c.label)}</div>
+        <div style="color:var(--text-faded);font-size:11px">${esc(c.detail)}</div>
       </div>
     </div>
   `).join('');
@@ -3955,20 +3984,20 @@ function showMigrateProgress(hostID, vmName, targetID, migRecordID) {
       <div class="modal-overlay" id="migrate-progress-modal" style="display:flex">
         <div class="modal" style="width:480px">
           <h3>Migrating ${esc(vmName)}</h3>
-          <div style="font-size:11px;color:#6E7681;margin-bottom:12px">${esc(hostID)} → ${esc(targetID)}</div>
+          <div style="font-size:11px;color:var(--text-faded);margin-bottom:12px">${esc(hostID)} → ${esc(targetID)}</div>
 
           <div style="margin-bottom:16px">
             <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-              <span style="font-size:13px;color:#F0F6FC;font-weight:600">${label}</span>
-              <span style="font-size:13px;color:#F0F6FC;font-weight:300">${pct}%</span>
+              <span style="font-size:13px;color:var(--text-strong);font-weight:600">${label}</span>
+              <span style="font-size:13px;color:var(--text-strong);font-weight:300">${pct}%</span>
             </div>
             <div class="resource-bar" style="height:10px">
               <div style="height:100%;border-radius:3px;background:${barColor};width:${pct}%;transition:width 0.5s"></div>
             </div>
           </div>
 
-          <div style="font-size:12px;color:#C9D1D9;margin-bottom:6px">${esc(s.detail || '')}</div>
-          <div style="font-size:11px;color:#6E7681">Elapsed: ${elapsed}</div>
+          <div style="font-size:12px;color:var(--text-body);margin-bottom:6px">${esc(s.detail || '')}</div>
+          <div style="font-size:11px;color:var(--text-faded)">Elapsed: ${elapsed}</div>
 
           ${s.error ? `<div style="margin-top:10px;padding:8px 12px;background:#3D1E1E;border:1px solid #f44336;border-radius:4px;color:#e57373;font-size:12px">${esc(s.error)}</div>` : ''}
 
@@ -3977,7 +4006,7 @@ function showMigrateProgress(hostID, vmName, targetID, migRecordID) {
               <button class="btn btn-primary" onclick="closeMigrateProgress()">Close</button>
             </div>
           ` : `
-            <div style="margin-top:12px;font-size:10px;color:#484F58;text-align:center">Polling every 3 seconds…</div>
+            <div style="margin-top:12px;font-size:10px;color:var(--text-disabled);text-align:center">Polling every 3 seconds…</div>
           `}
         </div>
       </div>
@@ -4034,18 +4063,18 @@ function renderSnapshotsView(q) {
 
   const leftPanel = `
     <div class="detail-panel" style="padding:0;margin:0;min-width:280px;max-width:320px;flex-shrink:0">
-      <div style="padding:12px 14px;border-bottom:1px solid #30363D;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#484F58">
+      <div style="padding:12px 14px;border-bottom:1px solid #30363D;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-disabled)">
         VMs with Snapshots (${vmsWithSnaps.length})
       </div>
       ${filtered.length === 0
-        ? '<div style="padding:16px;color:#484F58;font-size:12px">No VMs with snapshots.</div>'
+        ? '<div style="padding:16px;color:var(--text-disabled);font-size:12px">No VMs with snapshots.</div>'
         : filtered.map(v => `
             <div class="host-tree-item ${sel && sel.host_id===v.host_id && sel.name===v.name ? 'active' : ''}"
                  style="padding:10px 14px;border-left:3px solid transparent"
                  onclick="selectSnapshotVM('${esc(v.host_id)}','${esc(v.name)}')">
               <div style="flex:1;min-width:0">
-                <div style="color:#F0F6FC;font-weight:500;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.name)}</div>
-                <div style="color:#6E7681;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.host_id)}</div>
+                <div style="color:var(--text-strong);font-weight:500;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.name)}</div>
+                <div style="color:var(--text-faded);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.host_id)}</div>
               </div>
               <span class="nav-badge">${v.snapshot_count}</span>
             </div>
@@ -4059,7 +4088,7 @@ function renderSnapshotsView(q) {
   } else if (!selectedVM) {
     rightPanel = emptyState('VM not found', 'The selected VM is no longer in the inventory.');
   } else if (state.snapshotLoading) {
-    rightPanel = `<div class="empty-state"><p style="color:#6E7681">Loading snapshots…</p></div>`;
+    rightPanel = `<div class="empty-state"><p style="color:var(--text-faded)">Loading snapshots…</p></div>`;
   } else {
     rightPanel = renderSnapshotDetail(selectedVM, state.snapshotList);
   }
@@ -4078,8 +4107,8 @@ function renderSnapshotDetail(vm, snaps) {
     <div class="detail-panel">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-size:16px;font-weight:600;color:#F0F6FC">${esc(vm.name)}</div>
-          <div style="font-size:11px;color:#6E7681;margin-top:2px">${esc(vm.host_id)} · <span class="vm-state ${vm.state}">${vm.state}</span></div>
+          <div style="font-size:16px;font-weight:600;color:var(--text-strong)">${esc(vm.name)}</div>
+          <div style="font-size:11px;color:var(--text-faded);margin-top:2px">${esc(vm.host_id)} · <span class="vm-state ${vm.state}">${vm.state}</span></div>
         </div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-secondary btn-sm" onclick="openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')">📷 Create Snapshot</button>
@@ -4095,13 +4124,13 @@ function renderSnapshotDetail(vm, snaps) {
 
   const rows = snaps.map(s => `
     <tr>
-      <td style="font-weight:500;color:#F0F6FC">
+      <td style="font-weight:500;color:var(--text-strong)">
         ${esc(s.name)}
         ${s.is_current ? '<span style="margin-left:8px;font-size:9px;padding:1px 6px;border-radius:10px;background:#3D2510;color:#FF8A3C;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Current</span>' : ''}
       </td>
-      <td style="color:#8B949E;font-size:11px;font-family:'SF Mono',monospace">${esc(s.creation_time)}</td>
+      <td style="color:var(--text-muted);font-size:11px;font-family:'SF Mono',monospace">${esc(s.creation_time)}</td>
       <td><span class="vm-state ${s.state==='running'?'running':'stopped'}">${esc(s.state)}</span></td>
-      <td style="color:#6E7681;font-size:11px">${s.parent ? esc(s.parent) : '—'}</td>
+      <td style="color:var(--text-faded);font-size:11px">${s.parent ? esc(s.parent) : '—'}</td>
       <td>
         <div class="actions-row">
           <button class="btn btn-primary btn-sm" ${s.is_current ? 'disabled title="Already current"' : ''} onclick="revertSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')">↶ Revert</button>
@@ -4267,8 +4296,8 @@ function emptyState(title, msg) {
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
       <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
     </svg>
-    <p style="color:#6E7681;font-size:15px;margin-bottom:4px">${title}</p>
-    <p style="color:#484F58;font-size:12px">${msg}</p>
+    <p style="color:var(--text-faded);font-size:15px;margin-bottom:4px">${title}</p>
+    <p style="color:var(--text-disabled);font-size:12px">${msg}</p>
   </div>`;
 }
 
