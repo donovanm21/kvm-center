@@ -390,6 +390,27 @@ tbody td {
   vertical-align: middle;
 }
 
+/* ── Sortable Table Headers ─────────────────────────────── */
+thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+  position: relative;
+  padding-right: 20px;
+}
+thead th.sortable:hover { color: #0091da; }
+thead th.sortable::after {
+  content: '⇅';
+  position: absolute;
+  right: 4px;
+  opacity: 0.3;
+  font-size: 10px;
+}
+thead th.sortable.asc::after  { content: '▲'; opacity: 0.9; color: #0091da; }
+thead th.sortable.desc::after { content: '▼'; opacity: 0.9; color: #0091da; }
+thead th.sortable.asc,
+thead th.sortable.desc { color: #c5daf0; }
+
 /* ── VM State Badge ─────────────────────────────────────── */
 .vm-state {
   display: inline-flex;
@@ -1008,6 +1029,7 @@ let state = {
   deployOS: { 'kvm-tools': 'rhel', 'agent': 'rhel' }, // OS tab per package
   deployPortalOnline: null, // null=unknown, true/false probed
   deployPortalFiles: [],
+  vmSort: { key: 'name', dir: 'asc' }, // column sort for VM tables
 };
 
 // ── Bootstrap ──────────────────────────────────────────────
@@ -1238,23 +1260,60 @@ function renderAllVMs(q) {
   return `<div class="table-wrap">${vmTable(vms, true)}</div>`;
 }
 
+function toggleVMSort(key) {
+  if (state.vmSort.key === key) {
+    state.vmSort.dir = state.vmSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.vmSort.key = key;
+    state.vmSort.dir = 'asc';
+  }
+  render();
+}
+
+function sortVMs(vms) {
+  const { key, dir } = state.vmSort;
+  const mul = dir === 'asc' ? 1 : -1;
+  return [...vms].sort((a, b) => {
+    let av, bv;
+    switch (key) {
+      case 'name':     av = (a.name||'').toLowerCase();     bv = (b.name||'').toLowerCase();     break;
+      case 'host':     av = (a.host_id||'').toLowerCase();  bv = (b.host_id||'').toLowerCase();  break;
+      case 'state':    av = (a.state||'');                  bv = (b.state||'');                  break;
+      case 'cpus':     av = a.cpu_count||0;                 bv = b.cpu_count||0;                 break;
+      case 'memory':   av = a.mem_total_mb||0;              bv = b.mem_total_mb||0;              break;
+      case 'disk':     av = a.disk_total_gb||0;             bv = b.disk_total_gb||0;             break;
+      case 'cpu_usage':av = a.cpu_usage||0;                 bv = b.cpu_usage||0;                 break;
+      default:         av = (a.name||'').toLowerCase();     bv = (b.name||'').toLowerCase();
+    }
+    if (av < bv) return -1 * mul;
+    if (av > bv) return  1 * mul;
+    return 0;
+  });
+}
+
+function sortTH(label, key) {
+  const cls = state.vmSort.key === key ? state.vmSort.dir : '';
+  return `<th class="sortable ${cls}" onclick="toggleVMSort('${key}')">${label}</th>`;
+}
+
 function vmTable(vms, showHost) {
+  const sorted = sortVMs(vms);
   return `
     <table>
       <thead>
         <tr>
-          <th>Name</th>
-          ${showHost ? '<th>Host</th>' : ''}
-          <th>State</th>
-          <th>CPUs</th>
-          <th>Memory</th>
-          <th>Disk</th>
-          <th>CPU Usage</th>
+          ${sortTH('Name','name')}
+          ${showHost ? sortTH('Host','host') : ''}
+          ${sortTH('State','state')}
+          ${sortTH('CPUs','cpus')}
+          ${sortTH('Memory','memory')}
+          ${sortTH('Disk','disk')}
+          ${sortTH('CPU Usage','cpu_usage')}
           <th>Actions</th>
         </tr>
       </thead>
       <tbody>
-        ${vms.map(v => `
+        ${sorted.map(v => `
           <tr onclick="selectVM('${esc(v.uuid)}','${esc(v.host_id)}')">
             <td style="font-weight:500;color:#e8f4ff">${esc(v.name)}</td>
             ${showHost ? `<td style="color:#7aa8cc">${esc(v.host_id)}</td>` : ''}
