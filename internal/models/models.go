@@ -202,6 +202,79 @@ type TelemetryPayload struct {
 	GPUs           []string        `json:"gpus,omitempty"`
 }
 
+// ─── Authentication / RBAC ──────────────────────────────────────────────────
+
+// User is a local account that can log in to the web UI.
+type User struct {
+	ID           string    `json:"id"`
+	Username     string    `json:"username"`
+	Email        string    `json:"email,omitempty"`
+	PasswordHash string    `json:"password_hash,omitempty"` // omitted from API responses
+	Enabled      bool      `json:"enabled"`
+	RoleIDs      []string  `json:"role_ids"`  // direct role assignments
+	GroupIDs     []string  `json:"group_ids"` // group memberships (inherits group roles)
+	CreatedAt    time.Time `json:"created_at"`
+	LastLoginAt  time.Time `json:"last_login_at,omitempty"`
+}
+
+// Group is a collection of users that share a common set of role assignments.
+type Group struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	RoleIDs     []string  `json:"role_ids"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// Role is a named bundle of permission strings. Built-in roles cannot be
+// deleted or have their permissions modified, but can be assigned freely.
+type Role struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	Permissions []string  `json:"permissions"` // permission keys from the Perm* constants
+	BuiltIn     bool      `json:"built_in"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// Session is an authenticated cookie-backed session.
+type Session struct {
+	Token     string    `json:"token"`
+	UserID    string    `json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	UserAgent string    `json:"user_agent,omitempty"`
+}
+
+// Permission constants. PermAdmin is a wildcard granting everything.
+const (
+	PermAdmin         = "admin"
+	PermVMView        = "vm.view"
+	PermVMLifecycle   = "vm.lifecycle" // start/stop/restart/force-off
+	PermVMCreate      = "vm.create"
+	PermVMDelete      = "vm.delete"
+	PermVMMigrate     = "vm.migrate"
+	PermVMSnapshot    = "vm.snapshot"
+	PermVMConsole     = "vm.console"
+	PermVMEdit        = "vm.edit" // notes + hardware
+	PermHostView      = "host.view"
+	PermHostManage    = "host.manage"
+	PermStorageView   = "storage.view"
+	PermStorageUpload = "storage.upload"
+	PermStorageDelete = "storage.delete"
+	PermUserManage    = "user.manage" // create/update/disable users, groups, roles
+)
+
+// AllPermissions is the full list used for UI dropdowns and role editing.
+var AllPermissions = []string{
+	PermAdmin,
+	PermVMView, PermVMLifecycle, PermVMCreate, PermVMDelete,
+	PermVMMigrate, PermVMSnapshot, PermVMConsole, PermVMEdit,
+	PermHostView, PermHostManage,
+	PermStorageView, PermStorageUpload, PermStorageDelete,
+	PermUserManage,
+}
+
 // MigrationRecord is one completed or failed migration, persisted in the server store.
 type MigrationRecord struct {
 	ID          string `json:"id"`
