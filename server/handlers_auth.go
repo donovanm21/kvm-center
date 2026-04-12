@@ -102,7 +102,26 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 			return
 		}
 		u := store.GetUserByUsername(req.Username)
-		if u == nil || !u.Enabled || !verifyPassword(req.Password, u.PasswordHash) {
+		localOK := u != nil && u.Enabled && u.PasswordHash != "" && verifyPassword(req.Password, u.PasswordHash)
+		if !localOK {
+			// Fall through to any enabled LDAP/AD providers. Each is tried
+			// in order; first success wins. LDAP auth skips the local
+			// TOTP check because the directory is the authoritative source.
+			ldapUser, ldapErr := tryLDAPLogin(store, req.Username, req.Password)
+			if ldapErr == nil && ldapUser != nil {
+				sess, err := store.CreateSession(ldapUser.ID, r.UserAgent())
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not create session")
+					return
+				}
+				setSessionCookie(w, sess)
+				go store.Save()
+				writeJSON(w, http.StatusOK, map[string]any{
+					"user":        sanitizeUser(ldapUser),
+					"permissions": permListFromMap(effectivePermissions(store, ldapUser)),
+				})
+				return
+			}
 			writeError(w, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
