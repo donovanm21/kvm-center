@@ -532,6 +532,8 @@ var publicAPIPrefixes = []string{
 	"/api/auth/register",
 	"/api/auth/login",
 	"/api/auth/logout",
+	"/api/auth/providers",
+	"/api/auth/oidc/",
 	"/api/telemetry",
 	"/api/guest-telemetry",
 	"/api/version",
