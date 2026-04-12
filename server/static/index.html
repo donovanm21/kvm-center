@@ -121,6 +121,43 @@ body {
   overflow-y: auto;
 }
 .sidebar-section { margin-bottom: 4px; }
+
+.sidebar-cluster-pill {
+  margin: 12px 12px 8px 12px;
+  padding: 10px 12px;
+  background: #0d2a45;
+  border: 1px solid #0091da33;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e8f4ff;
+  flex-shrink: 0;
+}
+.sidebar-cluster-pill svg { flex-shrink: 0; }
+.sidebar-cluster-pill .sidebar-cluster-count {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 400;
+  color: #7aa8cc;
+  background: #091828;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.sidebar-separator {
+  margin: 16px 12px 6px 12px;
+  padding-top: 16px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: #3d6a8a;
+  border-top: 1px solid #1a3a5c;
+  flex-shrink: 0;
+}
 .sidebar-header {
   padding: 10px 12px 4px;
   font-size: 10px;
@@ -307,6 +344,131 @@ body {
   flex: 1;
   height: 1px;
   background: #1a3a5c;
+}
+
+/* ── Environment List (Portainer-style) ─────────────────── */
+.env-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: #0f2135;
+  border: 1px solid #1a3a5c;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+}
+.env-list {
+  border: 1px solid #1a3a5c;
+  border-radius: 0 0 6px 6px;
+  overflow: hidden;
+  margin-bottom: 24px;
+  background: #091828;
+}
+.env-row {
+  display: flex;
+  align-items: stretch;
+  padding: 16px 18px;
+  gap: 16px;
+  cursor: pointer;
+  border-top: 1px solid #1a3a5c;
+  background: #0f2135;
+  transition: background 0.15s;
+}
+.env-row:first-child { border-top: none; }
+.env-row:hover { background: #112f4a; }
+.env-row.offline { opacity: 0.7; }
+.env-row-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  background: #0d2a45;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.env-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.env-row-title-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.env-row-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e8f4ff;
+}
+.env-row-meta {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: #7aa8cc;
+  flex-wrap: wrap;
+}
+.env-row-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #c5daf0;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.env-stat strong { color: #e8f4ff; font-weight: 600; }
+.env-row-usage {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 4px;
+  max-width: 600px;
+}
+.env-row-usage-bar { min-width: 0; }
+.env-row-usage-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #7aa8cc;
+  margin-bottom: 3px;
+}
+.env-row-bar-track {
+  height: 4px;
+  background: #1a3a5c;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.env-row-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s;
+}
+.env-row-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+  justify-content: center;
+}
+.env-row-status-pill {
+  padding: 4px 12px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.env-row-status-pill.connected { background: #1a3d1a; color: #4caf50; }
+.env-row-status-pill.disconnected { background: #3d1a1a; color: #f44336; }
+
+@media (max-width: 768px) {
+  .env-row { flex-direction: column; }
+  .env-row-actions { flex-direction: row; align-items: stretch; }
+  .env-row-usage { grid-template-columns: 1fr; }
 }
 
 /* ── Host Cards Grid ────────────────────────────────────── */
@@ -1136,8 +1298,13 @@ thead th.sortable.desc { color: #c5daf0; }
 
   <!-- Sidebar -->
   <div id="sidebar">
+    <div class="sidebar-cluster-pill">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="#4db8ff"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zM1.018 7.5h2.49c.047-1.618.382-3.137.95-4.327.052-.108.106-.213.16-.316A7.01 7.01 0 0 0 1.018 7.5zm4.491 0h4.982C10.41 5.64 10.04 4.08 9.54 2.952 9.069 1.883 8.51 1.2 8 1.088c-.51.112-1.07.795-1.54 1.864-.5 1.127-.869 2.687-.95 4.548zm5.98 0A12.5 12.5 0 0 0 10.542 2.856A7.01 7.01 0 0 1 14.982 7.5h-3.493zM8 1.088c-.52.11-1.083.78-1.555 1.846-.501 1.13-.87 2.69-.95 4.566h4.984a12.5 12.5 0 0 0-.472-3.94C9.502 2.373 8.943 1.2 8 1.088zm-7 7.412h3.493c.049 1.78.396 3.446.957 4.778.095.226.195.44.3.638A7.01 7.01 0 0 1 1 8.5zm4.509 0c.051 1.706.348 3.273.823 4.428C6.803 14.582 7.487 15 8 15c.513 0 1.197-.418 1.668-1.572.475-1.155.772-2.722.823-4.428H5.509zm5.98 0h3.493a7.01 7.01 0 0 1-4.751 5.415c.104-.198.204-.412.3-.637.56-1.332.908-2.999.958-4.778z"/></svg>
+      <span>Cluster</span>
+      <span class="sidebar-cluster-count" id="cluster-count">0 hosts</span>
+    </div>
+
     <div class="sidebar-section">
-      <div class="sidebar-header">Navigation</div>
       <div class="nav-item active" id="nav-dashboard" onclick="showView('dashboard')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
           <path d="M2 11a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2zm6-9a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V2zm-5 3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5z"/>
@@ -1149,7 +1316,7 @@ thead th.sortable.desc { color: #c5daf0; }
           <path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/>
           <path d="M5 4a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v1H5V4zm-1 3h8v1H4V7zm0 3h8v1H4v-1z"/>
         </svg>
-        All VMs
+        Virtual Machines
         <span class="nav-badge" id="badge-vms">0</span>
       </div>
       <div class="nav-item" id="nav-storage" onclick="showView('storage')">
@@ -1173,6 +1340,15 @@ thead th.sortable.desc { color: #c5daf0; }
         Migrations
         <span class="nav-badge" id="badge-migrations">0</span>
       </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-header">Hosts</div>
+      <div id="host-tree"></div>
+    </div>
+
+    <div class="sidebar-separator">Administration</div>
+    <div class="sidebar-section">
       <div class="nav-item" id="nav-deployment" onclick="showView('deployment')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
           <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
@@ -1180,11 +1356,6 @@ thead th.sortable.desc { color: #c5daf0; }
         </svg>
         Deployment
       </div>
-    </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-header">Hosts</div>
-      <div id="host-tree"></div>
     </div>
 
     <div id="version-footer">
@@ -1332,6 +1503,8 @@ function render() {
 
 // ── Sidebar ────────────────────────────────────────────────
 function renderSidebar() {
+  const cc = document.getElementById('cluster-count');
+  if (cc) cc.textContent = state.hosts.length + ' host' + (state.hosts.length === 1 ? '' : 's');
   document.getElementById('badge-vms').textContent = state.vms.length;
   const snapTotal = state.vms.reduce((a, v) => a + (v.snapshot_count || 0), 0);
   document.getElementById('badge-snapshots').textContent = snapTotal;
@@ -1410,77 +1583,80 @@ function renderContent() {
 
 // ── Dashboard ──────────────────────────────────────────────
 function renderDashboard() {
-  const onlineHosts = state.hosts.filter(h => h.status === 'online').length;
-  const runningVMs  = state.vms.filter(v => v.state === 'running').length;
-  const stoppedVMs  = state.vms.filter(v => v.state === 'stopped').length;
-
-  const avgCPU = state.hosts.length
-    ? (state.hosts.filter(h=>h.status==='online').reduce((a,h)=>a+h.cpu_usage,0) / Math.max(onlineHosts,1)).toFixed(1)
-    : 0;
-
+  if (state.hosts.length === 0) {
+    return emptyState('No hypervisors', 'Deploy the agent on your hypervisors to see them here. Visit the Deployment page for copy-paste install commands.');
+  }
   return `
-    <div class="summary-grid">
-      <div class="summary-card accent">
-        <div class="label">Hypervisors</div>
-        <div class="value">${state.hosts.length}</div>
-        <div class="sub">${onlineHosts} online · ${state.hosts.length - onlineHosts} offline</div>
+    <div class="env-list-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="#4db8ff"><path d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3zm14 0H2v10h12V3z"/><path d="M3 4h10v1H3V4zm0 2h10v1H3V6zm0 2h6v1H3V8z"/></svg>
+        <span style="font-size:14px;font-weight:600;color:#e8f4ff">Hypervisors</span>
       </div>
-      <div class="summary-card">
-        <div class="label">Total VMs</div>
-        <div class="value">${state.vms.length}</div>
-        <div class="sub">across all hosts</div>
-      </div>
-      <div class="summary-card green-accent">
-        <div class="label">Running</div>
-        <div class="value">${runningVMs}</div>
-        <div class="sub">${stoppedVMs} stopped</div>
-      </div>
-      <div class="summary-card yellow-accent">
-        <div class="label">Avg CPU</div>
-        <div class="value">${avgCPU}<small style="font-size:14px;color:#7aa8cc">%</small></div>
-        <div class="sub">online hosts</div>
-      </div>
+      <div style="font-size:11px;color:#5a8ab0">Click a hypervisor to manage</div>
     </div>
-
-    <div class="section-title">Hypervisors</div>
-    <div class="host-grid">
-      ${state.hosts.length === 0 ? '<p style="color:#3d6a8a">No hosts have reported yet. Deploy the agent on your hypervisors.</p>' : ''}
-      ${state.hosts.map(h => renderHostCard(h)).join('')}
+    <div class="env-list">
+      ${state.hosts.map(h => renderHypervisorRow(h)).join('')}
     </div>
-
-    ${state.vms.length > 0 ? `
-    <div class="section-title">Recent VMs</div>
-    <div class="table-wrap">
-      ${vmTable(state.vms.slice(0, 10))}
-    </div>` : ''}
   `;
 }
 
-function renderHostCard(h) {
-  const cpuColor = h.cpu_usage > 85 ? 'bar-danger' : h.cpu_usage > 65 ? 'bar-warn' : 'bar-cpu';
-  const memColor = h.mem_usage > 85 ? 'bar-danger' : h.mem_usage > 65 ? 'bar-warn' : 'bar-mem';
+function renderHypervisorRow(h) {
+  const hostVMs = state.vms.filter(v => v.host_id === h.id);
+  const runningVMs = hostVMs.filter(v => v.state === 'running').length;
+  const stoppedVMs = hostVMs.filter(v => v.state === 'stopped').length;
+  const hostPools = state.storage.filter(p => p.host_id === h.id);
+
+  const lastSeen = h.last_seen ? relTime(h.last_seen) : '—';
+  const memGB = (h.mem_total_mb / 1024).toFixed(1);
+  const cpuColor = h.cpu_usage > 85 ? '#f44336' : h.cpu_usage > 65 ? '#ff9800' : '#4caf50';
+  const memColor = h.mem_usage > 85 ? '#f44336' : h.mem_usage > 65 ? '#ff9800' : '#4caf50';
+  const online = h.status === 'online';
+
   return `
-    <div class="host-card ${state.selectedHost===h.id && state.view==='host' ? 'active' : ''}"
-         onclick="showView('host','${esc(h.id)}','summary')">
-      <div class="host-card-header">
-        <div>
-          <div class="host-card-name">${esc(h.id)}</div>
-          <div class="host-card-ip">${esc(h.ip || '—')}</div>
+    <div class="env-row ${online ? '' : 'offline'}" onclick="showView('host','${esc(h.id)}','summary')">
+      <div class="env-row-icon">
+        <svg width="36" height="36" viewBox="0 0 16 16" fill="${online ? '#4db8ff' : '#5a8ab0'}">
+          <rect x="2" y="3" width="12" height="4" rx="1" opacity="0.9"/>
+          <rect x="2" y="9" width="12" height="4" rx="1" opacity="0.6"/>
+          <circle cx="4" cy="5" r="0.7" fill="#0d1b2a"/>
+          <circle cx="4" cy="11" r="0.7" fill="#0d1b2a"/>
+        </svg>
+      </div>
+
+      <div class="env-row-body">
+        <div class="env-row-title-line">
+          <span class="env-row-name">${esc(h.id)}</span>
+          <span class="status-pill ${h.status}">${online ? '● Up' : '● Down'}</span>
         </div>
-        <span class="status-pill ${h.status}">${h.status}</span>
+        <div class="env-row-meta">
+          <span title="Last telemetry">⟐ ${lastSeen}</span>
+          <span>libvirt ${esc(h.libvirt_ver || '—')}</span>
+          <span>${esc(h.ip || '—')}</span>
+          <span>Up ${esc(h.uptime || '—')}</span>
+        </div>
+        <div class="env-row-stats">
+          <span class="env-stat"><strong>${h.vm_count}</strong> VMs</span>
+          <span class="env-stat" style="color:#4caf50"><strong>${runningVMs}</strong> running</span>
+          <span class="env-stat" style="color:#7aa8cc"><strong>${stoppedVMs}</strong> stopped</span>
+          <span class="env-stat"><strong>${hostPools.length}</strong> storage pool${hostPools.length===1?'':'s'}</span>
+          <span class="env-stat">⚙ <strong>${h.cpu_count}</strong> CPU</span>
+          <span class="env-stat">▤ <strong>${memGB}</strong> GB RAM</span>
+        </div>
+        <div class="env-row-usage">
+          <div class="env-row-usage-bar">
+            <div class="env-row-usage-label"><span>CPU</span><span>${h.cpu_usage.toFixed(1)}%</span></div>
+            <div class="env-row-bar-track"><div class="env-row-bar-fill" style="width:${Math.min(h.cpu_usage,100)}%;background:${cpuColor}"></div></div>
+          </div>
+          <div class="env-row-usage-bar">
+            <div class="env-row-usage-label"><span>Memory</span><span>${h.mem_usage.toFixed(1)}%</span></div>
+            <div class="env-row-bar-track"><div class="env-row-bar-fill" style="width:${Math.min(h.mem_usage,100)}%;background:${memColor}"></div></div>
+          </div>
+        </div>
       </div>
-      <div class="resource-row">
-        <div class="resource-label"><span>CPU</span><span>${h.cpu_usage.toFixed(1)}%</span></div>
-        <div class="resource-bar"><div class="resource-bar-fill ${cpuColor}" style="width:${Math.min(h.cpu_usage,100)}%"></div></div>
-      </div>
-      <div class="resource-row">
-        <div class="resource-label"><span>Memory</span><span>${h.mem_usage.toFixed(1)}% of ${fmt(h.mem_total_mb, 'MB')}</span></div>
-        <div class="resource-bar"><div class="resource-bar-fill ${memColor}" style="width:${Math.min(h.mem_usage,100)}%"></div></div>
-      </div>
-      <div class="host-card-meta">
-        <span>VMs: <strong>${h.vm_count}</strong></span>
-        <span>CPUs: <strong>${h.cpu_count}</strong></span>
-        <span>Up: <strong>${h.uptime || '—'}</strong></span>
+
+      <div class="env-row-actions" onclick="event.stopPropagation()">
+        <div class="env-row-status-pill ${online ? 'connected' : 'disconnected'}">${online ? '● Connected' : '● Offline'}</div>
+        <button class="btn btn-secondary btn-sm" onclick="showView('host','${esc(h.id)}','summary')" title="Manage">Manage →</button>
       </div>
     </div>
   `;
