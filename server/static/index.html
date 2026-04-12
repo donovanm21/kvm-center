@@ -1878,6 +1878,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   const ok = await initAuth();
   if (ok) {
     refresh();
+    // Settings lives outside the main telemetry refresh loop, so a deep-link
+    // refresh (e.g. landing directly on #/settings) needs its own fetch.
+    if (state.view === 'settings') loadSettingsData();
     setInterval(refresh, 15000);
   }
 });
