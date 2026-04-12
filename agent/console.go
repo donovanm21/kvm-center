@@ -292,20 +292,26 @@ const consoleHTML = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Console — {{.VMName}} · KVM Center</title>
 <style>
+/* KVM Center console — matches the main web UI's productized theme
+   (see docs/STYLE_GUIDE.md). Single-theme dark: a full-screen remote
+   console is one of the few surfaces where light-mode makes no sense. */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow: hidden; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #0d1b2a;
-  color: #c5daf0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  background: #0B0E13;
+  color: #C9D1D9;
   display: flex;
   flex-direction: column;
   font-size: 13px;
+  -webkit-font-smoothing: antialiased;
 }
+::selection { background: #E3571E44; color: #F0F6FC; }
+
 #toolbar {
-  height: 46px;
-  background: #09131c;
-  border-bottom: 1px solid #1a3a5c;
+  height: 48px;
+  background: #0D1117;
+  border-bottom: 1px solid #30363D;
   display: flex;
   align-items: center;
   padding: 0 16px;
@@ -313,45 +319,46 @@ body {
   flex-shrink: 0;
 }
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #e8f4ff;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.4px;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 700; letter-spacing: -0.01em;
 }
-.brand svg { flex-shrink: 0; }
-.sep { color: #1a3a5c; font-size: 14px; }
+.brand svg { flex-shrink: 0; filter: drop-shadow(0 0 6px rgba(227,87,30,0.25)); }
+.brand .b-primary { color: #F0F6FC; }
+.brand .b-accent  { color: #E3571E; }
+.sep { color: #30363D; font-size: 14px; }
 #vm-name {
   font-weight: 600;
-  color: #e8f4ff;
-  font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: #F0F6FC;
+  font-size: 13px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   max-width: 340px;
 }
 #vm-state {
+  display: inline-flex; align-items: center; gap: 6px;
   font-size: 10px;
-  padding: 3px 9px;
+  padding: 3px 10px;
   border-radius: 10px;
-  background: #1a3a5c;
-  color: #7aa8cc;
+  background: #21262D;
+  color: #8B949E;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-#vm-state.running { background: #1a3d1a; color: #4caf50; }
-#vm-state.stopped { background: #2a2a2a; color: #9aa; }
-#vm-state.error   { background: #3d1a1a; color: #f44336; }
+#vm-state::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+}
+#vm-state.running { background: #1E3D23; color: #3FB950; }
+#vm-state.running::before { box-shadow: 0 0 5px #3FB95066; }
+#vm-state.stopped { background: #21262D; color: #8B949E; }
+#vm-state.error   { background: #3D1E1E; color: #F85149; }
 .spacer { flex: 1; }
+
 .btn {
-  background: #112233;
-  border: 1px solid #1a3a5c;
-  color: #c5daf0;
+  background: #161B22;
+  border: 1px solid #30363D;
+  color: #C9D1D9;
   padding: 6px 13px;
-  border-radius: 3px;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
@@ -359,21 +366,27 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: all 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
   white-space: nowrap;
 }
 .btn:hover:not(:disabled) {
-  border-color: #0091da;
-  background: #0d2a45;
-  color: #e8f4ff;
+  background: #1C2128;
+  border-color: #484F58;
+  color: #F0F6FC;
 }
 .btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.btn.primary { background: #0d3a5c; border-color: #0091da; color: #e8f4ff; }
-.btn.primary:hover:not(:disabled) { background: #0091da; color: #fff; }
+.btn.primary {
+  background: linear-gradient(180deg, #F26419 0%, #E3571E 100%);
+  border-color: #C04512; color: #fff;
+}
+.btn.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #FF7B3C 0%, #F26419 100%);
+}
 .btn.warn { background: #3d2a00; border-color: #7a5200; color: #ffd080; }
 .btn.warn:hover:not(:disabled) { background: #7a5200; color: #fff; }
-.btn.danger { background: #3d1a1a; border-color: #8b1c1c; color: #ffb3b3; }
-.btn.danger:hover:not(:disabled) { background: #8b1c1c; color: #fff; }
+.btn.danger { background: #7A1C1C; border-color: #A02929; color: #FFB3B3; }
+.btn.danger:hover:not(:disabled) { background: #A02929; color: #fff; }
+
 .spinner {
   display: none;
   width: 11px; height: 11px;
@@ -398,7 +411,7 @@ body {
   display: none;
   position: absolute;
   inset: 0;
-  background: rgba(13, 27, 42, 0.92);
+  background: rgba(11, 14, 19, 0.94);
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -408,24 +421,24 @@ body {
   z-index: 100;
 }
 #overlay.visible { display: flex; }
-#overlay .icon { font-size: 44px; }
-#overlay .title { font-size: 18px; font-weight: 600; color: #e8f4ff; }
-#overlay .msg { font-size: 13px; color: #7aa8cc; max-width: 460px; line-height: 1.6; }
+#overlay .icon { font-size: 44px; color: #E3571E; }
+#overlay .title { font-size: 18px; font-weight: 600; color: #F0F6FC; letter-spacing: -0.01em; }
+#overlay .msg { font-size: 13px; color: #8B949E; max-width: 460px; line-height: 1.6; }
 
 #banner {
   display: none;
   position: fixed;
-  top: 58px; left: 50%;
+  top: 60px; left: 50%;
   transform: translateX(-50%);
   padding: 7px 18px;
-  border-radius: 3px;
+  border-radius: 4px;
   font-size: 12px;
   z-index: 200;
   box-shadow: 0 4px 16px rgba(0,0,0,0.6);
   white-space: nowrap;
-  border-left: 3px solid #0091da;
-  background: #0f2a45;
-  color: #c5daf0;
+  border-left: 3px solid #E3571E;
+  background: #161B22;
+  color: #C9D1D9;
 }
 #banner.warn { border-color: #ff9800; color: #ffd080; background: #2a1d0a; }
 
@@ -444,10 +457,12 @@ body {
   min-width: 220px;
   border-left: 4px solid;
   animation: slideIn 0.2s ease;
+  background: #161B22;
+  color: #C9D1D9;
 }
-.toast.success { background: #0f2a0f; border-color: #4caf50; color: #81c784; }
-.toast.error   { background: #2a0f0f; border-color: #f44336; color: #e57373; }
-.toast.info    { background: #0f1e2a; border-color: #0091da; color: #64b5f6; }
+.toast.success { background: #1E3D23; border-color: #3FB950; color: #7EE787; }
+.toast.error   { background: #3D1E1E; border-color: #F85149; color: #FFB3B3; }
+.toast.info    { background: #161B22; border-color: #E3571E; color: #FF8A3C; }
 @keyframes slideIn { from { transform: translateX(120%); } to { transform: translateX(0); } }
 </style>
 </head>
@@ -455,14 +470,20 @@ body {
 
 <div id="toolbar">
   <div class="brand">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <rect x="2" y="3" width="20" height="14" rx="2" stroke="#0091da" stroke-width="1.5"/>
-      <path d="M8 21h8M12 17v4" stroke="#0091da" stroke-width="1.5" stroke-linecap="round"/>
-      <rect x="5" y="6" width="4" height="3" rx="0.5" fill="#0091da" opacity="0.7"/>
-      <rect x="10" y="6" width="4" height="3" rx="0.5" fill="#0091da" opacity="0.7"/>
-      <rect x="15" y="6" width="4" height="3" rx="0.5" fill="#0091da" opacity="0.7"/>
+    <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-label="KVM Center">
+      <defs>
+        <linearGradient id="cons-accent" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#FF8A3C"/>
+          <stop offset="100%" stop-color="#E3571E"/>
+        </linearGradient>
+      </defs>
+      <path d="M16 3 L27 10 L27 22 L16 29 L5 22 L5 10 Z"
+            fill="none" stroke="url(#cons-accent)" stroke-width="2" stroke-linejoin="round"/>
+      <rect x="10" y="11" width="12" height="3" rx="0.5" fill="url(#cons-accent)"/>
+      <rect x="10" y="15" width="9"  height="3" rx="0.5" fill="#E3571E" opacity="0.7"/>
+      <rect x="10" y="19" width="6"  height="3" rx="0.5" fill="#E3571E" opacity="0.45"/>
     </svg>
-    KVM Center
+    <span><span class="b-primary">kvm</span><span class="b-accent">center</span></span>
   </div>
   <span class="sep">|</span>
   <span id="vm-name">{{.VMName}}</span>
