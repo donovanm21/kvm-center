@@ -72,6 +72,32 @@ func main() {
 		w.Write([]byte(`{"version":"` + Version + `"}`))
 	})
 
+	// ── Auth + RBAC ────────────────────────────────────────────
+	mux.HandleFunc("/api/auth/status",   handleAuthStatus(store))
+	mux.HandleFunc("/api/auth/register", handleAuthRegister(store))
+	mux.HandleFunc("/api/auth/login",    handleAuthLogin(store))
+	mux.HandleFunc("/api/auth/logout",   handleAuthLogout(store))
+	mux.HandleFunc("/api/auth/me",       handleAuthMe(store))
+	// Admin-only user/group/role CRUD (require user.manage permission).
+	mux.Handle("/api/users",       requirePerm(store, "user.manage", handleUsersList(store)))
+	mux.Handle("/api/users/new",   requirePerm(store, "user.manage", handleUsersCreate(store)))
+	mux.Handle("/api/users/",      requirePerm(store, "user.manage", handleUserUpdate(store)))
+	mux.Handle("/api/groups",      requirePerm(store, "user.manage", handleGroupsList(store)))
+	mux.Handle("/api/groups/new",  requirePerm(store, "user.manage", handleGroupsCreate(store)))
+	mux.Handle("/api/groups/",     requirePerm(store, "user.manage", handleGroupUpdate(store)))
+	mux.Handle("/api/roles",       requirePerm(store, "user.manage", handleRolesList(store)))
+	mux.Handle("/api/roles/new",   requirePerm(store, "user.manage", handleRolesCreate(store)))
+	mux.Handle("/api/roles/",      requirePerm(store, "user.manage", handleRoleUpdate(store)))
+
+	// Purge expired sessions every 10 minutes.
+	go func() {
+		t := time.NewTicker(10 * time.Minute)
+		defer t.Stop()
+		for range t.C {
+			store.PurgeExpiredSessions()
+		}
+	}()
+
 	// Serve embedded web UI for everything else.
 	sub, err := fs.Sub(staticFiles, "static")
 	if err != nil {
@@ -79,7 +105,7 @@ func main() {
 	}
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 
-	handler := corsMiddleware(loggingMiddleware(mux))
+	handler := corsMiddleware(loggingMiddleware(authMiddleware(store, mux)))
 
 	log.Printf("kvm-center server listening on %s", *addr)
 	if err := http.ListenAndServe(*addr, handler); err != nil {
