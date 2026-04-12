@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"kvm-center/internal/models"
@@ -299,9 +298,7 @@ func buildVM(name, stateStr string) models.VM {
 				}
 				if path != "" {
 					vm.DiskPath = path
-					used, total := diskUsageGB(path)
-					vm.DiskUsageGB = used
-					vm.DiskTotalGB = total
+					vm.DiskTotalGB, vm.DiskUsageGB = domBlkInfoGB(name, d.Target.Dev)
 					break
 				}
 			}
@@ -593,33 +590,29 @@ func parseKiBToMB(s string) uint64 {
 	}
 }
 
-func diskUsageGB(path string) (used, total float64) {
-	// Try the file's directory if the file itself doesn't exist yet.
-	statPath := path
-	if _, err := os.Stat(statPath); err != nil {
-		// Walk up to find a directory we can stat.
-		for i := len(statPath) - 1; i >= 0; i-- {
-			if statPath[i] == '/' {
-				statPath = statPath[:i]
-				if statPath == "" {
-					statPath = "/"
-				}
-				if _, err := os.Stat(statPath); err == nil {
-					break
-				}
-			}
-		}
-	}
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(statPath, &st); err != nil {
+// domBlkInfoGB runs `virsh domblkinfo <vm> <dev>` and returns the virtual
+// disk capacity and actual host allocation in GB. This gives the real VM-level
+// values instead of the hypervisor's storage pool stats.
+func domBlkInfoGB(vmName, targetDev string) (capacityGB, allocationGB float64) {
+	out, err := exec.Command("virsh", "domblkinfo", vmName, targetDev).Output()
+	if err != nil {
 		return 0, 0
 	}
-	totalBytes := st.Blocks * uint64(st.Bsize)
-	freeBytes := st.Bfree * uint64(st.Bsize)
-	usedBytes := totalBytes - freeBytes
 	gb := 1024.0 * 1024.0 * 1024.0
-	return math.Round(float64(usedBytes)/gb*100) / 100,
-		math.Round(float64(totalBytes)/gb*100) / 100
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		val, _ := strconv.ParseUint(fields[1], 10, 64)
+		switch fields[0] {
+		case "Capacity:":
+			capacityGB = math.Round(float64(val)/gb*100) / 100
+		case "Allocation:":
+			allocationGB = math.Round(float64(val)/gb*100) / 100
+		}
+	}
+	return
 }
 
 // ─── Storage pools ───────────────────────────────────────────────────────────
