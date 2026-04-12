@@ -19,6 +19,9 @@ type persistData struct {
 	VMNotes    map[string]string                   `json:"vm_notes"`
 	GuestData  map[string]*guestEntry              `json:"guest_data"`
 	Migrations []*models.MigrationRecord           `json:"migrations,omitempty"`
+	Users      map[string]*models.User             `json:"users,omitempty"`
+	Groups     map[string]*models.Group            `json:"groups,omitempty"`
+	Roles      map[string]*models.Role             `json:"roles,omitempty"`
 }
 
 // guestEntry is one cached report from a kvm-tools daemon running in a guest.
@@ -39,6 +42,10 @@ type Store struct {
 	vmNotes    map[string]string                // keyed by VM UUID (lowercased)
 	guestData  map[string]*guestEntry           // keyed by VM UUID (lowercased)
 	migrations []*models.MigrationRecord
+	users      map[string]*models.User  // keyed by user ID
+	groups     map[string]*models.Group // keyed by group ID
+	roles      map[string]*models.Role  // keyed by role ID
+	sessions   map[string]*models.Session // keyed by session token (memory-only)
 	dataFile   string
 }
 
@@ -49,10 +56,48 @@ func NewStore(dataFile string) *Store {
 		storage:   make(map[string][]*models.StoragePool),
 		vmNotes:   make(map[string]string),
 		guestData: make(map[string]*guestEntry),
+		users:     make(map[string]*models.User),
+		groups:    make(map[string]*models.Group),
+		roles:     make(map[string]*models.Role),
+		sessions:  make(map[string]*models.Session),
 		dataFile:  dataFile,
 	}
 	s.load()
+	s.ensureBuiltInRoles()
 	return s
+}
+
+// ensureBuiltInRoles creates the Administrator / Operator / Viewer roles if
+// they don't exist. Safe to call on every start — idempotent.
+func (s *Store) ensureBuiltInRoles() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now()
+	builtIns := []struct {
+		id, name, desc string
+		perms          []string
+	}{
+		{"role_admin", "Administrator", "Full access to all resources and admin functions.",
+			[]string{models.PermAdmin}},
+		{"role_operator", "Operator", "Manage VM lifecycle, snapshots, and console access.",
+			[]string{models.PermVMView, models.PermVMLifecycle, models.PermVMSnapshot,
+				models.PermVMConsole, models.PermVMEdit, models.PermHostView,
+				models.PermStorageView, models.PermStorageUpload}},
+		{"role_viewer", "Viewer", "Read-only access to the inventory.",
+			[]string{models.PermVMView, models.PermHostView, models.PermStorageView}},
+	}
+	for _, r := range builtIns {
+		if existing, ok := s.roles[r.id]; ok {
+			// Re-sync permissions even if the role exists (built-ins are managed).
+			existing.Permissions = r.perms
+			existing.BuiltIn = true
+			continue
+		}
+		s.roles[r.id] = &models.Role{
+			ID: r.id, Name: r.name, Description: r.desc,
+			Permissions: r.perms, BuiltIn: true, CreatedAt: now,
+		}
+	}
 }
 
 // ApplyTelemetry upserts a host and replaces its VMs and storage pools atomically.
@@ -310,6 +355,9 @@ func (s *Store) Save() {
 		VMNotes:    s.vmNotes,
 		GuestData:  s.guestData,
 		Migrations: s.migrations,
+		Users:      s.users,
+		Groups:     s.groups,
+		Roles:      s.roles,
 	}
 	s.mu.RUnlock()
 
@@ -351,7 +399,17 @@ func (s *Store) load() {
 	if d.Migrations != nil {
 		s.migrations = d.Migrations
 	}
-	log.Printf("store: loaded %d hosts from %s", len(s.hosts), s.dataFile)
+	if d.Users != nil {
+		s.users = d.Users
+	}
+	if d.Groups != nil {
+		s.groups = d.Groups
+	}
+	if d.Roles != nil {
+		s.roles = d.Roles
+	}
+	log.Printf("store: loaded %d hosts, %d users, %d groups, %d roles from %s",
+		len(s.hosts), len(s.users), len(s.groups), len(s.roles), s.dataFile)
 }
 
 func itoa(n int) string {

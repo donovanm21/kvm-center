@@ -1343,6 +1343,108 @@ thead th.sortable.desc { color: var(--text-body); }
   tbody td { padding: 10px 10px; }
 }
 
+/* ── Auth screen (login + register) ─────────────────────── */
+#auth-screen {
+  position: fixed; inset: 0;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; z-index: 10000;
+}
+.auth-card {
+  width: 100%; max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px; padding: 32px;
+}
+.auth-brand {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+}
+.auth-brand svg { filter: drop-shadow(0 0 12px rgba(227,87,30,0.35)); }
+.auth-title {
+  font-size: 22px; font-weight: 700;
+  color: var(--text-strong); margin: 12px 0 6px 0;
+  letter-spacing: -0.01em;
+}
+.auth-sub {
+  font-size: 13px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.55;
+}
+.auth-form label {
+  display: block; font-size: 11px; font-weight: 600;
+  color: var(--text-muted); margin: 14px 0 6px 0;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.auth-form input {
+  width: 100%; height: 40px; padding: 0 12px;
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text-body); font-size: 13px; font-family: inherit;
+  outline: none; box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.auth-form input:focus { border-color: #E3571E; box-shadow: 0 0 0 2px #E3571E33; }
+.auth-submit {
+  width: 100%; height: 42px; margin-top: 20px;
+  background: linear-gradient(180deg, #F26419 0%, #E3571E 100%);
+  color: #fff; border: 1px solid #C04512; border-radius: 5px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s; font-family: inherit;
+}
+.auth-submit:hover:not(:disabled) { background: linear-gradient(180deg, #FF7B3C 0%, #F26419 100%); }
+.auth-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.auth-error {
+  margin-top: 14px; padding: 8px 12px;
+  background: #3D1E1E; color: #FFB3B3; border: 1px solid #A02929;
+  border-radius: 5px; font-size: 12px; display: none;
+}
+.auth-error.visible { display: block; }
+body.light-mode .auth-error { background: #FFEBE9; color: #CF222E; border-color: #FF8182; }
+
+/* ── User menu in topbar ─────────────────────────────────── */
+#user-menu { position: relative; flex-shrink: 0; }
+.user-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, #FF8A3C 0%, #E3571E 100%);
+  color: #fff; font-weight: 600; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; border: 2px solid transparent;
+  transition: border-color 0.15s; text-transform: uppercase;
+}
+.user-avatar:hover { border-color: #FF8A3C; }
+.user-dropdown {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  min-width: 220px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  padding: 8px 0; display: none; z-index: 500;
+}
+.user-dropdown.visible { display: block; }
+.user-dropdown-header {
+  padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 4px;
+}
+.user-dropdown-header .username {
+  font-weight: 600; color: var(--text-strong); font-size: 13px;
+}
+.user-dropdown-header .role { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.user-dropdown-item {
+  padding: 8px 14px; font-size: 12px; color: var(--text-body);
+  cursor: pointer; display: flex; align-items: center; gap: 8px;
+}
+.user-dropdown-item:hover { background: var(--surface-2); color: var(--text-strong); }
+.user-dropdown-item.danger { color: #F85149; }
+body.light-mode .user-dropdown-item.danger { color: #CF222E; }
+
+/* ── Settings page ───────────────────────────────────────── */
+.settings-tabs {
+  display: flex; gap: 2px;
+  border-bottom: 1px solid var(--border); margin-bottom: 18px;
+}
+.settings-tab {
+  padding: 10px 16px; cursor: pointer; font-size: 12px;
+  color: var(--text-muted); border-bottom: 2px solid transparent;
+  margin-bottom: -1px; font-weight: 500; transition: color 0.15s;
+}
+.settings-tab:hover { color: var(--text-strong); }
+.settings-tab.active { color: var(--text-strong); border-bottom-color: #E3571E; }
+
 /* ── Light mode overrides ───────────────────────────────── */
 body.light-mode {
   background: #F6F8FA;
@@ -1525,6 +1627,19 @@ body.light-mode #sidebar-overlay { background: rgba(0,0,0,0.3); }
   <button class="icon-btn" id="refresh-btn" onclick="refresh()" aria-label="Refresh" title="Refresh">
     <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
   </button>
+  <div id="user-menu" style="display:none">
+    <div class="user-avatar" id="user-avatar" onclick="toggleUserDropdown()">?</div>
+    <div class="user-dropdown" id="user-dropdown">
+      <div class="user-dropdown-header">
+        <div class="username" id="user-dropdown-name">—</div>
+        <div class="role" id="user-dropdown-role">—</div>
+      </div>
+      <div class="user-dropdown-item danger" onclick="doLogout()">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M6 12.5a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-8a.5.5 0 0 0-.5.5v2a.5.5 0 0 1-1 0v-2A1.5 1.5 0 0 1 6.5 2h8A1.5 1.5 0 0 1 16 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 5 12.5v-2a.5.5 0 0 1 1 0v2z"/><path d="M.146 8.354a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L1.707 7.5H10.5a.5.5 0 0 1 0 1H1.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3z"/></svg>
+        Sign out
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Main layout -->
@@ -1587,14 +1702,20 @@ body.light-mode #sidebar-overlay { background: rgba(0,0,0,0.3); }
       <div id="host-tree"></div>
     </div>
 
-    <div class="sidebar-separator">Administration</div>
-    <div class="sidebar-section">
+    <div class="sidebar-separator" id="admin-separator">Administration</div>
+    <div class="sidebar-section" id="admin-section">
       <div class="nav-item" id="nav-deployment" onclick="showView('deployment')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
           <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
           <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
         </svg>
         Deployment
+      </div>
+      <div class="nav-item" id="nav-settings" onclick="showView('settings')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/>
+        </svg>
+        Settings
       </div>
     </div>
 
@@ -1655,6 +1776,11 @@ let state = {
   migrations: [],           // migration history from server
   fileBrowser: null,        // { host_id, path, entries, loading, uploading }
   createVM: null,           // { host_id, info, mode, loading }
+  settingsTab: 'users',     // which Settings sub-tab is active
+  users: [], groups: [], roles: [], permissionsList: [],
+  userForm: null,           // { mode, data } when editing/creating
+  groupForm: null,
+  roleForm: null,
   deployOS: { 'kvm-tools': 'rhel', 'agent': 'rhel' }, // OS tab per package
   deployPortalOnline: null, // null=unknown, true/false probed
   deployPortalFiles: [],
@@ -1662,15 +1788,19 @@ let state = {
 };
 
 // ── Bootstrap ──────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   restoreRoute();
-  refresh();
-  setInterval(refresh, 15000);
-  // Fetch version once on load.
+  // Fetch version once on load — doesn't require auth.
   fetch('/api/version').then(r => r.json()).then(d => {
     const el = document.getElementById('version-text');
     if (el && d.version) el.textContent = 'KVM Center ' + d.version;
   }).catch(() => {});
+  // Gate the main app behind authentication.
+  const ok = await initAuth();
+  if (ok) {
+    refresh();
+    setInterval(refresh, 15000);
+  }
 });
 
 // Route persistence: encode current view into the URL hash so that a
@@ -1735,7 +1865,13 @@ async function refresh() {
 }
 
 async function fetchJSON(path) {
-  const r = await fetch(API + path);
+  const r = await fetch(API + path, { credentials: 'same-origin' });
+  if (r.status === 401) {
+    state.currentUser = null;
+    state.permissions = [];
+    showAuthScreen('login');
+    throw new Error('session expired');
+  }
   if (!r.ok) throw new Error(r.statusText);
   return r.json();
 }
@@ -1757,12 +1893,13 @@ function showView(view, hostID, tab) {
     state.selectedSnapshotVM = null;
     state.snapshotList = [];
   }
-  ['dashboard','all-vms','storage','snapshots','migrations','deployment'].forEach(v => {
+  ['dashboard','all-vms','storage','snapshots','migrations','deployment','settings'].forEach(v => {
     document.getElementById('nav-'+v)?.classList.toggle('active', v === view);
   });
   closeSidebar();
   persistRoute();
   if (view === 'deployment') probeDeployPortal();
+  if (view === 'settings') loadSettingsData();
   render();
 }
 
@@ -1816,7 +1953,7 @@ function renderSidebar() {
 
 // ── Breadcrumb ─────────────────────────────────────────────
 function renderBreadcrumb() {
-  const crumbs = { dashboard:'Dashboard', 'all-vms':'All VMs', storage:'Storage', host:'Hosts', snapshots:'Snapshots', vm:'Virtual Machines', migrations:'Migrations', deployment:'Deployment' };
+  const crumbs = { dashboard:'Dashboard', 'all-vms':'All VMs', storage:'Storage', host:'Hosts', snapshots:'Snapshots', vm:'Virtual Machines', migrations:'Migrations', deployment:'Deployment', settings:'Settings' };
   let html = `KVM Center <span>/ ${crumbs[state.view] || state.view}`;
   if (state.view === 'host' && state.selectedHost) html += ` / ${esc(state.selectedHost)}`;
   if (state.view === 'snapshots' && state.selectedSnapshotVM) html += ` / ${esc(state.selectedSnapshotVM.name)}`;
@@ -1869,6 +2006,7 @@ function renderContent() {
     case 'snapshots':  body.innerHTML = renderSnapshotsView(q); break;
     case 'vm':         body.innerHTML = renderVMView(); break;
     case 'migrations': body.innerHTML = renderMigrationsView(); break;
+    case 'settings':   body.innerHTML = renderSettingsView(); break;
     case 'deployment': body.innerHTML = renderDeploymentView(); break;
     default:           body.innerHTML = '';
   }
@@ -2774,6 +2912,401 @@ function renderMigrationsView() {
     ${pastSection}
     ${emptyMsg}
   `;
+}
+
+// ── Settings view (Users / Groups / Roles) ────────────────
+async function loadSettingsData() {
+  try {
+    const [users, groups, rolesResp] = await Promise.all([
+      fetchJSON('/api/users'),
+      fetchJSON('/api/groups'),
+      fetchJSON('/api/roles'),
+    ]);
+    state.users = users || [];
+    state.groups = groups || [];
+    state.roles = (rolesResp && rolesResp.roles) || [];
+    state.permissionsList = (rolesResp && rolesResp.permissions) || [];
+    if (state.view === 'settings') render();
+  } catch (e) {
+    if (e.message !== 'session expired') toast('error', 'Failed to load settings: ' + e.message);
+  }
+}
+
+function setSettingsTab(t) {
+  state.settingsTab = t;
+  state.userForm = null; state.groupForm = null; state.roleForm = null;
+  persistRoute();
+  render();
+}
+
+function renderSettingsView() {
+  const tab = state.settingsTab || 'users';
+  const tabHtml = ['users','groups','roles'].map(t => `
+    <div class="settings-tab ${tab===t?'active':''}" onclick="setSettingsTab('${t}')">${t.charAt(0).toUpperCase()+t.slice(1)}</div>
+  `).join('');
+
+  let body = '';
+  if (tab === 'users') body = renderSettingsUsers();
+  else if (tab === 'groups') body = renderSettingsGroups();
+  else if (tab === 'roles') body = renderSettingsRoles();
+
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h2 style="margin:0;font-size:18px;font-weight:600;color:var(--text-strong)">Settings</h2>
+    </div>
+    <div class="settings-tabs">${tabHtml}</div>
+    ${body}
+  `;
+}
+
+// ── Users ──
+function renderSettingsUsers() {
+  const roleName = (id) => state.roles.find(r => r.id === id)?.name || id;
+  const groupName = (id) => state.groups.find(g => g.id === id)?.name || id;
+
+  const rows = state.users.map(u => `
+    <tr>
+      <td style="font-weight:500;color:var(--text-strong)">${esc(u.username)}</td>
+      <td style="color:var(--text-muted)">${esc(u.email || '—')}</td>
+      <td>${u.role_ids && u.role_ids.length ? u.role_ids.map(id => `<span style="display:inline-block;padding:2px 8px;background:var(--surface-3);border-radius:10px;font-size:10px;margin-right:4px">${esc(roleName(id))}</span>`).join('') : '<span style="color:var(--text-faded)">none</span>'}</td>
+      <td>${u.group_ids && u.group_ids.length ? u.group_ids.map(id => `<span style="display:inline-block;padding:2px 8px;background:var(--surface-3);border-radius:10px;font-size:10px;margin-right:4px">${esc(groupName(id))}</span>`).join('') : '<span style="color:var(--text-faded)">none</span>'}</td>
+      <td>${u.enabled ? '<span class="status-pill online">● Active</span>' : '<span class="status-pill offline">● Disabled</span>'}</td>
+      <td>
+        <button class="btn btn-secondary btn-sm" onclick='openUserForm("edit", ${JSON.stringify(u)})'>Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteUser('${esc(u.id)}', '${esc(u.username)}')">Delete</button>
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="btn btn-primary" onclick="openUserForm('new', null)">+ Add User</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Username</th><th>Email</th><th>Roles</th><th>Groups</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-faded)">No users</td></tr>'}</tbody>
+      </table>
+    </div>
+    ${state.userForm ? renderUserFormModal() : ''}
+  `;
+}
+
+function openUserForm(mode, user) {
+  state.userForm = {
+    mode,
+    data: mode === 'edit' ? JSON.parse(JSON.stringify(user)) : {
+      username:'', email:'', password:'', enabled: true, role_ids: [], group_ids: [],
+    },
+  };
+  render();
+}
+function closeUserForm() { state.userForm = null; render(); }
+
+function renderUserFormModal() {
+  const f = state.userForm;
+  if (!f) return '';
+  const isNew = f.mode === 'new';
+  const checkboxList = (items, selected, kind) => items.map(it => `
+    <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer">
+      <input type="checkbox" ${selected.includes(it.id)?'checked':''}
+             onchange="toggleUserForm${kind}('${esc(it.id)}', this.checked)">
+      <span style="color:var(--text-body);font-size:12px">${esc(it.name)}</span>
+    </label>
+  `).join('');
+
+  return `
+    <div class="modal-overlay" style="display:flex" onclick="if(event.target===this)closeUserForm()">
+      <div class="modal" style="width:520px;max-width:calc(100vw - 32px);max-height:90vh;overflow-y:auto">
+        <h3>${isNew ? 'New User' : 'Edit User — ' + esc(f.data.username)}</h3>
+        ${isNew ? `
+          <label>Username</label>
+          <input type="text" id="uf-username" value="${esc(f.data.username)}" autofocus>
+        ` : ''}
+        <label style="margin-top:10px">Email</label>
+        <input type="email" id="uf-email" value="${esc(f.data.email||'')}">
+        <label style="margin-top:10px">Password${isNew ? '' : ' (leave blank to keep current)'}</label>
+        <input type="password" id="uf-password" ${isNew?'required':''} value="">
+
+        <label style="margin-top:14px">Roles</label>
+        <div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:8px 12px;background:var(--bg-input)">
+          ${checkboxList(state.roles.map(r=>({id:r.id,name:r.name})), f.data.role_ids||[], 'Role')}
+        </div>
+
+        <label style="margin-top:14px">Groups</label>
+        <div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:8px 12px;background:var(--bg-input)">
+          ${state.groups.length ? checkboxList(state.groups.map(g=>({id:g.id,name:g.name})), f.data.group_ids||[], 'Group')
+            : '<span style="color:var(--text-faded);font-size:11px">No groups yet</span>'}
+        </div>
+
+        <label style="margin-top:12px;display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="uf-enabled" ${f.data.enabled?'checked':''}>
+          <span style="font-size:12px;color:var(--text-body)">User is enabled (can sign in)</span>
+        </label>
+
+        <div class="modal-actions" style="margin-top:18px">
+          <button class="btn btn-secondary" onclick="closeUserForm()">Cancel</button>
+          <button class="btn btn-primary" onclick="submitUserForm()">${isNew ? 'Create User' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function toggleUserFormRole(id, checked) {
+  const f = state.userForm; if (!f) return;
+  f.data.role_ids = f.data.role_ids || [];
+  if (checked) { if (!f.data.role_ids.includes(id)) f.data.role_ids.push(id); }
+  else f.data.role_ids = f.data.role_ids.filter(x => x !== id);
+}
+function toggleUserFormGroup(id, checked) {
+  const f = state.userForm; if (!f) return;
+  f.data.group_ids = f.data.group_ids || [];
+  if (checked) { if (!f.data.group_ids.includes(id)) f.data.group_ids.push(id); }
+  else f.data.group_ids = f.data.group_ids.filter(x => x !== id);
+}
+
+async function submitUserForm() {
+  const f = state.userForm; if (!f) return;
+  const email = document.getElementById('uf-email').value.trim();
+  const password = document.getElementById('uf-password').value;
+  const enabled = document.getElementById('uf-enabled').checked;
+
+  try {
+    if (f.mode === 'new') {
+      const username = document.getElementById('uf-username').value.trim();
+      if (!username || !password) { toast('error', 'Username and password required'); return; }
+      if (password.length < 8) { toast('error', 'Password must be at least 8 characters'); return; }
+      const r = await fetch('/api/users/new', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email, password, enabled, role_ids: f.data.role_ids||[], group_ids: f.data.group_ids||[] }),
+      });
+      const d = await r.json();
+      if (!r.ok) { toast('error', d.error || 'Failed'); return; }
+      toast('success', 'User created');
+    } else {
+      const body = {
+        email, enabled,
+        role_ids: f.data.role_ids || [], group_ids: f.data.group_ids || [],
+      };
+      if (password) body.password = password;
+      const r = await fetch('/api/users/' + encodeURIComponent(f.data.id), {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok) { toast('error', d.error || 'Failed'); return; }
+      toast('success', 'User updated');
+    }
+    closeUserForm();
+    await loadSettingsData();
+  } catch (e) {
+    toast('error', 'Failed: ' + e.message);
+  }
+}
+
+async function deleteUser(id, name) {
+  if (!confirm('Delete user "' + name + '"? This cannot be undone.')) return;
+  try {
+    const r = await fetch('/api/users/' + encodeURIComponent(id), { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) { toast('error', d.error || 'Failed'); return; }
+    toast('success', 'User deleted');
+    await loadSettingsData();
+  } catch (e) { toast('error', e.message); }
+}
+
+// ── Groups ──
+function renderSettingsGroups() {
+  const roleName = (id) => state.roles.find(r => r.id === id)?.name || id;
+  const rows = state.groups.map(g => `
+    <tr>
+      <td style="font-weight:500;color:var(--text-strong)">${esc(g.name)}</td>
+      <td style="color:var(--text-muted)">${esc(g.description || '—')}</td>
+      <td>${g.role_ids && g.role_ids.length ? g.role_ids.map(id => `<span style="display:inline-block;padding:2px 8px;background:var(--surface-3);border-radius:10px;font-size:10px;margin-right:4px">${esc(roleName(id))}</span>`).join('') : '<span style="color:var(--text-faded)">none</span>'}</td>
+      <td>${state.users.filter(u => (u.group_ids||[]).includes(g.id)).length} member(s)</td>
+      <td>
+        <button class="btn btn-secondary btn-sm" onclick='openGroupForm("edit", ${JSON.stringify(g)})'>Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteGroup('${esc(g.id)}','${esc(g.name)}')">Delete</button>
+      </td>
+    </tr>
+  `).join('');
+  return `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="btn btn-primary" onclick="openGroupForm('new', null)">+ Add Group</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Description</th><th>Roles</th><th>Members</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-faded)">No groups</td></tr>'}</tbody>
+      </table>
+    </div>
+    ${state.groupForm ? renderGroupFormModal() : ''}
+  `;
+}
+function openGroupForm(mode, g) {
+  state.groupForm = { mode, data: mode === 'edit' ? JSON.parse(JSON.stringify(g)) : { name:'', description:'', role_ids:[] } };
+  render();
+}
+function closeGroupForm() { state.groupForm = null; render(); }
+function renderGroupFormModal() {
+  const f = state.groupForm; if (!f) return '';
+  const isNew = f.mode === 'new';
+  return `
+    <div class="modal-overlay" style="display:flex" onclick="if(event.target===this)closeGroupForm()">
+      <div class="modal" style="width:480px;max-width:calc(100vw - 32px);max-height:90vh;overflow-y:auto">
+        <h3>${isNew ? 'New Group' : 'Edit Group — ' + esc(f.data.name)}</h3>
+        <label>Name</label>
+        <input type="text" id="gf-name" value="${esc(f.data.name)}" autofocus>
+        <label style="margin-top:10px">Description</label>
+        <input type="text" id="gf-desc" value="${esc(f.data.description||'')}">
+        <label style="margin-top:14px">Assigned Roles</label>
+        <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:8px 12px;background:var(--bg-input)">
+          ${state.roles.map(r => `
+            <label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;cursor:pointer">
+              <input type="checkbox" ${(f.data.role_ids||[]).includes(r.id)?'checked':''}
+                     onchange="toggleGroupFormRole('${esc(r.id)}', this.checked)">
+              <span>
+                <div style="color:var(--text-body);font-size:12px;font-weight:500">${esc(r.name)}${r.built_in?' <span style="color:var(--text-faded);font-size:10px">(built-in)</span>':''}</div>
+                <div style="color:var(--text-muted);font-size:11px">${esc(r.description||'—')}</div>
+              </span>
+            </label>`).join('')}
+        </div>
+        <div class="modal-actions" style="margin-top:18px">
+          <button class="btn btn-secondary" onclick="closeGroupForm()">Cancel</button>
+          <button class="btn btn-primary" onclick="submitGroupForm()">${isNew ? 'Create Group' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function toggleGroupFormRole(id, checked) {
+  const f = state.groupForm; if (!f) return;
+  f.data.role_ids = f.data.role_ids || [];
+  if (checked) { if (!f.data.role_ids.includes(id)) f.data.role_ids.push(id); }
+  else f.data.role_ids = f.data.role_ids.filter(x => x !== id);
+}
+async function submitGroupForm() {
+  const f = state.groupForm; if (!f) return;
+  const name = document.getElementById('gf-name').value.trim();
+  const description = document.getElementById('gf-desc').value.trim();
+  if (!name) { toast('error', 'Name required'); return; }
+  const body = { name, description, role_ids: f.data.role_ids || [] };
+  try {
+    const url = f.mode === 'new' ? '/api/groups/new' : '/api/groups/' + encodeURIComponent(f.data.id);
+    const method = f.mode === 'new' ? 'POST' : 'PUT';
+    const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) { toast('error', d.error || 'Failed'); return; }
+    toast('success', f.mode === 'new' ? 'Group created' : 'Group updated');
+    closeGroupForm(); await loadSettingsData();
+  } catch (e) { toast('error', e.message); }
+}
+async function deleteGroup(id, name) {
+  if (!confirm('Delete group "' + name + '"? Users will be removed from it.')) return;
+  try {
+    const r = await fetch('/api/groups/' + encodeURIComponent(id), { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) { toast('error', d.error || 'Failed'); return; }
+    toast('success', 'Group deleted');
+    await loadSettingsData();
+  } catch (e) { toast('error', e.message); }
+}
+
+// ── Roles ──
+function renderSettingsRoles() {
+  const rows = state.roles.map(r => `
+    <tr>
+      <td style="font-weight:500;color:var(--text-strong)">${esc(r.name)}${r.built_in?' <span style="color:var(--text-faded);font-size:10px;margin-left:4px">built-in</span>':''}</td>
+      <td style="color:var(--text-muted)">${esc(r.description || '—')}</td>
+      <td>${r.permissions.length === 1 && r.permissions[0] === 'admin'
+          ? '<span style="color:#E3571E;font-weight:600">All permissions</span>'
+          : r.permissions.map(p => `<code style="background:var(--surface-3);padding:1px 6px;border-radius:3px;font-size:11px;margin-right:3px;color:var(--text-body)">${esc(p)}</code>`).join(' ')}</td>
+      <td>
+        ${r.built_in
+          ? '<span style="color:var(--text-faded);font-size:11px">protected</span>'
+          : `<button class="btn btn-secondary btn-sm" onclick='openRoleForm("edit", ${JSON.stringify(r)})'>Edit</button>
+             <button class="btn btn-danger btn-sm" onclick="deleteRole('${esc(r.id)}','${esc(r.name)}')">Delete</button>`}
+      </td>
+    </tr>
+  `).join('');
+  return `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="btn btn-primary" onclick="openRoleForm('new', null)">+ Add Role</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Description</th><th>Permissions</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    ${state.roleForm ? renderRoleFormModal() : ''}
+  `;
+}
+function openRoleForm(mode, r) {
+  state.roleForm = { mode, data: mode === 'edit' ? JSON.parse(JSON.stringify(r)) : { name:'', description:'', permissions:[] } };
+  render();
+}
+function closeRoleForm() { state.roleForm = null; render(); }
+function renderRoleFormModal() {
+  const f = state.roleForm; if (!f) return '';
+  const isNew = f.mode === 'new';
+  return `
+    <div class="modal-overlay" style="display:flex" onclick="if(event.target===this)closeRoleForm()">
+      <div class="modal" style="width:520px;max-width:calc(100vw - 32px);max-height:90vh;overflow-y:auto">
+        <h3>${isNew ? 'New Role' : 'Edit Role — ' + esc(f.data.name)}</h3>
+        <label>Name</label>
+        <input type="text" id="rf-name" value="${esc(f.data.name)}" autofocus>
+        <label style="margin-top:10px">Description</label>
+        <input type="text" id="rf-desc" value="${esc(f.data.description||'')}">
+        <label style="margin-top:14px">Permissions</label>
+        <div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:8px 12px;background:var(--bg-input)">
+          ${(state.permissionsList||[]).map(p => `
+            <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer">
+              <input type="checkbox" ${(f.data.permissions||[]).includes(p)?'checked':''}
+                     onchange="toggleRoleFormPerm('${esc(p)}', this.checked)">
+              <code style="background:transparent;padding:0;color:var(--text-body);font-size:12px">${esc(p)}</code>
+              ${p === 'admin' ? '<span style="color:#E3571E;font-size:10px;margin-left:auto">wildcard — grants everything</span>' : ''}
+            </label>`).join('')}
+        </div>
+        <div class="modal-actions" style="margin-top:18px">
+          <button class="btn btn-secondary" onclick="closeRoleForm()">Cancel</button>
+          <button class="btn btn-primary" onclick="submitRoleForm()">${isNew ? 'Create Role' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function toggleRoleFormPerm(p, checked) {
+  const f = state.roleForm; if (!f) return;
+  f.data.permissions = f.data.permissions || [];
+  if (checked) { if (!f.data.permissions.includes(p)) f.data.permissions.push(p); }
+  else f.data.permissions = f.data.permissions.filter(x => x !== p);
+}
+async function submitRoleForm() {
+  const f = state.roleForm; if (!f) return;
+  const name = document.getElementById('rf-name').value.trim();
+  const description = document.getElementById('rf-desc').value.trim();
+  if (!name) { toast('error', 'Name required'); return; }
+  const body = { name, description, permissions: f.data.permissions || [] };
+  try {
+    const url = f.mode === 'new' ? '/api/roles/new' : '/api/roles/' + encodeURIComponent(f.data.id);
+    const method = f.mode === 'new' ? 'POST' : 'PUT';
+    const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) { toast('error', d.error || 'Failed'); return; }
+    toast('success', f.mode === 'new' ? 'Role created' : 'Role updated');
+    closeRoleForm(); await loadSettingsData();
+  } catch (e) { toast('error', e.message); }
+}
+async function deleteRole(id, name) {
+  if (!confirm('Delete role "' + name + '"? Users/groups will lose this role.')) return;
+  try {
+    const r = await fetch('/api/roles/' + encodeURIComponent(id), { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) { toast('error', d.error || 'Failed'); return; }
+    toast('success', 'Role deleted');
+    await loadSettingsData();
+  } catch (e) { toast('error', e.message); }
 }
 
 // ── Deployment view ────────────────────────────────────────
@@ -4357,6 +4890,184 @@ function toggleTheme() {
   const cur = localStorage.getItem('theme') || 'dark';
   applyTheme(cur === 'dark' ? 'light' : 'dark');
 }
+
+// ── Authentication ────────────────────────────────────────
+state.currentUser = null;
+state.permissions = [];
+
+async function initAuth() {
+  try {
+    const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
+    if (r.ok) {
+      const d = await r.json();
+      state.currentUser = d.user;
+      state.permissions = d.permissions || [];
+      applyAuthUI();
+      return true;
+    }
+  } catch {}
+  // Not authenticated — show registration on first run, login otherwise.
+  let hasUsers = true;
+  try {
+    const s = await fetch('/api/auth/status').then(r => r.json());
+    hasUsers = !!s.has_users;
+  } catch {}
+  showAuthScreen(hasUsers ? 'login' : 'register');
+  return false;
+}
+
+function hasPerm(p) {
+  return state.permissions.includes('admin') || state.permissions.includes(p);
+}
+
+function applyAuthUI() {
+  hideAuthScreen();
+  // Show user menu + role text in topbar.
+  const menu = document.getElementById('user-menu');
+  if (menu && state.currentUser) {
+    menu.style.display = '';
+    document.getElementById('user-avatar').textContent =
+      (state.currentUser.username || '?').slice(0, 2);
+    document.getElementById('user-dropdown-name').textContent =
+      state.currentUser.username;
+    document.getElementById('user-dropdown-role').textContent =
+      hasPerm('admin') ? 'Administrator' : 'User';
+  }
+  // Hide Administration section if user lacks user.manage and isn't admin.
+  const adminSep = document.getElementById('admin-separator');
+  const adminSec = document.getElementById('admin-section');
+  const showAdmin = hasPerm('user.manage') || hasPerm('admin');
+  if (adminSep) adminSep.style.display = showAdmin ? '' : 'none';
+  if (adminSec) adminSec.style.display = showAdmin ? '' : 'none';
+}
+
+function showAuthScreen(mode) {
+  const existing = document.getElementById('auth-screen');
+  if (existing) existing.remove();
+  const isRegister = mode === 'register';
+  const html = `
+    <div id="auth-screen">
+      <div class="auth-card">
+        <div class="auth-brand">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <defs>
+              <linearGradient id="auth-accent" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#FF8A3C"/>
+                <stop offset="100%" stop-color="#E3571E"/>
+              </linearGradient>
+            </defs>
+            <path d="M16 3 L27 10 L27 22 L16 29 L5 22 L5 10 Z"
+                  fill="none" stroke="url(#auth-accent)" stroke-width="2" stroke-linejoin="round"/>
+            <rect x="10" y="11" width="12" height="3" rx="0.5" fill="url(#auth-accent)"/>
+            <rect x="10" y="15" width="9"  height="3" rx="0.5" fill="#E3571E" opacity="0.7"/>
+            <rect x="10" y="19" width="6"  height="3" rx="0.5" fill="#E3571E" opacity="0.45"/>
+          </svg>
+          <div style="font-size:18px;font-weight:700;letter-spacing:-0.01em">
+            <span style="color:var(--text-strong)">kvm</span><span style="color:#E3571E">center</span>
+          </div>
+        </div>
+        <div class="auth-title">${isRegister ? 'Create Admin Account' : 'Sign In'}</div>
+        <div class="auth-sub">
+          ${isRegister
+            ? 'No users exist yet. Create the first administrator account to start managing your cluster.'
+            : 'Enter your credentials to manage the KVM Center cluster.'}
+        </div>
+        <form class="auth-form" onsubmit="event.preventDefault(); ${isRegister ? 'doRegister' : 'doLogin'}();">
+          <label for="auth-username">Username</label>
+          <input id="auth-username" type="text" autocomplete="username" required autofocus>
+          ${isRegister ? `
+          <label for="auth-email">Email (optional)</label>
+          <input id="auth-email" type="email" autocomplete="email">
+          ` : ''}
+          <label for="auth-password">Password${isRegister ? ' (min 8 characters)' : ''}</label>
+          <input id="auth-password" type="password" autocomplete="${isRegister ? 'new-password' : 'current-password'}" required>
+          <div class="auth-error" id="auth-error"></div>
+          <button type="submit" class="auth-submit" id="auth-submit">
+            ${isRegister ? 'Create Admin & Sign In' : 'Sign In'}
+          </button>
+        </form>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function hideAuthScreen() {
+  const el = document.getElementById('auth-screen');
+  if (el) el.remove();
+}
+
+function authError(msg) {
+  const e = document.getElementById('auth-error');
+  if (e) { e.textContent = msg; e.classList.add('visible'); }
+  const btn = document.getElementById('auth-submit');
+  if (btn) btn.disabled = false;
+}
+
+async function doLogin() {
+  const u = document.getElementById('auth-username').value.trim();
+  const p = document.getElementById('auth-password').value;
+  if (!u || !p) return;
+  const btn = document.getElementById('auth-submit');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p }),
+    });
+    const d = await r.json();
+    if (!r.ok) { authError(d.error || 'Login failed'); btn.textContent = 'Sign In'; return; }
+    state.currentUser = d.user;
+    state.permissions = d.permissions || [];
+    applyAuthUI();
+    refresh();
+  } catch (e) {
+    authError('Network error: ' + e.message);
+    btn.textContent = 'Sign In';
+  }
+}
+
+async function doRegister() {
+  const u = document.getElementById('auth-username').value.trim();
+  const em = document.getElementById('auth-email')?.value.trim() || '';
+  const p = document.getElementById('auth-password').value;
+  if (!u || !p) return;
+  if (p.length < 8) { authError('Password must be at least 8 characters.'); return; }
+  const btn = document.getElementById('auth-submit');
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try {
+    const r = await fetch('/api/auth/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, email: em, password: p }),
+    });
+    const d = await r.json();
+    if (!r.ok) { authError(d.error || 'Registration failed'); btn.textContent = 'Create Admin & Sign In'; return; }
+    state.currentUser = d.user;
+    state.permissions = d.permissions || [];
+    applyAuthUI();
+    refresh();
+  } catch (e) {
+    authError('Network error: ' + e.message);
+    btn.textContent = 'Create Admin & Sign In';
+  }
+}
+
+async function doLogout() {
+  try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
+  state.currentUser = null;
+  state.permissions = [];
+  location.reload();
+}
+
+function toggleUserDropdown() {
+  document.getElementById('user-dropdown').classList.toggle('visible');
+}
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('user-menu');
+  if (menu && !menu.contains(e.target)) {
+    document.getElementById('user-dropdown')?.classList.remove('visible');
+  }
+});
 
 // ── Mobile sidebar toggle ─────────────────────────────────
 function toggleSidebar() {
