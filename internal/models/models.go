@@ -260,6 +260,9 @@ type IdentityProvider struct {
 	// LDAP-specific config, only consulted when Kind == "ldap".
 	LDAP *LDAPConfig `json:"ldap,omitempty"`
 
+	// SAML-specific config, only consulted when Kind == "saml".
+	SAML *SAMLConfig `json:"saml,omitempty"`
+
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -277,6 +280,27 @@ type LDAPConfig struct {
 	EmailAttr        string `json:"email_attr,omitempty"`    // default: mail
 	StartTLS         bool   `json:"start_tls,omitempty"`
 	InsecureSkipVerify bool `json:"insecure_skip_verify,omitempty"`
+}
+
+// SAMLConfig holds the minimum required to drive an SP-initiated SAML 2.0
+// sign-in flow against an external IdP. Either MetadataURL alone (we'll
+// fetch + parse on demand) or the manual trio (IDPEntityID, SSOURL,
+// Certificate) must be populated.
+type SAMLConfig struct {
+	MetadataURL  string `json:"metadata_url,omitempty"`
+	IDPEntityID  string `json:"idp_entity_id,omitempty"`
+	SSOURL       string `json:"sso_url,omitempty"`
+	Certificate  string `json:"certificate,omitempty"` // PEM-encoded IdP signing certificate
+
+	// SP (our) side. When blank we synthesize entity_id = <base_url>/api/auth/saml/metadata?provider=<id>
+	SPEntityID   string `json:"sp_entity_id,omitempty"`
+
+	// Attribute mapping — leave blank for sensible defaults (NameID for
+	// subject, "email"/"mail" for email, "preferred_username" or the
+	// email local-part for username).
+	SubjectAttr  string `json:"subject_attr,omitempty"`
+	EmailAttr    string `json:"email_attr,omitempty"`
+	UsernameAttr string `json:"username_attr,omitempty"`
 }
 
 // Group is a collection of users that share a common set of role assignments.
