@@ -61,7 +61,7 @@ func handleMigrateStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(getMigStatus())
 }
 
-func startOfflineMigrate(vmName, dest string) {
+func startOfflineMigrate(vmName, dest string, keepRaw bool) {
 	migStatusMu.Lock()
 	if migStatus.Active {
 		migStatusMu.Unlock()
@@ -79,7 +79,7 @@ func startOfflineMigrate(vmName, dest string) {
 	migStatusMu.Unlock()
 
 	go func() {
-		err := offlineMigrate(vmName, dest)
+		err := offlineMigrate(vmName, dest, keepRaw)
 		migStatusMu.Lock()
 		if err != nil {
 			migStatus.Phase = "failed"
@@ -100,7 +100,7 @@ func startOfflineMigrate(vmName, dest string) {
 
 const vc = "virsh -c qemu:///system"
 
-func offlineMigrate(vmName, dest string) error {
+func offlineMigrate(vmName, dest string, keepRaw bool) error {
 	logStep := func(msg string) {
 		log.Printf("offline-migrate %s→%s: %s", vmName, dest, msg)
 	}
@@ -215,6 +215,10 @@ func offlineMigrate(vmName, dest string) error {
 	}
 
 	// ── 5. Convert + transfer each disk ───────────────────────
+	// If the source disk is raw and keepRaw is true, the disk is still
+	// transferred as a compressed qcow2 intermediate (much smaller), then
+	// converted back to raw on the target. This gives the best of both:
+	// fast transfer + raw format on the destination.
 	xmlStr := string(xmlData)
 	diskIdx := 0
 	for _, d := range dom.Disks {
@@ -223,25 +227,34 @@ func offlineMigrate(vmName, dest string) error {
 		}
 		srcPath := d.Source.File
 		sourceDiskPaths = append(sourceDiskPaths, srcPath)
-		flatName := vmName + "-" + d.Target.Dev + ".qcow2"
-		tmpPath := "/tmp/" + flatName
+		isRaw := d.Driver.Type == "raw"
+		wantRaw := isRaw && keepRaw
+
+		var destExt string
+		if wantRaw {
+			destExt = ".img"
+		} else {
+			destExt = ".qcow2"
+		}
+		flatName := vmName + "-" + d.Target.Dev + destExt
+		tmpQcow := "/tmp/" + vmName + "-" + d.Target.Dev + ".qcow2"
 		destPath := imageDir + "/" + flatName
 
-		// Convert.
+		// Convert to compressed qcow2 for transfer (always, even for raw→raw).
 		convertBase := 15 + (35*diskIdx)/diskCount
 		convertEnd := 15 + (35*(diskIdx+1))/diskCount
 		setMigStatus("convert", convertBase, fmt.Sprintf("Compressing %s (qemu-img convert -c)", d.Target.Dev))
 		logStep(fmt.Sprintf("converting %s → compact qcow2", srcPath))
 		start := time.Now()
-		out, err := exec.Command("qemu-img", "convert", "-c", "-O", "qcow2", srcPath, tmpPath).CombinedOutput()
+		out, err := exec.Command("qemu-img", "convert", "-c", "-O", "qcow2", srcPath, tmpQcow).CombinedOutput()
 		if err != nil {
-			os.Remove(tmpPath)
+			os.Remove(tmpQcow)
 			rollback(fmt.Sprintf("qemu-img convert failed for %s", d.Target.Dev))
 			return fmt.Errorf("qemu-img convert failed for %s: %s", d.Target.Dev, strings.TrimSpace(string(out)))
 		}
-		tmpFiles = append(tmpFiles, tmpPath)
+		tmpFiles = append(tmpFiles, tmpQcow)
 
-		fi, _ := os.Stat(tmpPath)
+		fi, _ := os.Stat(tmpQcow)
 		sizeMB := int64(0)
 		if fi != nil {
 			sizeMB = fi.Size() / (1024 * 1024)
@@ -249,26 +262,57 @@ func offlineMigrate(vmName, dest string) error {
 		setMigStatus("convert", convertEnd, fmt.Sprintf("Compressed %s to %d MB in %ds", d.Target.Dev, sizeMB, int(time.Since(start).Seconds())))
 		logStep(fmt.Sprintf("compressed %s to %d MB in %ds", d.Target.Dev, sizeMB, int(time.Since(start).Seconds())))
 
-		// Transfer.
+		// Transfer the compressed qcow2 to the target.
 		transferBase := 50 + (35*diskIdx)/diskCount
 		transferEnd := 50 + (35*(diskIdx+1))/diskCount
+		// If we need raw on target, scp to a .qcow2 tmp path, then convert remotely.
+		remoteScpDest := destPath
+		if wantRaw {
+			remoteScpDest = imageDir + "/" + vmName + "-" + d.Target.Dev + ".qcow2.tmp"
+		}
 		setMigStatus("transfer", transferBase, fmt.Sprintf("Transferring %s (%d MB) to %s", d.Target.Dev, sizeMB, dest))
-		logStep(fmt.Sprintf("transferring %s to %s:%s", flatName, dest, destPath))
+		logStep(fmt.Sprintf("transferring %s to %s", flatName, dest))
 		start = time.Now()
 		out, err = exec.Command(
 			"scp", "-i", migratorKey, "-o", "StrictHostKeyChecking=no",
-			tmpPath, fmt.Sprintf("%s@%s:%s", migratorUser, dest, destPath),
+			tmpQcow, fmt.Sprintf("%s@%s:%s", migratorUser, dest, remoteScpDest),
 		).CombinedOutput()
-		os.Remove(tmpPath)
+		os.Remove(tmpQcow)
 		if err != nil {
 			rollback(fmt.Sprintf("transfer failed for %s", d.Target.Dev))
 			return fmt.Errorf("transfer failed for %s: %s", d.Target.Dev, strings.TrimSpace(string(out)))
 		}
-		transferredFiles = append(transferredFiles, destPath)
+		transferredFiles = append(transferredFiles, remoteScpDest)
+
+		// If keepRaw: convert the qcow2 back to raw on the target, then remove the tmp.
+		if wantRaw {
+			setMigStatus("transfer", transferEnd-2, fmt.Sprintf("Converting %s back to raw on target", d.Target.Dev))
+			logStep(fmt.Sprintf("converting %s back to raw on target", d.Target.Dev))
+			out, err = sshMigrator(dest, fmt.Sprintf("qemu-img convert -O raw %s %s && rm -f %s", remoteScpDest, destPath, remoteScpDest), "")
+			if err != nil {
+				rollback(fmt.Sprintf("raw conversion failed on target for %s", d.Target.Dev))
+				return fmt.Errorf("raw conversion on target failed for %s: %s", d.Target.Dev, out)
+			}
+			// Update tracked files: replace tmp with final.
+			for i, f := range transferredFiles {
+				if f == remoteScpDest {
+					transferredFiles[i] = destPath
+				}
+			}
+		}
+
 		setMigStatus("transfer", transferEnd, fmt.Sprintf("Transferred %s in %ds", d.Target.Dev, int(time.Since(start).Seconds())))
 		logStep(fmt.Sprintf("transferred %s in %ds", d.Target.Dev, int(time.Since(start).Seconds())))
 
+		// Update XML: replace source path and driver type.
 		xmlStr = strings.ReplaceAll(xmlStr, srcPath, destPath)
+		if wantRaw {
+			// Keep driver type='raw' in the XML (it's already raw, just path changed).
+		} else if isRaw {
+			// Source was raw but user chose qcow2: update driver type.
+			xmlStr = strings.ReplaceAll(xmlStr, `type='raw'`, `type='qcow2'`)
+			xmlStr = strings.ReplaceAll(xmlStr, `type="raw"`, `type="qcow2"`)
+		}
 		diskIdx++
 	}
 

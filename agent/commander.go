@@ -124,8 +124,9 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			respond(w, false, "another migration is already in progress: "+status.VMName)
 			return
 		}
-		log.Printf("command: offline-migrate vm=%s → %s (async)", vmTarget, dest)
-		startOfflineMigrate(vmTarget, dest)
+		keepRaw := req.Params["keep_raw"] == "true"
+		log.Printf("command: offline-migrate vm=%s → %s keep_raw=%v (async)", vmTarget, dest, keepRaw)
+		startOfflineMigrate(vmTarget, dest, keepRaw)
 		respond(w, true, "offline migration started — poll /migrate-status for progress")
 		return
 	default:
