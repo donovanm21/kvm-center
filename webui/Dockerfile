@@ -7,8 +7,12 @@ COPY webui/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY webui/docker-entrypoint.sh /docker-entrypoint-custom.sh
 RUN chmod +x /docker-entrypoint-custom.sh
 
-# The HTML lives in server/static so it stays in sync with the embedded version.
+# The HTML + PWA assets live in webui/ (synced from server/static/).
 COPY webui/index.html /usr/share/nginx/html/index.html
+COPY webui/manifest.json /usr/share/nginx/html/manifest.json
+COPY webui/sw.js /usr/share/nginx/html/sw.js
+COPY webui/icon-192.svg /usr/share/nginx/html/icon-192.svg
+COPY webui/icon-512.svg /usr/share/nginx/html/icon-512.svg
 
 EXPOSE 80
 
