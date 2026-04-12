@@ -170,7 +170,12 @@ func handleCommand(store *Store) http.HandlerFunc {
 		url := fmt.Sprintf("http://%s/command", agentAddr)
 		log.Printf("command: %s → %s  vm=%s", action, agentAddr, req.VMName)
 
-		client := &http.Client{Timeout: 15 * time.Second}
+		// Migrations with copy-storage can take many minutes.
+		timeout := 15 * time.Second
+		if action == "MIGRATE" {
+			timeout = 30 * time.Minute
+		}
+		client := &http.Client{Timeout: timeout}
 		resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 		if err != nil {
 			writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
