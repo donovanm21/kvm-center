@@ -307,6 +307,7 @@ func handleIDPUpdate(store *Store) http.Handler {
 				SubjectClaim  *string `json:"subject_claim"`
 				EmailClaim    *string `json:"email_claim"`
 				UsernameClaim *string `json:"username_claim"`
+				LDAP          *models.LDAPConfig `json:"ldap"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid JSON")
@@ -331,6 +332,18 @@ func handleIDPUpdate(store *Store) http.Handler {
 				if req.SubjectClaim != nil { p.SubjectClaim = *req.SubjectClaim }
 				if req.EmailClaim != nil { p.EmailClaim = *req.EmailClaim }
 				if req.UsernameClaim != nil { p.UsernameClaim = *req.UsernameClaim }
+				if req.LDAP != nil {
+					// Empty bind_password means "keep current" for LDAP, same
+					// behaviour as client_secret for OAuth2.
+					if p.LDAP == nil {
+						p.LDAP = &models.LDAPConfig{}
+					}
+					prevPw := p.LDAP.BindPassword
+					*p.LDAP = *req.LDAP
+					if req.LDAP.BindPassword == "" {
+						p.LDAP.BindPassword = prevPw
+					}
+				}
 				return nil
 			})
 			if err != nil {
@@ -353,6 +366,11 @@ func sanitizeIDP(p *models.IdentityProvider) *models.IdentityProvider {
 	}
 	cp := *p
 	cp.ClientSecret = "" // never emit on the wire
+	if cp.LDAP != nil {
+		l := *cp.LDAP
+		l.BindPassword = ""
+		cp.LDAP = &l
+	}
 	return &cp
 }
 

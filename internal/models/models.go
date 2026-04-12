@@ -256,7 +256,27 @@ type IdentityProvider struct {
 	SubjectClaim  string    `json:"subject_claim,omitempty"`  // default "sub"; GitHub uses "id"
 	EmailClaim    string    `json:"email_claim,omitempty"`    // default "email"
 	UsernameClaim string    `json:"username_claim,omitempty"` // default "preferred_username" then "email"
-	CreatedAt     time.Time `json:"created_at"`
+
+	// LDAP-specific config, only consulted when Kind == "ldap".
+	LDAP *LDAPConfig `json:"ldap,omitempty"`
+
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// LDAPConfig is everything needed to bind against an LDAP/AD directory
+// with a username+password pair and read the user's attributes. It lives
+// under IdentityProvider so LDAP shares the same enable/disable toggle,
+// default-role mapping, and CRUD path as OIDC providers.
+type LDAPConfig struct {
+	URL              string `json:"url"`                // ldap://host:389 or ldaps://host:636
+	BindDN           string `json:"bind_dn,omitempty"`  // service account used for user lookup; blank → bind directly as user
+	BindPassword     string `json:"bind_password,omitempty"` // omitted from API responses
+	UserBaseDN       string `json:"user_base_dn"`       // DN under which users live
+	UserFilter       string `json:"user_filter"`        // e.g. "(sAMAccountName=%s)" — %s is the submitted username
+	UsernameAttr     string `json:"username_attr,omitempty"` // default: sAMAccountName (AD) / uid (OpenLDAP)
+	EmailAttr        string `json:"email_attr,omitempty"`    // default: mail
+	StartTLS         bool   `json:"start_tls,omitempty"`
+	InsecureSkipVerify bool `json:"insecure_skip_verify,omitempty"`
 }
 
 // Group is a collection of users that share a common set of role assignments.
