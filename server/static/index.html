@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>KVM Center</title>
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0091da">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="KVM Center">
+<link rel="apple-touch-icon" href="/icon-192.svg">
+<meta name="mobile-web-app-capable" content="yes">
 <style>
 /* ── Reset & Base ────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -894,6 +902,149 @@ thead th.sortable.desc { color: #c5daf0; }
 .deploy-portal-pill.offline { background: #3d1a1a; color: #f44336; }
 .deploy-portal-pill.offline::before { background: #f44336; }
 
+.vm-bottom-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 768px) {
+  .vm-bottom-grid { grid-template-columns: 1fr !important; }
+}
+
+/* ── Mobile hamburger button ────────────────────────────── */
+#menu-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: #7aa8cc;
+  cursor: pointer;
+  padding: 4px;
+  flex-shrink: 0;
+}
+
+/* ── Sidebar overlay (mobile) ──────────────────────────── */
+#sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 199;
+}
+#sidebar-overlay.visible { display: block; }
+
+/* ── Safe area for notch devices ───────────────────────── */
+@supports (padding-top: env(safe-area-inset-top)) {
+  #topbar { padding-top: env(safe-area-inset-top); }
+  #sidebar { padding-bottom: env(safe-area-inset-bottom); }
+}
+
+/* ── Responsive: tablet (<=900px) ──────────────────────── */
+@media (max-width: 900px) {
+  .vm-detail-grid { grid-template-columns: 1fr 1fr !important; }
+  .vm-detail-grid > :first-child { display: none; }
+  .host-grid { grid-template-columns: 1fr !important; }
+  .detail-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important; }
+  .vm-info-grid { grid-template-columns: 120px 1fr !important; }
+}
+
+/* ── Responsive: mobile (<=768px) ──────────────────────── */
+@media (max-width: 768px) {
+  #menu-btn { display: flex; }
+
+  #sidebar {
+    position: fixed;
+    left: -260px;
+    top: 0;
+    bottom: 0;
+    width: 260px;
+    z-index: 200;
+    transition: left 0.25s ease;
+    overflow-y: auto;
+    padding-top: 50px;
+  }
+  #sidebar.open { left: 0; }
+
+  #search-bar { max-width: 180px; }
+
+  .vm-detail-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .vm-detail-grid > :first-child { display: none; }
+  .vm-detail-grid > :nth-child(3) { order: -1; }
+
+  .vm-actions-bar { flex-wrap: wrap; gap: 6px; }
+  .vm-actions-bar .vm-title { width: 100%; }
+
+  .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .host-grid { grid-template-columns: 1fr !important; }
+
+  .modal {
+    width: calc(100vw - 32px) !important;
+    max-width: none !important;
+    margin: 16px;
+    max-height: calc(100vh - 32px) !important;
+  }
+
+  table { font-size: 11px; }
+  thead th { padding: 6px 8px; font-size: 9px; }
+  tbody td { padding: 6px 8px; }
+
+  .actions-row { flex-wrap: wrap; }
+  .btn-sm { padding: 4px 8px; font-size: 10px; }
+
+  .deploy-code-wrap pre { font-size: 10px; padding-right: 16px; }
+  .deploy-copy-btn { position: static; margin-top: 6px; display: block; text-align: center; }
+  .deploy-code-wrap { display: flex; flex-direction: column; }
+
+  #content-body { padding: 12px; }
+  #content-header { padding: 8px 12px; }
+
+  .vm-usage-stack { flex-direction: row; flex-wrap: wrap; }
+  .vm-usage-card { flex: 1; min-width: 120px; }
+}
+
+/* ── Responsive: small phone (<=480px) ─────────────────── */
+@media (max-width: 480px) {
+  #topbar { padding: 0 8px; gap: 8px; }
+  #search-bar { max-width: 120px; font-size: 11px; }
+  .logo { font-size: 13px; }
+  #refresh-btn { display: none; }
+
+  .summary-grid { grid-template-columns: 1fr 1fr !important; gap: 8px; }
+  .summary-card .value { font-size: 22px; }
+
+  .vm-info-grid { grid-template-columns: 1fr !important; }
+  .vm-info-grid .lbl { color: #3d6a8a; font-size: 10px; margin-top: 6px; }
+
+  .vm-usage-stack { flex-direction: column; }
+  .vm-usage-card { min-width: auto; }
+
+  .actions-row .btn-sm:nth-child(n+4) { display: none; }
+
+  .deploy-os-tab { padding: 6px 8px; font-size: 10px; }
+
+  /* Snapshots view: stack panels vertically */
+  #content-body > div[style*="display:flex"] {
+    flex-direction: column !important;
+  }
+  #content-body > div[style*="display:flex"] > :first-child {
+    max-width: none !important;
+    min-width: auto !important;
+  }
+}
+
+/* ── Touch-friendly targets ────────────────────────────── */
+@media (pointer: coarse) {
+  .nav-item { padding: 10px 12px 10px 20px; min-height: 44px; }
+  .host-tree-item { padding: 10px 12px 10px 28px; min-height: 44px; }
+  .tab { padding: 10px 16px; }
+  .btn { min-height: 36px; }
+  .btn-sm { min-height: 32px; padding: 6px 10px; }
+  tbody tr { min-height: 44px; }
+  tbody td { padding: 10px 10px; }
+}
+
 /* ── Scrollbar ──────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #091828; }
@@ -905,6 +1056,9 @@ thead th.sortable.desc { color: #c5daf0; }
 
 <!-- Top bar -->
 <div id="topbar">
+  <button id="menu-btn" onclick="toggleSidebar()" aria-label="Menu">
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v1.5H2zm0 4.25h12v1.5H2zm0 4.25h12v1.5H2z"/></svg>
+  </button>
   <div class="logo">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
       <rect x="2" y="3" width="20" height="14" rx="2" stroke="#0091da" stroke-width="1.5"/>
@@ -929,6 +1083,9 @@ thead th.sortable.desc { color: #c5daf0; }
 
 <!-- Main layout -->
 <div id="layout">
+
+  <!-- Sidebar overlay (mobile) -->
+  <div id="sidebar-overlay" onclick="closeSidebar()"></div>
 
   <!-- Sidebar -->
   <div id="sidebar">
@@ -1091,6 +1248,7 @@ function showView(view, hostID, tab) {
   ['dashboard','all-vms','storage','snapshots','migrations','deployment'].forEach(v => {
     document.getElementById('nav-'+v)?.classList.toggle('active', v === view);
   });
+  closeSidebar();
   if (view === 'deployment') probeDeployPortal();
   render();
 }
@@ -2304,7 +2462,7 @@ function renderVMSummaryTab(vm) {
       ${middleCol}
       ${rightCol}
     </div>
-    <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:start">
+    <div class="vm-bottom-grid">
       <div>${hardware}${related}</div>
       <div>${notesPanel}</div>
     </div>
@@ -3183,6 +3341,21 @@ function relTime(iso) {
 }
 
 function pad(n) { return String(n).padStart(2,'0'); }
+
+// ── PWA service worker ────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+// ── Mobile sidebar toggle ─────────────────────────────────
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('visible');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+}
 </script>
 </body>
 </html>
