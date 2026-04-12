@@ -288,10 +288,10 @@ func offlineMigrate(vmName, dest string, keepRaw bool) error {
 		if wantRaw {
 			setMigStatus("transfer", transferEnd-2, fmt.Sprintf("Converting %s back to raw on target", d.Target.Dev))
 			logStep(fmt.Sprintf("converting %s back to raw on target", d.Target.Dev))
-			out, err = sshMigrator(dest, fmt.Sprintf("qemu-img convert -O raw %s %s && rm -f %s", remoteScpDest, destPath, remoteScpDest), "")
-			if err != nil {
+			rawOut, rawErr := sshMigrator(dest, fmt.Sprintf("qemu-img convert -O raw %s %s && rm -f %s", remoteScpDest, destPath, remoteScpDest), "")
+			if rawErr != nil {
 				rollback(fmt.Sprintf("raw conversion failed on target for %s", d.Target.Dev))
-				return fmt.Errorf("raw conversion on target failed for %s: %s", d.Target.Dev, out)
+				return fmt.Errorf("raw conversion on target failed for %s: %s", d.Target.Dev, rawOut)
 			}
 			// Update tracked files: replace tmp with final.
 			for i, f := range transferredFiles {
