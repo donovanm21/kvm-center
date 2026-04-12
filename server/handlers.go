@@ -147,7 +147,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 
 		action := strings.ToUpper(req.Action)
 		switch action {
-		case "START", "STOP", "FORCESTOP", "RESTART", "SNAPSHOT", "REVERT_SNAPSHOT", "DELETE_SNAPSHOT", "MIGRATE":
+		case "START", "STOP", "FORCESTOP", "RESTART", "SNAPSHOT", "REVERT_SNAPSHOT", "DELETE_SNAPSHOT", "MIGRATE", "OFFLINE_MIGRATE":
 		default:
 			writeError(w, http.StatusBadRequest, "unknown action: "+req.Action)
 			return
@@ -172,7 +172,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 
 		// Migrations with copy-storage can take many minutes.
 		timeout := 15 * time.Second
-		if action == "MIGRATE" {
+		if action == "MIGRATE" || action == "OFFLINE_MIGRATE" {
 			timeout = 30 * time.Minute
 		}
 		client := &http.Client{Timeout: timeout}

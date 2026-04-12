@@ -112,6 +112,22 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		}
 		args = append(args, vmTarget, uri)
 		out, err = exec.Command("virsh", args...).CombinedOutput()
+	case "OFFLINE_MIGRATE":
+		dest := req.Params["destination"]
+		if dest == "" {
+			respond(w, false, "OFFLINE_MIGRATE requires params.destination")
+			return
+		}
+		log.Printf("command: offline-migrate vm=%s → %s", vmTarget, dest)
+		msg, migrateErr := offlineMigrate(vmTarget, dest)
+		if migrateErr != nil {
+			log.Printf("command failed: OFFLINE_MIGRATE: %v", migrateErr)
+			respond(w, false, migrateErr.Error())
+			return
+		}
+		log.Printf("command ok: OFFLINE_MIGRATE vm=%s → %s", vmTarget, dest)
+		respond(w, true, msg)
+		return
 	default:
 		respond(w, false, "unknown action: "+req.Action)
 		return
