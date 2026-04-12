@@ -95,6 +95,7 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 		var req struct {
 			Username string `json:"username"`
 			Password string `json:"password"`
+			TOTPCode string `json:"totp_code"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid JSON")
@@ -104,6 +105,20 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 		if u == nil || !u.Enabled || !verifyPassword(req.Password, u.PasswordHash) {
 			writeError(w, http.StatusUnauthorized, "invalid credentials")
 			return
+		}
+		// Second factor, if enrolled. We signal "need code" with a distinct
+		// status so the UI can prompt for it without revealing whether the
+		// password itself was valid to an unauthenticated caller — the
+		// password check already succeeded here, so it's fine to surface.
+		if u.TOTPEnabled {
+			if req.TOTPCode == "" {
+				writeJSON(w, http.StatusAccepted, map[string]any{"totp_required": true})
+				return
+			}
+			if !verifyTOTP(u.TOTPSecret, req.TOTPCode) {
+				writeError(w, http.StatusUnauthorized, "invalid authentication code")
+				return
+			}
 		}
 		sess, err := store.CreateSession(u.ID, r.UserAgent())
 		if err != nil {
@@ -145,6 +160,112 @@ func handleAuthMe(store *Store) http.HandlerFunc {
 			"user":        sanitizeUser(u),
 			"permissions": permListFromMap(effectivePermissions(store, u)),
 		})
+	}
+}
+
+// ── TOTP 2FA enrollment ────────────────────────────────────────────
+// All three endpoints require an authenticated session (attached by
+// authMiddleware); they operate on the *current* user only.
+
+// POST /api/auth/2fa/setup — generates a pending secret and returns the
+// otpauth URI so the UI can show a QR or manual-entry key. Does NOT enable
+// 2FA; call /enable with a verification code to do that. Calling setup
+// again before enabling overwrites the pending secret.
+func handleTOTPSetup(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u := userFromRequest(r)
+		if u == nil {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		if u.TOTPEnabled {
+			writeError(w, http.StatusBadRequest, "2FA already enabled — disable first to re-enroll")
+			return
+		}
+		secret, err := newTOTPSecret()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not generate secret")
+			return
+		}
+		if err := store.UpdateUser(u.ID, func(x *models.User) error {
+			x.TOTPSecret = secret
+			x.TOTPEnabled = false
+			return nil
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{
+			"secret":       secret,
+			"otpauth_uri":  otpauthURI(u.Username, secret),
+			"issuer":       totpIssuer,
+			"account":      u.Username,
+		})
+	}
+}
+
+// POST /api/auth/2fa/enable — { code } — verifies the pending secret
+// against the submitted TOTP and, on success, flips TOTPEnabled=true.
+func handleTOTPEnable(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u := userFromRequest(r)
+		if u == nil {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		var req struct{ Code string `json:"code"` }
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON")
+			return
+		}
+		if u.TOTPSecret == "" {
+			writeError(w, http.StatusBadRequest, "call /2fa/setup first")
+			return
+		}
+		if !verifyTOTP(u.TOTPSecret, req.Code) {
+			writeError(w, http.StatusUnauthorized, "code did not match — check your authenticator and try again")
+			return
+		}
+		if err := store.UpdateUser(u.ID, func(x *models.User) error {
+			x.TOTPEnabled = true
+			return nil
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		go store.Save()
+		writeJSON(w, http.StatusOK, map[string]bool{"enabled": true})
+	}
+}
+
+// POST /api/auth/2fa/disable — { password } — requires the current
+// password so that a stolen session cookie alone can't strip 2FA off.
+func handleTOTPDisable(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u := userFromRequest(r)
+		if u == nil {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		var req struct{ Password string `json:"password"` }
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON")
+			return
+		}
+		if !verifyPassword(req.Password, u.PasswordHash) {
+			writeError(w, http.StatusUnauthorized, "incorrect password")
+			return
+		}
+		if err := store.UpdateUser(u.ID, func(x *models.User) error {
+			x.TOTPEnabled = false
+			x.TOTPSecret = ""
+			return nil
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		go store.Save()
+		writeJSON(w, http.StatusOK, map[string]bool{"enabled": false})
 	}
 }
 

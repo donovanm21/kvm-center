@@ -1657,6 +1657,10 @@ body.light-mode #sidebar-overlay { background: rgba(0,0,0,0.3); }
         <div class="username" id="user-dropdown-name">—</div>
         <div class="role" id="user-dropdown-role">—</div>
       </div>
+      <div class="user-dropdown-item" onclick="openSecurityModal()">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-.5V4.5A3.5 3.5 0 0 0 8 1zm2.5 6h-5V4.5a2.5 2.5 0 1 1 5 0V7z"/></svg>
+        Security &amp; 2FA
+      </div>
       <div class="user-dropdown-item danger" onclick="doLogout()">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M6 12.5a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-8a.5.5 0 0 0-.5.5v2a.5.5 0 0 1-1 0v-2A1.5 1.5 0 0 1 6.5 2h8A1.5 1.5 0 0 1 16 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 5 12.5v-2a.5.5 0 0 1 1 0v2z"/><path d="M.146 8.354a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L1.707 7.5H10.5a.5.5 0 0 1 0 1H1.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3z"/></svg>
         Sign out
@@ -5027,24 +5031,49 @@ function authError(msg) {
 async function doLogin() {
   const u = document.getElementById('auth-username').value.trim();
   const p = document.getElementById('auth-password').value;
+  const codeEl = document.getElementById('auth-totp');
+  const code = codeEl ? codeEl.value.trim() : '';
   if (!u || !p) return;
   const btn = document.getElementById('auth-submit');
   btn.disabled = true; btn.textContent = 'Signing in…';
   try {
+    const body = { username: u, password: p };
+    if (code) body.totp_code = code;
     const r = await fetch('/api/auth/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: u, password: p }),
+      body: JSON.stringify(body),
     });
     const d = await r.json();
-    if (!r.ok) { authError(d.error || 'Login failed'); btn.textContent = 'Sign In'; return; }
+    if (r.status === 202 && d.totp_required) {
+      // Password accepted — now prompt for the second factor.
+      showTOTPPrompt();
+      btn.disabled = false; btn.textContent = 'Verify & Sign In';
+      return;
+    }
+    if (!r.ok) { authError(d.error || 'Login failed'); btn.disabled = false; btn.textContent = codeEl ? 'Verify & Sign In' : 'Sign In'; return; }
     state.currentUser = d.user;
     state.permissions = d.permissions || [];
     applyAuthUI();
     refresh();
   } catch (e) {
     authError('Network error: ' + e.message);
-    btn.textContent = 'Sign In';
+    btn.disabled = false; btn.textContent = 'Sign In';
   }
+}
+
+function showTOTPPrompt() {
+  if (document.getElementById('auth-totp')) return;
+  const form = document.querySelector('.auth-form');
+  if (!form) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <label for="auth-totp" style="margin-top:10px">Authentication code</label>
+    <input id="auth-totp" type="text" inputmode="numeric" pattern="[0-9]{6}"
+           autocomplete="one-time-code" maxlength="6" required
+           placeholder="6-digit code" autofocus>
+  `;
+  form.insertBefore(wrap, form.querySelector('.auth-error'));
+  document.getElementById('auth-totp').focus();
 }
 
 async function doRegister() {
@@ -5088,6 +5117,144 @@ document.addEventListener('click', (e) => {
     document.getElementById('user-dropdown')?.classList.remove('visible');
   }
 });
+
+// ── Security / 2FA modal ──────────────────────────────────
+let securityModalData = null;
+
+async function openSecurityModal() {
+  document.getElementById('user-dropdown')?.classList.remove('visible');
+  // Refresh current user flags so the enabled/disabled view is accurate.
+  try {
+    const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
+    if (r.ok) {
+      const d = await r.json();
+      state.currentUser = d.user;
+    }
+  } catch {}
+  securityModalData = { phase: 'overview', setup: null };
+  renderSecurityModal();
+}
+function closeSecurityModal() {
+  securityModalData = null;
+  const el = document.getElementById('security-modal-root');
+  if (el) el.remove();
+}
+function renderSecurityModal() {
+  let root = document.getElementById('security-modal-root');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'security-modal-root';
+    document.body.appendChild(root);
+  }
+  const u = state.currentUser || {};
+  const d = securityModalData;
+  let body = '';
+  if (d.phase === 'overview') {
+    body = `
+      <h3>Security</h3>
+      <div style="margin-top:12px;padding:12px;background:var(--bg-input);border:1px solid var(--border);border-radius:4px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <div style="font-size:13px;color:var(--text-strong);font-weight:600">Two-factor authentication</div>
+            <div style="font-size:11px;color:var(--text-faded);margin-top:4px">
+              ${u.totp_enabled
+                ? 'Enabled — a 6-digit code from your authenticator app is required at sign-in.'
+                : 'Off — anyone with your password can sign in. Enable TOTP for an extra factor.'}
+            </div>
+          </div>
+          ${u.totp_enabled
+            ? `<button class="btn btn-secondary btn-sm" onclick="securityPhase('disable')">Disable</button>`
+            : `<button class="btn btn-primary btn-sm" onclick="startTOTPEnroll()">Enable</button>`}
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn btn-secondary" onclick="closeSecurityModal()">Close</button>
+      </div>
+    `;
+  } else if (d.phase === 'enroll' && d.setup) {
+    const s = d.setup;
+    body = `
+      <h3>Enable two-factor authentication</h3>
+      <ol style="margin:12px 0 0 18px;padding:0;color:var(--text-body);font-size:12px;line-height:1.6">
+        <li>Open your authenticator app (1Password, Authy, Google Authenticator, Bitwarden, iOS Passwords, …).</li>
+        <li>Add a new account and paste this key:
+          <div style="margin-top:6px;padding:8px 10px;background:var(--bg-input);border:1px solid var(--border);border-radius:4px;font-family:monospace;font-size:13px;color:var(--text-strong);word-break:break-all;user-select:all">${esc(s.secret)}</div>
+          <div style="margin-top:4px;color:var(--text-faded);font-size:11px">Issuer: ${esc(s.issuer)} · Account: ${esc(s.account)} · Algorithm: SHA-1 · 6 digits · 30 s</div>
+        </li>
+        <li>Enter the current 6-digit code to confirm:</li>
+      </ol>
+      <input type="text" id="sec-totp-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+             autocomplete="one-time-code" placeholder="000000"
+             style="margin-top:10px;letter-spacing:4px;text-align:center;font-size:16px" autofocus>
+      <div id="sec-totp-err" style="margin-top:6px;color:#F85149;font-size:11px;min-height:14px"></div>
+      <div class="modal-actions" style="margin-top:14px">
+        <button class="btn btn-secondary" onclick="closeSecurityModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmTOTPEnroll()">Enable</button>
+      </div>
+    `;
+  } else if (d.phase === 'disable') {
+    body = `
+      <h3>Disable two-factor authentication</h3>
+      <p style="margin-top:10px;color:var(--text-body);font-size:12px">
+        Confirm your password to turn off 2FA. You can re-enrol later at any time.
+      </p>
+      <label style="margin-top:10px">Password</label>
+      <input type="password" id="sec-disable-pw" autocomplete="current-password" autofocus>
+      <div id="sec-totp-err" style="margin-top:6px;color:#F85149;font-size:11px;min-height:14px"></div>
+      <div class="modal-actions" style="margin-top:14px">
+        <button class="btn btn-secondary" onclick="securityPhase('overview')">Back</button>
+        <button class="btn btn-primary" onclick="confirmTOTPDisable()">Disable 2FA</button>
+      </div>
+    `;
+  }
+  root.innerHTML = `
+    <div class="modal-overlay" style="display:flex" onclick="if(event.target===this)closeSecurityModal()">
+      <div class="modal" style="width:480px;max-width:calc(100vw - 32px)">${body}</div>
+    </div>`;
+}
+function securityPhase(p) { securityModalData.phase = p; renderSecurityModal(); }
+
+async function startTOTPEnroll() {
+  try {
+    const r = await fetch('/api/auth/2fa/setup', { method: 'POST', credentials: 'same-origin' });
+    const d = await r.json();
+    if (!r.ok) { toast('error', d.error || 'Setup failed'); return; }
+    securityModalData = { phase: 'enroll', setup: d };
+    renderSecurityModal();
+  } catch (e) { toast('error', 'Network error: ' + e.message); }
+}
+async function confirmTOTPEnroll() {
+  const code = document.getElementById('sec-totp-code').value.trim();
+  const err = document.getElementById('sec-totp-err');
+  if (code.length !== 6) { err.textContent = 'Enter the 6-digit code.'; return; }
+  try {
+    const r = await fetch('/api/auth/2fa/enable', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    const d = await r.json();
+    if (!r.ok) { err.textContent = d.error || 'Verification failed.'; return; }
+    toast('success', 'Two-factor authentication enabled');
+    state.currentUser.totp_enabled = true;
+    closeSecurityModal();
+  } catch (e) { err.textContent = 'Network error: ' + e.message; }
+}
+async function confirmTOTPDisable() {
+  const pw = document.getElementById('sec-disable-pw').value;
+  const err = document.getElementById('sec-totp-err');
+  if (!pw) { err.textContent = 'Password required.'; return; }
+  try {
+    const r = await fetch('/api/auth/2fa/disable', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    });
+    const d = await r.json();
+    if (!r.ok) { err.textContent = d.error || 'Failed to disable.'; return; }
+    toast('success', 'Two-factor authentication disabled');
+    state.currentUser.totp_enabled = false;
+    closeSecurityModal();
+  } catch (e) { err.textContent = 'Network error: ' + e.message; }
+}
 
 // ── Mobile sidebar toggle ─────────────────────────────────
 function toggleSidebar() {

@@ -78,6 +78,9 @@ func main() {
 	mux.HandleFunc("/api/auth/login",    handleAuthLogin(store))
 	mux.HandleFunc("/api/auth/logout",   handleAuthLogout(store))
 	mux.HandleFunc("/api/auth/me",       handleAuthMe(store))
+	mux.HandleFunc("/api/auth/2fa/setup",   handleTOTPSetup(store))
+	mux.HandleFunc("/api/auth/2fa/enable",  handleTOTPEnable(store))
+	mux.HandleFunc("/api/auth/2fa/disable", handleTOTPDisable(store))
 	// Admin-only user/group/role CRUD (require user.manage permission).
 	mux.Handle("/api/users",       requirePerm(store, "user.manage", handleUsersList(store)))
 	mux.Handle("/api/users/new",   requirePerm(store, "user.manage", handleUsersCreate(store)))
