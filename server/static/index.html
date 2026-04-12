@@ -1632,6 +1632,13 @@ body.light-mode .accent-pill { background: #FFF4EC; color: #C04512; }
 body.light-mode .fmt-pill { background: #FFF1C2; color: #7D4E00; }
 body.light-mode .fmt-pill.qcow2 { background: #DAFBE1; color: #1A7F37; }
 
+/* VM detail leftovers that still leak the dark palette in light mode. */
+body.light-mode .vm-tools-pill.running { background: #DAFBE1; color: #1A7F37; }
+body.light-mode .vm-tools-pill.missing { background: #FFF1C2; color: #7D4E00; }
+body.light-mode .vm-usage-card .icon { background: #FFF4EC; color: #C04512; }
+body.light-mode .vm-collapsible.open .vm-collapsible-head { border-bottom-color: #D0D7DE; }
+body.light-mode .vm-collapsible-head:hover { background: #F6F8FA; }
+
 body.light-mode .status-pill.online,
 body.light-mode .env-row-status-pill.connected { background: #DAFBE1; color: #1A7F37; }
 body.light-mode .status-pill.offline,
