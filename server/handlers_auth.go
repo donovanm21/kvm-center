@@ -407,7 +407,10 @@ func handleRoleUpdate(store *Store) http.HandlerFunc {
 // Paths that don't require authentication. Agents (telemetry/guest-telemetry)
 // are allowed through so the fleet keeps reporting even before an admin logs in.
 var publicAPIPrefixes = []string{
-	"/api/auth/",
+	"/api/auth/status",
+	"/api/auth/register",
+	"/api/auth/login",
+	"/api/auth/logout",
 	"/api/telemetry",
 	"/api/guest-telemetry",
 	"/api/version",
