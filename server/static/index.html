@@ -28,12 +28,15 @@ body {
 
 /* ── Top Navigation ─────────────────────────────────────── */
 #topbar {
-  height: 42px;
+  min-height: 42px;
   background: #09131c;
   border-bottom: 1px solid #1a3a5c;
   display: flex;
   align-items: center;
   padding: 0 16px;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
   gap: 16px;
   flex-shrink: 0;
   z-index: 100;
@@ -935,8 +938,16 @@ thead th.sortable.desc { color: #c5daf0; }
 
 /* ── Safe area for notch devices ───────────────────────── */
 @supports (padding-top: env(safe-area-inset-top)) {
-  #topbar { padding-top: env(safe-area-inset-top); }
-  #sidebar { padding-bottom: env(safe-area-inset-bottom); }
+  #sidebar {
+    padding-top: calc(50px + env(safe-area-inset-top));
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  #content-body {
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+  #toast-container {
+    bottom: max(20px, env(safe-area-inset-bottom));
+  }
 }
 
 /* ── Responsive: tablet (<=900px) ──────────────────────── */
@@ -961,7 +972,7 @@ thead th.sortable.desc { color: #c5daf0; }
     z-index: 200;
     transition: left 0.25s ease;
     overflow-y: auto;
-    padding-top: 50px;
+    padding-top: calc(50px + env(safe-area-inset-top, 0px));
   }
   #sidebar.open { left: 0; }
 
