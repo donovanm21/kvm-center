@@ -296,6 +296,102 @@ func handlePostMigration(store *Store) http.HandlerFunc {
 	}
 }
 
+// GET /api/storage/browse?host=<id>&path=<dir> — proxy file listing from agent.
+func handleStorageBrowse(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		hostID := r.URL.Query().Get("host")
+		path := r.URL.Query().Get("path")
+		if hostID == "" {
+			writeError(w, http.StatusBadRequest, "host required")
+			return
+		}
+		agentAddr := store.GetHostAgentAddr(hostID)
+		if agentAddr == "" {
+			writeError(w, http.StatusNotFound, "host not found")
+			return
+		}
+		url := fmt.Sprintf("http://%s/storage-browse?path=%s", agentAddr, path)
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Get(url)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "agent unreachable")
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		w.Write(body)
+	}
+}
+
+// POST /api/storage/upload?host=<id>&path=<dir> — proxy file upload to agent.
+func handleStorageUpload(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		hostID := r.URL.Query().Get("host")
+		path := r.URL.Query().Get("path")
+		if hostID == "" || path == "" {
+			writeError(w, http.StatusBadRequest, "host and path required")
+			return
+		}
+		agentAddr := store.GetHostAgentAddr(hostID)
+		if agentAddr == "" {
+			writeError(w, http.StatusNotFound, "host not found")
+			return
+		}
+		url := fmt.Sprintf("http://%s/storage-upload?path=%s", agentAddr, path)
+		client := &http.Client{Timeout: 30 * time.Minute}
+		resp, err := client.Post(url, r.Header.Get("Content-Type"), r.Body)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		w.Write(body)
+	}
+}
+
+// DELETE /api/storage/file?host=<id>&path=<file> — proxy file delete to agent.
+func handleStorageDelete(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			writeError(w, http.StatusMethodNotAllowed, "DELETE only")
+			return
+		}
+		hostID := r.URL.Query().Get("host")
+		path := r.URL.Query().Get("path")
+		if hostID == "" || path == "" {
+			writeError(w, http.StatusBadRequest, "host and path required")
+			return
+		}
+		agentAddr := store.GetHostAgentAddr(hostID)
+		if agentAddr == "" {
+			writeError(w, http.StatusNotFound, "host not found")
+			return
+		}
+		url := fmt.Sprintf("http://%s/storage-file?path=%s", agentAddr, path)
+		req, _ := http.NewRequest(http.MethodDelete, url, nil)
+		client := &http.Client{Timeout: 15 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "agent unreachable")
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		w.Write(body)
+	}
+}
+
 // GET /api/migrate-status?host=<id> — proxy the agent's migration progress.
 func handleMigrateStatus(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

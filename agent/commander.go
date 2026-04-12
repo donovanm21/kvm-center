@@ -20,6 +20,9 @@ func StartCommandServer(addr string) {
 	mux.HandleFunc("/ws/", handleConsoleWS)
 	mux.HandleFunc("/snapshots/", handleSnapshotList)
 	mux.HandleFunc("/migrate-status", handleMigrateStatus)
+	mux.HandleFunc("/storage-browse", handleStorageBrowse)
+	mux.HandleFunc("/storage-upload", handleStorageUpload)
+	mux.HandleFunc("/storage-file", handleStorageDelete)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
