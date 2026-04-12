@@ -85,6 +85,9 @@ func main() {
 	mux.HandleFunc("/api/auth/providers",      handleListProviders(store))
 	mux.HandleFunc("/api/auth/oidc/start",     handleOIDCStart(store))
 	mux.HandleFunc("/api/auth/oidc/callback",  handleOIDCCallback(store))
+	mux.HandleFunc("/api/auth/saml/start",     handleSAMLStart(store))
+	mux.HandleFunc("/api/auth/saml/acs",       handleSAMLACS(store))
+	mux.HandleFunc("/api/auth/saml/metadata",  handleSAMLMetadata(store))
 	// Admin IdP CRUD (requires user.manage).
 	mux.Handle("/api/idps",     requirePerm(store, "user.manage", handleIDPsList(store)))
 	mux.Handle("/api/idps/new", requirePerm(store, "user.manage", handleIDPsCreate(store)))

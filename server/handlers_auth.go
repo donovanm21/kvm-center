@@ -553,6 +553,7 @@ var publicAPIPrefixes = []string{
 	"/api/auth/logout",
 	"/api/auth/providers",
 	"/api/auth/oidc/",
+	"/api/auth/saml/",
 	"/api/telemetry",
 	"/api/guest-telemetry",
 	"/api/version",
