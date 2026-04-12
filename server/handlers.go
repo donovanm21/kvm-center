@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -310,7 +311,7 @@ func handleStorageBrowse(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "host not found")
 			return
 		}
-		url := fmt.Sprintf("http://%s/storage-browse?path=%s", agentAddr, path)
+		url := fmt.Sprintf("http://%s/storage-browse?path=%s", agentAddr, url.QueryEscape(path))
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Get(url)
 		if err != nil {
@@ -343,7 +344,7 @@ func handleStorageUpload(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "host not found")
 			return
 		}
-		url := fmt.Sprintf("http://%s/storage-upload?path=%s", agentAddr, path)
+		url := fmt.Sprintf("http://%s/storage-upload?path=%s", agentAddr, url.QueryEscape(path))
 		client := &http.Client{Timeout: 30 * time.Minute}
 		resp, err := client.Post(url, r.Header.Get("Content-Type"), r.Body)
 		if err != nil {
@@ -376,7 +377,7 @@ func handleStorageDelete(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "host not found")
 			return
 		}
-		url := fmt.Sprintf("http://%s/storage-file?path=%s", agentAddr, path)
+		url := fmt.Sprintf("http://%s/storage-file?path=%s", agentAddr, url.QueryEscape(path))
 		req, _ := http.NewRequest(http.MethodDelete, url, nil)
 		client := &http.Client{Timeout: 15 * time.Second}
 		resp, err := client.Do(req)
