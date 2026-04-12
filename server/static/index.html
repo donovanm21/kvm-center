@@ -1419,6 +1419,23 @@ body.light-mode .deploy-portal-pill.offline { background: #FFEBE9; color: #CF222
 }
 .auth-error.visible { display: block; }
 body.light-mode .auth-error { background: #FFEBE9; color: #CF222E; border-color: #FF8182; }
+.auth-divider {
+  display: flex; align-items: center; gap: 10px;
+  margin: 18px 0 12px;
+  font-size: 11px; color: var(--text-faded); text-transform: uppercase; letter-spacing: 0.08em;
+}
+.auth-divider::before, .auth-divider::after {
+  content: ""; flex: 1; height: 1px; background: var(--border);
+}
+.auth-provider-list { display: flex; flex-direction: column; gap: 8px; }
+.auth-provider-btn {
+  display: flex; align-items: center; gap: 10px;
+  height: 38px; padding: 0 14px;
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text-body); font-size: 13px; font-weight: 500;
+  text-decoration: none; transition: background 0.12s, border-color 0.12s;
+}
+.auth-provider-btn:hover { background: var(--surface-2); border-color: var(--border-strong, #484F58); color: var(--text-strong); }
 
 /* ── User menu in topbar ─────────────────────────────────── */
 #user-menu { position: relative; flex-shrink: 0; }
@@ -2941,15 +2958,17 @@ function renderMigrationsView() {
 // ── Settings view (Users / Groups / Roles) ────────────────
 async function loadSettingsData() {
   try {
-    const [users, groups, rolesResp] = await Promise.all([
+    const [users, groups, rolesResp, idps] = await Promise.all([
       fetchJSON('/api/users'),
       fetchJSON('/api/groups'),
       fetchJSON('/api/roles'),
+      fetchJSON('/api/idps').catch(() => []),
     ]);
     state.users = users || [];
     state.groups = groups || [];
     state.roles = (rolesResp && rolesResp.roles) || [];
     state.permissionsList = (rolesResp && rolesResp.permissions) || [];
+    state.idps = idps || [];
     if (state.view === 'settings') render();
   } catch (e) {
     if (e.message !== 'session expired') toast('error', 'Failed to load settings: ' + e.message);
@@ -2958,21 +2977,28 @@ async function loadSettingsData() {
 
 function setSettingsTab(t) {
   state.settingsTab = t;
-  state.userForm = null; state.groupForm = null; state.roleForm = null;
+  state.userForm = null; state.groupForm = null; state.roleForm = null; state.idpForm = null;
   persistRoute();
   render();
 }
 
 function renderSettingsView() {
   const tab = state.settingsTab || 'users';
-  const tabHtml = ['users','groups','roles'].map(t => `
-    <div class="settings-tab ${tab===t?'active':''}" onclick="setSettingsTab('${t}')">${t.charAt(0).toUpperCase()+t.slice(1)}</div>
+  const tabs = [
+    ['users', 'Users'],
+    ['groups', 'Groups'],
+    ['roles', 'Roles'],
+    ['providers', 'Identity Providers'],
+  ];
+  const tabHtml = tabs.map(([t, label]) => `
+    <div class="settings-tab ${tab===t?'active':''}" onclick="setSettingsTab('${t}')">${label}</div>
   `).join('');
 
   let body = '';
   if (tab === 'users') body = renderSettingsUsers();
   else if (tab === 'groups') body = renderSettingsGroups();
   else if (tab === 'roles') body = renderSettingsRoles();
+  else if (tab === 'providers') body = renderSettingsProviders();
 
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
@@ -3329,6 +3355,193 @@ async function deleteRole(id, name) {
     const d = await r.json();
     if (!r.ok) { toast('error', d.error || 'Failed'); return; }
     toast('success', 'Role deleted');
+    await loadSettingsData();
+  } catch (e) { toast('error', e.message); }
+}
+
+// ── Identity Providers ────────────────────────────────────
+const IDP_PRESETS = {
+  google: {
+    kind: 'google', name: 'Google',
+    issuer: 'https://accounts.google.com',
+    scopes: 'openid email profile',
+    subject_claim: 'sub', email_claim: 'email', username_claim: 'email',
+  },
+  github: {
+    kind: 'github', name: 'GitHub',
+    auth_url: 'https://github.com/login/oauth/authorize',
+    token_url: 'https://github.com/login/oauth/access_token',
+    userinfo_url: 'https://api.github.com/user',
+    scopes: 'read:user user:email',
+    subject_claim: 'id', email_claim: 'email', username_claim: 'login',
+  },
+  microsoft: {
+    kind: 'microsoft', name: 'Microsoft',
+    issuer: 'https://login.microsoftonline.com/common/v2.0',
+    scopes: 'openid email profile',
+    subject_claim: 'sub', email_claim: 'email', username_claim: 'preferred_username',
+  },
+  oidc: { kind: 'oidc', name: '', scopes: 'openid email profile' },
+};
+
+function renderSettingsProviders() {
+  const redirectURI = `${location.protocol}//${location.host}/api/auth/oidc/callback`;
+  const rows = (state.idps || []).map(p => `
+    <tr>
+      <td style="font-weight:500;color:var(--text-strong)">${esc(p.name)}</td>
+      <td style="color:var(--text-muted)">${esc(p.kind)}</td>
+      <td>${p.enabled ? '<span class="status-pill online">● Enabled</span>' : '<span class="status-pill offline">● Disabled</span>'}</td>
+      <td style="text-align:right">
+        <button class="btn btn-secondary btn-sm" onclick='openIDPForm("edit", ${JSON.stringify(p)})'>Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteIDP('${esc(p.id)}','${esc(p.name)}')">Delete</button>
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <div style="background:var(--bg-input);border:1px solid var(--border);border-radius:4px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:var(--text-muted)">
+      <strong style="color:var(--text-strong)">Redirect URI</strong> — configure this at your IdP:
+      <code style="display:block;margin-top:6px;padding:6px 8px;background:var(--surface-2);border-radius:3px;font-family:monospace;user-select:all;word-break:break-all">${esc(redirectURI)}</code>
+    </div>
+    ${(state.idps||[]).length === 0 ? `<div style="padding:24px;text-align:center;color:var(--text-faded);font-size:12px">No identity providers configured yet.</div>` : `
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left">Name</th><th style="text-align:left">Kind</th>
+        <th style="text-align:left">Status</th><th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`}
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="openIDPForm('new', null)">+ Add Provider</button>
+    </div>
+    ${state.idpForm ? renderIDPForm() : ''}
+  `;
+}
+
+function openIDPForm(mode, idp) {
+  state.idpForm = {
+    mode,
+    data: mode === 'edit' ? { ...idp, client_secret: '' } : { kind: 'google', enabled: true, ...IDP_PRESETS.google },
+  };
+  render();
+}
+function closeIDPForm() { state.idpForm = null; render(); }
+
+function idpFormApplyPreset(kind) {
+  const f = state.idpForm; if (!f || f.mode !== 'new') return;
+  const preset = IDP_PRESETS[kind] || IDP_PRESETS.oidc;
+  f.data = { ...f.data, ...preset, enabled: true };
+  render();
+}
+
+function renderIDPForm() {
+  const f = state.idpForm; if (!f) return '';
+  const isNew = f.mode === 'new';
+  const d = f.data;
+  const roleOpts = ['<option value="">— none —</option>']
+    .concat((state.roles || []).map(r => `<option value="${esc(r.id)}" ${d.default_role_id===r.id?'selected':''}>${esc(r.name)}</option>`))
+    .join('');
+  const kindOpts = ['google','github','microsoft','oidc']
+    .map(k => `<option value="${k}" ${d.kind===k?'selected':''}>${k}</option>`).join('');
+  return `
+    <div class="modal-overlay" style="display:flex" onclick="if(event.target===this)closeIDPForm()">
+      <div class="modal" style="width:620px;max-width:calc(100vw - 32px);max-height:92vh;overflow-y:auto">
+        <h3>${isNew ? 'Add Identity Provider' : 'Edit — ' + esc(d.name || '')}</h3>
+
+        <label style="margin-top:10px">Kind</label>
+        <select id="idp-kind" onchange="idpFormApplyPreset(this.value)">${kindOpts}</select>
+
+        <label style="margin-top:10px">Display name</label>
+        <input type="text" id="idp-name" value="${esc(d.name || '')}" placeholder="e.g. Sign in with Google">
+
+        <label style="margin-top:10px">Client ID</label>
+        <input type="text" id="idp-client-id" value="${esc(d.client_id || '')}" autocomplete="off">
+
+        <label style="margin-top:10px">Client secret ${isNew ? '' : '<span style="color:var(--text-faded)">(leave blank to keep current)</span>'}</label>
+        <input type="password" id="idp-client-secret" value="" autocomplete="new-password">
+
+        <label style="margin-top:10px">Issuer URL <span style="color:var(--text-faded)">(optional — used for OIDC discovery)</span></label>
+        <input type="text" id="idp-issuer" value="${esc(d.issuer || '')}" placeholder="https://accounts.google.com">
+
+        <details style="margin-top:10px">
+          <summary style="cursor:pointer;color:var(--text-muted);font-size:11px">Advanced: endpoint overrides &amp; claim mapping</summary>
+          <label style="margin-top:10px">Authorization URL</label>
+          <input type="text" id="idp-auth-url" value="${esc(d.auth_url || '')}">
+          <label style="margin-top:8px">Token URL</label>
+          <input type="text" id="idp-token-url" value="${esc(d.token_url || '')}">
+          <label style="margin-top:8px">Userinfo URL</label>
+          <input type="text" id="idp-userinfo-url" value="${esc(d.userinfo_url || '')}">
+          <label style="margin-top:8px">Scopes</label>
+          <input type="text" id="idp-scopes" value="${esc(d.scopes || '')}">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">
+            <div><label>Subject claim</label><input type="text" id="idp-subject-claim" value="${esc(d.subject_claim || '')}"></div>
+            <div><label>Email claim</label><input type="text" id="idp-email-claim" value="${esc(d.email_claim || '')}"></div>
+            <div><label>Username claim</label><input type="text" id="idp-username-claim" value="${esc(d.username_claim || '')}"></div>
+          </div>
+        </details>
+
+        <label style="margin-top:10px">Default role on first sign-in</label>
+        <select id="idp-default-role">${roleOpts}</select>
+
+        <label style="margin-top:12px;display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="idp-enabled" ${d.enabled?'checked':''}>
+          <span style="font-size:12px;color:var(--text-body)">Enabled (show on login page)</span>
+        </label>
+
+        <div class="modal-actions" style="margin-top:16px">
+          <button class="btn btn-secondary" onclick="closeIDPForm()">Cancel</button>
+          <button class="btn btn-primary" onclick="submitIDPForm()">${isNew ? 'Create' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function submitIDPForm() {
+  const f = state.idpForm; if (!f) return;
+  const body = {
+    kind: document.getElementById('idp-kind').value,
+    name: document.getElementById('idp-name').value.trim(),
+    client_id: document.getElementById('idp-client-id').value.trim(),
+    client_secret: document.getElementById('idp-client-secret').value,
+    issuer: document.getElementById('idp-issuer').value.trim(),
+    auth_url: document.getElementById('idp-auth-url').value.trim(),
+    token_url: document.getElementById('idp-token-url').value.trim(),
+    userinfo_url: document.getElementById('idp-userinfo-url').value.trim(),
+    scopes: document.getElementById('idp-scopes').value.trim(),
+    subject_claim: document.getElementById('idp-subject-claim').value.trim(),
+    email_claim: document.getElementById('idp-email-claim').value.trim(),
+    username_claim: document.getElementById('idp-username-claim').value.trim(),
+    default_role_id: document.getElementById('idp-default-role').value,
+    enabled: document.getElementById('idp-enabled').checked,
+  };
+  try {
+    let r;
+    if (f.mode === 'new') {
+      r = await fetch('/api/idps/new', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } else {
+      r = await fetch('/api/idps/' + encodeURIComponent(f.data.id), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    }
+    const d = await r.json();
+    if (!r.ok) { toast('error', d.error || 'Failed'); return; }
+    toast('success', f.mode === 'new' ? 'Provider created' : 'Provider updated');
+    closeIDPForm(); await loadSettingsData();
+  } catch (e) { toast('error', e.message); }
+}
+
+async function deleteIDP(id, name) {
+  if (!confirm('Delete identity provider "' + name + '"? Users linked to this provider will keep their accounts but won\'t be able to sign in through it.')) return;
+  try {
+    const r = await fetch('/api/idps/' + encodeURIComponent(id), { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) { toast('error', d.error || 'Failed'); return; }
+    toast('success', 'Provider deleted');
     await loadSettingsData();
   } catch (e) { toast('error', e.message); }
 }
@@ -5010,10 +5223,53 @@ function showAuthScreen(mode) {
             ${isRegister ? 'Create Admin & Sign In' : 'Sign In'}
           </button>
         </form>
+        ${isRegister ? '' : '<div id="auth-providers"></div>'}
       </div>
     </div>
   `;
   document.body.insertAdjacentHTML('beforeend', html);
+  if (!isRegister) loadAuthProviders();
+  // Surface errors bounced back from the OIDC callback.
+  const params = new URLSearchParams(location.search);
+  const err = params.get('oidc_error');
+  if (err) {
+    authError('Sign-in failed: ' + err);
+    history.replaceState({}, '', location.pathname);
+  }
+}
+
+async function loadAuthProviders() {
+  try {
+    const r = await fetch('/api/auth/providers');
+    if (!r.ok) return;
+    const list = await r.json();
+    if (!Array.isArray(list) || list.length === 0) return;
+    const root = document.getElementById('auth-providers');
+    if (!root) return;
+    const btns = list.map(p => `
+      <a class="auth-provider-btn" href="/api/auth/oidc/start?provider=${encodeURIComponent(p.id)}">
+        ${providerIcon(p.kind)}
+        <span>Continue with ${esc(p.name)}</span>
+      </a>
+    `).join('');
+    root.innerHTML = `
+      <div class="auth-divider"><span>or</span></div>
+      <div class="auth-provider-list">${btns}</div>
+    `;
+  } catch {}
+}
+
+function providerIcon(kind) {
+  // Tiny inline SVGs — no external requests. Fallback is a generic key icon.
+  switch (kind) {
+    case 'google':
+      return `<svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16.1 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35 26.7 36 24 36c-5.3 0-9.7-3.4-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.1 4-3.9 5.3l6.2 5.2C40.9 34.6 44 29.7 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>`;
+    case 'github':
+      return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38v-1.34c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.88 2.34.67.07-.52.28-.88.51-1.08-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.01.08-2.1 0 0 .67-.22 2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.09.16 1.9.08 2.1.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.19c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>`;
+    case 'microsoft':
+      return `<svg width="16" height="16" viewBox="0 0 16 16"><rect x="0" y="0" width="7" height="7" fill="#F25022"/><rect x="8" y="0" width="7" height="7" fill="#7FBA00"/><rect x="0" y="8" width="7" height="7" fill="#00A4EF"/><rect x="8" y="8" width="7" height="7" fill="#FFB900"/></svg>`;
+  }
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-.5V4.5A3.5 3.5 0 0 0 8 1z"/></svg>`;
 }
 
 function hideAuthScreen() {
