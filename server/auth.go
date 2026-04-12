@@ -147,5 +147,6 @@ func sanitizeUser(u *models.User) *models.User {
 	}
 	c := *u
 	c.PasswordHash = ""
+	c.TOTPSecret = "" // never leak to the UI; only TOTPEnabled is public
 	return &c
 }
