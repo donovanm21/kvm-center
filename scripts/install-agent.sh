@@ -114,12 +114,20 @@ EOF
 # ── kvm-migrator user for live migration ──────────────────────────────────────
 echo "Setting up kvm-migrator user for VM live migration..."
 if ! id kvm-migrator &>/dev/null; then
-  useradd -r -m -d /var/lib/kvm-migrator -s /bin/bash -G libvirt,kvm kvm-migrator
+  useradd -r -m -d /var/lib/kvm-migrator -s /bin/bash -G libvirt,kvm,qemu kvm-migrator
   echo "  Created kvm-migrator user"
 else
-  usermod -aG libvirt,kvm kvm-migrator 2>/dev/null
+  usermod -aG libvirt,kvm,qemu kvm-migrator 2>/dev/null
   echo "  kvm-migrator user already exists"
 fi
+
+# Ensure kvm-migrator can write disk images during offline migration.
+chown root:qemu /var/lib/libvirt/images 2>/dev/null
+chmod 775 /var/lib/libvirt/images 2>/dev/null
+
+# Allow qemu-bridge-helper to use br0 (needed for VMs migrated from other nodes).
+mkdir -p /etc/qemu
+grep -q "allow br0" /etc/qemu/bridge.conf 2>/dev/null || echo "allow br0" >> /etc/qemu/bridge.conf
 
 # Polkit rule for libvirt access.
 cat > /etc/polkit-1/rules.d/50-kvm-migrator.rules << 'POLKIT_EOF'

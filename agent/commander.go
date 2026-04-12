@@ -19,6 +19,7 @@ func StartCommandServer(addr string) {
 	mux.HandleFunc("/console/", handleConsolePage)
 	mux.HandleFunc("/ws/", handleConsoleWS)
 	mux.HandleFunc("/snapshots/", handleSnapshotList)
+	mux.HandleFunc("/migrate-status", handleMigrateStatus)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
@@ -118,15 +119,14 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			respond(w, false, "OFFLINE_MIGRATE requires params.destination")
 			return
 		}
-		log.Printf("command: offline-migrate vm=%s → %s", vmTarget, dest)
-		msg, migrateErr := offlineMigrate(vmTarget, dest)
-		if migrateErr != nil {
-			log.Printf("command failed: OFFLINE_MIGRATE: %v", migrateErr)
-			respond(w, false, migrateErr.Error())
+		status := getMigStatus()
+		if status.Active {
+			respond(w, false, "another migration is already in progress: "+status.VMName)
 			return
 		}
-		log.Printf("command ok: OFFLINE_MIGRATE vm=%s → %s", vmTarget, dest)
-		respond(w, true, msg)
+		log.Printf("command: offline-migrate vm=%s → %s (async)", vmTarget, dest)
+		startOfflineMigrate(vmTarget, dest)
+		respond(w, true, "offline migration started — poll /migrate-status for progress")
 		return
 	default:
 		respond(w, false, "unknown action: "+req.Action)
