@@ -111,6 +111,51 @@ SupplementaryGroups=libvirt kvm
 WantedBy=multi-user.target
 EOF
 
+# ── kvm-migrator user for live migration ──────────────────────────────────────
+echo "Setting up kvm-migrator user for VM live migration..."
+if ! id kvm-migrator &>/dev/null; then
+  useradd -r -m -d /var/lib/kvm-migrator -s /bin/bash -G libvirt,kvm kvm-migrator
+  echo "  Created kvm-migrator user"
+else
+  usermod -aG libvirt,kvm kvm-migrator 2>/dev/null
+  echo "  kvm-migrator user already exists"
+fi
+
+# Polkit rule for libvirt access.
+cat > /etc/polkit-1/rules.d/50-kvm-migrator.rules << 'POLKIT_EOF'
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.libvirt.") === 0 &&
+        subject.user === "kvm-migrator") {
+        return polkit.Result.YES;
+    }
+});
+POLKIT_EOF
+
+# SSH keypair for migration trust.
+MIGRATOR_SSH="/var/lib/kvm-migrator/.ssh"
+mkdir -p "$MIGRATOR_SSH"
+if [[ ! -f "${MIGRATOR_SSH}/id_ed25519" ]]; then
+  # Check for a shared key provided alongside this installer.
+  KEY_SRC="${SCRIPT_DIR}/kvm-migrator-key"
+  PUBKEY_SRC="${SCRIPT_DIR}/kvm-migrator-key.pub"
+  if [[ -f "$KEY_SRC" && -f "$PUBKEY_SRC" ]]; then
+    cp "$KEY_SRC" "${MIGRATOR_SSH}/id_ed25519"
+    cp "$PUBKEY_SRC" "${MIGRATOR_SSH}/id_ed25519.pub"
+    echo "  Installed shared migration keypair"
+  else
+    ssh-keygen -t ed25519 -N "" -f "${MIGRATOR_SSH}/id_ed25519" -C kvm-migrator >/dev/null 2>&1
+    echo "  Generated new migration keypair (exchange with existing nodes manually)"
+  fi
+fi
+
+# Authorize the key and populate known_hosts for other nodes.
+PUBKEY=$(cat "${MIGRATOR_SSH}/id_ed25519.pub")
+grep -qF "$PUBKEY" "${MIGRATOR_SSH}/authorized_keys" 2>/dev/null || echo "$PUBKEY" >> "${MIGRATOR_SSH}/authorized_keys"
+chown -R kvm-migrator:kvm-migrator "$MIGRATOR_SSH"
+chmod 700 "$MIGRATOR_SSH"
+chmod 600 "${MIGRATOR_SSH}/id_ed25519" "${MIGRATOR_SSH}/authorized_keys"
+echo "  Migration keypair ready"
+
 # ── Enable and start ───────────────────────────────────────────────────────────
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
@@ -122,3 +167,7 @@ systemctl status "${SERVICE_NAME}" --no-pager -l || true
 echo ""
 echo "Logs: journalctl -u ${SERVICE_NAME} -f"
 echo "      tail -f ${LOG_FILE}"
+echo ""
+echo "Migration: kvm-migrator user is ready. To enable migration to/from"
+echo "this node, exchange the public key at ${MIGRATOR_SSH}/id_ed25519.pub"
+echo "with all other hypervisors in the cluster."

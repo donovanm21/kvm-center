@@ -2504,6 +2504,11 @@ function openMigrateDialog(hostID, vmUUID, vmName) {
         <select id="migrate-target" onchange="updateMigrateChecks()" style="width:100%;background:#091828;border:1px solid #1a3a5c;color:#c5daf0;padding:8px;border-radius:4px;font-size:12px;font-family:inherit">
           ${otherHosts.map(h => `<option value="${esc(h.id)}">${esc(h.id)} (${esc(h.ip)}) — ${fmt(h.mem_free_mb,'MB')} free</option>`).join('')}
         </select>
+        <label style="margin-top:12px;display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="migrate-copy-storage" checked style="accent-color:#0091da">
+          <span style="font-size:12px;color:#c5daf0">Copy storage (required without shared NFS/GlusterFS)</span>
+        </label>
+        <div style="font-size:10px;color:#5a8ab0;margin-top:2px;padding-left:24px">Copies the full disk image to the target host during migration. Disable only if both hosts share the same storage pool.</div>
         <div style="margin-top:14px">
           <label>Pre-flight Checks</label>
           <div id="migrate-checks" style="margin-top:6px">
@@ -2560,13 +2565,16 @@ async function executeMigrate(hostID, vmUUID, vmName) {
   const targetID = document.getElementById('migrate-target').value;
   const target = state.hosts.find(h => h.id === targetID);
   if (!target) return;
+  const copyStorage = document.getElementById('migrate-copy-storage').checked;
   closeMigrateModal();
-  toast('info', `Migrating ${vmName} to ${targetID}…`);
+  toast('info', `Migrating ${vmName} to ${targetID}${copyStorage ? ' (copying storage)' : ''}…`);
   try {
+    const params = { destination: target.ip };
+    if (copyStorage) params.copy_storage = 'true';
     const r = await fetch(API + '/api/command', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ host_id: hostID, vm_uuid: vmUUID, vm_name: vmName, action: 'MIGRATE', params: { destination: target.ip } }),
+      body: JSON.stringify({ host_id: hostID, vm_uuid: vmUUID, vm_name: vmName, action: 'MIGRATE', params }),
     });
     const data = await r.json();
     if (data.success || r.ok) {
