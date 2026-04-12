@@ -13,11 +13,12 @@ import (
 
 // persistData is the on-disk JSON structure.
 type persistData struct {
-	Hosts     map[string]*models.Host             `json:"hosts"`
-	VMs       map[string][]*models.VM             `json:"vms"`
-	Storage   map[string][]*models.StoragePool    `json:"storage"`
-	VMNotes   map[string]string                   `json:"vm_notes"`    // keyed by VM UUID
-	GuestData map[string]*guestEntry              `json:"guest_data"`  // keyed by VM UUID
+	Hosts      map[string]*models.Host             `json:"hosts"`
+	VMs        map[string][]*models.VM             `json:"vms"`
+	Storage    map[string][]*models.StoragePool    `json:"storage"`
+	VMNotes    map[string]string                   `json:"vm_notes"`
+	GuestData  map[string]*guestEntry              `json:"guest_data"`
+	Migrations []*models.MigrationRecord           `json:"migrations,omitempty"`
 }
 
 // guestEntry is one cached report from a kvm-tools daemon running in a guest.
@@ -31,13 +32,14 @@ const guestToolsFreshness = 5 * time.Minute
 
 // Store is the in-memory data store backed by a JSON file.
 type Store struct {
-	mu        sync.RWMutex
-	hosts     map[string]*models.Host
-	vms       map[string][]*models.VM          // keyed by host_id
-	storage   map[string][]*models.StoragePool // keyed by host_id
-	vmNotes   map[string]string                // keyed by VM UUID (lowercased)
-	guestData map[string]*guestEntry           // keyed by VM UUID (lowercased)
-	dataFile  string
+	mu         sync.RWMutex
+	hosts      map[string]*models.Host
+	vms        map[string][]*models.VM          // keyed by host_id
+	storage    map[string][]*models.StoragePool // keyed by host_id
+	vmNotes    map[string]string                // keyed by VM UUID (lowercased)
+	guestData  map[string]*guestEntry           // keyed by VM UUID (lowercased)
+	migrations []*models.MigrationRecord
+	dataFile   string
 }
 
 func NewStore(dataFile string) *Store {
@@ -186,6 +188,31 @@ func (s *Store) ApplyGuestTelemetry(p *models.GuestTelemetryPayload) {
 	}
 }
 
+// AddMigration inserts or updates a migration record.
+func (s *Store) AddMigration(r *models.MigrationRecord) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, m := range s.migrations {
+		if m.ID == r.ID {
+			s.migrations[i] = r
+			return
+		}
+	}
+	s.migrations = append(s.migrations, r)
+}
+
+// GetMigrations returns all migration records, newest first.
+func (s *Store) GetMigrations() []*models.MigrationRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]*models.MigrationRecord, len(s.migrations))
+	copy(out, s.migrations)
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out
+}
+
 // GetHosts returns a snapshot of all hosts, with offline detection applied.
 func (s *Store) GetHosts() []*models.Host {
 	s.mu.RLock()
@@ -277,11 +304,12 @@ func (s *Store) MarkOfflineHosts() {
 func (s *Store) Save() {
 	s.mu.RLock()
 	d := persistData{
-		Hosts:     s.hosts,
-		VMs:       s.vms,
-		Storage:   s.storage,
-		VMNotes:   s.vmNotes,
-		GuestData: s.guestData,
+		Hosts:      s.hosts,
+		VMs:        s.vms,
+		Storage:    s.storage,
+		VMNotes:    s.vmNotes,
+		GuestData:  s.guestData,
+		Migrations: s.migrations,
 	}
 	s.mu.RUnlock()
 
@@ -319,6 +347,9 @@ func (s *Store) load() {
 	}
 	if d.GuestData != nil {
 		s.guestData = d.GuestData
+	}
+	if d.Migrations != nil {
+		s.migrations = d.Migrations
 	}
 	log.Printf("store: loaded %d hosts from %s", len(s.hosts), s.dataFile)
 }
