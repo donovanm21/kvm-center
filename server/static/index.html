@@ -2538,7 +2538,7 @@ function setDeployOS(pkg, os) {
 }
 
 function copyDeploySnippet(btnId, text) {
-  navigator.clipboard.writeText(text).then(() => {
+  const flashCopied = () => {
     const btn = document.getElementById(btnId);
     if (!btn) return;
     const orig = btn.textContent;
@@ -2548,9 +2548,35 @@ function copyDeploySnippet(btnId, text) {
       btn.textContent = orig;
       btn.classList.remove('copied');
     }, 1800);
-  }).catch(() => {
-    toast('error', 'Clipboard write failed');
-  });
+  };
+
+  // Prefer the modern Clipboard API (requires HTTPS or localhost).
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(flashCopied).catch(fallbackCopy);
+    return;
+  }
+  fallbackCopy();
+
+  function fallbackCopy() {
+    // Legacy path — works on plain HTTP. Creates a hidden textarea, selects
+    // its contents, runs execCommand('copy'), then removes it.
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '0';
+    ta.style.left = '0';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+    if (ok) flashCopied();
+    else toast('error', 'Copy failed — select the text manually');
+  }
 }
 
 function renderDeploymentView() {
