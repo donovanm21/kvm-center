@@ -1138,13 +1138,13 @@ function renderBreadcrumb() {
 function renderTabs() {
   const tabBar = document.getElementById('tabs');
   if (state.view === 'host') {
-    tabBar.innerHTML = ['summary','vms','storage'].map(t => `
+    tabBar.innerHTML = ['summary','vms','storage','hardware'].map(t => `
       <div class="tab ${state.hostTab===t?'active':''}" onclick="setTab('${t}')">
         ${t.charAt(0).toUpperCase()+t.slice(1)}
       </div>
     `).join('');
   } else if (state.view === 'vm') {
-    tabBar.innerHTML = ['summary','monitor','networks','snapshots'].map(t => `
+    tabBar.innerHTML = ['summary','monitor','hardware','networks','snapshots'].map(t => `
       <div class="tab ${state.vmTab===t?'active':''}" onclick="setVMTab('${t}')">
         ${t.charAt(0).toUpperCase()+t.slice(1)}
       </div>
@@ -1347,11 +1347,13 @@ function vmActions(v) {
   const host = state.hosts.find(h => h.id === v.host_id);
   const consoleOK = running && host && host.ip;
   const consoleTitle = running ? 'Open VNC console' : 'Console available when VM is running';
+  const snapOK = !v.disk_type || v.disk_type === 'qcow2';
+  const snapTitle = snapOK ? 'Create snapshot' : 'Snapshots require qcow2 disk (this VM uses ' + (v.disk_type||'raw') + ')';
   return `
     <button class="btn btn-primary btn-sm" ${stopped?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','START')" title="Start">▶</button>
     <button class="btn btn-warning btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','STOP')" title="Shutdown">■</button>
     <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','RESTART')" title="Restart">↺</button>
-    <button class="btn btn-secondary btn-sm" onclick="openSnapshot('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}')" title="Snapshot">📷</button>
+    <button class="btn btn-secondary btn-sm" ${snapOK?'':'disabled'} onclick="openSnapshot('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}')" title="${snapTitle}">📷</button>
     <button class="btn btn-secondary btn-sm" ${consoleOK?'':'disabled'} onclick="openConsole('${esc(v.host_id)}','${esc(v.name)}')" title="${consoleTitle}">🖥</button>
   `;
 }
@@ -1397,9 +1399,10 @@ function renderHostView() {
   const hostPools = state.storage.filter(p => p.host_id === state.selectedHost);
 
   switch (state.hostTab) {
-    case 'summary': return renderHostSummary(h, hostVMs, hostPools);
-    case 'vms':     return renderHostVMs(h, hostVMs);
-    case 'storage': return renderHostStorage(h, hostPools);
+    case 'summary':  return renderHostSummary(h, hostVMs, hostPools);
+    case 'vms':      return renderHostVMs(h, hostVMs);
+    case 'storage':  return renderHostStorage(h, hostPools);
+    case 'hardware': return renderHostHardware(h);
   }
   return '';
 }
@@ -1793,6 +1796,7 @@ function renderVMView() {
   switch (state.vmTab || 'summary') {
     case 'snapshots': return renderVMSnapshotsTab(vm);
     case 'monitor':   return renderVMMonitorTab(vm);
+    case 'hardware':  return renderVMHardwareTab(vm);
     case 'networks':  return renderVMNetworksTab(vm);
     default:          return renderVMSummaryTab(vm);
   }
@@ -1809,6 +1813,7 @@ function vmDetailHeader(vm) {
         <button class="btn btn-warning btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','STOP')">■ Shutdown</button>
         <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','RESTART')">↺ Restart</button>
         <button class="btn btn-danger btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','FORCESTOP')">⚡ Force Off</button>
+        <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="openMigrateDialog('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')" title="Live migrate to another host">↗ Migrate</button>
       </div>
     </div>
   `;
@@ -2274,6 +2279,301 @@ async function saveNotes(uuid) {
     await refresh();
   } catch (e) {
     toast('error', `Failed to save notes: ${e.message}`);
+  }
+}
+
+// ── VM Hardware tab ────────────────────────────────────────
+function renderVMHardwareTab(vm) {
+  const fwLabel = {'bios':'BIOS (SeaBIOS)','efi':'UEFI (OVMF)','efi+secureboot':'UEFI + Secure Boot'}[vm.firmware] || vm.firmware || '—';
+  const fwIcon = vm.firmware?.includes('secureboot') ? '🔒' : (vm.firmware === 'efi' ? '🖥' : '⚙');
+
+  const configGrid = `
+    <div class="detail-panel">
+      <div style="font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:12px">System Configuration</div>
+      <div class="vm-info-grid" style="grid-template-columns:180px 1fr;gap:10px 16px">
+        <span class="lbl">Firmware:</span>
+        <span class="val">${fwIcon} ${fwLabel}</span>
+        <span class="lbl">Machine Type:</span>
+        <span class="val" style="font-family:'SF Mono',monospace;font-size:11px">${esc(vm.machine_type || '—')}</span>
+        <span class="lbl">CPU Mode:</span>
+        <span class="val">${esc(vm.cpu_mode || '—')}</span>
+        <span class="lbl">vCPUs:</span>
+        <span class="val">${vm.cpu_count}</span>
+        <span class="lbl">Memory:</span>
+        <span class="val">${fmt(vm.mem_total_mb, 'MB')}</span>
+        <span class="lbl">Boot Device:</span>
+        <span class="val">${esc(vm.boot_dev || '—')}</span>
+        <span class="lbl">vTPM:</span>
+        <span class="val">${vm.has_tpm ? '✓ TPM ' + esc(vm.tpm_version || '2.0') + ' (emulated)' : '✗ Not configured'}</span>
+        <span class="lbl">Secure Boot:</span>
+        <span class="val">${vm.firmware === 'efi+secureboot' ? '✓ Enabled (SMM)' : '✗ Not enabled'}</span>
+        <span class="lbl">Video Adapter:</span>
+        <span class="val">${esc(vm.video_model || '—')}</span>
+        <span class="lbl">Auto Start:</span>
+        <span class="val">${vm.autostart ? '<span style="color:#4caf50">✓ Enabled</span>' : '<span style="color:#7aa8cc">✗ Disabled</span>'}</span>
+      </div>
+    </div>
+  `;
+
+  // Disks table.
+  const diskRows = (vm.all_disks || []).map(d => {
+    const snapOK = d.disk_type === 'qcow2';
+    return `
+      <tr>
+        <td style="font-weight:500;color:#e8f4ff">${esc(d.target)}</td>
+        <td>${esc(d.device)}</td>
+        <td><span style="padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;background:${snapOK?'#1a3d1a':'#3d2a00'};color:${snapOK?'#4caf50':'#ff9800'}">${esc(d.disk_type||'—')}</span></td>
+        <td>${esc(d.bus || '—')}</td>
+        <td style="font-family:'SF Mono',monospace;font-size:11px;color:#7aa8cc;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(d.path)}">${esc(d.path || '—')}</td>
+        <td>${d.capacity_gb > 0 ? d.capacity_gb.toFixed(1)+' GB' : '—'}</td>
+        <td>${d.alloc_gb > 0 ? d.alloc_gb.toFixed(1)+' GB' : '—'}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const disksPanel = `
+    <div class="detail-panel">
+      <div style="font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:10px">Storage Devices (${(vm.all_disks||[]).length})</div>
+      <div class="table-wrap" style="border:none">
+        <table><thead><tr><th>Target</th><th>Device</th><th>Format</th><th>Bus</th><th>Path</th><th>Capacity</th><th>Allocated</th></tr></thead>
+        <tbody>${diskRows || '<tr><td colspan="7" style="color:#3d6a8a">No disks</td></tr>'}</tbody></table>
+      </div>
+    </div>
+  `;
+
+  // PCI passthrough.
+  const pciPanel = (vm.pci_devices && vm.pci_devices.length) ? `
+    <div class="detail-panel">
+      <div style="font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:10px">PCI Passthrough Devices (${vm.pci_devices.length})</div>
+      <div class="table-wrap" style="border:none">
+        <table><thead><tr><th>Host Address</th><th>Description</th></tr></thead>
+        <tbody>
+          ${vm.pci_devices.map(d => `
+            <tr>
+              <td style="font-family:'SF Mono',monospace;font-size:11px;color:#4db8ff">${esc(d.source_addr)}</td>
+              <td>${esc(d.host_desc || '—')}</td>
+            </tr>
+          `).join('')}
+        </tbody></table>
+      </div>
+      <div class="deploy-note" style="margin-top:8px;color:#ff9800">⚠ PCI passthrough devices prevent live migration. The VM must be shut down to move to another host.</div>
+    </div>
+  ` : '';
+
+  // Network adapters summary.
+  const netPanel = (vm.networks && vm.networks.length) ? `
+    <div class="detail-panel">
+      <div style="font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:10px">Network Adapters (${vm.networks.length})</div>
+      <div class="table-wrap" style="border:none">
+        <table><thead><tr><th>Interface</th><th>Bridge</th><th>MAC</th></tr></thead>
+        <tbody>
+          ${vm.networks.map(n => `
+            <tr>
+              <td>${esc(n.interface || '—')}</td>
+              <td>${esc(n.bridge || '—')}</td>
+              <td style="font-family:'SF Mono',monospace;font-size:11px;color:#7aa8cc">${esc(n.mac || '—')}</td>
+            </tr>
+          `).join('')}
+        </tbody></table>
+      </div>
+    </div>
+  ` : '';
+
+  return vmDetailHeader(vm) + `
+    ${configGrid}
+    ${disksPanel}
+    ${pciPanel}
+    ${netPanel}
+  `;
+}
+
+// ── Host Hardware tab ──────────────────────────────────────
+function renderHostHardware(h) {
+  // CPU topology.
+  const cpuPanel = `
+    <div class="detail-panel">
+      <div style="font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:12px">CPU / Topology</div>
+      <div class="vm-info-grid" style="grid-template-columns:180px 1fr;gap:10px 16px">
+        <span class="lbl">CPU Model:</span>
+        <span class="val">${esc(h.cpu_model || '—')}</span>
+        <span class="lbl">Sockets:</span>
+        <span class="val">${h.sockets || '—'}</span>
+        <span class="lbl">Cores / Socket:</span>
+        <span class="val">${h.cores_per_socket || '—'}</span>
+        <span class="lbl">Threads / Core:</span>
+        <span class="val">${h.threads_per_core || '—'}</span>
+        <span class="lbl">Total Logical CPUs:</span>
+        <span class="val">${h.cpu_count}</span>
+        <span class="lbl">NUMA Nodes:</span>
+        <span class="val">${h.numa_nodes || '—'}</span>
+        <span class="lbl">Total Memory:</span>
+        <span class="val">${fmt(h.mem_total_mb, 'MB')}</span>
+      </div>
+    </div>
+  `;
+
+  // GPUs.
+  const gpuPanel = (h.gpus && h.gpus.length) ? `
+    <div class="detail-panel">
+      <div style="font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:10px">Graphics / GPU (${h.gpus.length})</div>
+      ${h.gpus.map(g => `
+        <div style="padding:6px 0;font-size:12px;color:#c5daf0;border-bottom:1px solid #122030">${esc(g)}</div>
+      `).join('')}
+    </div>
+  ` : '';
+
+  // PCI devices table (show all, highlight GPUs and passthrough-capable devices).
+  const pciDevs = h.host_pci_devices || [];
+  const pciPanel = pciDevs.length ? `
+    <div class="detail-panel">
+      <div style="font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:10px">PCI Devices (${pciDevs.length})</div>
+      <div class="table-wrap" style="border:none;max-height:400px;overflow-y:auto">
+        <table><thead><tr><th>Address</th><th>IOMMU</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          ${pciDevs.map(d => {
+            const isGPU = d.description && /vga|3d|display|gpu/i.test(d.description);
+            const rowStyle = isGPU ? 'background:#0d2a45' : '';
+            return `
+              <tr style="${rowStyle}">
+                <td style="font-family:'SF Mono',monospace;font-size:11px;color:#4db8ff">${esc(d.address)}</td>
+                <td style="font-size:11px;color:#7aa8cc">${d.iommu_group >= 0 ? d.iommu_group : '—'}</td>
+                <td style="font-size:11px">${esc(d.type || '—')}</td>
+                <td style="font-size:11px;color:#c5daf0">${esc(d.description || '—')}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody></table>
+      </div>
+    </div>
+  ` : '';
+
+  return `
+    ${cpuPanel}
+    ${gpuPanel}
+    ${pciPanel}
+  `;
+}
+
+// ── VM Migration dialog ────────────────────────────────────
+function openMigrateDialog(hostID, vmUUID, vmName) {
+  const vm = state.vms.find(v => v.uuid === vmUUID);
+  if (!vm) { toast('error', 'VM not found'); return; }
+
+  const sourceHost = state.hosts.find(h => h.id === hostID);
+  const otherHosts = state.hosts.filter(h => h.id !== hostID && h.status === 'online');
+  if (!otherHosts.length) { toast('error', 'No other online hosts available for migration'); return; }
+
+  // Pre-flight checks generator.
+  function checks(targetID) {
+    const target = state.hosts.find(h => h.id === targetID);
+    if (!target) return [];
+    const results = [];
+    // 1. Target is online.
+    results.push({ ok: target.status === 'online', label: 'Target host is online', detail: target.status });
+    // 2. Enough free memory.
+    const neededMB = vm.mem_total_mb || 0;
+    const freeMB = target.mem_free_mb || 0;
+    results.push({ ok: freeMB >= neededMB, label: 'Sufficient free memory', detail: fmt(freeMB,'MB')+' free, VM needs '+fmt(neededMB,'MB') });
+    // 3. CPU compatibility (both host-passthrough = compatible same-arch migration).
+    const srcModel = sourceHost?.cpu_model || '';
+    const dstModel = target.cpu_model || '';
+    const cpuOk = srcModel === dstModel || vm.cpu_mode === 'host-model' || vm.cpu_mode === 'custom';
+    results.push({ ok: cpuOk, label: 'CPU compatibility', detail: cpuOk ? 'Same CPU model or VM uses portable CPU mode' : 'Source: '+srcModel+' vs Target: '+dstModel+' (host-passthrough requires matching CPUs)' });
+    // 4. No PCI passthrough.
+    const hasPCI = vm.pci_devices && vm.pci_devices.length > 0;
+    results.push({ ok: !hasPCI, label: 'No PCI passthrough devices', detail: hasPCI ? vm.pci_devices.length+' device(s) block live migration' : 'None attached' });
+    // 5. Disk format.
+    const rawDisk = vm.disk_type === 'raw';
+    results.push({ ok: !rawDisk, label: 'Disk format supports migration', detail: (vm.disk_type||'qcow2')+' — '+(rawDisk ? 'raw on local storage may need shared storage' : 'OK') });
+    return results;
+  }
+
+  const defaultTarget = otherHosts[0].id;
+  const initialChecks = checks(defaultTarget);
+
+  const modalHTML = `
+    <div class="modal-overlay" id="migrate-modal" style="display:flex">
+      <div class="modal" style="width:520px">
+        <h3>Live Migrate — ${esc(vmName)}</h3>
+        <label>Source Host</label>
+        <div style="padding:6px 0;font-weight:600;color:#e8f4ff;font-size:13px">${esc(hostID)}</div>
+        <label style="margin-top:12px">Target Host</label>
+        <select id="migrate-target" onchange="updateMigrateChecks()" style="width:100%;background:#091828;border:1px solid #1a3a5c;color:#c5daf0;padding:8px;border-radius:4px;font-size:12px;font-family:inherit">
+          ${otherHosts.map(h => `<option value="${esc(h.id)}">${esc(h.id)} (${esc(h.ip)}) — ${fmt(h.mem_free_mb,'MB')} free</option>`).join('')}
+        </select>
+        <div style="margin-top:14px">
+          <label>Pre-flight Checks</label>
+          <div id="migrate-checks" style="margin-top:6px">
+            ${initialChecks.map(c => `
+              <div style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12px">
+                <span style="color:${c.ok?'#4caf50':'#f44336'};flex-shrink:0">${c.ok?'✓':'✗'}</span>
+                <div>
+                  <div style="color:#e8f4ff">${esc(c.label)}</div>
+                  <div style="color:#5a8ab0;font-size:11px">${esc(c.detail)}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        <div class="modal-actions" style="margin-top:16px">
+          <button class="btn btn-secondary" onclick="closeMigrateModal()">Cancel</button>
+          <button class="btn btn-primary" id="migrate-btn" ${initialChecks.every(c=>c.ok)?'':'disabled'} onclick="executeMigrate('${esc(hostID)}','${esc(vmUUID)}','${esc(vmName)}')">Migrate</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Inject modal HTML and store checks function for updates.
+  const existing = document.getElementById('migrate-modal');
+  if (existing) existing.remove();
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+  window._migrateChecks = checks;
+  window._migrateVM = { hostID, vmUUID, vmName };
+}
+
+function updateMigrateChecks() {
+  const targetID = document.getElementById('migrate-target').value;
+  const checks = window._migrateChecks(targetID);
+  const container = document.getElementById('migrate-checks');
+  container.innerHTML = checks.map(c => `
+    <div style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12px">
+      <span style="color:${c.ok?'#4caf50':'#f44336'};flex-shrink:0">${c.ok?'✓':'✗'}</span>
+      <div>
+        <div style="color:#e8f4ff">${esc(c.label)}</div>
+        <div style="color:#5a8ab0;font-size:11px">${esc(c.detail)}</div>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('migrate-btn').disabled = !checks.every(c => c.ok);
+}
+
+function closeMigrateModal() {
+  const el = document.getElementById('migrate-modal');
+  if (el) el.remove();
+}
+
+async function executeMigrate(hostID, vmUUID, vmName) {
+  const targetID = document.getElementById('migrate-target').value;
+  const target = state.hosts.find(h => h.id === targetID);
+  if (!target) return;
+  closeMigrateModal();
+  toast('info', `Migrating ${vmName} to ${targetID}…`);
+  try {
+    const r = await fetch(API + '/api/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host_id: hostID, vm_uuid: vmUUID, vm_name: vmName, action: 'MIGRATE', params: { destination: target.ip } }),
+    });
+    const data = await r.json();
+    if (data.success || r.ok) {
+      toast('success', `Migration of ${vmName} to ${targetID} completed`);
+      setTimeout(refresh, 3000);
+    } else {
+      toast('error', `Migration failed: ${data.message || data.error}`);
+    }
+  } catch (e) {
+    toast('error', `Migration failed: ${e.message}`);
   }
 }
 

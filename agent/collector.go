@@ -30,7 +30,7 @@ var prevVMCPU = make(map[string]struct {
 
 // CollectTelemetry gathers host and VM metrics using /proc and virsh.
 func CollectTelemetry(agentPort int) models.TelemetryPayload {
-	return models.TelemetryPayload{
+	p := models.TelemetryPayload{
 		HostID:     hostname(),
 		AgentPort:  agentPort,
 		OS:         osRelease(),
@@ -46,6 +46,8 @@ func CollectTelemetry(agentPort int) models.TelemetryPayload {
 		Storage:    listStoragePools(),
 		Timestamp:  time.Now(),
 	}
+	collectHostHardware(&p)
+	return p
 }
 
 // ─── Host metrics ────────────────────────────────────────────────────────────
@@ -202,22 +204,64 @@ func parseMemField(field string) uint64 {
 
 // ─── VM metrics (via virsh) ──────────────────────────────────────────────────
 
-// virshDomainXML holds minimal fields from `virsh dumpxml`.
+// virshDomainXML holds fields from `virsh dumpxml` for VM hardware parsing.
 type virshDomainXML struct {
-	UUID   string        `xml:"uuid"`
-	Disks  []virshDisk   `xml:"devices>disk"`
-	Ifaces []virshIface  `xml:"devices>interface"`
+	UUID    string `xml:"uuid"`
+	OS      struct {
+		Type struct {
+			Arch    string `xml:"arch,attr"`
+			Machine string `xml:"machine,attr"`
+			Value   string `xml:",chardata"`
+		} `xml:"type"`
+		Loader struct {
+			Secure string `xml:"secure,attr"`
+			Type   string `xml:"type,attr"`
+			Path   string `xml:",chardata"`
+		} `xml:"loader"`
+		Boot struct {
+			Dev string `xml:"dev,attr"`
+		} `xml:"boot"`
+	} `xml:"os"`
+	CPU struct {
+		Mode       string `xml:"mode,attr"`
+		Migratable string `xml:"migratable,attr"`
+	} `xml:"cpu"`
+	Features struct {
+		SMM *struct {
+			State string `xml:"state,attr"`
+		} `xml:"smm"`
+	} `xml:"features"`
+	Disks    []virshDisk    `xml:"devices>disk"`
+	Ifaces   []virshIface   `xml:"devices>interface"`
+	Hostdevs []virshHostdev `xml:"devices>hostdev"`
+	TPMs     []struct {
+		Model   string `xml:"model,attr"`
+		Backend struct {
+			Type    string `xml:"type,attr"`
+			Version string `xml:"version,attr"`
+		} `xml:"backend"`
+	} `xml:"devices>tpm"`
+	Videos []struct {
+		Model struct {
+			Type string `xml:"type,attr"`
+		} `xml:"model"`
+	} `xml:"devices>video"`
 }
 
 type virshDisk struct {
 	Type   string `xml:"type,attr"`
 	Device string `xml:"device,attr"`
+	Driver struct {
+		Name string `xml:"name,attr"`
+		Type string `xml:"type,attr"` // "qcow2", "raw"
+	} `xml:"driver"`
 	Source struct {
 		File string `xml:"file,attr"`
 		Dev  string `xml:"dev,attr"`
 	} `xml:"source"`
 	Target struct {
 		Dev string `xml:"dev,attr"`
+		Bus string `xml:"bus,attr"`
 	} `xml:"target"`
 }
 
@@ -233,6 +277,19 @@ type virshIface struct {
 	Target struct {
 		Dev string `xml:"dev,attr"`
 	} `xml:"target"`
+}
+
+type virshHostdev struct {
+	Mode   string `xml:"mode,attr"`
+	Type   string `xml:"type,attr"`
+	Source struct {
+		Address struct {
+			Domain   string `xml:"domain,attr"`
+			Bus      string `xml:"bus,attr"`
+			Slot     string `xml:"slot,attr"`
+			Function string `xml:"function,attr"`
+		} `xml:"address"`
+	} `xml:"source"`
 }
 
 func listVMs() []models.VM {
@@ -268,18 +325,19 @@ func buildVM(name, stateStr string) models.VM {
 		Networks: []models.VMNetwork{},
 	}
 
-	// Get UUID, CPU count, and memory from dominfo.
+	// Get UUID, CPU count, memory, and autostart from dominfo.
 	if info := virshDomInfo(name); info != nil {
 		vm.UUID = info["uuid"]
 		vm.CPUCount, _ = strconv.Atoi(info["cpu(s)"])
 		vm.MemTotalMB = parseKiBToMB(info["max memory"])
 		vm.MemUsageMB = parseKiBToMB(info["used memory"])
+		vm.Autostart = strings.TrimSpace(info["autostart"]) == "enable"
 	}
 	if vm.UUID == "" {
 		vm.UUID = name // fallback
 	}
 
-	// Parse domain XML for disk paths and network interfaces.
+	// Parse domain XML for hardware config, disks, network interfaces, PCI passthrough, etc.
 	xmlData, err := exec.Command("virsh", "dumpxml", name).Output()
 	if err == nil {
 		var domXML virshDomainXML
@@ -287,21 +345,79 @@ func buildVM(name, stateStr string) models.VM {
 			if domXML.UUID != "" {
 				vm.UUID = domXML.UUID
 			}
-			// Primary disk.
-			for _, d := range domXML.Disks {
-				if d.Device != "disk" {
-					continue
+
+			// Machine type and CPU.
+			vm.MachineType = domXML.OS.Type.Machine
+			vm.CPUMode = domXML.CPU.Mode
+			vm.BootDev = domXML.OS.Boot.Dev
+
+			// Firmware: BIOS, EFI, or EFI+SecureBoot.
+			if domXML.OS.Loader.Path != "" {
+				if domXML.OS.Loader.Secure == "yes" || (domXML.Features.SMM != nil && domXML.Features.SMM.State == "on") {
+					vm.Firmware = "efi+secureboot"
+				} else {
+					vm.Firmware = "efi"
 				}
+			} else {
+				vm.Firmware = "bios"
+			}
+
+			// TPM.
+			if len(domXML.TPMs) > 0 {
+				vm.HasTPM = true
+				vm.TPMVersion = domXML.TPMs[0].Backend.Version
+			}
+
+			// Video model.
+			if len(domXML.Videos) > 0 {
+				vm.VideoModel = domXML.Videos[0].Model.Type
+			}
+
+			// All disks (including cdrom).
+			primarySet := false
+			for _, d := range domXML.Disks {
 				path := d.Source.File
 				if path == "" {
 					path = d.Source.Dev
 				}
-				if path != "" {
+				vd := models.VMDisk{
+					Target:   d.Target.Dev,
+					Device:   d.Device,
+					DiskType: d.Driver.Type,
+					Bus:      d.Target.Bus,
+					Path:     path,
+				}
+				if d.Device == "disk" && path != "" {
+					vd.CapacityGB, vd.AllocGB = domBlkInfoGB(name, d.Target.Dev)
+				}
+				vm.AllDisks = append(vm.AllDisks, vd)
+				// Primary disk for summary fields.
+				if !primarySet && d.Device == "disk" && path != "" {
 					vm.DiskPath = path
-					vm.DiskTotalGB, vm.DiskUsageGB = domBlkInfoGB(name, d.Target.Dev)
-					break
+					vm.DiskType = d.Driver.Type
+					vm.DiskTotalGB = vd.CapacityGB
+					vm.DiskUsageGB = vd.AllocGB
+					primarySet = true
 				}
 			}
+
+			// PCI passthrough devices.
+			for _, hd := range domXML.Hostdevs {
+				if hd.Type != "pci" {
+					continue
+				}
+				addr := fmt.Sprintf("%s:%s:%s.%s",
+					strings.TrimPrefix(hd.Source.Address.Domain, "0x"),
+					strings.TrimPrefix(hd.Source.Address.Bus, "0x"),
+					strings.TrimPrefix(hd.Source.Address.Slot, "0x"),
+					strings.TrimPrefix(hd.Source.Address.Function, "0x"))
+				desc := lspciDesc(addr)
+				vm.PCIDevices = append(vm.PCIDevices, models.VMPCIDevice{
+					SourceAddr: addr,
+					HostDesc:   desc,
+				})
+			}
+
 			// Network interfaces.
 			for _, iface := range domXML.Ifaces {
 				net := models.VMNetwork{
@@ -613,6 +729,136 @@ func domBlkInfoGB(vmName, targetDev string) (capacityGB, allocationGB float64) {
 		}
 	}
 	return
+}
+
+// lspciDesc returns the lspci description line for a PCI address like "0000:05:00.0".
+func lspciDesc(addr string) string {
+	// lspci uses short form "05:00.0" not "0000:05:00.0".
+	short := addr
+	if len(addr) > 5 && addr[4] == ':' {
+		short = addr[5:]
+	}
+	out, err := exec.Command("lspci", "-s", short).Output()
+	if err != nil {
+		return ""
+	}
+	line := strings.TrimSpace(string(out))
+	// Strip the address prefix to return just the description.
+	if idx := strings.Index(line, " "); idx > 0 {
+		return strings.TrimSpace(line[idx+1:])
+	}
+	return line
+}
+
+// ─── Host hardware collection ────────────────────────────────────────────────
+
+// collectHostHardware populates the hardware fields on a TelemetryPayload
+// from virsh nodeinfo, lspci, and /sys/kernel/iommu_groups/.
+func collectHostHardware(p *models.TelemetryPayload) {
+	info := virshNodeInfo()
+	p.CPUModel = info["cpu model"]
+	p.Sockets, _ = strconv.Atoi(info["cpu socket(s)"])
+	p.CoresPerSocket, _ = strconv.Atoi(info["core(s) per socket"])
+	p.ThreadsPerCore, _ = strconv.Atoi(info["thread(s) per core"])
+	p.NUMANodes, _ = strconv.Atoi(info["numa cell(s)"])
+	p.PCIDevices = collectPCIDevices()
+	p.GPUs = collectGPUs()
+}
+
+func virshNodeInfo() map[string]string {
+	out, err := exec.Command("virsh", "nodeinfo").Output()
+	if err != nil {
+		return nil
+	}
+	info := make(map[string]string)
+	for _, line := range strings.Split(string(out), "\n") {
+		if idx := strings.Index(line, ":"); idx > 0 {
+			key := strings.ToLower(strings.TrimSpace(line[:idx]))
+			val := strings.TrimSpace(line[idx+1:])
+			info[key] = val
+		}
+	}
+	return info
+}
+
+func collectGPUs() []string {
+	out, err := exec.Command("lspci").Output()
+	if err != nil {
+		return nil
+	}
+	var gpus []string
+	for _, line := range strings.Split(string(out), "\n") {
+		lower := strings.ToLower(line)
+		if strings.Contains(lower, "vga") || strings.Contains(lower, "3d controller") || strings.Contains(lower, "display") {
+			gpus = append(gpus, strings.TrimSpace(line))
+		}
+	}
+	return gpus
+}
+
+func collectPCIDevices() []models.HostPCIDevice {
+	out, err := exec.Command("lspci", "-nn").Output()
+	if err != nil {
+		return nil
+	}
+	iommuMap := loadIOMMUGroups()
+	var devs []models.HostPCIDevice
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		addr := ""
+		desc := line
+		if idx := strings.Index(line, " "); idx > 0 {
+			addr = line[:idx]
+			desc = strings.TrimSpace(line[idx+1:])
+		}
+		dtype := ""
+		if cidx := strings.Index(desc, ":"); cidx > 0 {
+			dtype = strings.TrimSpace(desc[:cidx])
+		}
+		group := -1
+		if g, ok := iommuMap[addr]; ok {
+			group = g
+		}
+		devs = append(devs, models.HostPCIDevice{
+			Address:     addr,
+			Type:        dtype,
+			Description: desc,
+			IOMMUGroup:  group,
+		})
+	}
+	return devs
+}
+
+func loadIOMMUGroups() map[string]int {
+	m := make(map[string]int)
+	groups, err := os.ReadDir("/sys/kernel/iommu_groups")
+	if err != nil {
+		return m
+	}
+	for _, g := range groups {
+		gid, err := strconv.Atoi(g.Name())
+		if err != nil {
+			continue
+		}
+		devDir := "/sys/kernel/iommu_groups/" + g.Name() + "/devices"
+		devs, err := os.ReadDir(devDir)
+		if err != nil {
+			continue
+		}
+		for _, d := range devs {
+			// d.Name() is like "0000:05:00.0" — convert to lspci short "05:00.0"
+			full := d.Name()
+			short := full
+			if len(full) > 5 && full[4] == ':' {
+				short = full[5:]
+			}
+			m[short] = gid
+		}
+	}
+	return m
 }
 
 // ─── Storage pools ───────────────────────────────────────────────────────────
