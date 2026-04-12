@@ -330,8 +330,12 @@ func buildVM(name, stateStr string) models.VM {
 		vm.UUID = info["uuid"]
 		vm.CPUCount, _ = strconv.Atoi(info["cpu(s)"])
 		vm.MemTotalMB = parseKiBToMB(info["max memory"])
-		vm.MemUsageMB = parseKiBToMB(info["used memory"])
+		vm.MemUsageMB = parseKiBToMB(info["used memory"]) // fallback: allocated
 		vm.Autostart = strings.TrimSpace(info["autostart"]) == "enable"
+	}
+	// Prefer dommemstat for actual guest-side memory usage (requires virtio-balloon).
+	if usedMB, ok := virshDomMemUsed(name); ok {
+		vm.MemUsageMB = usedMB
 	}
 	if vm.UUID == "" {
 		vm.UUID = name // fallback
@@ -606,6 +610,36 @@ func virshDomInfo(name string) map[string]string {
 		}
 	}
 	return info
+}
+
+// virshDomMemUsed returns actual guest-side memory usage in MB via dommemstat.
+// Returns (0, false) when the balloon driver isn't reporting stats.
+func virshDomMemUsed(name string) (uint64, bool) {
+	out, err := exec.Command("virsh", "dommemstat", name).Output()
+	if err != nil {
+		return 0, false
+	}
+	var available, unused uint64
+	var hasAvail, hasUnused bool
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		val, _ := strconv.ParseUint(fields[1], 10, 64)
+		switch fields[0] {
+		case "available":
+			available = val
+			hasAvail = true
+		case "unused":
+			unused = val
+			hasUnused = true
+		}
+	}
+	if hasAvail && hasUnused && available >= unused {
+		return (available - unused) / 1024, true
+	}
+	return 0, false
 }
 
 // vmCPUUsage calculates CPU % by comparing domstats cpu.time readings.

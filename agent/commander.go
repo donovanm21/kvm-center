@@ -87,6 +87,18 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out, err = exec.Command("virsh", "snapshot-delete", vmTarget, snapName).CombinedOutput()
+		if err != nil {
+			// External snapshots with backing chains can't be fully deleted while
+			// the VM is running. Fall back to --metadata (removes the snapshot
+			// record but preserves the backing disk files).
+			metaOut, metaErr := exec.Command("virsh", "snapshot-delete", vmTarget, snapName, "--metadata").CombinedOutput()
+			if metaErr == nil {
+				msg := "Snapshot metadata removed (external snapshot — disk backing files preserved): " + strings.TrimSpace(string(metaOut))
+				log.Printf("command ok: DELETE_SNAPSHOT (metadata) vm=%s snap=%s", vmTarget, snapName)
+				respond(w, true, msg)
+				return
+			}
+		}
 	case "MIGRATE":
 		dest := req.Params["destination"]
 		if dest == "" {
