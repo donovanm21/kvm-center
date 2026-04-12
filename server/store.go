@@ -22,6 +22,7 @@ type persistData struct {
 	Users      map[string]*models.User             `json:"users,omitempty"`
 	Groups     map[string]*models.Group            `json:"groups,omitempty"`
 	Roles      map[string]*models.Role             `json:"roles,omitempty"`
+	Sessions   map[string]*models.Session          `json:"sessions,omitempty"`
 }
 
 // guestEntry is one cached report from a kvm-tools daemon running in a guest.
@@ -358,6 +359,7 @@ func (s *Store) Save() {
 		Users:      s.users,
 		Groups:     s.groups,
 		Roles:      s.roles,
+		Sessions:   s.sessions,
 	}
 	s.mu.RUnlock()
 
@@ -407,6 +409,16 @@ func (s *Store) load() {
 	}
 	if d.Roles != nil {
 		s.roles = d.Roles
+	}
+	if d.Sessions != nil {
+		// Drop any that expired while we were down.
+		now := time.Now()
+		for tok, sess := range d.Sessions {
+			if now.After(sess.ExpiresAt) {
+				delete(d.Sessions, tok)
+			}
+		}
+		s.sessions = d.Sessions
 	}
 	log.Printf("store: loaded %d hosts, %d users, %d groups, %d roles from %s",
 		len(s.hosts), len(s.users), len(s.groups), len(s.roles), s.dataFile)
