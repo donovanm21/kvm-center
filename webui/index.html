@@ -1139,6 +1139,24 @@ thead th.sortable.desc { color: var(--text-body); }
 }
 .deploy-copy-btn:hover { background: #E3571E; color: #fff; }
 .deploy-copy-btn.copied { background: #1E3D23; border-color: #4caf50; color: #4caf50; }
+body.light-mode .deploy-copy-btn { background: #FFE8DA; border-color: #E3571E; color: #E3571E; }
+body.light-mode .deploy-copy-btn:hover { background: #E3571E; color: #fff; }
+body.light-mode .deploy-copy-btn.copied { background: #DAFBE1; border-color: #1A7F37; color: #1A7F37; }
+
+/* Migration status + mode pills (replace inline styles so light-mode works) */
+.mig-status-pill { display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px; }
+.mig-status-pill.running  { background:#3D2510;color:#FF8A3C; }
+.mig-status-pill.complete { background:#1E3D23;color:#4caf50; }
+.mig-status-pill.failed   { background:#3D1E1E;color:#f44336; }
+body.light-mode .mig-status-pill.running  { background:#FFE8DA;color:#E3571E; }
+body.light-mode .mig-status-pill.complete { background:#DAFBE1;color:#1A7F37; }
+body.light-mode .mig-status-pill.failed   { background:#FFEBE9;color:#CF222E; }
+
+.mig-mode-pill { display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600; }
+.mig-mode-pill.offline { background:#2D1810;color:#FF8A3C; }
+.mig-mode-pill.live    { background:#3D2510;color:#ff9800; }
+body.light-mode .mig-mode-pill.offline { background:#FFE8DA;color:#E3571E; }
+body.light-mode .mig-mode-pill.live    { background:#FFF4CC;color:#9A6700; }
 
 .deploy-note {
   font-size: 11px;
@@ -1173,6 +1191,9 @@ thead th.sortable.desc { color: var(--text-body); }
 }
 .deploy-files-table td a:hover { text-decoration: underline; }
 .deploy-files-table td .size { color: var(--text-faded); font-size: 10px; }
+
+body.light-mode .deploy-portal-pill { background: #DAFBE1; color: #1A7F37; }
+body.light-mode .deploy-portal-pill.offline { background: #FFEBE9; color: #CF222E; }
 
 .deploy-portal-pill {
   display: inline-flex;
@@ -2811,10 +2832,7 @@ function renderMigrationsView() {
   const active = migs.filter(m => m.status === 'running');
   const past = migs.filter(m => m.status !== 'running');
 
-  const statusPill = (s) => {
-    const colors = { running: 'background:#3D2510;color:#FF8A3C', complete: 'background:#1E3D23;color:#4caf50', failed: 'background:#3D1E1E;color:#f44336' };
-    return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;${colors[s]||''}">${esc(s)}</span>`;
-  };
+  const statusPill = (s) => `<span class="mig-status-pill ${esc(s)}">${esc(s)}</span>`;
 
   const fmtTime = (ts) => {
     if (!ts) return '—';
@@ -2877,7 +2895,7 @@ function renderMigrationsView() {
               <td style="color:var(--text-muted);font-size:11px">${esc(m.source_host)}</td>
               <td style="color:var(--text-muted);font-size:11px">${esc(m.dest_host)}</td>
               <td>
-                <span style="padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;background:${m.mode==='offline'?'#2D1810':'#2D1810'};color:${m.mode==='offline'?'#FF8A3C':'#ff9800'}">${esc(m.mode)}</span>
+                <span class="mig-mode-pill ${m.mode==='offline'?'offline':'live'}">${esc(m.mode)}</span>
               </td>
               <td>${statusPill(m.status)}</td>
               <td style="font-size:11px;color:var(--text-muted);white-space:nowrap">${fmtTime(m.started_at)}</td>
