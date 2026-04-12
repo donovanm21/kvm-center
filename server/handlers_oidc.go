@@ -23,9 +23,15 @@ func handleListProviders(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		out := []publicProvider{}
 		for _, p := range store.ListIDPs() {
-			if p.Enabled {
-				out = append(out, publicProvider{ID: p.ID, Name: p.Name, Kind: p.Kind})
+			if !p.Enabled {
+				continue
 			}
+			// LDAP is transparent (handled inside the username/password form)
+			// and doesn't produce a login button.
+			if p.Kind == "ldap" {
+				continue
+			}
+			out = append(out, publicProvider{ID: p.ID, Name: p.Name, Kind: p.Kind})
 		}
 		writeJSON(w, http.StatusOK, out)
 	}
@@ -308,6 +314,7 @@ func handleIDPUpdate(store *Store) http.Handler {
 				EmailClaim    *string `json:"email_claim"`
 				UsernameClaim *string `json:"username_claim"`
 				LDAP          *models.LDAPConfig `json:"ldap"`
+				SAML          *models.SAMLConfig `json:"saml"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid JSON")
@@ -332,6 +339,9 @@ func handleIDPUpdate(store *Store) http.Handler {
 				if req.SubjectClaim != nil { p.SubjectClaim = *req.SubjectClaim }
 				if req.EmailClaim != nil { p.EmailClaim = *req.EmailClaim }
 				if req.UsernameClaim != nil { p.UsernameClaim = *req.UsernameClaim }
+				if req.SAML != nil {
+					p.SAML = req.SAML
+				}
 				if req.LDAP != nil {
 					// Empty bind_password means "keep current" for LDAP, same
 					// behaviour as client_secret for OAuth2.

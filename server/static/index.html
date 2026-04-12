@@ -3382,6 +3382,10 @@ const IDP_PRESETS = {
     subject_claim: 'sub', email_claim: 'email', username_claim: 'preferred_username',
   },
   oidc: { kind: 'oidc', name: '', scopes: 'openid email profile' },
+  saml: {
+    kind: 'saml', name: 'SAML SSO',
+    saml: { metadata_url: '', idp_entity_id: '', sso_url: '', certificate: '', sp_entity_id: '' },
+  },
   ldap: {
     kind: 'ldap', name: 'Active Directory',
     ldap: {
@@ -3452,10 +3456,12 @@ function renderIDPForm() {
   const roleOpts = ['<option value="">— none —</option>']
     .concat((state.roles || []).map(r => `<option value="${esc(r.id)}" ${d.default_role_id===r.id?'selected':''}>${esc(r.name)}</option>`))
     .join('');
-  const kindOpts = ['google','github','microsoft','oidc','ldap']
+  const kindOpts = ['google','github','microsoft','oidc','saml','ldap']
     .map(k => `<option value="${k}" ${d.kind===k?'selected':''}>${k}</option>`).join('');
   const isLDAP = d.kind === 'ldap';
+  const isSAML = d.kind === 'saml';
   const ldap = d.ldap || {};
+  const samlCfg = d.saml || {};
   return `
     <div class="modal-overlay" style="display:flex" onclick="if(event.target===this)closeIDPForm()">
       <div class="modal" style="width:620px;max-width:calc(100vw - 32px);max-height:92vh;overflow-y:auto">
@@ -3467,7 +3473,38 @@ function renderIDPForm() {
         <label style="margin-top:10px">Display name</label>
         <input type="text" id="idp-name" value="${esc(d.name || '')}" placeholder="e.g. Sign in with Google">
 
-        ${isLDAP ? `
+        ${isSAML ? `
+          <div style="margin-top:10px;padding:10px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--text-muted)">
+            <strong style="color:var(--text-strong)">SP metadata URL</strong> (import this at your IdP):
+            <code style="display:block;margin-top:6px;padding:6px 8px;background:var(--surface-2);border-radius:3px;font-family:monospace;user-select:all;word-break:break-all">${location.protocol}//${location.host}/api/auth/saml/metadata?provider=${esc(d.id || '<after-save>')}</code>
+          </div>
+
+          <label style="margin-top:10px">IdP metadata URL <span style="color:var(--text-faded)">(easiest — we fetch &amp; refresh on demand)</span></label>
+          <input type="text" id="idp-saml-metadata-url" value="${esc(samlCfg.metadata_url || '')}" placeholder="https://login.example.com/saml/metadata">
+
+          <details style="margin-top:10px">
+            <summary style="cursor:pointer;color:var(--text-muted);font-size:11px">Or configure IdP manually (entity ID + SSO URL + certificate)</summary>
+            <label style="margin-top:10px">IdP entity ID</label>
+            <input type="text" id="idp-saml-entity-id" value="${esc(samlCfg.idp_entity_id || '')}">
+            <label style="margin-top:8px">Single sign-on URL</label>
+            <input type="text" id="idp-saml-sso-url" value="${esc(samlCfg.sso_url || '')}" placeholder="https://login.example.com/saml/sso">
+            <label style="margin-top:8px">IdP signing certificate (PEM)</label>
+            <textarea id="idp-saml-cert" rows="5" style="font-family:monospace;font-size:11px" placeholder="-----BEGIN CERTIFICATE-----
+MIIC...
+-----END CERTIFICATE-----">${esc(samlCfg.certificate || '')}</textarea>
+          </details>
+
+          <details style="margin-top:10px">
+            <summary style="cursor:pointer;color:var(--text-muted);font-size:11px">Advanced: SP entity ID override &amp; attribute mapping</summary>
+            <label style="margin-top:10px">SP entity ID <span style="color:var(--text-faded)">(leave blank to use metadata URL)</span></label>
+            <input type="text" id="idp-saml-sp-entity" value="${esc(samlCfg.sp_entity_id || '')}">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">
+              <div><label>Subject attribute</label><input type="text" id="idp-saml-subject-attr" value="${esc(samlCfg.subject_attr || '')}" placeholder="NameID"></div>
+              <div><label>Email attribute</label><input type="text" id="idp-saml-email-attr" value="${esc(samlCfg.email_attr || '')}" placeholder="email"></div>
+              <div><label>Username attribute</label><input type="text" id="idp-saml-username-attr" value="${esc(samlCfg.username_attr || '')}" placeholder="preferred_username"></div>
+            </div>
+          </details>
+        ` : isLDAP ? `
           <label style="margin-top:10px">LDAP URL</label>
           <input type="text" id="idp-ldap-url" value="${esc(ldap.url || '')}" placeholder="ldap://dc.example.com:389 or ldaps://…">
 
@@ -3552,7 +3589,18 @@ async function submitIDPForm() {
     default_role_id: document.getElementById('idp-default-role').value,
     enabled: document.getElementById('idp-enabled').checked,
   };
-  if (kind === 'ldap') {
+  if (kind === 'saml') {
+    body.saml = {
+      metadata_url: document.getElementById('idp-saml-metadata-url').value.trim(),
+      idp_entity_id: document.getElementById('idp-saml-entity-id')?.value.trim() || '',
+      sso_url: document.getElementById('idp-saml-sso-url')?.value.trim() || '',
+      certificate: document.getElementById('idp-saml-cert')?.value.trim() || '',
+      sp_entity_id: document.getElementById('idp-saml-sp-entity')?.value.trim() || '',
+      subject_attr: document.getElementById('idp-saml-subject-attr')?.value.trim() || '',
+      email_attr: document.getElementById('idp-saml-email-attr')?.value.trim() || '',
+      username_attr: document.getElementById('idp-saml-username-attr')?.value.trim() || '',
+    };
+  } else if (kind === 'ldap') {
     body.ldap = {
       url: document.getElementById('idp-ldap-url').value.trim(),
       user_base_dn: document.getElementById('idp-ldap-user-base').value.trim(),
@@ -5308,7 +5356,7 @@ async function loadAuthProviders() {
     const root = document.getElementById('auth-providers');
     if (!root) return;
     const btns = list.map(p => `
-      <a class="auth-provider-btn" href="/api/auth/oidc/start?provider=${encodeURIComponent(p.id)}">
+      <a class="auth-provider-btn" href="${p.kind==='saml' ? '/api/auth/saml/start' : '/api/auth/oidc/start'}?provider=${encodeURIComponent(p.id)}">
         ${providerIcon(p.kind)}
         <span>Continue with ${esc(p.name)}</span>
       </a>
