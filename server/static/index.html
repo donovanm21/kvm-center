@@ -2657,6 +2657,21 @@ function openMigrateDialog(hostID, vmUUID, vmName) {
             <span style="font-size:12px;color:#c5daf0">Copy storage (required without shared NFS)</span>
           </label>` : ''}
 
+          ${mode==='offline' && vm.disk_type === 'raw' ? `
+          <div style="margin-top:12px;padding:10px 14px;background:#091828;border:1px solid #1a3a5c;border-radius:4px">
+            <div style="font-size:11px;font-weight:600;color:#e8f4ff;margin-bottom:8px">Disk Format After Migration</div>
+            <div style="font-size:11px;color:#5a8ab0;margin-bottom:8px">This VM uses <strong style="color:#ff9800">raw</strong> disk images. The disk is always transferred as compressed qcow2 for speed. Choose the final format on the target:</div>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px">
+              <input type="radio" name="migrate-disk-fmt" value="qcow2" checked style="accent-color:#0091da">
+              <span style="font-size:12px;color:#c5daf0"><strong>Convert to qcow2</strong> — enables snapshots, thin provisioning, smaller footprint</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="radio" name="migrate-disk-fmt" value="raw" style="accent-color:#0091da">
+              <span style="font-size:12px;color:#c5daf0"><strong>Keep raw</strong> — converted back to raw on the target after transfer (slightly slower)</span>
+            </label>
+          </div>
+          ` : ''}
+
           <div style="margin-top:12px">
             <label>Pre-flight Checks</label>
             <div id="migrate-checks" style="margin-top:6px">
@@ -2749,7 +2764,10 @@ async function executeMigrate(hostID, vmUUID, vmName) {
       const r = await fetch(API + '/api/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ host_id: hostID, vm_uuid: vmUUID, vm_name: vmName, action: 'OFFLINE_MIGRATE', params: { destination: target.ip } }),
+        body: JSON.stringify({ host_id: hostID, vm_uuid: vmUUID, vm_name: vmName, action: 'OFFLINE_MIGRATE', params: {
+        destination: target.ip,
+        keep_raw: document.querySelector('input[name="migrate-disk-fmt"][value="raw"]')?.checked ? 'true' : 'false',
+      } }),
       });
       const data = await r.json();
       if (data.success) {
