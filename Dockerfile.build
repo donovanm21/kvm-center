@@ -7,10 +7,9 @@ ARG VERSION=dev
 RUN apk --no-cache add python3 tar
 
 WORKDIR /src
-COPY go.mod .
-RUN go mod download
-
+COPY go.mod go.su[m] ./
 COPY . .
+RUN go mod tidy
 
 # Build server (linux/amd64 - runs in container)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
