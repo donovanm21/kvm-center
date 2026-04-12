@@ -2,6 +2,8 @@
 # and serves a download portal on port 8080 (python3 http.server).
 FROM golang:1.22-alpine
 
+ARG VERSION=dev
+
 RUN apk --no-cache add python3 tar
 
 WORKDIR /src
@@ -12,24 +14,24 @@ COPY . .
 
 # Build server (linux/amd64 — runs in container)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-s -w" -o /out/kvm-center-server ./server
+    go build -ldflags="-s -w -X main.Version=${VERSION}" -o /out/kvm-center-server ./server
 
 # Build agent for common hypervisor targets
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-s -w" -o /out/kvm-center-agent-amd64 ./agent
+    go build -ldflags="-s -w -X main.Version=${VERSION}" -o /out/kvm-center-agent-amd64 ./agent
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
-    go build -ldflags="-s -w" -o /out/kvm-center-agent-arm64 ./agent
+    go build -ldflags="-s -w -X main.Version=${VERSION}" -o /out/kvm-center-agent-arm64 ./agent
 
 # Build kvm-tools guest daemon for Linux (amd64 + arm64) and Windows (amd64)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-s -w" -o /out/kvm-tools-linux-amd64 ./kvm-tools
+    go build -ldflags="-s -w -X main.Version=${VERSION}" -o /out/kvm-tools-linux-amd64 ./kvm-tools
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
-    go build -ldflags="-s -w" -o /out/kvm-tools-linux-arm64 ./kvm-tools
+    go build -ldflags="-s -w -X main.Version=${VERSION}" -o /out/kvm-tools-linux-arm64 ./kvm-tools
 
 RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
-    go build -ldflags="-s -w" -o /out/kvm-tools-windows-amd64.exe ./kvm-tools
+    go build -ldflags="-s -w -X main.Version=${VERSION}" -o /out/kvm-tools-windows-amd64.exe ./kvm-tools
 
 # Bundle artifacts
 RUN mkdir -p /dist && \

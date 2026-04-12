@@ -13,11 +13,21 @@ import (
 	"time"
 )
 
+// Version is injected at build time via -ldflags.
+var Version = "dev"
+
 func main() {
 	serverURL := flag.String("server", envOrDefault("KVM_CENTER_SERVER", "http://10.10.100.8:8090"), "control plane URL")
 	cmdPort := flag.Int("port", intEnvOrDefault("KVM_CENTER_AGENT_PORT", 8081), "command server port")
 	interval := flag.Duration("interval", 30*time.Second, "telemetry interval")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		log.Printf("kvm-center-agent %s", Version)
+		os.Exit(0)
+	}
+	log.Printf("kvm-center-agent starting, version=%s", Version)
 
 	cmdAddr := fmt.Sprintf(":%d", *cmdPort)
 
