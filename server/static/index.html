@@ -1476,6 +1476,41 @@ body.light-mode .btn-secondary {
 }
 body.light-mode .btn-secondary:hover:not(:disabled) { background: #F6F8FA; color: #1F2328; }
 
+/* Danger + warning variants need their own light palette — the dark
+   maroon/amber backgrounds are illegible against a white page. */
+body.light-mode .btn-danger {
+  background: #FFEBE9; color: #A40E26; border-color: #FF8182;
+}
+body.light-mode .btn-danger:hover:not(:disabled) { background: #FFC1BA; color: #82071E; }
+body.light-mode .btn-warning {
+  background: #FFF1C2; color: #7D4E00; border-color: #E9BE4C;
+}
+body.light-mode .btn-warning:hover:not(:disabled) { background: #F5E8A0; color: #5C3A00; }
+
+/* Pills that reuse the accent palette (BRIDGED network, CURRENT snapshot,
+   various badges). Class form lets us theme them once. */
+.accent-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #3D2510; color: #FF8A3C;
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+body.light-mode .accent-pill { background: #FFF4EC; color: #C04512; }
+
+/* Disk-format pills on the VM Hardware tab. */
+.fmt-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 10px; font-weight: 600;
+  background: #3d2a00; color: #ff9800;
+}
+.fmt-pill.qcow2 { background: #1E3D23; color: #4caf50; }
+body.light-mode .fmt-pill { background: #FFF1C2; color: #7D4E00; }
+body.light-mode .fmt-pill.qcow2 { background: #DAFBE1; color: #1A7F37; }
+
 body.light-mode .status-pill.online,
 body.light-mode .env-row-status-pill.connected { background: #DAFBE1; color: #1A7F37; }
 body.light-mode .status-pill.offline,
@@ -3171,7 +3206,7 @@ function renderVMNetworksTab(vm) {
             <div style="font-size:14px;font-weight:600;color:var(--text-strong)">Network Adapter ${i+1}</div>
             <div style="font-size:11px;color:var(--text-faded);font-family:'SF Mono',monospace">${esc(n.interface || 'host-side tap')}</div>
           </div>
-          <span class="vm-pill" style="background:#3D2510;color:#FF8A3C">BRIDGED</span>
+          <span class="accent-pill">BRIDGED</span>
         </div>
         <div class="vm-info-grid" style="grid-template-columns:140px 1fr">
           <span class="lbl">Bridge:</span>
@@ -3507,7 +3542,7 @@ function renderSnapshotDetailTable(vm, snaps) {
     <tr>
       <td style="font-weight:500;color:var(--text-strong)">
         ${esc(s.name)}
-        ${s.is_current ? '<span style="margin-left:8px;font-size:9px;padding:1px 6px;border-radius:10px;background:#3D2510;color:#FF8A3C;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Current</span>' : ''}
+        ${s.is_current ? '<span class="accent-pill" style="margin-left:8px;font-size:9px;padding:1px 6px">Current</span>' : ''}
       </td>
       <td style="color:var(--text-muted);font-size:11px;font-family:'SF Mono',monospace">${esc(s.creation_time)}</td>
       <td><span class="vm-state ${s.state==='running'?'running':'stopped'}">${esc(s.state)}</span></td>
@@ -3606,7 +3641,7 @@ function renderVMHardwareTab(vm) {
       <tr>
         <td style="font-weight:500;color:var(--text-strong)">${esc(d.target)}</td>
         <td>${esc(d.device)}</td>
-        <td><span style="padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;background:${snapOK?'#1E3D23':'#3d2a00'};color:${snapOK?'#4caf50':'#ff9800'}">${esc(d.disk_type||'—')}</span></td>
+        <td><span class="fmt-pill ${snapOK?'qcow2':''}">${esc(d.disk_type||'—')}</span></td>
         <td>${esc(d.bus || '—')}</td>
         <td style="font-family:'SF Mono',monospace;font-size:11px;color:var(--text-muted);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(d.path)}">${esc(d.path || '—')}</td>
         <td>${d.capacity_gb > 0 ? d.capacity_gb.toFixed(1)+' GB' : '—'}</td>
@@ -4144,7 +4179,7 @@ function renderSnapshotDetail(vm, snaps) {
     <tr>
       <td style="font-weight:500;color:var(--text-strong)">
         ${esc(s.name)}
-        ${s.is_current ? '<span style="margin-left:8px;font-size:9px;padding:1px 6px;border-radius:10px;background:#3D2510;color:#FF8A3C;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Current</span>' : ''}
+        ${s.is_current ? '<span class="accent-pill" style="margin-left:8px;font-size:9px;padding:1px 6px">Current</span>' : ''}
       </td>
       <td style="color:var(--text-muted);font-size:11px;font-family:'SF Mono',monospace">${esc(s.creation_time)}</td>
       <td><span class="vm-state ${s.state==='running'?'running':'stopped'}">${esc(s.state)}</span></td>
