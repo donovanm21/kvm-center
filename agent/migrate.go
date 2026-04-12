@@ -268,11 +268,15 @@ func offlineMigrate(vmName, dest string) error {
 	}
 	defer os.Remove(xmlTmp)
 
+	// kvm-migrator must use qemu:///system explicitly — the default for non-root
+	// users is qemu:///session which creates ephemeral domains that vanish on logout.
+	const vc = "virsh -c qemu:///system"
+
 	out, err := sshMigrator(dest, "cat > /tmp/"+vmName+"-define.xml", xmlStr)
 	if err != nil {
 		return fmt.Errorf("send XML to target: %s", out)
 	}
-	out, err = sshMigrator(dest, "virsh define /tmp/"+vmName+"-define.xml && rm /tmp/"+vmName+"-define.xml", "")
+	out, err = sshMigrator(dest, vc+" define /tmp/"+vmName+"-define.xml && rm /tmp/"+vmName+"-define.xml", "")
 	if err != nil {
 		return fmt.Errorf("virsh define on target: %s", out)
 	}
@@ -280,7 +284,9 @@ func offlineMigrate(vmName, dest string) error {
 	// ── 8. Start on target ────────────────────────────────────
 	setMigStatus("start", 95, "Starting "+vmName+" on target")
 	logStep("starting VM on target")
-	out, err = sshMigrator(dest, "virsh start "+vmName, "")
+	// Kill any stale session-mode qemu process holding a lock on the disk.
+	sshMigrator(dest, "fuser -k "+imageDir+"/"+vmName+"-*.qcow2 2>/dev/null; sleep 1", "")
+	out, err = sshMigrator(dest, vc+" start "+vmName, "")
 	if err != nil {
 		return fmt.Errorf("virsh start on target: %s", out)
 	}
