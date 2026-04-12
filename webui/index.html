@@ -104,17 +104,57 @@ body {
   box-shadow: 0 0 6px #4caf5088;
 }
 .status-dot.offline { background: #f44336; box-shadow: 0 0 6px #f4433688; }
-#refresh-btn {
+.icon-btn {
   background: none;
   border: 1px solid #30363D;
   color: #8B949E;
-  padding: 4px 10px;
-  border-radius: 3px;
+  padding: 6px 8px;
+  border-radius: 5px;
   cursor: pointer;
-  font-size: 11px;
-  transition: all 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-#refresh-btn:hover { background: #1C2128; color: #C9D1D9; border-color: #E3571E; }
+.icon-btn:hover { background: #1C2128; color: #E3571E; border-color: #E3571E; }
+.icon-btn svg { display: block; }
+
+/* ── View-scoped search input ──────────────────────────── */
+.view-search {
+  position: relative;
+  margin-bottom: 14px;
+  max-width: 380px;
+}
+.view-search input {
+  width: 100%;
+  height: 36px;
+  background: #0D1117;
+  border: 1px solid #30363D;
+  border-radius: 5px;
+  color: #C9D1D9;
+  padding: 0 12px 0 34px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.view-search input:focus {
+  border-color: #E3571E;
+  box-shadow: 0 0 0 2px #E3571E33;
+}
+.view-search::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='%238B949E' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
 
 /* ── Layout ─────────────────────────────────────────────── */
 #layout {
@@ -1274,6 +1314,144 @@ thead th.sortable.desc { color: #C9D1D9; }
   tbody td { padding: 10px 10px; }
 }
 
+/* ── Light mode overrides ───────────────────────────────── */
+body.light-mode {
+  background: #F6F8FA;
+  color: #3D434D;
+}
+body.light-mode #topbar {
+  background: #FFFFFF;
+  border-bottom: 1px solid #D0D7DE;
+}
+body.light-mode .brand-primary { color: #1F2328; }
+body.light-mode #conn-status { color: #656D76; }
+body.light-mode .icon-btn {
+  border-color: #D0D7DE; color: #656D76;
+}
+body.light-mode .icon-btn:hover { background: #F6F8FA; color: #E3571E; border-color: #E3571E; }
+body.light-mode #sidebar {
+  background: #FFFFFF; border-right: 1px solid #D0D7DE;
+}
+body.light-mode .sidebar-cluster-pill {
+  background: #FFF4EC; border-color: #E3571E44;
+  color: #1F2328;
+}
+body.light-mode .sidebar-cluster-pill .sidebar-cluster-count {
+  background: #F6F8FA; color: #656D76;
+}
+body.light-mode .sidebar-header,
+body.light-mode .sidebar-separator { color: #656D76; border-top-color: #D0D7DE; }
+body.light-mode .nav-item { color: #3D434D; }
+body.light-mode .nav-item:hover { background: #F6F8FA; color: #1F2328; }
+body.light-mode .nav-item.active {
+  background: linear-gradient(90deg, rgba(227,87,30,0.10) 0%, rgba(227,87,30,0) 100%);
+  color: #1F2328; border-left-color: #E3571E;
+}
+body.light-mode .nav-badge { background: #EAEEF2; color: #656D76; }
+body.light-mode .nav-item.active .nav-badge { background: #FFE0CC; color: #E3571E; }
+body.light-mode .host-tree-item { color: #656D76; }
+body.light-mode .host-tree-item:hover { background: #F6F8FA; color: #1F2328; }
+body.light-mode .host-tree-item.active { background: #FFF4EC; color: #1F2328; border-left-color: #E3571E; }
+body.light-mode #version-footer { color: #8B95A1; border-top-color: #D0D7DE; }
+body.light-mode #version-footer #version-text { color: #656D76; }
+
+body.light-mode #content-header,
+body.light-mode #tabs {
+  background: #FFFFFF; border-bottom-color: #D0D7DE;
+}
+body.light-mode .breadcrumb { color: #8B95A1; }
+body.light-mode .breadcrumb span { color: #1F2328; }
+body.light-mode .tab { color: #656D76; }
+body.light-mode .tab:hover { color: #1F2328; }
+body.light-mode .tab.active { color: #1F2328; border-bottom-color: #E3571E; }
+
+body.light-mode .summary-card,
+body.light-mode .host-card,
+body.light-mode .detail-panel,
+body.light-mode .env-list-header,
+body.light-mode .env-list,
+body.light-mode .env-row,
+body.light-mode .table-wrap,
+body.light-mode .vm-info-card,
+body.light-mode .vm-usage-card,
+body.light-mode .vm-collapsible,
+body.light-mode .vm-thumbnail,
+body.light-mode .vm-actions-bar,
+body.light-mode .deploy-package,
+body.light-mode .deploy-intro,
+body.light-mode .modal {
+  background: #FFFFFF; border-color: #D0D7DE;
+}
+body.light-mode .env-row { border-top-color: #D0D7DE; }
+body.light-mode .env-row:hover { background: #F6F8FA; }
+body.light-mode .env-row-icon { background: #FFF4EC; }
+body.light-mode .summary-card .label,
+body.light-mode .summary-card .sub,
+body.light-mode .resource-label,
+body.light-mode .env-row-meta,
+body.light-mode .host-card-ip,
+body.light-mode .host-card-meta,
+body.light-mode .detail-label { color: #656D76; }
+body.light-mode .summary-card .value,
+body.light-mode .env-row-name,
+body.light-mode .host-card-name,
+body.light-mode .detail-value { color: #1F2328; }
+body.light-mode .section-title { color: #656D76; }
+body.light-mode .section-title::after { background: #D0D7DE; }
+body.light-mode .resource-bar { background: #EAEEF2; }
+body.light-mode .env-row-bar-track { background: #EAEEF2; }
+
+body.light-mode thead th {
+  background: #F6F8FA; color: #656D76; border-bottom-color: #D0D7DE;
+}
+body.light-mode tbody tr { border-top-color: #EAEEF2; }
+body.light-mode tbody td { color: #3D434D; }
+body.light-mode tbody tr:hover { background: #F6F8FA; }
+body.light-mode tbody tr.selected { background: #FFF4EC; }
+
+body.light-mode .modal input[type="text"],
+body.light-mode .modal input[type="password"],
+body.light-mode .modal input[type="number"],
+body.light-mode .modal select,
+body.light-mode .modal textarea,
+body.light-mode .view-search input {
+  background: #FFFFFF; border-color: #D0D7DE; color: #1F2328;
+}
+body.light-mode .view-search::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='%23656D76' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z'/%3E%3C/svg%3E");
+}
+
+body.light-mode .btn-secondary {
+  background: #FFFFFF; color: #3D434D; border-color: #D0D7DE;
+}
+body.light-mode .btn-secondary:hover:not(:disabled) { background: #F6F8FA; color: #1F2328; }
+
+body.light-mode .status-pill.online,
+body.light-mode .env-row-status-pill.connected { background: #DAFBE1; color: #1A7F37; }
+body.light-mode .status-pill.offline,
+body.light-mode .env-row-status-pill.disconnected { background: #FFEBE9; color: #CF222E; }
+
+body.light-mode .vm-state.running { color: #1A7F37; }
+body.light-mode .vm-state.stopped { color: #656D76; }
+body.light-mode .vm-state.paused  { color: #9A6700; }
+body.light-mode .vm-state.crashed { color: #CF222E; }
+
+body.light-mode pre,
+body.light-mode .deploy-code-wrap,
+body.light-mode code {
+  background: #F6F8FA; color: #1F2328; border-color: #D0D7DE;
+}
+body.light-mode .deploy-code-wrap pre { color: #1F2328; }
+
+body.light-mode .empty-state { color: #8B95A1; }
+body.light-mode .empty-state p { color: #656D76; }
+
+body.light-mode ::-webkit-scrollbar-track { background: #EAEEF2; }
+body.light-mode ::-webkit-scrollbar-thumb { background: #D0D7DE; }
+body.light-mode ::-webkit-scrollbar-thumb:hover { background: #B1BAC4; }
+
+body.light-mode #sidebar-overlay { background: rgba(0,0,0,0.3); }
+
 /* ── Scrollbar ──────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #0D1117; }
@@ -1306,13 +1484,18 @@ thead th.sortable.desc { color: #C9D1D9; }
       <span class="brand-primary">kvm</span><span class="brand-accent">center</span>
     </span>
   </div>
-  <input id="search-bar" type="text" placeholder="Search VMs, hosts..." oninput="onSearch(this.value)">
   <div class="spacer"></div>
   <div id="conn-status">
     <div class="status-dot" id="conn-dot"></div>
     <span id="conn-text">Connecting…</span>
   </div>
-  <button class="btn btn-secondary" id="refresh-btn" onclick="refresh()">↺ Refresh</button>
+  <button class="icon-btn" id="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme" title="Toggle light / dark mode">
+    <svg id="theme-icon-dark" width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M6 .278a.77.77 0 0 1 .08.858 7.2 7.2 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.78.78 0 0 1 .81.316.73.73 0 0 1-.031.893A8.35 8.35 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.75.75 0 0 1 6 .278z"/></svg>
+    <svg id="theme-icon-light" width="18" height="18" viewBox="0 0 16 16" fill="currentColor" style="display:none"><path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"/></svg>
+  </button>
+  <button class="icon-btn" id="refresh-btn" onclick="refresh()" aria-label="Refresh" title="Refresh">
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+  </button>
 </div>
 
 <!-- Main layout -->
@@ -1540,6 +1723,7 @@ function showView(view, hostID, tab) {
   if (hostID !== undefined) state.selectedHost = hostID;
   if (tab     !== undefined) state.hostTab     = tab;
   state.selectedVM = null;
+  state.searchQuery = '';  // clear search when switching views
   if (view !== 'snapshots') {
     state.selectedSnapshotVM = null;
     state.snapshotList = [];
@@ -1562,7 +1746,15 @@ function setTab(tab) {
 
 function onSearch(q) {
   state.searchQuery = q.toLowerCase();
-  render();
+  // Re-render only the content area so the search input retains focus +
+  // caret position while the user types.
+  renderContent();
+  const input = document.getElementById('view-search-input');
+  if (input && document.activeElement !== input) {
+    input.focus();
+    const end = input.value.length;
+    input.setSelectionRange(end, end);
+  }
 }
 
 // ── Main render dispatcher ─────────────────────────────────
@@ -1769,8 +1961,21 @@ function renderHypervisorRow(h) {
 function renderAllVMs(q) {
   let vms = state.vms;
   if (q) vms = vms.filter(v => v.name.toLowerCase().includes(q) || v.host_id.toLowerCase().includes(q));
-  if (!vms.length) return emptyState('No VMs found', 'Deploy VMs on your hypervisors or check your search query.');
-  return `<div class="table-wrap">${vmTable(vms, true)}</div>`;
+  const searchBox = viewSearchInput('Search VMs by name or host…');
+  if (!vms.length) return searchBox + emptyState('No VMs found', 'Deploy VMs on your hypervisors or check your search query.');
+  return `${searchBox}<div class="table-wrap">${vmTable(vms, true)}</div>`;
+}
+
+// Embeddable search input; each view that wants search calls this helper
+// which binds to the shared state.searchQuery without causing a full
+// re-render on every keystroke.
+function viewSearchInput(placeholder) {
+  return `
+    <div class="view-search">
+      <input type="text" id="view-search-input" placeholder="${esc(placeholder)}"
+             value="${esc(state.searchQuery || '')}" oninput="onSearch(this.value)" autocomplete="off">
+    </div>
+  `;
 }
 
 function toggleVMSort(key) {
@@ -2001,9 +2206,10 @@ function renderHostStorage(h, hostPools) {
 function renderStorageView(q) {
   let pools = state.storage;
   if (q) pools = pools.filter(p => p.name.toLowerCase().includes(q) || p.host_id.toLowerCase().includes(q));
-  if (!pools.length) return emptyState('No Storage Pools', 'Storage pool data will appear here once agents report in.');
+  const searchBox = viewSearchInput('Search storage pools…');
+  if (!pools.length) return searchBox + emptyState('No Storage Pools', 'Storage pool data will appear here once agents report in.');
   const browser = state.fileBrowser ? renderFileBrowser() : '';
-  return `<div class="table-wrap">${storageTable(pools, true)}</div>${browser}`;
+  return `${searchBox}<div class="table-wrap">${storageTable(pools, true)}</div>${browser}`;
 }
 
 function storageTable(pools, showHost) {
@@ -3821,6 +4027,7 @@ function renderSnapshotsView(q) {
   const filtered = q
     ? vmsWithSnaps.filter(v => v.name.toLowerCase().includes(q) || v.host_id.toLowerCase().includes(q))
     : vmsWithSnaps;
+  const searchBox = viewSearchInput('Search VMs with snapshots…');
 
   const sel = state.selectedSnapshotVM;
   const selectedVM = sel ? state.vms.find(v => v.host_id === sel.host_id && v.name === sel.name) : null;
@@ -3858,6 +4065,7 @@ function renderSnapshotsView(q) {
   }
 
   return `
+    ${searchBox}
     <div style="display:flex;gap:16px;align-items:flex-start">
       ${leftPanel}
       <div style="flex:1;min-width:0">${rightPanel}</div>
@@ -4096,6 +4304,29 @@ function pad(n) { return String(n).padStart(2,'0'); }
 // ── PWA service worker ────────────────────────────────────
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+// ── Theme (light / dark) ──────────────────────────────────
+(function initTheme() {
+  const saved = localStorage.getItem('theme') || 'dark';
+  applyTheme(saved);
+})();
+function applyTheme(theme) {
+  document.body.classList.toggle('light-mode', theme === 'light');
+  localStorage.setItem('theme', theme);
+  const dk = document.getElementById('theme-icon-dark');
+  const lt = document.getElementById('theme-icon-light');
+  if (dk && lt) {
+    // Show the OPPOSITE icon (i.e. the one you'd switch to).
+    dk.style.display = theme === 'dark' ? 'none' : '';
+    lt.style.display = theme === 'light' ? 'none' : '';
+  }
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', theme === 'light' ? '#FFFFFF' : '#E3571E');
+}
+function toggleTheme() {
+  const cur = localStorage.getItem('theme') || 'dark';
+  applyTheme(cur === 'dark' ? 'light' : 'dark');
 }
 
 // ── Mobile sidebar toggle ─────────────────────────────────
