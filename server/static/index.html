@@ -2485,6 +2485,9 @@ function openMigrateDialog(hostID, vmUUID, vmName) {
     // 5. Disk format.
     const rawDisk = vm.disk_type === 'raw';
     results.push({ ok: !rawDisk, label: 'Disk format supports migration', detail: (vm.disk_type||'qcow2')+' — '+(rawDisk ? 'raw on local storage may need shared storage' : 'OK') });
+    // 6. No snapshots.
+    const hasSnaps = (vm.snapshot_count || 0) > 0;
+    results.push({ ok: !hasSnaps, label: 'No snapshots', detail: hasSnaps ? vm.snapshot_count+' snapshot(s) — delete or merge all snapshots before migrating' : 'None' });
     return results;
   }
 
