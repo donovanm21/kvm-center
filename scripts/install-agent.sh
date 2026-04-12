@@ -126,8 +126,12 @@ chown root:qemu /var/lib/libvirt/images 2>/dev/null
 chmod 775 /var/lib/libvirt/images 2>/dev/null
 
 # Allow qemu-bridge-helper to use br0 (needed for VMs migrated from other nodes).
-mkdir -p /etc/qemu
-grep -q "allow br0" /etc/qemu/bridge.conf 2>/dev/null || echo "allow br0" >> /etc/qemu/bridge.conf
+# RHEL/Rocky use /etc/qemu-kvm/bridge.conf; Debian/Ubuntu use /etc/qemu/bridge.conf.
+for bconf in /etc/qemu-kvm/bridge.conf /etc/qemu/bridge.conf; do
+  dir="$(dirname "$bconf")"
+  [ -d "$dir" ] || continue
+  grep -q "allow br0" "$bconf" 2>/dev/null || echo "allow br0" >> "$bconf"
+done
 
 # Polkit rule for libvirt access.
 cat > /etc/polkit-1/rules.d/50-kvm-migrator.rules << 'POLKIT_EOF'
