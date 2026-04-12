@@ -1,11 +1,11 @@
 {
   "name": "KVM Center",
   "short_name": "KVM Center",
-  "description": "Centralized KVM hypervisor fleet management",
+  "description": "Centralized KVM/QEMU hypervisor fleet management",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0d1b2a",
-  "theme_color": "#0091da",
+  "background_color": "#0B0E13",
+  "theme_color": "#E3571E",
   "orientation": "any",
   "icons": [
     { "src": "/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable" },
