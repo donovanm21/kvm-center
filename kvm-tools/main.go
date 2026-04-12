@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -47,12 +48,19 @@ type GuestTelemetryPayload struct {
 
 func main() {
 	serverURL := flag.String("server", envOr("KVM_TOOLS_SERVER", "http://REDACTED-HOST:8090"), "kvm-center server URL")
+	uuidOverride := flag.String("uuid", envOr("KVM_TOOLS_UUID", ""), "override VM UUID (use when DMI UUID doesn't match libvirt domain UUID)")
 	interval := flag.Duration("interval", 30*time.Second, "report interval")
 	flag.Parse()
 
-	uuid, err := readDMIUUID()
-	if err != nil {
-		log.Fatalf("kvm-tools: cannot read DMI UUID (is this running in a VM?): %v", err)
+	var uuid string
+	if *uuidOverride != "" {
+		uuid = strings.ToLower(strings.TrimSpace(*uuidOverride))
+	} else {
+		var err error
+		uuid, err = readDMIUUID()
+		if err != nil {
+			log.Fatalf("kvm-tools: cannot read DMI UUID (is this running in a VM?): %v", err)
+		}
 	}
 	log.Printf("kvm-tools: vm_uuid=%s  os=%s  server=%s  interval=%s", uuid, runtime.GOOS, *serverURL, *interval)
 
