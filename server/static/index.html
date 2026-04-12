@@ -524,7 +524,7 @@ thead th.sortable.desc { color: #c5daf0; }
 }
 .modal h3 { color: #e8f4ff; margin-bottom: 16px; font-size: 15px; }
 .modal label { display: block; font-size: 11px; color: #5a8ab0; margin-bottom: 4px; }
-.modal input {
+.modal input[type="text"], .modal input[type="password"], .modal input[type="number"] {
   width: 100%;
   background: #091828;
   border: 1px solid #1a3a5c;
@@ -535,7 +535,7 @@ thead th.sortable.desc { color: #c5daf0; }
   outline: none;
   font-family: inherit;
 }
-.modal input:focus { border-color: #0091da; }
+.modal input[type="text"]:focus { border-color: #0091da; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 
 /* ── VM Detail View ─────────────────────────────────────── */
