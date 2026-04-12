@@ -9,7 +9,12 @@ import (
 	"kvm-center/internal/models"
 )
 
-const sessionLifetime = 24 * time.Hour
+// sessionLifetime is the sliding idle-timeout window: a session stays valid
+// for this long after its last authenticated request. Industry-standard for
+// admin tools: long enough to survive a browser restart, short enough that
+// an abandoned session eventually expires. Sliding means active users never
+// get logged out unexpectedly.
+const sessionLifetime = 7 * 24 * time.Hour
 
 // ── Users ───────────────────────────────────────────────────────────
 
@@ -296,6 +301,30 @@ func (s *Store) GetSession(token string) *models.Session {
 	}
 	if time.Now().After(sess.ExpiresAt) {
 		return nil
+	}
+	cp := *sess
+	return &cp
+}
+
+// TouchSession slides the expiration forward when more than half the
+// lifetime has been consumed. Returns the (possibly updated) session, or
+// nil if it no longer exists. Safe to call on every authenticated request.
+func (s *Store) TouchSession(token string) *models.Session {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, ok := s.sessions[token]
+	if !ok {
+		return nil
+	}
+	now := time.Now()
+	if now.After(sess.ExpiresAt) {
+		delete(s.sessions, token)
+		return nil
+	}
+	// Only extend when less than half the window remains — avoids a write
+	// on every single request.
+	if sess.ExpiresAt.Sub(now) < sessionLifetime/2 {
+		sess.ExpiresAt = now.Add(sessionLifetime)
 	}
 	cp := *sess
 	return &cp

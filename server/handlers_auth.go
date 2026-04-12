@@ -77,6 +77,7 @@ func handleAuthRegister(store *Store) http.HandlerFunc {
 			return
 		}
 		setSessionCookie(w, sess)
+		go store.Save()
 		writeJSON(w, http.StatusOK, map[string]any{
 			"user":        sanitizeUser(u),
 			"permissions": permListFromMap(effectivePermissions(store, u)),
@@ -110,6 +111,7 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 			return
 		}
 		setSessionCookie(w, sess)
+		go store.Save()
 		writeJSON(w, http.StatusOK, map[string]any{
 			"user":        sanitizeUser(u),
 			"permissions": permListFromMap(effectivePermissions(store, u)),
@@ -431,7 +433,7 @@ func authMiddleware(store *Store, next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
 			return
 		}
-		sess := store.GetSession(c.Value)
+		sess := store.TouchSession(c.Value)
 		if sess == nil {
 			writeError(w, http.StatusUnauthorized, "session expired")
 			return
@@ -441,6 +443,9 @@ func authMiddleware(store *Store, next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "user disabled")
 			return
 		}
+		// If TouchSession slid the expiration forward, refresh the cookie
+		// so the browser keeps a matching Expires/Max-Age value.
+		setSessionCookie(w, sess)
 		// Attach user to request context.
 		ctx := context.WithValue(r.Context(), userCtxKey, u)
 		next.ServeHTTP(w, r.WithContext(ctx))
