@@ -13,10 +13,21 @@ import (
 //go:embed static
 var staticFiles embed.FS
 
+// Version is injected at build time via -ldflags "-X main.Version=v1.0.0".
+// Defaults to "dev" for local go build.
+var Version = "dev"
+
 func main() {
 	addr := flag.String("addr", envOrDefault("KVM_CENTER_ADDR", ":8090"), "listen address")
 	dataFile := flag.String("data", envOrDefault("KVM_CENTER_DATA", "/var/lib/kvm-center/data.json"), "JSON persistence file")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		log.Printf("kvm-center-server %s", Version)
+		os.Exit(0)
+	}
+	log.Printf("kvm-center-server starting, version=%s", Version)
 
 	// Ensure data directory exists.
 	if err := os.MkdirAll(dirOf(*dataFile), 0755); err != nil {
@@ -56,6 +67,10 @@ func main() {
 	mux.HandleFunc("/api/migrations/record", handlePostMigration(store))
 	mux.HandleFunc("/api/migrate-status", handleMigrateStatus(store))
 	mux.HandleFunc("/health", handleHealth)
+	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"version":"` + Version + `"}`))
+	})
 
 	// Serve embedded web UI for everything else.
 	sub, err := fs.Sub(staticFiles, "static")
