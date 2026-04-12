@@ -1512,7 +1512,7 @@ function renderSidebar() {
   document.getElementById('badge-migrations').textContent = activeM > 0 ? activeM : state.migrations.length;
 
   const tree = document.getElementById('host-tree');
-  tree.innerHTML = state.hosts.map(h => `
+  tree.innerHTML = [...state.hosts].sort((a,b) => a.id.toLowerCase().localeCompare(b.id.toLowerCase())).map(h => `
     <div class="host-tree-item ${state.selectedHost===h.id && state.view==='host' ? 'active' : ''}"
          onclick="showView('host','${esc(h.id)}','summary')">
       <div class="host-tree-dot ${h.status}"></div>
@@ -1626,7 +1626,7 @@ function renderDashboard() {
       <div style="font-size:11px;color:#5a8ab0">Click a hypervisor to manage</div>
     </div>
     <div class="env-list">
-      ${state.hosts.map(h => renderHypervisorRow(h)).join('')}
+      ${[...state.hosts].sort((a,b) => a.id.toLowerCase().localeCompare(b.id.toLowerCase())).map(h => renderHypervisorRow(h)).join('')}
     </div>
   `;
 }
