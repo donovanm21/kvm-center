@@ -1191,6 +1191,7 @@ let state = {
   vmRelatedOpen: true,
   vmNetworksOpen: false,
   migrations: [],           // migration history from server
+  fileBrowser: null,        // { host_id, path, entries, loading, uploading }
   deployOS: { 'kvm-tools': 'rhel', 'agent': 'rhel' }, // OS tab per package
   deployPortalOnline: null, // null=unknown, true/false probed
   deployPortalFiles: [],
@@ -1658,7 +1659,8 @@ function renderStorageView(q) {
   let pools = state.storage;
   if (q) pools = pools.filter(p => p.name.toLowerCase().includes(q) || p.host_id.toLowerCase().includes(q));
   if (!pools.length) return emptyState('No Storage Pools', 'Storage pool data will appear here once agents report in.');
-  return `<div class="table-wrap">${storageTable(pools, true)}</div>`;
+  const browser = state.fileBrowser ? renderFileBrowser() : '';
+  return `<div class="table-wrap">${storageTable(pools, true)}</div>${browser}`;
 }
 
 function storageTable(pools, showHost) {
@@ -1675,6 +1677,7 @@ function storageTable(pools, showHost) {
           <th>Available</th>
           <th>Utilisation</th>
           <th>Path</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -1699,11 +1702,191 @@ function storageTable(pools, showHost) {
                 </div>
               </td>
               <td style="font-family:monospace;font-size:11px;color:#5a8ab0">${esc(p.path||'—')}</td>
+              <td onclick="event.stopPropagation()">
+                <button class="btn btn-secondary btn-sm" ${p.path?'':'disabled'} onclick="openFileBrowser('${esc(p.host_id)}','${esc(p.path)}')">Browse</button>
+              </td>
             </tr>
           `;
         }).join('')}
       </tbody>
     </table>
+  `;
+}
+
+// ── File Browser ───────────────────────────────────────────
+async function openFileBrowser(hostID, path) {
+  state.fileBrowser = { host_id: hostID, path, entries: [], loading: true, uploading: false };
+  render();
+  await fetchBrowse(hostID, path);
+}
+
+function closeFileBrowser() {
+  state.fileBrowser = null;
+  render();
+}
+
+async function fetchBrowse(hostID, path) {
+  state.fileBrowser.loading = true;
+  state.fileBrowser.path = path;
+  render();
+  try {
+    const r = await fetch(`${API}/api/storage/browse?host=${encodeURIComponent(hostID)}&path=${encodeURIComponent(path)}`);
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    state.fileBrowser.entries = data.entries || [];
+    state.fileBrowser.path = data.path || path;
+  } catch (e) {
+    toast('error', `Browse failed: ${e.message}`);
+    state.fileBrowser.entries = [];
+  } finally {
+    state.fileBrowser.loading = false;
+    render();
+  }
+}
+
+async function browseNavigate(dir) {
+  const fb = state.fileBrowser;
+  const newPath = fb.path + '/' + dir;
+  await fetchBrowse(fb.host_id, newPath);
+}
+
+async function browseUp() {
+  const fb = state.fileBrowser;
+  const parent = fb.path.replace(/\/[^/]+$/, '') || '/';
+  await fetchBrowse(fb.host_id, parent);
+}
+
+async function deleteStorageFile(fileName) {
+  const fb = state.fileBrowser;
+  if (!confirm(`Delete "${fileName}" from ${fb.path}?\n\nThis cannot be undone.`)) return;
+  const filePath = fb.path + '/' + fileName;
+  try {
+    const r = await fetch(`${API}/api/storage/file?host=${encodeURIComponent(fb.host_id)}&path=${encodeURIComponent(filePath)}`, { method: 'DELETE' });
+    const data = await r.json();
+    if (data.success) {
+      toast('success', data.message || `Deleted ${fileName}`);
+      await fetchBrowse(fb.host_id, fb.path);
+    } else {
+      toast('error', `Delete failed: ${data.error || 'unknown'}`);
+    }
+  } catch (e) {
+    toast('error', `Delete failed: ${e.message}`);
+  }
+}
+
+function triggerUpload() {
+  document.getElementById('fb-upload-input').click();
+}
+
+async function handleUpload(input) {
+  const fb = state.fileBrowser;
+  if (!input.files || !input.files.length) return;
+  const file = input.files[0];
+  fb.uploading = true;
+  render();
+  toast('info', `Uploading ${file.name} (${(file.size/1048576).toFixed(1)} MB)…`);
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const r = await fetch(`${API}/api/storage/upload?host=${encodeURIComponent(fb.host_id)}&path=${encodeURIComponent(fb.path)}`, {
+      method: 'POST',
+      body: form,
+    });
+    const data = await r.json();
+    if (data.success) {
+      toast('success', `Uploaded ${data.name} (${(data.size/1048576).toFixed(1)} MB)`);
+      await fetchBrowse(fb.host_id, fb.path);
+    } else {
+      toast('error', `Upload failed: ${data.error || 'unknown'}`);
+    }
+  } catch (e) {
+    toast('error', `Upload failed: ${e.message}`);
+  } finally {
+    fb.uploading = false;
+    input.value = '';
+    render();
+  }
+}
+
+function fmtFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+  if (bytes < 1073741824) return (bytes/1048576).toFixed(1) + ' MB';
+  return (bytes/1073741824).toFixed(2) + ' GB';
+}
+
+function fileIcon(entry) {
+  if (entry.is_dir) return '<span style="color:#4db8ff">&#128193;</span>';
+  const ext = entry.name.split('.').pop().toLowerCase();
+  if (['iso','img'].includes(ext)) return '<span style="color:#ff9800">&#128191;</span>';
+  if (['qcow2','vmdk','vdi','vhd','raw'].includes(ext)) return '<span style="color:#7c4dff">&#128190;</span>';
+  if (['xml','conf','cfg'].includes(ext)) return '<span style="color:#4caf50">&#128196;</span>';
+  if (['log','txt'].includes(ext)) return '<span style="color:#7aa8cc">&#128196;</span>';
+  return '<span style="color:#5a8ab0">&#128196;</span>';
+}
+
+function renderFileBrowser() {
+  const fb = state.fileBrowser;
+  if (!fb) return '';
+
+  const host = state.hosts.find(h => h.id === fb.host_id);
+  const hostLabel = host ? `${fb.host_id} (${host.ip})` : fb.host_id;
+
+  // Breadcrumb path segments.
+  const segments = fb.path.split('/').filter(Boolean);
+  let crumbPath = '';
+  const crumbs = segments.map((seg, i) => {
+    crumbPath += '/' + seg;
+    const p = crumbPath;
+    const isLast = i === segments.length - 1;
+    return isLast
+      ? `<span style="color:#e8f4ff">${esc(seg)}</span>`
+      : `<a href="#" onclick="fetchBrowse('${esc(fb.host_id)}','${esc(p)}');return false" style="color:#4db8ff;text-decoration:none">${esc(seg)}</a>`;
+  });
+
+  const fileRows = fb.loading
+    ? `<tr><td colspan="4" style="text-align:center;color:#5a8ab0;padding:24px">Loading…</td></tr>`
+    : fb.entries.length === 0
+      ? `<tr><td colspan="4" style="text-align:center;color:#3d6a8a;padding:24px">Empty directory</td></tr>`
+      : fb.entries.map(e => `
+        <tr${e.is_dir ? ` onclick="browseNavigate('${esc(e.name)}')" style="cursor:pointer"` : ''}>
+          <td style="white-space:nowrap">${fileIcon(e)} <span style="color:${e.is_dir ? '#4db8ff' : '#e8f4ff'};font-weight:${e.is_dir ? '600' : '400'}">${esc(e.name)}</span></td>
+          <td style="color:#7aa8cc;font-size:11px;white-space:nowrap">${e.is_dir ? '—' : fmtFileSize(e.size)}</td>
+          <td style="color:#5a8ab0;font-size:11px;white-space:nowrap">${e.modified ? new Date(e.modified).toLocaleString([], {dateStyle:'short',timeStyle:'short'}) : '—'}</td>
+          <td onclick="event.stopPropagation()">
+            ${!e.is_dir ? `<button class="btn btn-danger btn-sm" onclick="deleteStorageFile('${esc(e.name)}')">Delete</button>` : ''}
+          </td>
+        </tr>
+      `).join('');
+
+  return `
+    <div class="detail-panel" style="margin-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div style="min-width:0">
+          <div style="font-size:14px;font-weight:600;color:#e8f4ff;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            File Browser
+            <span style="font-size:11px;font-weight:400;color:#5a8ab0">${esc(hostLabel)}</span>
+          </div>
+          <div style="font-size:12px;color:#7aa8cc;margin-top:4px;font-family:'SF Mono',monospace;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+            <a href="#" onclick="fetchBrowse('${esc(fb.host_id)}','/');return false" style="color:#4db8ff;text-decoration:none">/</a>
+            ${crumbs.map(c => `<span style="color:#3d6a8a">/</span> ${c}`).join(' ')}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-secondary btn-sm" onclick="browseUp()">&#8593; Up</button>
+          <button class="btn btn-primary btn-sm" onclick="triggerUpload()" ${fb.uploading?'disabled':''}>${fb.uploading ? 'Uploading…' : 'Upload File'}</button>
+          <button class="btn btn-secondary btn-sm" onclick="fetchBrowse('${esc(fb.host_id)}','${esc(fb.path)}')">&#8635; Refresh</button>
+          <button class="btn btn-secondary btn-sm" onclick="closeFileBrowser()">Close</button>
+          <input type="file" id="fb-upload-input" style="display:none" onchange="handleUpload(this)">
+        </div>
+      </div>
+      <div class="table-wrap" style="border:none">
+        <table>
+          <thead><tr><th>Name</th><th>Size</th><th>Modified</th><th></th></tr></thead>
+          <tbody>${fileRows}</tbody>
+        </table>
+      </div>
+    </div>
   `;
 }
 
