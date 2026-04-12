@@ -543,18 +543,34 @@ thead th.sortable.desc { color: #c5daf0; }
 }
 .modal h3 { color: #e8f4ff; margin-bottom: 16px; font-size: 15px; }
 .modal label { display: block; font-size: 11px; color: #5a8ab0; margin-bottom: 4px; }
-.modal input[type="text"], .modal input[type="password"], .modal input[type="number"] {
+/* Consistent form controls across all modals and views */
+.modal input[type="text"],
+.modal input[type="password"],
+.modal input[type="number"],
+.modal select,
+.modal textarea {
   width: 100%;
+  height: 36px;
   background: #091828;
   border: 1px solid #1a3a5c;
   color: #c5daf0;
-  padding: 8px 10px;
+  padding: 0 10px;
   border-radius: 4px;
   font-size: 12px;
   outline: none;
   font-family: inherit;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
 }
-.modal input[type="text"]:focus { border-color: #0091da; }
+.modal select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a8ab0'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+.modal textarea { height: auto; min-height: 80px; padding: 8px 10px; }
+.modal input:focus, .modal select:focus, .modal textarea:focus { border-color: #0091da; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 
 /* ── VM Detail View ─────────────────────────────────────── */
@@ -944,17 +960,17 @@ thead th.sortable.desc { color: #c5daf0; }
 }
 #sidebar-overlay.visible { display: block; }
 
-/* ── Safe area for notch devices ───────────────────────── */
-@supports (padding-top: env(safe-area-inset-top)) {
+/* ── Safe area for notch devices (PWA standalone only) ─── */
+@media (display-mode: standalone) {
   #sidebar {
-    padding-top: calc(50px + env(safe-area-inset-top));
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-top: calc(50px + env(safe-area-inset-top, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   #content-body {
-    padding-bottom: max(20px, env(safe-area-inset-bottom));
+    padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
   }
   #toast-container {
-    bottom: max(20px, env(safe-area-inset-bottom));
+    bottom: max(20px, env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -1805,12 +1821,12 @@ function renderCreateVMModal() {
       ${content}
     </div>
   `;
-  const sel = (id, opts, selected) => `<select id="${id}" style="width:100%;background:#091828;border:1px solid #1a3a5c;color:#c5daf0;padding:8px;border-radius:4px;font-size:12px;font-family:inherit">${opts.map(o => {
+  const sel = (id, opts, selected) => `<select id="${id}">${opts.map(o => {
     const v = typeof o === 'string' ? o : o.value;
     const l = typeof o === 'string' ? o : o.label;
     return `<option value="${esc(v)}" ${v===selected?'selected':''}>${esc(l)}</option>`;
   }).join('')}</select>`;
-  const inp = (id, type, val, ph, extra) => `<input type="${type||'text'}" id="${id}" value="${esc(val||'')}" placeholder="${esc(ph||'')}" ${extra||''} style="width:100%;background:#091828;border:1px solid #1a3a5c;color:#c5daf0;padding:8px;border-radius:4px;font-size:12px;font-family:inherit;box-sizing:border-box">`;
+  const inp = (id, type, val, ph, extra) => `<input type="${type||'text'}" id="${id}" value="${esc(val||'')}" placeholder="${esc(ph||'')}" ${extra||''}>`;
 
   const createForm = `
     ${formField('VM Name', 'cvm-name', inp('cvm-name','text','','e.g. my-new-vm'))}
@@ -3212,7 +3228,7 @@ function openMigrateDialog(hostID, vmUUID, vmName) {
           <label>Source Host</label>
           <div style="padding:4px 0;font-weight:600;color:#e8f4ff;font-size:13px">${esc(hostID)}</div>
           <label style="margin-top:10px">Target Host</label>
-          <select id="migrate-target" onchange="updateMigrateChecks()" style="width:100%;background:#091828;border:1px solid #1a3a5c;color:#c5daf0;padding:8px;border-radius:4px;font-size:12px;font-family:inherit">
+          <select id="migrate-target" onchange="updateMigrateChecks()"
             ${otherHosts.map(h => `<option value="${esc(h.id)}" ${h.id===targetID?'selected':''}>${esc(h.id)} (${esc(h.ip)}) — ${fmt(h.mem_free_mb,'MB')} free</option>`).join('')}
           </select>
 
