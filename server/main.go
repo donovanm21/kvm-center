@@ -47,6 +47,8 @@ func main() {
 	mux.HandleFunc("/api/storage", handleGetStorage(store))
 	mux.HandleFunc("/api/command", handleCommand(store))
 	mux.HandleFunc("/api/guest-telemetry", handleGuestTelemetry(store))
+	mux.HandleFunc("/api/migrations", handleGetMigrations(store))
+	mux.HandleFunc("/api/migrations/record", handlePostMigration(store))
 	mux.HandleFunc("/api/migrate-status", handleMigrateStatus(store))
 	mux.HandleFunc("/health", handleHealth)
 

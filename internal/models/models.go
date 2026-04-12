@@ -202,6 +202,24 @@ type TelemetryPayload struct {
 	GPUs           []string        `json:"gpus,omitempty"`
 }
 
+// MigrationRecord is one completed or failed migration, persisted in the server store.
+type MigrationRecord struct {
+	ID          string `json:"id"`
+	VMName      string `json:"vm_name"`
+	SourceHost  string `json:"source_host"`
+	DestHost    string `json:"dest_host"`
+	Mode        string `json:"mode"`        // "offline" | "live"
+	Status      string `json:"status"`      // "running" | "complete" | "failed"
+	StartedAt   int64  `json:"started_at"`  // unix seconds
+	CompletedAt int64  `json:"completed_at,omitempty"`
+	ElapsedSec  int64  `json:"elapsed_sec,omitempty"`
+	DiskSizeMB  int64  `json:"disk_size_mb,omitempty"`
+	Detail      string `json:"detail,omitempty"`
+	Error       string `json:"error,omitempty"`
+	Progress    int    `json:"progress"`
+	Phase       string `json:"phase,omitempty"`
+}
+
 // CommandRequest is sent by the server to an agent's POST /command endpoint.
 type CommandRequest struct {
 	Action string            `json:"action"` // START, STOP, RESTART, SNAPSHOT, MIGRATE

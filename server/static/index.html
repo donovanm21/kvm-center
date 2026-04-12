@@ -962,6 +962,13 @@ thead th.sortable.desc { color: #c5daf0; }
         Snapshots
         <span class="nav-badge" id="badge-snapshots">0</span>
       </div>
+      <div class="nav-item" id="nav-migrations" onclick="showView('migrations')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M1 11.5a.5.5 0 0 0 .5.5h11.793l-3.147 3.146a.5.5 0 0 0 .708.708l4-4a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 11H1.5a.5.5 0 0 0-.5.5zm14-7a.5.5 0 0 1-.5.5H2.707l3.147 3.146a.5.5 0 1 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 4H14.5a.5.5 0 0 1 .5.5z"/>
+        </svg>
+        Migrations
+        <span class="nav-badge" id="badge-migrations">0</span>
+      </div>
       <div class="nav-item" id="nav-deployment" onclick="showView('deployment')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
           <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
@@ -1026,6 +1033,7 @@ let state = {
   vmHardwareOpen: true,
   vmRelatedOpen: true,
   vmNetworksOpen: false,
+  migrations: [],           // migration history from server
   deployOS: { 'kvm-tools': 'rhel', 'agent': 'rhel' }, // OS tab per package
   deployPortalOnline: null, // null=unknown, true/false probed
   deployPortalFiles: [],
@@ -1040,14 +1048,16 @@ window.addEventListener('DOMContentLoaded', () => {
 
 async function refresh() {
   try {
-    const [hosts, vms, storage] = await Promise.all([
+    const [hosts, vms, storage, migrations] = await Promise.all([
       fetchJSON('/api/hosts'),
       fetchJSON('/api/vms'),
       fetchJSON('/api/storage'),
+      fetchJSON('/api/migrations'),
     ]);
-    state.hosts   = hosts   || [];
-    state.vms     = vms     || [];
-    state.storage = storage || [];
+    state.hosts      = hosts      || [];
+    state.vms        = vms        || [];
+    state.storage    = storage    || [];
+    state.migrations = migrations || [];
     setConnected(true);
     render();
   } catch (e) {
@@ -1078,7 +1088,7 @@ function showView(view, hostID, tab) {
     state.selectedSnapshotVM = null;
     state.snapshotList = [];
   }
-  ['dashboard','all-vms','storage','snapshots','deployment'].forEach(v => {
+  ['dashboard','all-vms','storage','snapshots','migrations','deployment'].forEach(v => {
     document.getElementById('nav-'+v)?.classList.toggle('active', v === view);
   });
   if (view === 'deployment') probeDeployPortal();
@@ -1109,6 +1119,8 @@ function renderSidebar() {
   document.getElementById('badge-vms').textContent = state.vms.length;
   const snapTotal = state.vms.reduce((a, v) => a + (v.snapshot_count || 0), 0);
   document.getElementById('badge-snapshots').textContent = snapTotal;
+  const activeM = state.migrations.filter(m => m.status === 'running').length;
+  document.getElementById('badge-migrations').textContent = activeM > 0 ? activeM : state.migrations.length;
 
   const tree = document.getElementById('host-tree');
   tree.innerHTML = state.hosts.map(h => `
@@ -1122,7 +1134,7 @@ function renderSidebar() {
 
 // ── Breadcrumb ─────────────────────────────────────────────
 function renderBreadcrumb() {
-  const crumbs = { dashboard:'Dashboard', 'all-vms':'All VMs', storage:'Storage', host:'Hosts', snapshots:'Snapshots', vm:'Virtual Machines', deployment:'Deployment' };
+  const crumbs = { dashboard:'Dashboard', 'all-vms':'All VMs', storage:'Storage', host:'Hosts', snapshots:'Snapshots', vm:'Virtual Machines', migrations:'Migrations', deployment:'Deployment' };
   let html = `KVM Center <span>/ ${crumbs[state.view] || state.view}`;
   if (state.view === 'host' && state.selectedHost) html += ` / ${esc(state.selectedHost)}`;
   if (state.view === 'snapshots' && state.selectedSnapshotVM) html += ` / ${esc(state.selectedSnapshotVM.name)}`;
@@ -1169,6 +1181,7 @@ function renderContent() {
     case 'host':       body.innerHTML = renderHostView();  break;
     case 'snapshots':  body.innerHTML = renderSnapshotsView(q); break;
     case 'vm':         body.innerHTML = renderVMView(); break;
+    case 'migrations': body.innerHTML = renderMigrationsView(); break;
     case 'deployment': body.innerHTML = renderDeploymentView(); break;
     default:           body.innerHTML = '';
   }
@@ -1533,6 +1546,115 @@ function storageTable(pools, showHost) {
         }).join('')}
       </tbody>
     </table>
+  `;
+}
+
+// ── Migrations view ────────────────────────────────────────
+function renderMigrationsView() {
+  const migs = state.migrations || [];
+  const active = migs.filter(m => m.status === 'running');
+  const past = migs.filter(m => m.status !== 'running');
+
+  const statusPill = (s) => {
+    const colors = { running: 'background:#0d3a5c;color:#4db8ff', complete: 'background:#1a3d1a;color:#4caf50', failed: 'background:#3d1a1a;color:#f44336' };
+    return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;${colors[s]||''}">${esc(s)}</span>`;
+  };
+
+  const fmtTime = (ts) => {
+    if (!ts) return '—';
+    const d = new Date(ts * 1000);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  };
+
+  const fmtDuration = (sec) => {
+    if (!sec) return '—';
+    if (sec < 60) return sec + 's';
+    return Math.floor(sec/60) + 'm ' + (sec%60) + 's';
+  };
+
+  // Active migrations with live progress.
+  const activeSection = active.length ? `
+    <div class="section-title">Active Migrations (${active.length})</div>
+    ${active.map(m => {
+      const pct = m.progress || 0;
+      return `
+        <div class="detail-panel" style="border-left:3px solid #0091da;margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div>
+              <div style="font-size:15px;font-weight:600;color:#e8f4ff">${esc(m.vm_name)}</div>
+              <div style="font-size:11px;color:#5a8ab0">${esc(m.source_host)} → ${esc(m.dest_host)} · ${esc(m.mode)}</div>
+            </div>
+            ${statusPill(m.status)}
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:12px;color:#c5daf0">${esc(m.phase || 'starting')}</span>
+            <span style="font-size:12px;color:#e8f4ff">${pct}%</span>
+          </div>
+          <div class="resource-bar" style="height:8px"><div class="resource-bar-fill bar-cpu" style="width:${pct}%;transition:width 0.5s"></div></div>
+          <div style="font-size:11px;color:#5a8ab0;margin-top:6px">${esc(m.detail || '')} · Started ${fmtTime(m.started_at)}</div>
+        </div>
+      `;
+    }).join('')}
+  ` : '';
+
+  // Past migrations table.
+  const pastSection = past.length ? `
+    <div class="section-title">Migration History (${past.length})</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>VM</th>
+            <th>Source</th>
+            <th>Destination</th>
+            <th>Mode</th>
+            <th>Status</th>
+            <th>Started</th>
+            <th>Duration</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${past.map(m => `
+            <tr>
+              <td style="font-weight:500;color:#e8f4ff">${esc(m.vm_name)}</td>
+              <td style="color:#7aa8cc;font-size:11px">${esc(m.source_host)}</td>
+              <td style="color:#7aa8cc;font-size:11px">${esc(m.dest_host)}</td>
+              <td>
+                <span style="padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;background:${m.mode==='offline'?'#0d2a45':'#2a1d0a'};color:${m.mode==='offline'?'#4db8ff':'#ff9800'}">${esc(m.mode)}</span>
+              </td>
+              <td>${statusPill(m.status)}</td>
+              <td style="font-size:11px;color:#7aa8cc;white-space:nowrap">${fmtTime(m.started_at)}</td>
+              <td style="font-size:11px;color:#c5daf0">${fmtDuration(m.elapsed_sec)}</td>
+              <td style="font-size:11px;color:#5a8ab0;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(m.error || m.detail || '')}">${esc(m.error || m.detail || '—')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  ` : '';
+
+  const emptyMsg = (!active.length && !past.length) ? emptyState('No migrations', 'Migration history will appear here when you migrate a VM between hypervisors.') : '';
+
+  return `
+    <div class="summary-grid" style="margin-bottom:20px">
+      <div class="summary-card accent">
+        <div class="label">Total Migrations</div>
+        <div class="value">${migs.length}</div>
+        <div class="sub">${active.length} active</div>
+      </div>
+      <div class="summary-card green-accent">
+        <div class="label">Successful</div>
+        <div class="value">${migs.filter(m=>m.status==='complete').length}</div>
+      </div>
+      <div class="summary-card red-accent">
+        <div class="label">Failed</div>
+        <div class="value">${migs.filter(m=>m.status==='failed').length}</div>
+      </div>
+    </div>
+    ${activeSection}
+    ${pastSection}
+    ${emptyMsg}
   `;
 }
 
@@ -2594,12 +2716,33 @@ function closeMigrateModal() {
   if (el) el.remove();
 }
 
+function migrationID() {
+  return 'mig-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
+}
+
+async function recordMigration(rec) {
+  try {
+    await fetch(API + '/api/migrations/record', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rec),
+    });
+  } catch (e) { /* best-effort */ }
+}
+
 async function executeMigrate(hostID, vmUUID, vmName) {
   const mode = window._migrateMode || 'offline';
   const targetID = document.getElementById('migrate-target').value;
   const target = state.hosts.find(h => h.id === targetID);
   if (!target) return;
   closeMigrateModal();
+
+  const id = migrationID();
+  const rec = {
+    id, vm_name: vmName, source_host: hostID, dest_host: targetID,
+    mode, status: 'running', started_at: Math.floor(Date.now()/1000), progress: 0, phase: 'starting',
+  };
+  await recordMigration(rec);
 
   if (mode === 'offline') {
     try {
@@ -2610,16 +2753,22 @@ async function executeMigrate(hostID, vmUUID, vmName) {
       });
       const data = await r.json();
       if (data.success) {
-        showMigrateProgress(hostID, vmName, targetID);
+        showMigrateProgress(hostID, vmName, targetID, id);
       } else {
-        toast('error', `Migration failed: ${data.message || data.error}`);
+        rec.status = 'failed'; rec.error = data.message || data.error;
+        rec.completed_at = Math.floor(Date.now()/1000);
+        await recordMigration(rec);
+        toast('error', `Migration failed: ${rec.error}`);
       }
     } catch (e) {
+      rec.status = 'failed'; rec.error = e.message;
+      rec.completed_at = Math.floor(Date.now()/1000);
+      await recordMigration(rec);
       toast('error', `Migration failed: ${e.message}`);
     }
   } else {
     const copyStorage = document.getElementById('migrate-copy-storage')?.checked;
-    toast('info', `Live migrating ${vmName} to ${targetID}${copyStorage ? ' (copying storage)' : ''}…`);
+    toast('info', `Live migrating ${vmName} to ${targetID}…`);
     try {
       const params = { destination: target.ip };
       if (copyStorage) params.copy_storage = 'true';
@@ -2629,19 +2778,27 @@ async function executeMigrate(hostID, vmUUID, vmName) {
         body: JSON.stringify({ host_id: hostID, vm_uuid: vmUUID, vm_name: vmName, action: 'MIGRATE', params }),
       });
       const data = await r.json();
+      const now = Math.floor(Date.now()/1000);
       if (data.success || r.ok) {
-        toast('success', `Live migration of ${vmName} to ${targetID} completed`);
+        rec.status = 'complete'; rec.progress = 100; rec.completed_at = now;
+        rec.elapsed_sec = now - rec.started_at; rec.detail = 'Live migration completed';
+        toast('success', `Live migration completed`);
         setTimeout(refresh, 3000);
       } else {
-        toast('error', `Migration failed: ${data.message || data.error}`);
+        rec.status = 'failed'; rec.error = data.message || data.error; rec.completed_at = now;
+        toast('error', `Migration failed: ${rec.error}`);
       }
+      await recordMigration(rec);
     } catch (e) {
+      rec.status = 'failed'; rec.error = e.message;
+      rec.completed_at = Math.floor(Date.now()/1000);
+      await recordMigration(rec);
       toast('error', `Migration failed: ${e.message}`);
     }
   }
 }
 
-function showMigrateProgress(hostID, vmName, targetID) {
+function showMigrateProgress(hostID, vmName, targetID, migRecordID) {
   let pollId = null;
   const phaseLabels = {
     starting: 'Initialising', shutdown: 'Shutting down', convert: 'Compressing disk',
@@ -2701,10 +2858,12 @@ function showMigrateProgress(hostID, vmName, targetID) {
       if (s.phase === 'complete') {
         clearInterval(pollId);
         toast('success', `Migration of ${vmName} to ${targetID} completed in ${Math.floor(s.elapsed_s/60)}m ${s.elapsed_s%60}s`);
+        recordMigration({ id: migRecordID, vm_name: vmName, source_host: hostID, dest_host: targetID, mode: 'offline', status: 'complete', progress: 100, started_at: s.started_at, completed_at: Math.floor(Date.now()/1000), elapsed_sec: s.elapsed_s, detail: s.detail });
         setTimeout(refresh, 3000);
       } else if (s.phase === 'failed') {
         clearInterval(pollId);
         toast('error', `Migration failed: ${s.error || 'unknown error'}`);
+        recordMigration({ id: migRecordID, vm_name: vmName, source_host: hostID, dest_host: targetID, mode: 'offline', status: 'failed', progress: s.progress, started_at: s.started_at, completed_at: Math.floor(Date.now()/1000), elapsed_sec: s.elapsed_s, error: s.error, detail: s.detail });
         setTimeout(refresh, 2000);
       }
     } catch (e) {

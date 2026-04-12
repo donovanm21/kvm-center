@@ -272,6 +272,30 @@ func handleVMSnapshots(store *Store) http.HandlerFunc {
 	}
 }
 
+// GET /api/migrations — list all migration records.
+func handleGetMigrations(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, store.GetMigrations())
+	}
+}
+
+// POST /api/migrations — upsert a migration record (called by the command handler).
+func handlePostMigration(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		var rec models.MigrationRecord
+		if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON")
+			return
+		}
+		store.AddMigration(&rec)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
+}
+
 // GET /api/migrate-status?host=<id> — proxy the agent's migration progress.
 func handleMigrateStatus(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
