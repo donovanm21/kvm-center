@@ -1,4 +1,4 @@
-const CACHE = 'kvm-center-v5';
+const CACHE = 'kvm-center-v6';
 const PRECACHE = ['/', '/manifest.json', '/icon-192.svg', '/icon-512.svg'];
 
 self.addEventListener('install', e => {
