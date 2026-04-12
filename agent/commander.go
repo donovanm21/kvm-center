@@ -105,7 +105,7 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			respond(w, false, "MIGRATE requires params.destination")
 			return
 		}
-		uri := fmt.Sprintf("qemu+ssh://kvm-migrator@%s/system", dest)
+		uri := fmt.Sprintf("qemu+ssh://kvm-migrator@%s/system?keyfile=/var/lib/kvm-migrator/.ssh/id_ed25519&no_verify=1", dest)
 		args := []string{"migrate", "--live", "--persistent", "--verbose"}
 		if req.Params["copy_storage"] == "true" {
 			args = append(args, "--copy-storage-all")
