@@ -50,7 +50,8 @@ RUN mkdir -p /dist && \
     ln -s kvm-tools-linux-amd64 /dist/kvm-tools-amd64 && \
     ln -s kvm-tools-linux-arm64 /dist/kvm-tools-arm64
 
-# Generate host-monitor-style download portal
+# Generate KVM Center styled download portal (matches the main web UI's
+# productized theme — see docs/STYLE_GUIDE.md for the token reference).
 RUN cat > /dist/index.html << EOF_PORTAL
 <!DOCTYPE html>
 <html>
@@ -58,50 +59,197 @@ RUN cat > /dist/index.html << EOF_PORTAL
     <meta charset="UTF-8">
     <title>KVM Center Downloads</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#E3571E">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-               max-width: 900px; margin: 40px auto; padding: 20px; background: #f5f5f5; color: #333; }
-        h1 { color: #333; border-bottom: 2px solid #0091da; padding-bottom: 10px; }
-        h2 { color: #333; margin-top: 0; }
-        h3 { color: #333; margin-top: 0; }
-        .package { background: white; padding: 24px; border-radius: 8px;
-                   box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin: 20px 0; }
-        .download-link { display: inline-block; background: #0091da; color: white;
-                         padding: 10px 20px; text-decoration: none; border-radius: 4px;
-                         font-weight: bold; margin: 6px 6px 6px 0; font-size: 14px; }
-        .download-link:hover { background: #007ab8; }
-        .download-link.secondary { background: #6c757d; }
-        .download-link.secondary:hover { background: #5a6268; }
-        code { background: #e8e8e8; padding: 2px 6px; border-radius: 3px;
-               font-family: "SF Mono", "Courier New", monospace; font-size: 13px; }
-        .instructions { background: #fff; padding: 20px; border-radius: 8px;
-                        margin: 20px 0; border-left: 4px solid #0091da;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        pre { background: #2d2d2d; color: #f8f8f2; padding: 15px;
-              border-radius: 4px; overflow-x: auto; font-size: 13px;
-              font-family: "SF Mono", "Courier New", monospace; }
-        .status { padding: 10px 16px; border-radius: 4px; margin: 10px 0;
-                  font-size: 14px; }
-        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .version-badge { display: inline-block; background: #0091da; color: white;
-                         padding: 3px 10px; border-radius: 12px; font-size: 12px;
-                         font-weight: bold; margin-left: 8px; vertical-align: middle; }
-        .meta { color: #666; font-size: 13px; margin-bottom: 4px; }
-        .file-list { margin: 0; padding-left: 20px; }
-        .file-list code { background: #f0f0f0; }
-        ul { line-height: 1.8; }
-        p { line-height: 1.5; }
-        .subsection { margin-top: 20px; }
-        .subsection h4 { color: #0091da; margin-bottom: 8px; font-size: 14px;
-                         text-transform: uppercase; letter-spacing: 0.5px; }
+        :root {
+            --accent: #E3571E;
+            --accent-hover: #FF8A3C;
+            --accent-dim: #C04512;
+            --accent-subtle: #2D1810;
+            --bg: #0B0E13;
+            --bg-input: #0D1117;
+            --surface: #161B22;
+            --surface-hover: #1C2128;
+            --surface-active: #21262D;
+            --border: #30363D;
+            --border-subtle: #21262D;
+            --text: #F0F6FC;
+            --text-body: #C9D1D9;
+            --text-muted: #8B949E;
+            --text-faded: #6E7681;
+            --success: #3FB950;
+            --success-bg: #1E3D23;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+            max-width: 960px; margin: 0 auto; padding: 32px 24px 64px;
+            background: var(--bg); color: var(--text-body);
+            -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+            line-height: 1.55;
+        }
+        ::selection { background: #E3571E44; color: var(--text); }
+
+        /* ── Header ── */
+        .header {
+            display: flex; align-items: center; gap: 14px;
+            padding-bottom: 18px; margin-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+        .header svg { flex-shrink: 0; filter: drop-shadow(0 0 8px rgba(227,87,30,0.25)); }
+        .brand-text {
+            display: flex; flex-direction: column; gap: 2px;
+        }
+        .brand-wordmark {
+            display: inline-flex; align-items: baseline;
+            font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
+        }
+        .brand-primary { color: var(--text); }
+        .brand-accent { color: var(--accent); margin-left: 2px; }
+        .brand-sub {
+            font-size: 11px; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.08em;
+        }
+        .version-badge {
+            margin-left: auto;
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 12px; border-radius: 12px;
+            background: var(--accent-subtle); color: var(--accent-hover);
+            font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+            border: 1px solid var(--accent-dim);
+        }
+        .version-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+        /* ── Status banner ── */
+        .status {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 14px; border-radius: 4px; margin-bottom: 20px;
+            font-size: 13px;
+            background: var(--success-bg); color: var(--success);
+            border: 1px solid rgba(63, 185, 80, 0.3);
+        }
+        .status::before { content: '●'; color: var(--success); }
+
+        /* ── Cards ── */
+        .package {
+            background: var(--surface); padding: 24px;
+            border: 1px solid var(--border); border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        h1 { margin: 0; display: none; }  /* brand block replaces h1 */
+        h2 {
+            color: var(--text); margin: 0 0 10px 0;
+            font-size: 16px; font-weight: 600; letter-spacing: -0.01em;
+        }
+        h3 {
+            color: var(--text); margin: 0 0 10px 0;
+            font-size: 14px; font-weight: 600;
+        }
+        .package p {
+            color: var(--text-body); margin: 0 0 14px 0;
+            font-size: 13px;
+        }
+
+        /* ── Download buttons ── */
+        .download-link {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: linear-gradient(180deg, #F26419 0%, var(--accent) 100%);
+            color: #fff;
+            padding: 8px 14px; border: 1px solid var(--accent-dim); border-radius: 5px;
+            text-decoration: none;
+            font-weight: 500; font-size: 12px;
+            margin: 4px 6px 4px 0;
+            transition: background 0.15s, box-shadow 0.15s;
+        }
+        .download-link::before { content: '↓'; font-weight: 700; }
+        .download-link:hover {
+            background: linear-gradient(180deg, #FF7B3C 0%, #F26419 100%);
+        }
+        .download-link.secondary {
+            background: var(--surface-active); color: var(--text-body);
+            border-color: var(--border);
+        }
+        .download-link.secondary::before { content: '↓'; color: var(--text-muted); }
+        .download-link.secondary:hover {
+            background: var(--border); color: var(--text);
+        }
+
+        /* ── Code / snippets ── */
+        code {
+            background: var(--bg-input); color: var(--accent-hover);
+            padding: 2px 6px; border-radius: 3px;
+            font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+            font-size: 12px;
+            border: 1px solid var(--border-subtle);
+        }
+        pre {
+            background: var(--bg-input); color: var(--text);
+            padding: 14px 16px; border: 1px solid var(--border);
+            border-radius: 5px; overflow-x: auto;
+            font-size: 12px; line-height: 1.55;
+            font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+            margin: 8px 0;
+        }
+
+        /* ── Instructions panel (accent-bordered) ── */
+        .instructions {
+            background: var(--surface); padding: 24px;
+            border: 1px solid var(--border); border-left: 3px solid var(--accent);
+            border-radius: 6px; margin-bottom: 20px;
+        }
+
+        /* ── Meta / sub-section headings ── */
+        .meta { color: var(--text-muted); font-size: 12px; margin-bottom: 4px; }
+        .meta strong { color: var(--text); font-weight: 600; }
+        .subsection { margin-top: 18px; }
+        .subsection h4 {
+            color: var(--text-faded); margin: 0 0 8px 0; font-size: 10px;
+            font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em;
+        }
+
+        /* ── Lists ── */
+        ul.file-list {
+            margin: 0; padding-left: 0; list-style: none;
+        }
+        ul.file-list li {
+            padding: 8px 0; border-bottom: 1px solid var(--border-subtle);
+            font-size: 13px;
+        }
+        ul.file-list li:last-child { border-bottom: none; }
+        p { line-height: 1.55; }
+
+        /* ── Responsive ── */
+        @media (max-width: 640px) {
+            body { padding: 20px 12px 40px; }
+            .header { flex-wrap: wrap; }
+            .version-badge { margin-left: 0; margin-top: 8px; }
+            .download-link { width: 100%; justify-content: center; margin-right: 0; }
+        }
     </style>
 </head>
 <body>
-    <h1>KVM Center Downloads<span class="version-badge">${VERSION}</span></h1>
-
-    <div class="status success">
-        [OK] Build complete! All packages ready for download.
+    <div class="header">
+        <svg width="40" height="40" viewBox="0 0 32 32" fill="none" aria-label="KVM Center">
+            <defs>
+                <linearGradient id="logo-accent" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#FF8A3C"/>
+                    <stop offset="100%" stop-color="#E3571E"/>
+                </linearGradient>
+            </defs>
+            <path d="M16 3 L27 10 L27 22 L16 29 L5 22 L5 10 Z"
+                  fill="none" stroke="url(#logo-accent)" stroke-width="2" stroke-linejoin="round"/>
+            <rect x="10" y="11" width="12" height="3" rx="0.5" fill="url(#logo-accent)"/>
+            <rect x="10" y="15" width="9"  height="3" rx="0.5" fill="#E3571E" opacity="0.7"/>
+            <rect x="10" y="19" width="6"  height="3" rx="0.5" fill="#E3571E" opacity="0.45"/>
+        </svg>
+        <div class="brand-text">
+            <div class="brand-wordmark"><span class="brand-primary">kvm</span><span class="brand-accent">center</span></div>
+            <div class="brand-sub">Build Artefacts &amp; Installers</div>
+        </div>
+        <span class="version-badge">${VERSION}</span>
     </div>
+
+    <div class="status">Build complete — all packages ready for download.</div>
 
     <!-- Hypervisor Agent -->
     <div class="package">
