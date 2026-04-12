@@ -2652,10 +2652,14 @@ function openMigrateDialog(hostID, vmUUID, vmName) {
           </select>
 
           ${mode==='live' ? `
-          <label style="margin-top:10px;display:flex;align-items:flex-start;gap:8px;cursor:pointer">
-            <input type="checkbox" id="migrate-copy-storage" checked style="accent-color:#0091da;flex-shrink:0;margin-top:2px">
-            <span style="font-size:12px;color:#c5daf0;min-width:0">Copy storage (required without shared NFS)</span>
-          </label>` : ''}
+          <div style="margin-top:12px;padding:10px 14px;background:#091828;border:1px solid #1a3a5c;border-radius:4px;overflow:hidden">
+            <div style="font-size:11px;font-weight:600;color:#e8f4ff;margin-bottom:8px">Storage Transfer</div>
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-bottom:6px">
+              <input type="checkbox" id="migrate-copy-storage" checked style="accent-color:#0091da;flex-shrink:0;margin-top:2px">
+              <span style="font-size:12px;color:#c5daf0;min-width:0"><strong>Copy storage</strong></span>
+            </label>
+            <div style="font-size:11px;color:#5a8ab0;line-height:1.5;padding-left:24px">Copies the full virtual disk to the target during migration. Required when hypervisors do not share a common storage backend (NFS, GlusterFS, Ceph). Disable only if both hosts mount the same storage pool.</div>
+          </div>` : ''}
 
           ${mode==='offline' && vm.disk_type === 'raw' ? `
           <div style="margin-top:12px;padding:10px 14px;background:#091828;border:1px solid #1a3a5c;border-radius:4px;overflow:hidden">
