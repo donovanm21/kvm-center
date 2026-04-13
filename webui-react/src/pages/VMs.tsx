@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { CreateVMModal } from '@/components/CreateVMModal';
 import { useVMs, useFeatures } from '@/hooks/useInventory';
 import { useAuth } from '@/hooks/useAuth';
 import type { VM } from '@/types';
@@ -10,6 +11,7 @@ export function VMs() {
   const features = useFeatures();
   const { hasPerm } = useAuth();
   const [query, setQuery] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
 
   const canCreate = hasPerm('vm.create') && !features.data?.disable_vm_create;
 
@@ -34,7 +36,7 @@ export function VMs() {
         />
         <div style={{ flex: 1 }} />
         {canCreate ? (
-          <button type="button" className="btn-primary-sm" disabled title="Port of the Create VM wizard lands in a later commit.">
+          <button type="button" className="btn-primary-sm" onClick={() => setCreateOpen(true)}>
             + Create VM
           </button>
         ) : null}
@@ -67,6 +69,7 @@ export function VMs() {
           </table>
         )}
       </div>
+      <CreateVMModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </>
   );
 }
