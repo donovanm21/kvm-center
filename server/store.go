@@ -224,6 +224,9 @@ func (s *Store) applyVMSideData(v *models.VM) {
 	if len(p.FS) > 0 {
 		v.GuestFS = p.FS
 	}
+	if len(p.Interfaces) > 0 {
+		v.GuestInterfaces = p.Interfaces
+	}
 }
 
 // SetVMNotes updates the note for the given VM UUID and rewrites any in-memory copies.

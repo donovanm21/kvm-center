@@ -266,7 +266,7 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
           <KV label="Kernel" value={vm.guest_kernel || '—'} />
           <KV
             label="IP Addresses"
-            value={vm.guest_ips && vm.guest_ips.length > 0 ? vm.guest_ips.join(', ') : '—'}
+            valueNode={<IPList ips={vm.guest_ips ?? []} />}
             mono
           />
           <KV
@@ -782,6 +782,9 @@ function NetworksTab({ vm }: { vm: VM }) {
           ))
         )}
       </div>
+      {(vm.guest_interfaces?.length ?? 0) > 0 && (
+        <GuestInterfacesPanel ifaces={vm.guest_interfaces!} />
+      )}
       {guestIPs.length > 0 && (
         <div className="panel">
           <h2>Guest IP addresses</h2>
@@ -795,6 +798,127 @@ function NetworksTab({ vm }: { vm: VM }) {
     </div>
   );
 }
+
+/**
+ * Guest interface table — surfaces docker0, container veth pairs, VPN
+ * tunnels, and any other NIC the in-guest kvm-tools daemon reports
+ * beyond the primary uplink. Useful for spotting "this VM has Docker"
+ * or "this VM is on the wireguard mesh" without SSHing in.
+ */
+function GuestInterfacesPanel({ ifaces }: { ifaces: NonNullable<VM['guest_interfaces']> }) {
+  const nonPrimary = ifaces.filter((i) => i.kind !== 'primary');
+  return (
+    <div className="panel">
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+        <h2 style={{ margin: 0 }}>Guest interfaces</h2>
+        {nonPrimary.length > 0 && (
+          <span style={{ fontSize: 11, color: '#FF8A3C' }}>
+            {nonPrimary.length} extra ({Array.from(new Set(nonPrimary.map((i) => i.kind))).join(', ')})
+          </span>
+        )}
+      </div>
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Interface</th>
+            <th>Kind</th>
+            <th>Addresses</th>
+            <th>MAC</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ifaces.map((i) => (
+            <tr key={i.name + (i.mac ?? '')}>
+              <td style={{ fontFamily: "'SF Mono', monospace", fontWeight: 500, color: 'var(--text-strong)' }}>{i.name}</td>
+              <td><GuestKindPill kind={i.kind} /></td>
+              <td><IPList ips={i.addrs ?? []} /></td>
+              <td style={{ fontFamily: "'SF Mono', monospace", fontSize: 11, color: 'var(--text-muted)' }}>{i.mac || '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const GUEST_KIND_TONE: Record<string, { bg: string; fg: string; label: string }> = {
+  primary:   { bg: '#1E3D23', fg: '#3FB950', label: 'PRIMARY' },
+  docker:    { bg: '#0F2A4A', fg: '#58A6FF', label: 'DOCKER' },
+  container: { bg: '#21304A', fg: '#79C0FF', label: 'CONTAINER' },
+  vpn:       { bg: '#3D2510', fg: '#FF8A3C', label: 'VPN' },
+  bridge:    { bg: '#2D2D2D', fg: '#C9D1D9', label: 'BRIDGE' },
+  other:     { bg: 'var(--surface-3)', fg: 'var(--text-muted)', label: 'OTHER' },
+};
+function GuestKindPill({ kind }: { kind: string }) {
+  const tone = GUEST_KIND_TONE[kind] ?? GUEST_KIND_TONE.other;
+  return (
+    <span style={{
+      display: 'inline-block', padding: '1px 8px', borderRadius: 8,
+      fontSize: 9, fontWeight: 700, letterSpacing: '0.5px',
+      background: tone.bg, color: tone.fg,
+    }}>
+      {tone.label}
+    </span>
+  );
+}
+
+/**
+ * Compact IP renderer — shows the first 2 addresses inline and
+ * collapses the rest behind a clickable "+N more" pill that toggles
+ * the full list. Used both for Guest IPs in Summary and per-interface
+ * Addresses in the Networks tab.
+ */
+function IPList({ ips, max = 2 }: { ips: string[]; max?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  if (ips.length === 0) {
+    return <span style={{ color: 'var(--text-faded)' }}>—</span>;
+  }
+  const show = expanded ? ips : ips.slice(0, max);
+  const remaining = ips.length - show.length;
+  return (
+    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+      {show.map((ip, i) => (
+        <span key={ip}>
+          <span style={{ fontFamily: "'SF Mono', monospace" }}>{ip}</span>
+          {i < show.length - 1 && <span style={{ color: 'var(--text-faded)' }}>,</span>}
+        </span>
+      ))}
+      {remaining > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          title={`Show all ${ips.length} addresses`}
+          style={ipMoreBtnStyle}
+        >
+          … +{remaining} more
+        </button>
+      )}
+      {expanded && ips.length > max && (
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          title="Collapse"
+          style={ipMoreBtnStyle}
+        >
+          show less
+        </button>
+      )}
+    </span>
+  );
+}
+
+const ipMoreBtnStyle: React.CSSProperties = {
+  background: 'transparent',
+  border: '1px dashed var(--border)',
+  color: 'var(--accent)',
+  padding: '0 6px',
+  height: 18,
+  fontSize: 10,
+  fontWeight: 600,
+  borderRadius: 4,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+};
 
 function fmtBytes(b: number): string {
   if (!b) return '0 B';

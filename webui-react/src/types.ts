@@ -69,6 +69,14 @@ export interface GuestFS {
   used_gb: number;
 }
 
+export type GuestInterfaceKind = 'primary' | 'docker' | 'container' | 'vpn' | 'bridge' | 'other';
+export interface GuestInterface {
+  name: string;
+  mac?: string;
+  addrs?: string[];
+  kind: GuestInterfaceKind;
+}
+
 export interface VM {
   uuid: string;
   name: string;
@@ -89,6 +97,7 @@ export interface VM {
   guest_uptime?: string;
   guest_ips?: string[];
   guest_fs?: GuestFS[];
+  guest_interfaces?: GuestInterface[];
   disk_type?: string;
   firmware?: string;
   machine_type?: string;
