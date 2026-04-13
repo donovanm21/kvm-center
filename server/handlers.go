@@ -207,6 +207,35 @@ func handleCommand(store *Store) http.HandlerFunc {
 		url := fmt.Sprintf("http://%s/command", agentAddr)
 		log.Printf("command: %s → %s  vm=%s", action, agentAddr, req.VMName)
 
+		// Track migrations in the store so the Migrations summary page
+		// reflects in-flight + historical state without the React SPA
+		// needing to POST /api/migrations/record explicitly.
+		var migRec *models.MigrationRecord
+		if action == "MIGRATE" || action == "OFFLINE_MIGRATE" {
+			mode := "offline"
+			if action == "MIGRATE" {
+				mode = "live"
+			}
+			destIP := req.Params["destination"]
+			migRec = &models.MigrationRecord{
+				ID:         fmt.Sprintf("%s-%d", req.VMName, time.Now().UnixNano()),
+				VMName:     req.VMName,
+				SourceHost: req.HostID,
+				DestHost:   resolveHostByIP(store, destIP),
+				Mode:       mode,
+				Status:     "running",
+				StartedAt:  time.Now().Unix(),
+				Phase:      "starting",
+				Progress:   0,
+			}
+			store.AddMigration(migRec)
+			if action == "OFFLINE_MIGRATE" {
+				// Offline migrations run async on the agent; mirror the
+				// /migrate-status feed onto the record until terminal.
+				go pollMigrationStatus(store, migRec, agentAddr)
+			}
+		}
+
 		// Migrations with copy-storage can take many minutes.
 		timeout := 15 * time.Second
 		if action == "MIGRATE" || action == "OFFLINE_MIGRATE" {
@@ -215,16 +244,117 @@ func handleCommand(store *Store) http.HandlerFunc {
 		client := &http.Client{Timeout: timeout}
 		resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 		if err != nil {
+			if migRec != nil {
+				finalizeMigration(store, migRec, "failed", "agent unreachable: "+err.Error())
+			}
 			writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
 			return
 		}
 		defer resp.Body.Close()
 
 		respBody, _ := io.ReadAll(resp.Body)
+		// Live migrations are synchronous in the agent — the response
+		// arrives only when virsh migrate finishes (or errors). Offline
+		// migrations return immediately and the poller takes over from
+		// here.
+		if migRec != nil && action == "MIGRATE" {
+			if resp.StatusCode >= 400 {
+				finalizeMigration(store, migRec, "failed", strings.TrimSpace(string(respBody)))
+			} else {
+				finalizeMigration(store, migRec, "complete", "live migration finished")
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
 		w.Write(respBody)
 	}
+}
+
+// resolveHostByIP returns the host ID matching the given IP, or the IP
+// itself when no host is known. Used to fill the dest_host field on a
+// migration record when the client only supplies a destination IP.
+func resolveHostByIP(store *Store, ip string) string {
+	if ip == "" {
+		return ""
+	}
+	for _, h := range store.GetHosts() {
+		if h.IP == ip {
+			return h.ID
+		}
+	}
+	return ip
+}
+
+// finalizeMigration stamps a record as complete or failed and re-publishes
+// it through the store so SSE clients see the terminal state.
+func finalizeMigration(store *Store, rec *models.MigrationRecord, status, detail string) {
+	rec.Status = status
+	rec.CompletedAt = time.Now().Unix()
+	rec.ElapsedSec = rec.CompletedAt - rec.StartedAt
+	if status == "complete" {
+		rec.Progress = 100
+		rec.Phase = "complete"
+	} else {
+		rec.Phase = "failed"
+		rec.Error = detail
+	}
+	if detail != "" {
+		rec.Detail = detail
+	}
+	store.AddMigration(rec)
+}
+
+// pollMigrationStatus polls the source agent's /migrate-status endpoint
+// every second and mirrors phase/progress/detail onto the in-store
+// migration record. Stops when the agent reports the migration is no
+// longer Active, or after a 90-minute safety net.
+func pollMigrationStatus(store *Store, rec *models.MigrationRecord, agentAddr string) {
+	deadline := time.Now().Add(90 * time.Minute)
+	client := &http.Client{Timeout: 4 * time.Second}
+	url := fmt.Sprintf("http://%s/migrate-status", agentAddr)
+	for time.Now().Before(deadline) {
+		time.Sleep(1 * time.Second)
+		resp, err := client.Get(url)
+		if err != nil {
+			continue
+		}
+		var s struct {
+			Active   bool   `json:"active"`
+			VMName   string `json:"vm_name"`
+			Phase    string `json:"phase"`
+			Progress int    `json:"progress"`
+			Detail   string `json:"detail"`
+			Error    string `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&s)
+		resp.Body.Close()
+		// The agent reports a single most-recent migration — only mirror
+		// updates that match this record's VM, otherwise a follow-up
+		// migration on the same agent could clobber an unrelated record.
+		if s.VMName != "" && s.VMName != rec.VMName {
+			continue
+		}
+		if !s.Active {
+			switch s.Phase {
+			case "complete":
+				finalizeMigration(store, rec, "complete", s.Detail)
+			case "failed":
+				detail := s.Error
+				if detail == "" {
+					detail = s.Detail
+				}
+				finalizeMigration(store, rec, "failed", detail)
+			default:
+				finalizeMigration(store, rec, "failed", "lost contact with agent migration status")
+			}
+			return
+		}
+		rec.Phase = s.Phase
+		rec.Progress = s.Progress
+		rec.Detail = s.Detail
+		store.AddMigration(rec)
+	}
+	finalizeMigration(store, rec, "failed", "migration timed out after 90 minutes")
 }
 
 // POST /api/vms/notes — update the editable notes field for a VM, keyed by UUID.

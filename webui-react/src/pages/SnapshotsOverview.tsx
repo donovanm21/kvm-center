@@ -41,7 +41,7 @@ export function SnapshotsOverview() {
     <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16, alignItems: 'flex-start' }}>
       <div className="panel" style={{ padding: 0, overflow: 'hidden', minHeight: 200 }}>
         <div style={listHeaderStyle}>
-          VMs with Snapshots ({vmsWithSnaps.length})
+          VMs with Snapshots
         </div>
         <div style={{ padding: 8 }}>
           <input

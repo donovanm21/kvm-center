@@ -635,7 +635,7 @@ function HardwareTab({ vm }: { vm: VM }) {
         <KV label="Auto start" value={vm.autostart ? '✓ Enabled' : '✕ Disabled'} />
       </div>
       <div className="panel">
-        <h2>Storage devices ({(vm.all_disks ?? []).length})</h2>
+        <h2>Storage devices</h2>
         {(vm.all_disks ?? []).length === 0 ? (
           <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No disks reported.</div>
         ) : (
@@ -674,7 +674,7 @@ function HardwareTab({ vm }: { vm: VM }) {
       </div>
       {vm.pci_devices && vm.pci_devices.length > 0 && (
         <div className="panel">
-          <h2>PCI passthrough ({vm.pci_devices.length})</h2>
+          <h2>PCI passthrough</h2>
           <table className="data-table">
             <thead><tr><th>Address</th><th>Description</th></tr></thead>
             <tbody>
@@ -721,7 +721,7 @@ function NetworksTab({ vm }: { vm: VM }) {
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div className="panel">
-        <h2>Virtual network adapters ({networks.length})</h2>
+        <h2>Virtual network adapters</h2>
         {networks.length === 0 ? (
           <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No adapters reported.</div>
         ) : (
