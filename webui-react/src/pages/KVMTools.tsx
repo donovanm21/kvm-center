@@ -8,7 +8,7 @@ import { useKVMToolsLatest, useVMs } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
 import type { VM } from '@/types';
 
-type Filter = 'all' | 'outdated' | 'missing' | 'current';
+type Filter = 'all' | 'warning' | 'current';
 
 /**
  * KVM Tools update center: lists every VM with its reported kvm-tools
@@ -24,7 +24,7 @@ export function KVMTools() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const [filter, setFilter] = useState<Filter>('outdated');
+  const [filter, setFilter] = useState<Filter>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const canUpdate = hasPerm('vm.edit');
 
@@ -34,10 +34,15 @@ export function KVMTools() {
     const list = vms.data ?? [];
     return list
       .map((v) => ({ vm: v, status: classify(v, latestVer) }))
-      .filter((r) => filter === 'all' || r.status === filter)
+      .filter((r) => {
+        if (filter === 'all') return true;
+        if (filter === 'warning') return r.status === 'outdated' || r.status === 'missing' || r.status === 'no-tools';
+        if (filter === 'current') return r.status === 'current';
+        return true;
+      })
       .sort((a, b) => {
-        // Outdated/missing first, then by VM name
-        const order: Record<string, number> = { outdated: 0, missing: 1, current: 2, 'no-tools': 3 };
+        // Warnings first, then by VM name, so outdated VMs jump out on "all".
+        const order: Record<string, number> = { outdated: 0, missing: 1, 'no-tools': 2, current: 3 };
         const d = (order[a.status] ?? 9) - (order[b.status] ?? 9);
         if (d !== 0) return d;
         return a.vm.name.localeCompare(b.vm.name);
@@ -124,9 +129,13 @@ export function KVMTools() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <FilterTab label="Outdated + missing" active={filter === 'outdated'} onClick={() => setFilter('outdated')} />
         <FilterTab label={`All (${counts.all})`} active={filter === 'all'} onClick={() => setFilter('all')} />
-        <FilterTab label="Current only"  active={filter === 'current'} onClick={() => setFilter('current')} />
+        <FilterTab
+          label={`Warnings (${counts.outdated + counts.missing + counts.noTools})`}
+          active={filter === 'warning'}
+          onClick={() => setFilter('warning')}
+        />
+        <FilterTab label={`Current (${counts.current})`} active={filter === 'current'} onClick={() => setFilter('current')} />
         <div style={{ flex: 1 }} />
         <button
           type="button"
@@ -142,7 +151,7 @@ export function KVMTools() {
       <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
         {rows.length === 0 ? (
           <div style={{ padding: 20, textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
-            {filter === 'outdated' && counts.outdated + counts.missing === 0
+            {filter === 'warning' && counts.outdated + counts.missing + counts.noTools === 0
               ? 'All guests on the latest kvm-tools — nothing to update.'
               : 'No VMs match this filter.'}
           </div>
@@ -191,7 +200,12 @@ export function KVMTools() {
                     <td style={{ fontFamily: "'SF Mono', monospace", fontSize: 12, color: 'var(--text-body)' }}>
                       {vm.kvm_tools_version || (vm.guest_agent ? '—' : <span style={{ color: 'var(--text-faded)' }}>not reporting</span>)}
                     </td>
-                    <td><StatusPill status={status} queued={vm.kvm_tools_update_queued} /></td>
+                    <td>
+                      <StatusPill status={status} queued={vm.kvm_tools_update_queued} />
+                      <div style={{ fontSize: 11, color: 'var(--text-faded)', marginTop: 2 }}>
+                        {statusDetail(status, vm, latestVer)}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -216,6 +230,28 @@ function classify(v: VM, latest: string): Status {
   if (!v.kvm_tools_version) return 'missing';
   if (!latest || v.kvm_tools_version === latest) return 'current';
   return 'outdated';
+}
+
+// statusDetail expands the status pill with a one-liner describing the
+// specific issue — the user should be able to read the table and know
+// exactly why each warning row is flagged.
+function statusDetail(status: Status, v: VM, latest: string): string {
+  switch (status) {
+    case 'current':
+      return `Running ${latest}`;
+    case 'outdated':
+      return `Reporting ${v.kvm_tools_version} — server ships ${latest}`;
+    case 'missing':
+      return v.state === 'running'
+        ? 'Guest agent live but kvm-tools version not reported — older daemon or qemu-ga fallback'
+        : 'VM is not running — start it, then install kvm-tools';
+    case 'no-tools':
+      return v.state === 'running'
+        ? 'No guest agent responding — install kvm-tools to enable OS / IP / filesystem reporting'
+        : 'VM is not running — no telemetry available';
+    default:
+      return '';
+  }
 }
 
 function StatusPill({ status, queued }: { status: Status; queued?: boolean }) {
