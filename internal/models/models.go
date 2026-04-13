@@ -104,11 +104,30 @@ type VM struct {
 	GuestHostname string    `json:"guest_hostname,omitempty"`
 	GuestKernel   string    `json:"guest_kernel,omitempty"`
 	GuestUptime   string    `json:"guest_uptime,omitempty"`
-	GuestIPs      []string  `json:"guest_ips,omitempty"`
-	GuestFS       []GuestFS `json:"guest_fs,omitempty"`
+	GuestIPs        []string         `json:"guest_ips,omitempty"`
+	GuestFS         []GuestFS        `json:"guest_fs,omitempty"`
+	GuestInterfaces []GuestInterface `json:"guest_interfaces,omitempty"`
 
 	// User-editable, persisted in server store (rehydrated by UUID).
 	Notes string `json:"notes,omitempty"`
+}
+
+// GuestInterface is one network interface reported by the in-guest
+// kvm-tools daemon, classified so the UI can flag Docker bridges,
+// VPN tunnels, and container veth pairs separately from the primary
+// NIC. Loopback is filtered out at collection time.
+type GuestInterface struct {
+	Name  string   `json:"name"`            // eth0, docker0, br-1a2b…, tailscale0
+	MAC   string   `json:"mac,omitempty"`
+	Addrs []string `json:"addrs,omitempty"` // IPv4 + IPv6 with CIDR
+	// Kind buckets the interface so the UI can colour-code:
+	//   "primary"   — first non-loopback, non-virtual interface
+	//   "docker"    — docker0 / Docker custom bridge (br-<hex>)
+	//   "container" — veth pair, podman, cni*, flannel*, weave, calico*
+	//   "vpn"       — wg*, tailscale*, tun*, tap*, zt*, ppp*
+	//   "bridge"    — generic bridge (virbr*, br0/br1 …)
+	//   "other"     — anything else not loopback
+	Kind string `json:"kind"`
 }
 
 // GuestFS is one filesystem mount reported by a guest agent.
@@ -147,9 +166,10 @@ type GuestTelemetryPayload struct {
 	CPUCount   int       `json:"cpu_count"`
 	MemTotalMB uint64    `json:"mem_total_mb"`
 	MemUsedMB  uint64    `json:"mem_used_mb"`
-	IPs        []string  `json:"ips"`
-	FS         []GuestFS `json:"fs"`
-	Timestamp  time.Time `json:"timestamp"`
+	IPs        []string         `json:"ips"`
+	Interfaces []GuestInterface `json:"interfaces,omitempty"`
+	FS         []GuestFS        `json:"fs"`
+	Timestamp  time.Time        `json:"timestamp"`
 }
 
 // Snapshot represents a libvirt domain snapshot.
