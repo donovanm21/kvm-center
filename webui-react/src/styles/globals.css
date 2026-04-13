@@ -198,6 +198,12 @@ body.light-mode .auth-error { background: #FFEBE9; color: #CF222E; border-color:
   height: 100vh; color: var(--text-muted); font-size: 13px;
 }
 
+/* ── Animations ──────────────────────────────────────────── */
+@keyframes kvmPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.85); }
+}
+
 /* ── Buttons ─────────────────────────────────────────────── */
 .btn-primary-sm, .btn-secondary-sm, .btn-danger-sm {
   display: inline-flex; align-items: center; gap: 6px;
