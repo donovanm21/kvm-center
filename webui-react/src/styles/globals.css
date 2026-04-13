@@ -198,6 +198,45 @@ body.light-mode .auth-error { background: #FFEBE9; color: #CF222E; border-color:
   height: 100vh; color: var(--text-muted); font-size: 13px;
 }
 
+/* ── Pagination ──────────────────────────────────────────── */
+.page-btn {
+  background: var(--surface-2);
+  color: var(--text-body);
+  border: 1px solid var(--border);
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.page-btn:hover:not(:disabled):not(.active) { background: var(--surface-3); color: var(--text-strong); }
+.page-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+body.light-mode .page-btn { background: #FFFFFF; color: #3D434D; border-color: #D0D7DE; }
+body.light-mode .page-btn:hover:not(:disabled):not(.active) { background: #F6F8FA; color: #1F2328; }
+body.light-mode .page-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ── Migration / lock badges ─────────────────────────────── */
+.lock-pill, .topbar-mig-badge {
+  display: inline-flex; align-items: center;
+  font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.lock-pill {
+  margin-left: 8px; padding: 1px 8px; border-radius: 8px;
+  font-size: 9px; font-weight: 700;
+}
+.lock-pill.warn  { background: #3D2510; color: #FF8A3C; border: 1px solid #5C3814; }
+.lock-pill.danger{ background: #3D1E1E; color: #F85149; border: 1px solid #5C2A2A; }
+body.light-mode .lock-pill.warn   { background: #FFF4EC; color: #C04512; border-color: #F7B07F; }
+body.light-mode .lock-pill.danger { background: #FFEBE9; color: #A40E26; border-color: #FF8182; }
+
+.topbar-mig-badge {
+  gap: 8px; height: 28px; padding: 0 12px; margin-right: 4px;
+  background: #3D2510; color: #FF8A3C;
+  border: 1px solid #5C3814; border-radius: 14px;
+  font-size: 11px; font-family: inherit; cursor: pointer;
+}
+body.light-mode .topbar-mig-badge { background: #FFF4EC; color: #C04512; border-color: #F7B07F; }
+
 /* ── Animations ──────────────────────────────────────────── */
 @keyframes kvmPulse {
   0%, 100% { opacity: 1; transform: scale(1); }

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { Pagination } from '@/components/Pagination';
 import { useHosts, useStorage, useVMs } from '@/hooks/useInventory';
 import type { Host, StoragePool, VM } from '@/types';
 
@@ -106,58 +107,11 @@ export function Dashboard() {
             onChange={setPage}
             totalItems={hostList.length}
             perPage={HOSTS_PER_PAGE}
+            noun="hypervisors"
           />
         )}
       </div>
     </>
-  );
-}
-
-function Pagination({
-  page, totalPages, onChange, totalItems, perPage,
-}: {
-  page: number; totalPages: number; onChange: (n: number) => void;
-  totalItems: number; perPage: number;
-}) {
-  const start = (page - 1) * perPage + 1;
-  const end = Math.min(page * perPage, totalItems);
-  const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
-      <span style={{ fontSize: 11, color: 'var(--text-faded)' }}>
-        Showing {start}–{end} of {totalItems} hypervisors
-      </span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <PageBtn disabled={page === 1} onClick={() => onChange(page - 1)}>‹</PageBtn>
-        {pages.map((n) => (
-          <PageBtn key={n} active={n === page} onClick={() => onChange(n)}>{n}</PageBtn>
-        ))}
-        <PageBtn disabled={page === totalPages} onClick={() => onChange(page + 1)}>›</PageBtn>
-      </div>
-    </div>
-  );
-}
-
-function PageBtn({
-  children, active = false, disabled = false, onClick,
-}: { children: React.ReactNode; active?: boolean; disabled?: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        minWidth: 28, height: 28, padding: '0 8px',
-        background: active ? 'var(--accent)' : 'var(--surface-2)',
-        color: active ? '#fff' : 'var(--text-body)',
-        border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
-        borderRadius: 4, fontSize: 12, fontFamily: 'inherit',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.4 : 1,
-      }}
-    >
-      {children}
-    </button>
   );
 }
 

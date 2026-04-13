@@ -7,7 +7,7 @@ import { MigrateModal } from '@/components/MigrateModal';
 import { Modal } from '@/components/Modal';
 import { apiPost } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useFeatures, useHosts, useVMs } from '@/hooks/useInventory';
+import { useFeatures, useHosts, useMigrations, useVMs } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
 import {
   useCreateSnapshot,
@@ -61,9 +61,28 @@ export function VMDetail() {
 function DetailHeader({ vm, openModal }: { vm: VM; openModal: (k: ModalKind) => void }) {
   const { hasPerm } = useAuth();
   const features = useFeatures();
+  const migrations = useMigrations();
   const cmd = useVMCommand();
 
+  // Lock all actions when this VM is mid-migration on the source host or
+  // when a recent failed rollback may have left artifacts on the dest.
+  // Same gate used by the VMs list — VMDetail is reachable by deep link
+  // even for a VM that's currently locked in the list.
+  const lock = useMemo(() => {
+    for (const r of migrations.data ?? []) {
+      if (r.vm_name !== vm.name) continue;
+      if (r.status === 'running' && r.source_host === vm.host_id) {
+        return { reason: 'migrating' as const, message: `Migration in progress (${r.phase || 'starting'} · ${r.progress ?? 0}%) — actions are disabled until it finishes.` };
+      }
+      if (r.status === 'failed' && r.dest_host === vm.host_id && ['define', 'start', 'verify', 'cleanup'].includes(r.phase ?? '')) {
+        return { reason: 'rolled-back' as const, message: 'Migration rolled back — destination may have partial artifacts. Investigate before acting.' };
+      }
+    }
+    return null;
+  }, [migrations.data, vm.name, vm.host_id]);
+
   const gate = (perm: string, featFlag?: keyof NonNullable<typeof features.data>): { ok: boolean; reason?: string } => {
+    if (lock) return { ok: false, reason: lock.message };
     if (!hasPerm(perm)) return { ok: false, reason: `Requires the ${perm} permission` };
     if (featFlag && features.data?.[featFlag]) return { ok: false, reason: 'Feature disabled by administrator' };
     return { ok: true };
@@ -104,6 +123,15 @@ function DetailHeader({ vm, openModal }: { vm: VM; openModal: (k: ModalKind) => 
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
       <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)' }}>{vm.name}</div>
       <span className={`state-pill ${vm.state}`}>{vm.state}</span>
+      {lock && (
+        <span
+          className={`lock-pill ${lock.reason === 'rolled-back' ? 'danger' : 'warn'}`}
+          title={lock.message}
+          style={{ marginLeft: 0 }}
+        >
+          {lock.reason === 'rolled-back' ? 'rolled back' : 'migrating'}
+        </span>
+      )}
       <div style={{ flex: 1 }} />
       <ActionsMenu groups={groups} />
     </div>
@@ -224,9 +252,13 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
         </div>
 
         <div className="panel">
-          {vm.guest_agent && (
+          {vm.guest_agent ? (
             <div style={toolsPillStyle}>
               ● KVM TOOLS: {vm.guest_source ?? 'present'}
+            </div>
+          ) : (
+            <div style={toolsPillMissingStyle} title="Install kvm-tools (or qemu-guest-agent) inside the guest to expose hostname, IP addresses, and filesystem usage.">
+              ● KVM TOOLS: not installed
             </div>
           )}
           <KV label="Guest OS" value={vm.guest_os || '—'} />
@@ -524,6 +556,12 @@ const toolsPillStyle: React.CSSProperties = {
   borderRadius: 10,
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
+};
+const toolsPillMissingStyle: React.CSSProperties = {
+  ...toolsPillStyle,
+  background: 'var(--surface-3)',
+  color: 'var(--text-faded)',
+  cursor: 'help',
 };
 const sectionHeaderStyle: React.CSSProperties = {
   marginTop: 14,
@@ -910,14 +948,21 @@ function DeleteVMModal({ vm, open, onClose }: { vm: VM; open: boolean; onClose: 
   const cmd = useVMCommand();
   const [step, setStep] = useState(1);
   const [ack, setAck] = useState(false);
+  const [deleteDisks, setDeleteDisks] = useState(false);
   const [typed, setTyped] = useState('');
 
-  const reset = () => { setStep(1); setAck(false); setTyped(''); };
+  const reset = () => { setStep(1); setAck(false); setDeleteDisks(false); setTyped(''); };
   const close = () => { reset(); onClose(); };
 
   const submit = () => {
     cmd.mutate(
-      { host_id: vm.host_id, vm_uuid: vm.uuid, vm_name: vm.name, action: 'DELETE_VM' },
+      {
+        host_id: vm.host_id,
+        vm_uuid: vm.uuid,
+        vm_name: vm.name,
+        action: 'DELETE_VM',
+        params: { delete_disks: deleteDisks ? 'true' : 'false' },
+      },
       {
         onSuccess: (d) => {
           if (d && (d as any).success === false) return;
@@ -994,22 +1039,50 @@ function DeleteVMModal({ vm, open, onClose }: { vm: VM; open: boolean; onClose: 
       {step === 2 && (
         <>
           <p style={{ fontSize: 12, color: 'var(--text-body)', lineHeight: 1.55 }}>
-            The disk files listed on the previous step will be{' '}
-            <strong>deleted from disk</strong>. Snapshots, NVRAM, and managed-save
-            state are also removed — there is no trash bin.
+            The domain definition, snapshots, NVRAM, and managed-save state
+            are always removed — there is no trash bin. Choose what should
+            happen to the backing disk files:
           </p>
           <label
             style={{
               marginTop: 12, display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer',
               padding: '10px 12px', background: 'var(--bg-input)',
+              border: `1px solid ${deleteDisks ? '#A02929' : 'var(--border)'}`,
+              borderLeft: `3px solid ${deleteDisks ? '#F85149' : 'var(--border)'}`,
+              borderRadius: 4,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={deleteDisks}
+              onChange={(e) => setDeleteDisks(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span style={{ fontSize: 12, color: 'var(--text-body)', lineHeight: 1.5 }}>
+              <strong style={{ color: deleteDisks ? '#F85149' : 'var(--text-strong)' }}>
+                Also delete the backing disk files
+              </strong>
+              <br />
+              <span style={{ color: 'var(--text-faded)', fontSize: 11 }}>
+                {deleteDisks
+                  ? `The ${diskList.length} disk file${diskList.length === 1 ? '' : 's'} listed on the previous step will be permanently removed. This cannot be undone.`
+                  : 'Leave unchecked to keep the disk files on the host so they can be reattached to a new VM later.'}
+              </span>
+            </span>
+          </label>
+          <label
+            style={{
+              marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer',
+              padding: '10px 12px', background: 'var(--bg-input)',
               border: '1px solid var(--border)', borderRadius: 4,
             }}
           >
-            <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+            <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} style={{ marginTop: 2 }} />
             <span style={{ fontSize: 12, color: 'var(--text-body)', lineHeight: 1.5 }}>
-              I understand that the VM's disks, snapshots, and all associated
-              metadata will be permanently removed from the host and cannot be
-              recovered.
+              I understand that the VM definition, snapshots, and metadata will
+              be permanently removed
+              {deleteDisks && ', and that the backing disk files will be deleted'}
+              .
             </span>
           </label>
         </>
