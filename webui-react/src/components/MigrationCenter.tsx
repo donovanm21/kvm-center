@@ -130,7 +130,7 @@ export function MigrationProgressCard({ m }: { m: MigrationRecord }) {
           style={{
             width: `${pct}%`,
             height: '100%',
-            background: '#E3571E',
+            background: 'var(--accent)',
             transition: 'width 0.5s',
           }}
         />
@@ -143,25 +143,11 @@ export function MigrationProgressCard({ m }: { m: MigrationRecord }) {
 }
 
 function StatusPill({ status }: { status: string }) {
-  const bg =
-    status === 'running' ? '#3D2510' :
-    status === 'cancelling' ? '#3D1E1E' :
-    status === 'complete' ? '#1E3D23' :
-    status === 'failed' ? '#3D1E1E' :
-    'var(--surface-3)';
-  const color =
-    status === 'running' ? '#FF8A3C' :
-    status === 'cancelling' ? '#F85149' :
-    status === 'complete' ? '#3FB950' :
-    status === 'failed' ? '#F85149' :
-    'var(--text-muted)';
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center',
-      padding: '2px 10px', borderRadius: 10,
-      fontSize: 10, fontWeight: 600,
-      textTransform: 'uppercase', letterSpacing: '0.5px',
-      background: bg, color,
-    }}>{status}</span>
-  );
+  const tone =
+    status === 'running'    ? 'warn' :
+    status === 'cancelling' ? 'danger' :
+    status === 'complete'   ? 'ok' :
+    status === 'failed'     ? 'danger' :
+    'muted';
+  return <span className={`tone-pill ${tone}`}>{status}</span>;
 }

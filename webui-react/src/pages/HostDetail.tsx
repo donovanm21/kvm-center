@@ -101,16 +101,8 @@ function SummaryTab({ host }: { host: Host }) {
             </div>
           </div>
           <span
-            style={{
-              padding: '4px 12px',
-              borderRadius: 12,
-              background: host.status === 'online' ? '#1E3D23' : 'var(--surface-3)',
-              color: host.status === 'online' ? '#3FB950' : 'var(--text-muted)',
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-            }}
+            className={`tone-pill ${host.status === 'online' ? 'ok' : 'muted'}`}
+            style={{ padding: '4px 12px', borderRadius: 12 }}
           >
             {host.status}
           </span>

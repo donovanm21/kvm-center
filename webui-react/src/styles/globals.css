@@ -36,6 +36,10 @@ body.light-mode {
   --text-muted: #656D76;
   --text-faded: #8B95A1;
   --text-disabled: #AFB8C1;
+
+  /* Flip the dark-mode accent-subtle (warm brown) to a soft peach that
+   * reads on a white surface. Keeps brand hue consistent across modes. */
+  --accent-subtle: #FFF4EC;
 }
 
 * { box-sizing: border-box; }
@@ -214,6 +218,83 @@ body.light-mode .auth-error { background: #FFEBE9; color: #CF222E; border-color:
 body.light-mode .page-btn { background: #FFFFFF; color: #3D434D; border-color: #D0D7DE; }
 body.light-mode .page-btn:hover:not(:disabled):not(.active) { background: #F6F8FA; color: #1F2328; }
 body.light-mode .page-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ── IP copy-to-clipboard badges ─────────────────────────── */
+.ip-badge {
+  display: inline-flex; align-items: center;
+  height: 22px; padding: 0 8px;
+  font-family: 'SF Mono', monospace; font-size: 11px; font-weight: 500;
+  background: var(--bg-input); color: var(--text-body);
+  border: 1px solid var(--border);
+  border-radius: 4px; cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.ip-badge:hover { background: var(--surface-3); }
+.ip-badge.copied { background: #1E3D23; color: #3FB950; border-color: #2E5E35; }
+.ip-badge.failed { background: #3D1E1E; color: #F85149; border-color: #5C2A2A; }
+body.light-mode .ip-badge.copied { background: #DAFBE1; color: #1A7F37; border-color: #1A7F3755; }
+body.light-mode .ip-badge.failed { background: #FFEBE9; color: #A40E26; border-color: #FF8182; }
+
+/* ── Tone primitives ─────────────────────────────────────── */
+/* Five semantic tones (ok / warn / danger / info / muted) expressed as a
+ * pill (inline label), a panel (tinted card/banner), or an icon tile
+ * (the squarish coloured square behind status glyphs). All carry light-
+ * mode overrides so the whole UI flips cleanly. Use these instead of
+ * hand-rolled inline styles — it's the only way new pages stay
+ * theme-consistent without duplicating colour literals. */
+.tone-pill {
+  display: inline-flex; align-items: center;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  border: 1px solid transparent;
+}
+.tone-pill.ok     { background: #1E3D23; color: #3FB950; }
+.tone-pill.warn   { background: #3D2510; color: #FF8A3C; }
+.tone-pill.danger { background: #3D1E1E; color: #F85149; }
+.tone-pill.info   { background: #0F2A4A; color: #58A6FF; }
+.tone-pill.muted  { background: var(--surface-3); color: var(--text-muted); }
+body.light-mode .tone-pill.ok     { background: #DAFBE1; color: #1A7F37; }
+body.light-mode .tone-pill.warn   { background: #FFF4EC; color: #C04512; border-color: #F7B07F; }
+body.light-mode .tone-pill.danger { background: #FFEBE9; color: #A40E26; border-color: #FF8182; }
+body.light-mode .tone-pill.info   { background: #DDF4FF; color: #0969DA; border-color: #54AEFF; }
+body.light-mode .tone-pill.muted  { background: #EAEEF2; color: #656D76; }
+
+.tone-panel {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 18px;
+}
+.tone-panel.ok     { background: #1E3D23; color: #3FB950; border-color: #2E5E35; }
+.tone-panel.warn   { background: #3D2510; color: #FF8A3C; border-color: #5C3814; }
+.tone-panel.danger { background: #3D1E1E; color: #F85149; border-color: #5C2A2A; }
+.tone-panel.info   { background: #0F2A4A; color: #58A6FF; border-color: #1F4B7A; }
+.tone-panel.muted  { background: var(--surface-3); color: var(--text-muted); }
+body.light-mode .tone-panel.ok     { background: #DAFBE1; color: #1A7F37; border-color: #1A7F3755; }
+body.light-mode .tone-panel.warn   { background: #FFF4EC; color: #C04512; border-color: #F7B07F; }
+body.light-mode .tone-panel.danger { background: #FFEBE9; color: #A40E26; border-color: #FF8182; }
+body.light-mode .tone-panel.info   { background: #DDF4FF; color: #0969DA; border-color: #54AEFF; }
+body.light-mode .tone-panel.muted  { background: #EAEEF2; color: #656D76; }
+
+.tone-icon-tile {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.tone-icon-tile.accent { background: #2D1810; color: var(--accent); }
+.tone-icon-tile.ok     { background: #1E3D23; color: #3FB950; }
+.tone-icon-tile.warn   { background: #3D2510; color: #FF8A3C; }
+.tone-icon-tile.danger { background: #3D1E1E; color: #F85149; }
+.tone-icon-tile.info   { background: #1E2340; color: #8B5CF6; }
+.tone-icon-tile.muted  { background: var(--surface-3); color: var(--text-muted); }
+body.light-mode .tone-icon-tile.accent { background: #FFF4EC; color: #C04512; }
+body.light-mode .tone-icon-tile.ok     { background: #DAFBE1; color: #1A7F37; }
+body.light-mode .tone-icon-tile.warn   { background: #FFF4EC; color: #C04512; }
+body.light-mode .tone-icon-tile.danger { background: #FFEBE9; color: #A40E26; }
+body.light-mode .tone-icon-tile.info   { background: #EDE9FE; color: #6D28D9; }
+body.light-mode .tone-icon-tile.muted  { background: #EAEEF2; color: #656D76; }
 
 /* ── Migration / lock badges ─────────────────────────────── */
 .lock-pill, .topbar-mig-badge {
