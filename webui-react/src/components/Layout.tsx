@@ -3,8 +3,10 @@ import { NavLink, useLocation } from 'react-router-dom';
 
 import { apiGet } from '@/api/client';
 import { BrandLogo } from './Brand';
+import { MigrationCenter } from './MigrationCenter';
 import { UserMenu } from './UserMenu';
 import { useAuth } from '@/hooks/useAuth';
+import { useMigrations } from '@/hooks/useInventory';
 import { useTheme } from '@/hooks/useTheme';
 
 interface NavEntry {
@@ -78,6 +80,9 @@ export function Layout({ children }: { children: ReactNode }) {
 function Topbar() {
   const [version, setVersion] = useState<string>('…');
   const [theme, toggleTheme] = useTheme();
+  const [centerOpen, setCenterOpen] = useState(false);
+  const migrations = useMigrations();
+  const activeCount = (migrations.data ?? []).filter((m) => m.status === 'running').length;
   useEffect(() => {
     apiGet<{ version: string }>('/api/version')
       .then((d) => setVersion(d.version || 'dev'))
@@ -96,6 +101,17 @@ function Topbar() {
         </div>
       </div>
       <div className="spacer" />
+      {activeCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setCenterOpen(true)}
+          title={`${activeCount} active migration${activeCount === 1 ? '' : 's'} — click to view progress`}
+          style={migrationBadgeStyle}
+        >
+          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#FF8A3C', animation: 'kvmPulse 1.4s ease-in-out infinite' }} />
+          {activeCount} migrating
+        </button>
+      )}
       <span className="version-badge">{version}</span>
       <button
         type="button"
@@ -107,9 +123,20 @@ function Topbar() {
         {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
       </button>
       <UserMenu />
+      <MigrationCenter open={centerOpen} onClose={() => setCenterOpen(false)} />
     </header>
   );
 }
+
+const migrationBadgeStyle: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 8,
+  height: 28, padding: '0 12px', marginRight: 4,
+  background: '#3D2510', color: '#FF8A3C',
+  border: '1px solid #5C3814', borderRadius: 14,
+  fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+  textTransform: 'uppercase', letterSpacing: '0.5px',
+  cursor: 'pointer',
+};
 
 function MoonIcon() {
   return (

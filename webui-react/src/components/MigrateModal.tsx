@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Modal } from './Modal';
+import { MigrationProgressCard } from './MigrationCenter';
+import { useMigrations } from '@/hooks/useInventory';
 import { useVMCommand } from '@/hooks/useVMCommand';
 import type { Host, VM } from '@/types';
 
@@ -34,7 +36,25 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
   const [targetID, setTargetID] = useState<string>('');
   const [copyStorage, setCopyStorage] = useState(true);
   const [keepRaw, setKeepRaw] = useState(false);
+  // Tracks whether we've already kicked off a migration in this modal
+  // session — once true we swap the form for a live progress view.
+  const [submittedAt, setSubmittedAt] = useState<number | null>(null);
   const cmd = useVMCommand();
+  const migrations = useMigrations();
+
+  // Reset transient state every time the modal is reopened.
+  useEffect(() => {
+    if (!open) setSubmittedAt(null);
+  }, [open]);
+
+  // Find the live record for the just-started migration: most recent
+  // running record for this VM that started after we hit submit.
+  const activeRecord = useMemo(() => {
+    if (submittedAt === null) return undefined;
+    return (migrations.data ?? [])
+      .filter((m) => m.vm_name === vm.name && m.started_at * 1000 >= submittedAt - 5_000)
+      .sort((a, b) => b.started_at - a.started_at)[0];
+  }, [migrations.data, vm.name, submittedAt]);
 
   const effectiveTarget = targetID || onlinePeers[0]?.id;
   const sourceHost = hosts.find((h) => h.id === vm.host_id);
@@ -96,16 +116,14 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
     } else {
       params.keep_raw = keepRaw ? 'true' : 'false';
     }
-    cmd.mutate(
-      {
-        host_id: vm.host_id,
-        vm_uuid: vm.uuid,
-        vm_name: vm.name,
-        action: mode === 'live' ? 'MIGRATE' : 'OFFLINE_MIGRATE',
-        params,
-      },
-      { onSuccess: () => onClose() },
-    );
+    setSubmittedAt(Date.now());
+    cmd.mutate({
+      host_id: vm.host_id,
+      vm_uuid: vm.uuid,
+      vm_name: vm.name,
+      action: mode === 'live' ? 'MIGRATE' : 'OFFLINE_MIGRATE',
+      params,
+    });
   };
 
   if (onlinePeers.length === 0) {
@@ -118,6 +136,37 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
       >
         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           No other online hypervisors are available — need at least one healthy peer to migrate to.
+        </div>
+      </Modal>
+    );
+  }
+
+  if (submittedAt !== null) {
+    // Post-submit progress view. The modal can be closed (the migration
+    // keeps running on the agent + server) and reopened from the
+    // Topbar's Migration Center badge.
+    return (
+      <Modal
+        open={open}
+        onClose={onClose}
+        width={520}
+        title={`Migrating — ${vm.name}`}
+        footer={
+          <button className="btn-secondary-sm" onClick={onClose}>
+            Run in background
+          </button>
+        }
+      >
+        {activeRecord ? (
+          <MigrationProgressCard m={activeRecord} />
+        ) : (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>
+            Starting migration… progress will appear here once the agent reports back.
+          </div>
+        )}
+        <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-faded)' }}>
+          You can close this modal — the migration will continue on the source agent.
+          Reopen progress at any time from the Migration Center button in the top bar.
         </div>
       </Modal>
     );

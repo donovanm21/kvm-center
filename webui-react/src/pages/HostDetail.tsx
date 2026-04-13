@@ -486,7 +486,7 @@ function HardwareTab({ host }: { host: Host }) {
 
       {host.gpus && host.gpus.length > 0 && (
         <div className="panel">
-          <h2>GPUs ({host.gpus.length})</h2>
+          <h2>GPUs</h2>
           {host.gpus.map((g) => (
             <div key={g} style={{ fontFamily: "'SF Mono', monospace", fontSize: 12, color: 'var(--text-body)', padding: '4px 0' }}>
               {g}
@@ -497,7 +497,7 @@ function HardwareTab({ host }: { host: Host }) {
 
       {host.host_pci_devices && host.host_pci_devices.length > 0 && (
         <div className="panel">
-          <h2>PCI devices ({host.host_pci_devices.length})</h2>
+          <h2>PCI devices</h2>
           <table className="data-table">
             <thead>
               <tr>
