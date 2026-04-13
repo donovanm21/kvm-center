@@ -652,6 +652,81 @@ func handleVMCreate(store *Store) http.HandlerFunc {
 	}
 }
 
+// POST /api/migrations/cancel?id=<migration-id> — ask the source agent to
+// abort the in-flight migration. For offline migrations the agent's
+// goroutine observes the cancelled context, breaks out of its current
+// step, and falls through rollback() which restores the source VM. For
+// live migrations we send `virsh domjobabort` to the source as a best-
+// effort cancel — virsh aborts the in-flight migration and resumes
+// execution on the source. Once the cleanup phase has begun the source
+// disks are gone; we refuse to cancel past that point.
+func handleCancelMigration(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			writeError(w, http.StatusBadRequest, "id query param required")
+			return
+		}
+		var rec *models.MigrationRecord
+		for _, m := range store.GetMigrations() {
+			if m.ID == id {
+				rec = m
+				break
+			}
+		}
+		if rec == nil {
+			writeError(w, http.StatusNotFound, "migration not found")
+			return
+		}
+		if rec.Status != "running" {
+			writeError(w, http.StatusConflict, "migration is not running (status="+rec.Status+")")
+			return
+		}
+		if rec.Phase == "cleanup" {
+			writeError(w, http.StatusConflict,
+				"too late to cancel — source disks have already been removed during the cleanup phase")
+			return
+		}
+		agentAddr := store.GetHostAgentAddr(rec.SourceHost)
+		if agentAddr == "" {
+			writeError(w, http.StatusNotFound, "source agent unreachable")
+			return
+		}
+		// Update record so the SSE clients see the cancelling state
+		// immediately — the poller will overwrite once the rollback
+		// completes (status → failed, error → "cancelled by operator").
+		rec.Phase = "cancelling"
+		rec.Detail = "Operator requested cancel — rolling back…"
+		store.AddMigration(rec)
+
+		url := fmt.Sprintf("http://%s/cancel-migrate?vm=%s", agentAddr, rec.VMName)
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Post(url, "application/json", nil)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		// For LIVE migrations the agent's offline migration tracker is
+		// empty (offlineMigrate isn't running) so the agent returns 404
+		// + the best-effort domjobabort path. Either way, finalize the
+		// record as failed/cancelled here so the UI doesn't hang on
+		// "cancelling" forever for live migrations.
+		if rec.Mode == "live" {
+			finalizeMigration(store, rec, "failed", "cancelled by operator (virsh domjobabort)")
+		}
+		log.Printf("cancel-migration: %s phase=%s mode=%s — agent: %s", rec.VMName, rec.Phase, rec.Mode, strings.TrimSpace(string(body)))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(body)
+	}
+}
+
 // GET /api/migrate-status?host=<id> — proxy the agent's migration progress.
 func handleMigrateStatus(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

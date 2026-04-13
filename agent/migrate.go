@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -33,7 +35,17 @@ type MigrationStatus struct {
 var (
 	migStatus   MigrationStatus
 	migStatusMu sync.RWMutex
+	// migCancel cancels the in-flight migration's root context. The
+	// offlineMigrate goroutine periodically checks ctx.Err() and routes
+	// any non-nil result through the existing rollback() path so the
+	// source VM is restored. Set when a migration starts; cleared when
+	// it finishes (or is cancelled).
+	migCancel context.CancelFunc
 )
+
+// errCancelled is returned from offlineMigrate steps that observed a
+// cancelled context; callers route it through rollback().
+var errCancelled = errors.New("migration cancelled by operator")
 
 func setMigStatus(phase string, progress int, detail string) {
 	migStatusMu.Lock()
@@ -61,12 +73,62 @@ func handleMigrateStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(getMigStatus())
 }
 
+// handleCancelMigrate aborts the currently in-flight migration. The
+// offlineMigrate goroutine observes the cancelled context, breaks out of
+// whatever step it's on, and falls into rollback() which restores the
+// source VM. For live (virsh-driven) migrations the agent runs them
+// synchronously inside handleCommand; we use `virsh domjobabort` to ask
+// libvirt to abort the in-flight migration on the source.
+func handleCancelMigrate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	migStatusMu.Lock()
+	active := migStatus.Active
+	vmName := migStatus.VMName
+	cancel := migCancel
+	migStatusMu.Unlock()
+
+	if !active {
+		// Nothing offline is in flight. Best-effort live abort: works
+		// when a `virsh migrate` is running synchronously elsewhere on
+		// this agent. domjobabort is a no-op if no job is active.
+		if vm := r.URL.Query().Get("vm"); vm != "" {
+			out, _ := exec.Command("virsh", "domjobabort", vm).CombinedOutput()
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"status":  "best-effort live cancel issued",
+				"detail":  strings.TrimSpace(string(out)),
+				"vm":      vm,
+				"offline": false,
+			})
+			return
+		}
+		http.Error(w, "no migration in flight", http.StatusNotFound)
+		return
+	}
+
+	if cancel != nil {
+		cancel()
+	}
+	log.Printf("cancel-migrate: signalled cancellation for %s", vmName)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":  "cancelling",
+		"vm":      vmName,
+		"offline": true,
+	})
+}
+
 func startOfflineMigrate(vmName, dest string, keepRaw bool) {
 	migStatusMu.Lock()
 	if migStatus.Active {
 		migStatusMu.Unlock()
 		return
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	migCancel = cancel
 	migStatus = MigrationStatus{
 		Active:    true,
 		VMName:    vmName,
@@ -79,28 +141,43 @@ func startOfflineMigrate(vmName, dest string, keepRaw bool) {
 	migStatusMu.Unlock()
 
 	go func() {
-		err := offlineMigrate(vmName, dest, keepRaw)
+		err := offlineMigrate(ctx, vmName, dest, keepRaw)
 		migStatusMu.Lock()
-		if err != nil {
-			migStatus.Phase = "failed"
-			migStatus.Error = err.Error()
-			migStatus.Detail = "Migration failed: " + err.Error()
-		} else {
+		switch {
+		case err == nil:
 			migStatus.Phase = "complete"
 			migStatus.Progress = 100
 			migStatus.Detail = "Migration completed successfully"
+		case errors.Is(err, errCancelled) || errors.Is(ctx.Err(), context.Canceled):
+			migStatus.Phase = "failed"
+			migStatus.Error = "cancelled by operator"
+			migStatus.Detail = "Migration cancelled — source VM restored"
+		default:
+			migStatus.Phase = "failed"
+			migStatus.Error = err.Error()
+			migStatus.Detail = "Migration failed: " + err.Error()
 		}
 		migStatus.Active = false
 		if migStatus.StartedAt > 0 {
 			migStatus.Elapsed = time.Now().Unix() - migStatus.StartedAt
 		}
+		migCancel = nil
 		migStatusMu.Unlock()
 	}()
 }
 
 const vc = "virsh -c qemu:///system"
 
-func offlineMigrate(vmName, dest string, keepRaw bool) error {
+// checkCancel returns errCancelled if the operator has cancelled. Cheap
+// to call between subprocess steps; keeps the rollback path tidy.
+func checkCancel(ctx context.Context) error {
+	if ctx.Err() != nil {
+		return errCancelled
+	}
+	return nil
+}
+
+func offlineMigrate(ctx context.Context, vmName, dest string, keepRaw bool) error {
 	logStep := func(msg string) {
 		log.Printf("offline-migrate %s→%s: %s", vmName, dest, msg)
 	}
@@ -158,6 +235,10 @@ func offlineMigrate(vmName, dest string, keepRaw bool) error {
 			return fmt.Errorf("shutdown failed: %s", strings.TrimSpace(string(out)))
 		}
 		for i := 0; i < 60; i++ {
+			if err := checkCancel(ctx); err != nil {
+				rollback("cancelled while waiting for shutdown")
+				return err
+			}
 			time.Sleep(2 * time.Second)
 			s, _ := exec.Command("virsh", "domstate", vmName).Output()
 			if strings.TrimSpace(string(s)) == "shut off" {
@@ -245,8 +326,12 @@ func offlineMigrate(vmName, dest string, keepRaw bool) error {
 		convertEnd := 15 + (35*(diskIdx+1))/diskCount
 		setMigStatus("convert", convertBase, fmt.Sprintf("Compressing %s (qemu-img convert -c)", d.Target.Dev))
 		logStep(fmt.Sprintf("converting %s → compact qcow2", srcPath))
+		if err := checkCancel(ctx); err != nil {
+			rollback("cancelled before disk conversion")
+			return err
+		}
 		start := time.Now()
-		out, err := exec.Command("qemu-img", "convert", "-c", "-O", "qcow2", srcPath, tmpQcow).CombinedOutput()
+		out, err := exec.CommandContext(ctx, "qemu-img", "convert", "-c", "-O", "qcow2", srcPath, tmpQcow).CombinedOutput()
 		if err != nil {
 			os.Remove(tmpQcow)
 			rollback(fmt.Sprintf("qemu-img convert failed for %s", d.Target.Dev))
@@ -272,8 +357,13 @@ func offlineMigrate(vmName, dest string, keepRaw bool) error {
 		}
 		setMigStatus("transfer", transferBase, fmt.Sprintf("Transferring %s (%d MB) to %s", d.Target.Dev, sizeMB, dest))
 		logStep(fmt.Sprintf("transferring %s to %s", flatName, dest))
+		if err := checkCancel(ctx); err != nil {
+			os.Remove(tmpQcow)
+			rollback("cancelled before disk transfer")
+			return err
+		}
 		start = time.Now()
-		out, err = exec.Command(
+		out, err = exec.CommandContext(ctx,
 			"scp", "-i", migratorKey, "-o", "StrictHostKeyChecking=no",
 			tmpQcow, fmt.Sprintf("%s@%s:%s", migratorUser, dest, remoteScpDest),
 		).CombinedOutput()
@@ -346,6 +436,10 @@ func offlineMigrate(vmName, dest string, keepRaw bool) error {
 	sshMigrator(dest, "for f in /etc/qemu-kvm/bridge.conf /etc/qemu/bridge.conf; do [ -d $(dirname $f) ] && grep -q 'allow br0' $f 2>/dev/null || echo 'allow br0' >> $f; done", "")
 
 	// ── 7. Define VM on target ────────────────────────────────
+	if err := checkCancel(ctx); err != nil {
+		rollback("cancelled before defining VM on target")
+		return err
+	}
 	setMigStatus("define", 90, "Defining VM on target")
 	logStep("defining VM on target")
 
