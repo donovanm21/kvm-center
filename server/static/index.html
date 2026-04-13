@@ -3173,6 +3173,7 @@ async function loadSettingsData() {
 function setSettingsTab(t) {
   state.settingsTab = t;
   state.userForm = null; state.groupForm = null; state.roleForm = null; state.idpForm = null;
+  document.getElementById('idp-form-modal-root')?.remove();
   persistRoute();
   render();
 }
@@ -3689,7 +3690,6 @@ function renderSettingsProviders() {
     <div style="margin-top:14px;display:flex;gap:8px">
       <button class="btn btn-primary" onclick="openIDPForm('new', null)">+ Add Provider</button>
     </div>
-    ${state.idpForm ? renderIDPForm() : ''}
   `;
 }
 
@@ -3698,15 +3698,30 @@ function openIDPForm(mode, idp) {
     mode,
     data: mode === 'edit' ? { ...idp, client_secret: '' } : { kind: 'google', enabled: true, ...IDP_PRESETS.google },
   };
-  render();
+  mountIDPFormModal();
 }
-function closeIDPForm() { state.idpForm = null; render(); }
+function closeIDPForm() {
+  state.idpForm = null;
+  document.getElementById('idp-form-modal-root')?.remove();
+}
+// The IdP form modal mounts as its own top-level element so the 15 s
+// telemetry refresh (which re-renders the settings body via innerHTML)
+// can't blow away the inputs you're in the middle of typing.
+function mountIDPFormModal() {
+  let root = document.getElementById('idp-form-modal-root');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'idp-form-modal-root';
+    document.body.appendChild(root);
+  }
+  root.innerHTML = state.idpForm ? renderIDPForm() : '';
+}
 
 function idpFormApplyPreset(kind) {
   const f = state.idpForm; if (!f || f.mode !== 'new') return;
   const preset = IDP_PRESETS[kind] || IDP_PRESETS.oidc;
   f.data = { ...f.data, ...preset, enabled: true };
-  render();
+  mountIDPFormModal();
 }
 
 function renderIDPForm() {
