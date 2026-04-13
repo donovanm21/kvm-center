@@ -2222,9 +2222,13 @@ function renderContent() {
 
   // Show "Create VM" button on relevant views.
   if (['dashboard','all-vms','host'].includes(state.view) && state.hosts.length > 0) {
-    actions.innerHTML = featureOn('vm_create')
-      ? `<button class="btn btn-primary" onclick="openCreateVM()">+ Create VM</button>`
-      : `<button class="btn btn-primary" disabled title="VM creation disabled by administrator">+ Create VM</button>`;
+    if (!hasPerm('vm.create')) {
+      actions.innerHTML = '';
+    } else {
+      actions.innerHTML = featureOn('vm_create')
+        ? `<button class="btn btn-primary" onclick="openCreateVM()">+ Create VM</button>`
+        : `<button class="btn btn-primary" disabled title="VM creation disabled by administrator">+ Create VM</button>`;
+    }
   }
 
   switch (state.view) {
@@ -2463,20 +2467,23 @@ function vmActions(v) {
   const consoleTitle = running ? 'Open VNC console' : 'Console available when VM is running';
   const snapOK = !v.disk_type || v.disk_type === 'qcow2';
   const snapTitle = snapOK ? 'Create snapshot' : 'Snapshots require qcow2 disk (this VM uses ' + (v.disk_type||'raw') + ')';
+  const canLife = hasPerm('vm.lifecycle');
+  const canSnap = hasPerm('vm.snapshot') && featureOn('snapshots');
   return `
-    <button class="btn btn-primary btn-sm" ${stopped?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','START')" title="Start">▶</button>
-    <button class="btn btn-warning btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','STOP')" title="Shutdown">■</button>
-    <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','RESTART')" title="Restart">↺</button>
-    <button class="btn btn-secondary btn-sm" ${snapOK && featureOn('snapshots')?'':'disabled'}
+    <button class="btn btn-primary btn-sm" ${stopped && canLife?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','START')" title="${canLife?'Start':'Requires vm.lifecycle'}">▶</button>
+    <button class="btn btn-warning btn-sm" ${running && canLife?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','STOP')" title="${canLife?'Shutdown':'Requires vm.lifecycle'}">■</button>
+    <button class="btn btn-secondary btn-sm" ${running && canLife?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','RESTART')" title="${canLife?'Restart':'Requires vm.lifecycle'}">↺</button>
+    <button class="btn btn-secondary btn-sm" ${snapOK && canSnap?'':'disabled'}
             onclick="openSnapshot('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}')"
-            title="${featureOn('snapshots')?snapTitle:'Snapshots disabled by administrator'}">📷</button>
-    <button class="btn btn-secondary btn-sm" ${consoleOK && featureOn('console')?'':'disabled'}
+            title="${canSnap?snapTitle:(!hasPerm('vm.snapshot')?'Requires vm.snapshot':'Snapshots disabled by administrator')}">📷</button>
+    <button class="btn btn-secondary btn-sm" ${consoleOK && hasPerm('vm.console') && featureOn('console')?'':'disabled'}
             onclick="openConsole('${esc(v.host_id)}','${esc(v.name)}')"
-            title="${featureOn('console')?consoleTitle:'Remote console disabled by administrator'}">🖥</button>
+            title="${!hasPerm('vm.console')?'Requires vm.console':(featureOn('console')?consoleTitle:'Remote console disabled by administrator')}">🖥</button>
   `;
 }
 
 function openConsole(hostID, vmName) {
+  if (!hasPerm('vm.console')) { toast('error', 'You don\'t have permission to open the console'); return; }
   if (!featureOn('console')) { toast('error', 'Remote console is disabled by the administrator'); return; }
   const host = state.hosts.find(h => h.id === hostID);
   if (!host || !host.ip) {
@@ -2666,6 +2673,7 @@ function storageTable(pools, showHost) {
 
 // ── Create VM dialog ───────────────────────────────────────
 async function openCreateVM(preselectedHost) {
+  if (!hasPerm('vm.create')) { toast('error', 'You don\'t have permission to create VMs'); return; }
   if (!featureOn('vm_create')) { toast('error', 'VM creation is disabled by the administrator'); return; }
   const hostID = preselectedHost || (state.selectedHost && state.view === 'host' ? state.selectedHost : state.hosts[0]?.id);
   if (!hostID) { toast('error', 'No hosts available'); return; }
@@ -2905,6 +2913,7 @@ async function browseUp() {
 }
 
 async function deleteStorageFile(idx) {
+  if (!hasPerm('storage.delete')) { toast('error', 'You don\'t have permission to delete storage files'); return; }
   if (!featureOn('storage_delete')) { toast('error', 'Storage file deletion is disabled by the administrator'); return; }
   const fb = state.fileBrowser;
   const entry = fb.entries[idx];
@@ -2927,6 +2936,7 @@ async function deleteStorageFile(idx) {
 }
 
 function triggerUpload() {
+  if (!hasPerm('storage.upload')) { toast('error', 'You don\'t have permission to upload to storage'); return; }
   if (!featureOn('storage_upload')) { toast('error', 'Storage uploads are disabled by the administrator'); return; }
   document.getElementById('fb-upload-input').click();
 }
@@ -3007,7 +3017,7 @@ function renderFileBrowser() {
           <td style="color:var(--text-muted);font-size:11px;white-space:nowrap">${e.is_dir ? '—' : fmtFileSize(e.size)}</td>
           <td style="color:var(--text-faded);font-size:11px;white-space:nowrap">${e.modified ? new Date(e.modified).toLocaleString([], {dateStyle:'short',timeStyle:'short'}) : '—'}</td>
           <td onclick="event.stopPropagation()">
-            ${!e.is_dir ? `<button class="btn btn-danger btn-sm" ${featureOn('storage_delete')?'':'disabled'} onclick="deleteStorageFile(${idx})" title="${featureOn('storage_delete')?'':'Storage file delete disabled by administrator'}">Delete</button>` : ''}
+            ${!e.is_dir ? `<button class="btn btn-danger btn-sm" ${hasPerm('storage.delete') && featureOn('storage_delete')?'':'disabled'} onclick="deleteStorageFile(${idx})" title="${!hasPerm('storage.delete')?'Requires storage.delete':(featureOn('storage_delete')?'':'Storage file delete disabled by administrator')}">Delete</button>` : ''}
           </td>
         </tr>
       `).join('');
@@ -3027,8 +3037,8 @@ function renderFileBrowser() {
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0">
           <button class="btn btn-secondary btn-sm" onclick="browseUp()">&#8593; Up</button>
-          <button class="btn btn-primary btn-sm" onclick="triggerUpload()" ${fb.uploading || !featureOn('storage_upload')?'disabled':''}
-                  title="${featureOn('storage_upload')?'':'Storage uploads disabled by administrator'}">${fb.uploading ? 'Uploading…' : 'Upload File'}</button>
+          <button class="btn btn-primary btn-sm" onclick="triggerUpload()" ${fb.uploading || !hasPerm('storage.upload') || !featureOn('storage_upload')?'disabled':''}
+                  title="${!hasPerm('storage.upload')?'Requires storage.upload':(featureOn('storage_upload')?'':'Storage uploads disabled by administrator')}">${fb.uploading ? 'Uploading…' : 'Upload File'}</button>
           <button class="btn btn-secondary btn-sm" onclick="fetchBrowse('${esc(fb.host_id)}','${esc(fb.path)}')">&#8635; Refresh</button>
           <button class="btn btn-secondary btn-sm" onclick="closeFileBrowser()">Close</button>
           <input type="file" id="fb-upload-input" style="display:none" onchange="handleUpload(this)">
@@ -4243,25 +4253,37 @@ function vmActionsMenu(vm) {
   const running = vm.state === 'running';
   const stopped = vm.state === 'stopped';
   const id = 'vm-actions-' + vm.uuid.replace(/[^a-z0-9]/gi,'');
+  // Each item checks BOTH the user's permission and the global feature
+  // flag. Missing permission → greyed out with "requires <perm>" tooltip.
+  const gate = (perm, feat, featLabel) => {
+    if (!hasPerm(perm)) return { enabled: false, reason: 'Requires the ' + perm + ' permission' };
+    if (feat && !featureOn(feat)) return { enabled: false, reason: featLabel + ' disabled by administrator' };
+    return { enabled: true };
+  };
+  const life  = gate('vm.lifecycle', null, '');
+  const snap  = gate('vm.snapshot', 'snapshots', 'Snapshots');
+  const mig   = gate('vm.migrate',  'migrations', 'VM migrations');
+  const del   = gate('vm.delete',   'vm_delete', 'VM deletion');
   const items = [
-    { key:'start',    label:'▶ Start',       enabled: stopped,
+    { key:'start',    label:'▶ Start',     enabled: stopped && life.enabled,
+      disabledReason: life.enabled ? null : life.reason,
       action: `sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','START')` },
-    { key:'shutdown', label:'■ Shutdown',    enabled: running,
+    { key:'shutdown', label:'■ Shutdown',  enabled: running && life.enabled,
+      disabledReason: life.enabled ? null : life.reason,
       action: `sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','STOP')` },
-    { key:'restart',  label:'↺ Restart',     enabled: running,
+    { key:'restart',  label:'↺ Restart',   enabled: running && life.enabled,
+      disabledReason: life.enabled ? null : life.reason,
       action: `sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','RESTART')` },
-    { key:'force',    label:'⚡ Force Off',   enabled: running, danger: true,
+    { key:'force',    label:'⚡ Force Off', enabled: running && life.enabled, danger: true,
+      disabledReason: life.enabled ? null : life.reason,
       action: `sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','FORCESTOP')` },
     { sep: true },
-    { key:'snapshot', label:'📷 Snapshot',    enabled: featureOn('snapshots'),
-      disabledReason: 'Snapshots disabled by administrator',
+    { key:'snapshot', label:'📷 Snapshot',  enabled: snap.enabled, disabledReason: snap.reason,
       action: `openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')` },
-    { key:'migrate',  label:'↗ Migrate',     enabled: featureOn('migrations'),
-      disabledReason: 'Migrations disabled by administrator',
+    { key:'migrate',  label:'↗ Migrate',   enabled: mig.enabled, disabledReason: mig.reason,
       action: `openMigrateDialog('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')` },
     { sep: true },
-    { key:'delete',   label:'🗑 Delete VM',   enabled: featureOn('vm_delete'), danger: true,
-      disabledReason: 'VM deletion disabled by administrator',
+    { key:'delete',   label:'🗑 Delete VM', enabled: del.enabled, danger: true, disabledReason: del.reason,
       action: `openDeleteVMDialog('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')` },
   ];
   const menu = items.map(it => {
@@ -4424,13 +4446,14 @@ function renderVMSummaryTab(vm) {
   // Left column: live thumbnail (clickable) + launch console button.
   // Thumbnail auto-refreshes on every polling tick via the data-vm-thumb
   // attribute (see startThumbnailRefresher below).
-  const consoleDisabled = (running && host && host.ip && featureOn('console')) ? '' : 'disabled';
-  const thumbURL = (running && host && host.ip && featureOn('console'))
+  const canConsole = hasPerm('vm.console') && featureOn('console');
+  const consoleDisabled = (running && host && host.ip && canConsole) ? '' : 'disabled';
+  const thumbURL = (running && host && host.ip && canConsole)
     ? `http://${host.ip}:${host.agent_port || 8081}/screenshot/${encodeURIComponent(vm.name)}?_t=${Date.now()}`
     : '';
   const leftCol = `
     <div>
-      <div class="vm-thumbnail ${running && featureOn('console')?'clickable':''}" ${running && featureOn('console')?`onclick="openConsole('${esc(vm.host_id)}','${esc(vm.name)}')"`:''}
+      <div class="vm-thumbnail ${running && canConsole?'clickable':''}" ${running && canConsole?`onclick="openConsole('${esc(vm.host_id)}','${esc(vm.name)}')"`:''}
            data-vm-thumb="${esc(vm.host_id)}|${esc(vm.name)}">
         ${thumbURL ? `<img class="vm-thumb-img" alt="" src="${esc(thumbURL)}"
                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">` : ''}
@@ -4651,7 +4674,7 @@ function renderVMSummaryTab(vm) {
     : `
       <div class="vm-notes-view ${vm.notes ? '' : 'empty'}">${vm.notes ? esc(vm.notes) : 'No notes. Click Edit to add a description.'}</div>
       <div style="display:flex;justify-content:flex-end;margin-top:8px">
-        <button class="btn btn-secondary btn-sm" onclick="startNotesEdit('${esc(vm.notes || '')}')">✎ Edit Notes</button>
+        <button class="btn btn-secondary btn-sm" ${hasPerm('vm.edit')?'':'disabled'} onclick="startNotesEdit('${esc(vm.notes || '')}')" title="${hasPerm('vm.edit')?'':'Requires vm.edit'}">✎ Edit Notes</button>
       </div>
     `;
 
@@ -5360,8 +5383,8 @@ function renderSnapshotDetail(vm, snaps) {
       <td style="color:var(--text-faded);font-size:11px">${s.parent ? esc(s.parent) : '—'}</td>
       <td>
         <div class="actions-row">
-          <button class="btn btn-primary btn-sm" ${s.is_current || !featureOn('snapshots') ? 'disabled' : ''} onclick="revertSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')" title="${featureOn('snapshots')?(s.is_current?'Already current':''):'Snapshots disabled by administrator'}">↶ Revert</button>
-          <button class="btn btn-danger btn-sm" ${featureOn('snapshots')?'':'disabled'} onclick="deleteSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')" title="${featureOn('snapshots')?'':'Snapshots disabled by administrator'}">🗑 Delete</button>
+          <button class="btn btn-primary btn-sm" ${s.is_current || !hasPerm('vm.snapshot') || !featureOn('snapshots') ? 'disabled' : ''} onclick="revertSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')" title="${!hasPerm('vm.snapshot')?'Requires vm.snapshot':(featureOn('snapshots')?(s.is_current?'Already current':''):'Snapshots disabled by administrator')}">↶ Revert</button>
+          <button class="btn btn-danger btn-sm" ${hasPerm('vm.snapshot') && featureOn('snapshots')?'':'disabled'} onclick="deleteSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')" title="${!hasPerm('vm.snapshot')?'Requires vm.snapshot':(featureOn('snapshots')?'':'Snapshots disabled by administrator')}">🗑 Delete</button>
         </div>
       </td>
     </tr>
@@ -5417,6 +5440,7 @@ async function fetchSnapshots(hostID, vmName) {
 }
 
 async function revertSnapshot(hostID, vmName, snapName) {
+  if (!hasPerm('vm.snapshot')) { toast('error', 'You don\'t have permission to manage snapshots'); return; }
   if (!featureOn('snapshots')) { toast('error', 'Snapshots are disabled by the administrator'); return; }
   if (!confirm(`Revert ${vmName} to snapshot "${snapName}"?\n\nThis will discard the VM's current state.`)) return;
   toast('info', `Reverting ${vmName} to ${snapName}…`);
@@ -5440,6 +5464,7 @@ async function revertSnapshot(hostID, vmName, snapName) {
 }
 
 async function deleteSnapshot(hostID, vmName, snapName) {
+  if (!hasPerm('vm.snapshot')) { toast('error', 'You don\'t have permission to manage snapshots'); return; }
   if (!featureOn('snapshots')) { toast('error', 'Snapshots are disabled by the administrator'); return; }
   if (!confirm(`Delete snapshot "${snapName}" from ${vmName}?\n\nThis cannot be undone.`)) return;
   toast('info', `Deleting snapshot "${snapName}"…`);
@@ -5472,6 +5497,7 @@ async function deleteSnapshot(hostID, vmName, snapName) {
 let deleteVMState = null;
 
 function openDeleteVMDialog(hostID, vmUUID, vmName) {
+  if (!hasPerm('vm.delete')) { toast('error', 'You don\'t have permission to delete VMs'); return; }
   if (!featureOn('vm_delete')) return;
   deleteVMState = { step: 1, hostID, vmUUID, vmName, ackDisks: false, typed: '', submitting: false };
   renderDeleteVMDialog();
@@ -5619,6 +5645,7 @@ async function sendCmd(hostID, vmUUID, vmName, action) {
 }
 
 function openSnapshot(hostID, vmUUID, vmName) {
+  if (!hasPerm('vm.snapshot')) { toast('error', 'You don\'t have permission to manage snapshots'); return; }
   if (!featureOn('snapshots')) { toast('error', 'Snapshots are disabled by the administrator'); return; }
   state.snapshotTarget = { hostID, vmUUID, vmName };
   const d = new Date();

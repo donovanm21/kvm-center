@@ -147,15 +147,34 @@ func handleCommand(store *Store) http.HandlerFunc {
 		}
 
 		action := strings.ToUpper(req.Action)
+		var needPerm string
 		switch action {
-		case "START", "STOP", "FORCESTOP", "RESTART", "SNAPSHOT", "REVERT_SNAPSHOT", "DELETE_SNAPSHOT", "MIGRATE", "OFFLINE_MIGRATE", "DELETE_VM":
+		case "START", "STOP", "FORCESTOP", "RESTART":
+			needPerm = models.PermVMLifecycle
+		case "SNAPSHOT", "REVERT_SNAPSHOT", "DELETE_SNAPSHOT":
+			needPerm = models.PermVMSnapshot
+		case "MIGRATE", "OFFLINE_MIGRATE":
+			needPerm = models.PermVMMigrate
+		case "DELETE_VM":
+			needPerm = models.PermVMDelete
 		default:
 			writeError(w, http.StatusBadRequest, "unknown action: "+req.Action)
 			return
 		}
 
-		// Global feature-flag gating. Lifecycle (start/stop/restart/forcestop)
-		// is never gated — the admin can always regain control of a VM.
+		// RBAC check: the caller's role must grant the matching permission.
+		u := userFromRequest(r)
+		if u == nil {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		if !hasPermission(store, u, needPerm) {
+			writeError(w, http.StatusForbidden, "missing permission: "+needPerm)
+			return
+		}
+
+		// Global feature-flag gating. Lifecycle actions are never gated —
+		// an admin must always be able to regain control of a VM.
 		switch action {
 		case "SNAPSHOT", "REVERT_SNAPSHOT", "DELETE_SNAPSHOT":
 			if featureBlocked(w, store, "snapshots", "snapshots") {
