@@ -24,7 +24,20 @@ export function Hosts() {
     const q = query.trim().toLowerCase();
     const list = hosts.data ?? [];
     if (!q) return list;
-    return list.filter((h) => h.id.toLowerCase().includes(q) || h.ip.toLowerCase().includes(q));
+    // Match against every field a user is likely to type: host id, IP,
+    // OS name, libvirt version, kernel. v3's sidebar tree matched on
+    // just the id which was too narrow for common operator searches.
+    return list.filter((h) => {
+      const hay = [
+        h.id,
+        h.ip,
+        h.os ?? '',
+        h.libvirt_ver ?? '',
+        h.kernel_ver ?? '',
+        h.status,
+      ].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
   }, [hosts.data, query]);
 
   return (

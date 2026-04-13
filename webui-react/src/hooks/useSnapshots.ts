@@ -8,14 +8,20 @@ import type { Snapshot } from '@/types';
  * Snapshot list for a given (host, VM). Polled manually (not on SSE)
  * because the list rarely changes outside of explicit user actions.
  * The create/revert/delete mutations invalidate this key directly.
+ *
+ * The agent returns `{ snapshots: Snapshot[] }` (v3 used the same
+ * shape). Unwrap it here so callers always receive a bare array.
  */
 export function useSnapshots(hostID: string, vmName: string) {
   return useQuery({
     queryKey: ['snapshots', hostID, vmName],
-    queryFn: () =>
-      apiGet<Snapshot[]>(
+    queryFn: async () => {
+      const resp = await apiGet<{ snapshots?: Snapshot[] } | Snapshot[]>(
         `/api/vms/snapshots?host=${encodeURIComponent(hostID)}&vm=${encodeURIComponent(vmName)}`,
-      ),
+      );
+      if (Array.isArray(resp)) return resp;
+      return resp?.snapshots ?? [];
+    },
     enabled: Boolean(hostID && vmName),
   });
 }
