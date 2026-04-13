@@ -22,6 +22,7 @@ func StartCommandServer(addr string) {
 	mux.HandleFunc("/screenshot/", handleVMScreenshot)
 	mux.HandleFunc("/snapshots/", handleSnapshotList)
 	mux.HandleFunc("/migrate-status", handleMigrateStatus)
+	mux.HandleFunc("/cancel-migrate", handleCancelMigrate)
 	mux.HandleFunc("/storage-browse", handleStorageBrowse)
 	mux.HandleFunc("/storage-upload", handleStorageUpload)
 	mux.HandleFunc("/storage-file", handleStorageDelete)

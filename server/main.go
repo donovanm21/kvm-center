@@ -81,6 +81,7 @@ func main() {
 	mux.HandleFunc("/api/guest-telemetry", handleGuestTelemetry(store))
 	mux.HandleFunc("/api/migrations", handleGetMigrations(store))
 	mux.HandleFunc("/api/migrations/record", handlePostMigration(store))
+	mux.Handle("/api/migrations/cancel", requirePerm(store, "vm.migrate", http.HandlerFunc(handleCancelMigration(store))))
 	mux.HandleFunc("/api/migrate-status", handleMigrateStatus(store))
 	mux.HandleFunc("/health", handleHealth)
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
