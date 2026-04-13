@@ -25,7 +25,7 @@ var staticV4Files embed.FS
 // -ldflags "-X main.Version=..." can still override it at build time,
 // but the committed default is the source of truth when no override is
 // passed (e.g. bootstrap.sh --deploy, local go build).
-var Version = "v4.1.1"
+var Version = "v4.1.2"
 
 func main() {
 	addr := flag.String("addr", envOrDefault("KVM_CENTER_ADDR", ":8090"), "listen address")
