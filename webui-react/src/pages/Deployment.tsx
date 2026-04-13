@@ -30,7 +30,7 @@ export function Deployment() {
       <IntroBanner portalURL={portalURL} />
 
       <PackageCard
-        icon={<span style={{ ...iconTileStyle, background: '#2D1810', color: '#E3571E' }}>✚</span>}
+        icon={<span className="tone-icon-tile accent" style={iconTileStyle}>✚</span>}
         title="KVM Tools (Guest VM Daemon)"
         description={
           <>
@@ -81,7 +81,7 @@ Set-Location $tmp
       />
 
       <PackageCard
-        icon={<span style={{ ...iconTileStyle, background: '#1E2340', color: '#8B5CF6' }}>↓</span>}
+        icon={<span className="tone-icon-tile info" style={iconTileStyle}>↓</span>}
         title="KVM Center Agent (Hypervisor)"
         description={
           <>
@@ -212,19 +212,7 @@ function PortalPill({ state }: { state: 'checking' | 'ok' | 'down' }) {
   const ok = state === 'ok';
   return (
     <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        fontSize: 11,
-        padding: '2px 10px',
-        borderRadius: 10,
-        background: ok ? '#1E3D23' : '#3D1E1E',
-        color: ok ? '#3FB950' : '#F85149',
-        fontWeight: 600,
-        textTransform: 'uppercase',
-        letterSpacing: '0.04em',
-      }}
+      className={`tone-pill ${ok ? 'ok' : 'danger'}`}
     >
       ● Portal {ok ? 'online' : 'unreachable'}
     </span>
@@ -424,9 +412,9 @@ const copyBtnStyle: React.CSSProperties = {
   height: 26,
   padding: '0 12px',
   fontSize: 11,
-  background: '#2D1810',
-  color: '#FF8A3C',
-  border: '1px solid #C04512',
+  background: 'var(--surface-2)',
+  color: 'var(--accent)',
+  border: '1px solid var(--accent-dim, var(--accent))',
   borderRadius: 3,
   cursor: 'pointer',
   fontWeight: 600,

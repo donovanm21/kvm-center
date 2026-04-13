@@ -208,7 +208,7 @@ function SnapshotDetail({ vm }: { vm: VM }) {
                 <td style={{ fontWeight: 500, color: 'var(--text-strong)' }}>
                   {s.name}
                   {s.is_current && (
-                    <span style={currentPillStyle}>Current</span>
+                    <span className="tone-pill warn" style={currentPillStyle}>Current</span>
                   )}
                 </td>
                 <td style={{ fontFamily: "'SF Mono', monospace", color: 'var(--text-muted)', fontSize: 11 }}>
@@ -330,14 +330,4 @@ const searchStyle: React.CSSProperties = {
   color: 'var(--text-body)',
   fontSize: 12,
 };
-const currentPillStyle: React.CSSProperties = {
-  marginLeft: 8,
-  fontSize: 9,
-  padding: '1px 6px',
-  borderRadius: 10,
-  background: '#3D2510',
-  color: '#FF8A3C',
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px',
-};
+const currentPillStyle: React.CSSProperties = { marginLeft: 8 };

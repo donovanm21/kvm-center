@@ -62,17 +62,7 @@ export function CheckList({
 export function ErrorBanner({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <div
-      style={{
-        marginTop: 10,
-        padding: '8px 12px',
-        background: '#3D1E1E',
-        color: '#FFB3B3',
-        border: '1px solid #A02929',
-        borderRadius: 4,
-        fontSize: 12,
-      }}
-    >
+    <div className="tone-panel danger" style={{ marginTop: 10, padding: '8px 12px', borderRadius: 4, fontSize: 12 }}>
       {message}
     </div>
   );

@@ -80,7 +80,7 @@ function Toggle({ checked, disabled, onChange }: { checked: boolean; disabled?: 
         style={{
           position: 'absolute',
           inset: 0,
-          background: checked ? '#E3571E' : 'var(--surface-3)',
+          background: checked ? 'var(--accent)' : 'var(--surface-3)',
           borderRadius: 22,
           transition: 'background 0.18s',
           cursor: disabled ? 'not-allowed' : 'pointer',
