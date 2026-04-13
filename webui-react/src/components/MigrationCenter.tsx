@@ -1,5 +1,10 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+
 import { Modal } from './Modal';
+import { apiPost } from '@/api/client';
+import { useAuth } from '@/hooks/useAuth';
 import { useMigrations } from '@/hooks/useInventory';
+import { useToast } from '@/hooks/useToast';
 import type { MigrationRecord } from '@/types';
 
 interface Props {
@@ -42,11 +47,49 @@ export function MigrationCenter({ open, onClose }: Props) {
 
 /**
  * Compact progress card used by both the Migration Center modal and
- * MigrateModal's post-submit view. Pure presentational component — the
- * phase + progress numbers come from the store via useMigrations.
+ * MigrateModal's post-submit view. Phase + progress come from the
+ * store via useMigrations; Cancel hits the new server endpoint which
+ * proxies to the agent's /cancel-migrate.
  */
 export function MigrationProgressCard({ m }: { m: MigrationRecord }) {
   const pct = Math.min(m.progress ?? 0, 100);
+  const { hasPerm } = useAuth();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const cancel = useMutation({
+    mutationFn: () => apiPost(`/api/migrations/cancel?id=${encodeURIComponent(m.id)}`),
+    onSuccess: () => {
+      toast('success', `Cancelling migration of ${m.vm_name}`);
+      qc.invalidateQueries({ queryKey: ['migrations'] });
+    },
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast('error', `Cancel failed: ${msg}`);
+    },
+  });
+
+  // Cancellation is unsafe past the cleanup phase — source disks are
+  // gone by then. Also disabled while a cancel request is already in
+  // flight or once the record reports "cancelling".
+  const phase = m.phase ?? '';
+  const tooLate = phase === 'cleanup';
+  const alreadyCancelling = phase === 'cancelling';
+  const canCancel = hasPerm('vm.migrate') && m.status === 'running' && !tooLate && !alreadyCancelling && !cancel.isPending;
+  const cancelTitle = !hasPerm('vm.migrate')
+    ? 'Requires vm.migrate'
+    : tooLate
+      ? 'Source disks have already been removed during the cleanup phase — too late to cancel'
+      : alreadyCancelling
+        ? 'Cancellation already in progress'
+        : `Cancel migration and roll back to ${m.source_host}`;
+
+  const onCancelClick = () => {
+    if (!canCancel) return;
+    if (confirm(`Cancel migration of "${m.vm_name}" and restore it on ${m.source_host}?`)) {
+      cancel.mutate();
+    }
+  };
+
   return (
     <div
       style={{
@@ -64,7 +107,19 @@ export function MigrationProgressCard({ m }: { m: MigrationRecord }) {
             {m.source_host} → {m.dest_host} · {m.mode}
           </div>
         </div>
-        <StatusPill status={m.status} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <StatusPill status={alreadyCancelling ? 'cancelling' : m.status} />
+          <button
+            type="button"
+            className="btn-danger-sm"
+            disabled={!canCancel}
+            title={cancelTitle}
+            onClick={onCancelClick}
+            style={{ height: 24, padding: '0 10px', fontSize: 11 }}
+          >
+            {cancel.isPending || alreadyCancelling ? 'Cancelling…' : 'Cancel'}
+          </button>
+        </div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
         <span style={{ fontSize: 12, color: 'var(--text-body)' }}>{m.phase || 'starting'}</span>
@@ -90,11 +145,13 @@ export function MigrationProgressCard({ m }: { m: MigrationRecord }) {
 function StatusPill({ status }: { status: string }) {
   const bg =
     status === 'running' ? '#3D2510' :
+    status === 'cancelling' ? '#3D1E1E' :
     status === 'complete' ? '#1E3D23' :
     status === 'failed' ? '#3D1E1E' :
     'var(--surface-3)';
   const color =
     status === 'running' ? '#FF8A3C' :
+    status === 'cancelling' ? '#F85149' :
     status === 'complete' ? '#3FB950' :
     status === 'failed' ? '#F85149' :
     'var(--text-muted)';
