@@ -61,12 +61,12 @@ body {
 
 /* ── Top Navigation ─────────────────────────────────────── */
 #topbar {
-  height: 42px;
+  height: 64px;
   background: #13161D;
   border-bottom: 1px solid #30363D;
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 20px;
   gap: 16px;
   flex-shrink: 0;
   z-index: 100;
@@ -85,22 +85,46 @@ body {
 .logo {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   white-space: nowrap;
 }
 .logo svg { flex-shrink: 0; filter: drop-shadow(0 0 8px rgba(227,87,30,0.25)); }
+.brand-text { display: flex; flex-direction: column; gap: 2px; line-height: 1; }
 .brand {
   display: inline-flex;
   align-items: baseline;
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: -0.01em;
   line-height: 1;
 }
 .brand-primary { color: var(--text-strong); }
-.brand-accent {
-  color: #E3571E;
-  margin-left: 2px;
+.brand-accent { color: #E3571E; margin-left: 2px; }
+.brand-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 500;
+}
+/* Version pill — same styling as the build portal's header badge. */
+.version-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 12px;
+  background: #2D1810; color: #FF8A3C;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  border: 1px solid #C04512;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.version-badge::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%; background: #E3571E;
+}
+body.light-mode .version-badge { background: #FFF4EC; color: #C04512; border-color: #E3571E; }
+@media (max-width: 640px) {
+  .brand { font-size: 16px; }
+  .brand-sub { display: none; }
+  #topbar { height: 54px; }
 }
 #search-bar {
   flex: 1;
@@ -1710,7 +1734,7 @@ body.light-mode #sidebar-overlay { background: rgba(0,0,0,0.3); }
     <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v1.5H2zm0 4.25h12v1.5H2zm0 4.25h12v1.5H2z"/></svg>
   </button>
   <div class="logo">
-    <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-label="KVM Center logo">
+    <svg width="40" height="40" viewBox="0 0 32 32" fill="none" aria-label="KVM Center logo">
       <defs>
         <linearGradient id="logo-accent" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stop-color="#FF8A3C"/>
@@ -1723,11 +1747,15 @@ body.light-mode #sidebar-overlay { background: rgba(0,0,0,0.3); }
       <rect x="10" y="15" width="9"  height="3" rx="0.5" fill="#E3571E" opacity="0.7"/>
       <rect x="10" y="19" width="6"  height="3" rx="0.5" fill="#E3571E" opacity="0.45"/>
     </svg>
-    <span class="brand">
-      <span class="brand-primary">kvm</span><span class="brand-accent">center</span>
-    </span>
+    <div class="brand-text">
+      <span class="brand">
+        <span class="brand-primary">kvm</span><span class="brand-accent">center</span>
+      </span>
+      <span class="brand-sub">KVM management, simplified</span>
+    </div>
   </div>
   <div class="spacer"></div>
+  <span class="version-badge" id="version-badge">loading…</span>
   <div id="conn-status">
     <div class="status-dot" id="conn-dot"></div>
     <span id="conn-text">Connecting…</span>
@@ -1908,8 +1936,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   restoreRoute();
   // Fetch version once on load — doesn't require auth.
   fetch('/api/version').then(r => r.json()).then(d => {
+    if (!d.version) return;
     const el = document.getElementById('version-text');
-    if (el && d.version) el.textContent = 'KVM Center ' + d.version;
+    if (el) el.textContent = 'KVM Center ' + d.version;
+    const badge = document.getElementById('version-badge');
+    if (badge) badge.textContent = d.version;
   }).catch(() => {});
   // Gate the main app behind authentication.
   const ok = await initAuth();
