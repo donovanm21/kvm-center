@@ -2601,7 +2601,8 @@ function renderHostVMs(h, hostVMs) {
 
 function renderHostStorage(h, hostPools) {
   if (!hostPools.length) return emptyState('No Storage Pools', 'No libvirt storage pools found on this host.');
-  return `<div class="table-wrap">${storageTable(hostPools)}</div>`;
+  const browser = state.fileBrowser ? renderFileBrowser() : '';
+  return `<div class="table-wrap">${storageTable(hostPools)}</div>${browser}`;
 }
 
 // ── Storage view ───────────────────────────────────────────
