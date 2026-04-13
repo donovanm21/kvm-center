@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
 
 import { FileBrowserModal } from '@/components/FileBrowserModal';
+import { SortableTH, useSort } from '@/components/SortableTH';
 import { useHosts, useStorage } from '@/hooks/useInventory';
 import type { StoragePool } from '@/types';
+
+type PoolSortKey = 'name' | 'host_id' | 'pool_type' | 'state' | 'capacity_gb' | 'allocation_gb' | 'available_gb' | 'path';
 
 interface BrowseTarget {
   hostID: string;
@@ -15,14 +18,18 @@ export function Storage() {
   const [query, setQuery] = useState('');
   const [browse, setBrowse] = useState<BrowseTarget | null>(null);
 
+  const { sort, onToggle, compare } = useSort<PoolSortKey>('name');
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = storage.data ?? [];
-    if (!q) return list;
-    return list.filter(
-      (p) => p.name.toLowerCase().includes(q) || p.host_id.toLowerCase().includes(q),
-    );
-  }, [storage.data, query]);
+    const base = !q
+      ? list
+      : list.filter(
+          (p) => p.name.toLowerCase().includes(q) || p.host_id.toLowerCase().includes(q),
+        );
+    return [...base].sort((a, b) => compare(a[sort.key], b[sort.key]));
+  }, [storage.data, query, sort, compare]);
 
   return (
     <>
@@ -46,15 +53,15 @@ export function Storage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Pool</th>
-                <th>Host</th>
-                <th>Type</th>
-                <th>State</th>
-                <th>Capacity</th>
-                <th>Used</th>
-                <th>Available</th>
+                <SortableTH colKey="name"          label="Pool"      sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="host_id"       label="Host"      sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="pool_type"     label="Type"      sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="state"         label="State"     sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="capacity_gb"   label="Capacity"  sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="allocation_gb" label="Used"      sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="available_gb"  label="Available" sort={sort} onToggle={onToggle} />
                 <th style={{ width: 220 }}>Utilisation</th>
-                <th>Path</th>
+                <SortableTH colKey="path"          label="Path"      sort={sort} onToggle={onToggle} />
                 <th style={{ width: 80 }} />
               </tr>
             </thead>

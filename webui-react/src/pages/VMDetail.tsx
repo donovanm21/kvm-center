@@ -1,11 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, useMatch, useNavigate, useParams } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { ActionsMenu, type ActionGroup } from '@/components/ActionsMenu';
 import { MigrateModal } from '@/components/MigrateModal';
 import { Modal } from '@/components/Modal';
+import { apiPost } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useFeatures, useHosts, useVMs } from '@/hooks/useInventory';
+import { useToast } from '@/hooks/useToast';
 import {
   useCreateSnapshot,
   useDeleteSnapshot,
@@ -170,13 +173,14 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       {/* Three-column layout: thumbnail · guest card · usage stack */}
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr 200px', gap: 16 }}>
-        <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr 320px', gap: 16, alignItems: 'stretch' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div
             onClick={thumbURL ? openConsole : undefined}
             style={{
               position: 'relative',
-              aspectRatio: '4 / 3',
+              flex: 1,
+              minHeight: 160,
               background: '#000',
               border: '1px solid var(--border)',
               borderRadius: 6,
@@ -271,7 +275,7 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
       </div>
 
       {/* VM hardware quick-view + Notes */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, alignItems: 'start' }}>
         <HardwareQuickView vm={vm} />
         <NotesPanel vm={vm} />
       </div>
@@ -367,14 +371,86 @@ function HardwareQuickView({ vm }: { vm: VM }) {
 }
 
 function NotesPanel({ vm }: { vm: VM }) {
+  const { hasPerm } = useAuth();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const canEdit = hasPerm('vm.edit');
+  const [draft, setDraft] = useState<string | null>(null);
+  const editing = draft !== null;
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (editing) textareaRef.current?.focus();
+  }, [editing]);
+
+  const save = useMutation({
+    mutationFn: (notes: string) => apiPost('/api/vms/notes', { uuid: vm.uuid, notes }),
+    onSuccess: () => {
+      toast('success', 'Notes saved');
+      qc.invalidateQueries({ queryKey: ['vms'] });
+      setDraft(null);
+    },
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast('error', `Failed to save notes: ${msg}`);
+    },
+  });
+
   return (
     <div className="panel">
-      <h2>Notes</h2>
-      {vm.notes ? (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <h2 style={{ margin: 0 }}>Notes</h2>
+        {!editing && (
+          <button
+            className="btn-secondary-sm"
+            disabled={!canEdit}
+            title={canEdit ? 'Edit notes' : 'Requires vm.edit'}
+            onClick={() => setDraft(vm.notes ?? '')}
+          >
+            {vm.notes ? 'Edit' : 'Add'}
+          </button>
+        )}
+      </div>
+      {editing ? (
+        <>
+          <textarea
+            ref={textareaRef}
+            value={draft ?? ''}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={6}
+            placeholder="Free-form notes about this VM…"
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              background: 'var(--bg-input)',
+              color: 'var(--text-body)',
+              border: '1px solid var(--border)',
+              borderRadius: 4,
+              padding: 8,
+              fontSize: 12,
+              fontFamily: 'inherit',
+              lineHeight: 1.5,
+              resize: 'vertical',
+            }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 8 }}>
+            <button className="btn-secondary-sm" onClick={() => setDraft(null)} disabled={save.isPending}>
+              Cancel
+            </button>
+            <button
+              className="btn-primary-sm"
+              onClick={() => save.mutate(draft ?? '')}
+              disabled={save.isPending || (draft ?? '') === (vm.notes ?? '')}
+            >
+              {save.isPending ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </>
+      ) : vm.notes ? (
         <div style={{ fontSize: 12, color: 'var(--text-body)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{vm.notes}</div>
       ) : (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          No notes. The VM detail Hardware tab has an inline editor (port pending).
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+          No notes yet.
         </div>
       )}
     </div>
