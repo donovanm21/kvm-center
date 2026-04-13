@@ -99,6 +99,19 @@ export interface Snapshot {
   is_current: boolean;
 }
 
+export interface StorageEntry {
+  name: string;
+  is_dir: boolean;
+  size: number;
+  modified?: string;
+}
+
+export interface StorageBrowseResponse {
+  host_id: string;
+  path: string;
+  entries: StorageEntry[];
+}
+
 export interface StoragePool {
   name: string;
   host_id: string;
