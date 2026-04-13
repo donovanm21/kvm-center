@@ -1538,6 +1538,34 @@ body.light-mode .user-dropdown-item.danger { color: #CF222E; }
 .settings-tab:hover { color: var(--text-strong); }
 .settings-tab.active { color: var(--text-strong); border-bottom-color: #E3571E; }
 
+/* General-tab feature toggles */
+.feat-list { display: flex; flex-direction: column; gap: 4px; }
+.feat-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 24px; padding: 14px 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+}
+.feat-label { font-size: 13px; font-weight: 600; color: var(--text-strong); }
+.feat-help  { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; max-width: 440px; }
+body.light-mode .feat-row { background: #FFFFFF; border-color: #D0D7DE; }
+
+.toggle { position: relative; display: inline-block; width: 42px; height: 22px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0; background: #30363D;
+  border-radius: 22px; cursor: pointer; transition: background 0.18s;
+}
+.toggle-slider::before {
+  content: ''; position: absolute; left: 2px; top: 2px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #F0F6FC; transition: transform 0.18s;
+}
+.toggle input:checked + .toggle-slider { background: #E3571E; }
+.toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
+.toggle.disabled .toggle-slider { opacity: 0.5; cursor: not-allowed; }
+body.light-mode .toggle-slider { background: #D0D7DE; }
+body.light-mode .toggle-slider::before { background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+
 /* ── Light mode overrides ───────────────────────────────── */
 body.light-mode {
   background: #F6F8FA;
@@ -1863,9 +1891,6 @@ body.light-mode #sidebar-overlay { background: rgba(0,0,0,0.3); }
       </div>
     </div>
 
-    <div id="version-footer">
-      <span id="version-text">loading…</span>
-    </div>
   </div>
 
   <!-- Main panel -->
@@ -1937,14 +1962,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Fetch version once on load — doesn't require auth.
   fetch('/api/version').then(r => r.json()).then(d => {
     if (!d.version) return;
-    const el = document.getElementById('version-text');
-    if (el) el.textContent = 'KVM Center ' + d.version;
     const badge = document.getElementById('version-badge');
     if (badge) badge.textContent = d.version;
   }).catch(() => {});
   // Gate the main app behind authentication.
   const ok = await initAuth();
   if (ok) {
+    await loadFeatures();
     refresh();
     // Settings lives outside the main telemetry refresh loop, so a deep-link
     // refresh (e.g. landing directly on #/settings) needs its own fetch.
@@ -2157,7 +2181,9 @@ function renderContent() {
 
   // Show "Create VM" button on relevant views.
   if (['dashboard','all-vms','host'].includes(state.view) && state.hosts.length > 0) {
-    actions.innerHTML = `<button class="btn btn-primary" onclick="openCreateVM()">+ Create VM</button>`;
+    actions.innerHTML = featureOn('vm_create')
+      ? `<button class="btn btn-primary" onclick="openCreateVM()">+ Create VM</button>`
+      : `<button class="btn btn-primary" disabled title="VM creation disabled by administrator">+ Create VM</button>`;
   }
 
   switch (state.view) {
@@ -2401,7 +2427,9 @@ function vmActions(v) {
     <button class="btn btn-warning btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','STOP')" title="Shutdown">■</button>
     <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}','RESTART')" title="Restart">↺</button>
     <button class="btn btn-secondary btn-sm" ${snapOK?'':'disabled'} onclick="openSnapshot('${esc(v.host_id)}','${esc(v.uuid)}','${esc(v.name)}')" title="${snapTitle}">📷</button>
-    <button class="btn btn-secondary btn-sm" ${consoleOK?'':'disabled'} onclick="openConsole('${esc(v.host_id)}','${esc(v.name)}')" title="${consoleTitle}">🖥</button>
+    <button class="btn btn-secondary btn-sm" ${consoleOK && featureOn('console')?'':'disabled'}
+            onclick="openConsole('${esc(v.host_id)}','${esc(v.name)}')"
+            title="${featureOn('console')?consoleTitle:'Remote console disabled by administrator'}">🖥</button>
   `;
 }
 
@@ -2931,7 +2959,7 @@ function renderFileBrowser() {
           <td style="color:var(--text-muted);font-size:11px;white-space:nowrap">${e.is_dir ? '—' : fmtFileSize(e.size)}</td>
           <td style="color:var(--text-faded);font-size:11px;white-space:nowrap">${e.modified ? new Date(e.modified).toLocaleString([], {dateStyle:'short',timeStyle:'short'}) : '—'}</td>
           <td onclick="event.stopPropagation()">
-            ${!e.is_dir ? `<button class="btn btn-danger btn-sm" onclick="deleteStorageFile(${idx})">Delete</button>` : ''}
+            ${!e.is_dir ? `<button class="btn btn-danger btn-sm" ${featureOn('storage_delete')?'':'disabled'} onclick="deleteStorageFile(${idx})" title="${featureOn('storage_delete')?'':'Storage file delete disabled by administrator'}">Delete</button>` : ''}
           </td>
         </tr>
       `).join('');
@@ -2951,7 +2979,8 @@ function renderFileBrowser() {
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0">
           <button class="btn btn-secondary btn-sm" onclick="browseUp()">&#8593; Up</button>
-          <button class="btn btn-primary btn-sm" onclick="triggerUpload()" ${fb.uploading?'disabled':''}>${fb.uploading ? 'Uploading…' : 'Upload File'}</button>
+          <button class="btn btn-primary btn-sm" onclick="triggerUpload()" ${fb.uploading || !featureOn('storage_upload')?'disabled':''}
+                  title="${featureOn('storage_upload')?'':'Storage uploads disabled by administrator'}">${fb.uploading ? 'Uploading…' : 'Upload File'}</button>
           <button class="btn btn-secondary btn-sm" onclick="fetchBrowse('${esc(fb.host_id)}','${esc(fb.path)}')">&#8635; Refresh</button>
           <button class="btn btn-secondary btn-sm" onclick="closeFileBrowser()">Close</button>
           <input type="file" id="fb-upload-input" style="display:none" onchange="handleUpload(this)">
@@ -3101,8 +3130,9 @@ function setSettingsTab(t) {
 }
 
 function renderSettingsView() {
-  const tab = state.settingsTab || 'users';
+  const tab = state.settingsTab || 'general';
   const tabs = [
+    ['general', 'General'],
     ['users', 'Users'],
     ['groups', 'Groups'],
     ['roles', 'Roles'],
@@ -3113,7 +3143,8 @@ function renderSettingsView() {
   `).join('');
 
   let body = '';
-  if (tab === 'users') body = renderSettingsUsers();
+  if (tab === 'general') body = renderSettingsGeneral();
+  else if (tab === 'users') body = renderSettingsUsers();
   else if (tab === 'groups') body = renderSettingsGroups();
   else if (tab === 'roles') body = renderSettingsRoles();
   else if (tab === 'providers') body = renderSettingsProviders();
@@ -3128,6 +3159,69 @@ function renderSettingsView() {
 }
 
 // ── Users ──
+// ── General ──
+// The global feature-flag matrix. Toggle = "enabled" from the user's POV,
+// which is the inverse of the backing disable_* fields.
+function renderSettingsGeneral() {
+  const canEdit = hasPerm('user.manage') || hasPerm('admin');
+  const rows = [
+    ['vm_create',      'Create VMs',         'Allow operators to provision new VMs through the wizard.'],
+    ['vm_delete',      'Delete VMs',         'Allow operators to permanently destroy VM domains and their disks.'],
+    ['snapshots',      'Snapshots',          'Create, revert, and delete libvirt domain snapshots.'],
+    ['console',        'Remote console',     'Hide the Launch Console button and the live thumbnail click-through.'],
+    ['migrations',     'VM migrations',      'Live and offline migration between hypervisors.'],
+    ['storage_upload', 'Storage uploads',    'Upload ISOs and disk images to storage pools.'],
+    ['storage_delete', 'Storage file delete','Delete files from storage pools through the UI.'],
+  ].map(([key, label, help]) => {
+    const on = featureOn(key);
+    return `
+      <div class="feat-row">
+        <div>
+          <div class="feat-label">${label}</div>
+          <div class="feat-help">${help}</div>
+        </div>
+        <label class="toggle ${canEdit?'':'disabled'}">
+          <input type="checkbox" ${on?'checked':''} ${canEdit?'':'disabled'}
+                 onchange="setFeature('${key}', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>`;
+  }).join('');
+  return `
+    <div style="max-width:680px">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
+        Features are enabled by default. Disabling one here greys the corresponding buttons out for every user and
+        the server rejects the underlying API call — a defense-in-depth against accidental operations.
+        ${canEdit?'':'<br><strong style="color:var(--text-faded)">Read-only — requires the user.manage permission to edit.</strong>'}
+      </div>
+      <div class="feat-list">${rows}</div>
+    </div>
+  `;
+}
+
+async function setFeature(key, enabled) {
+  // UI stores positive ("on" = enabled); server stores negative ("disable_*").
+  const fieldMap = {
+    vm_create: 'disable_vm_create', vm_delete: 'disable_vm_delete',
+    snapshots: 'disable_snapshots', console: 'disable_console',
+    migrations: 'disable_migrations',
+    storage_upload: 'disable_storage_upload',
+    storage_delete: 'disable_storage_delete',
+  };
+  const next = { ...state.features, [fieldMap[key]]: !enabled };
+  try {
+    const r = await fetch('/api/settings/update', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(next),
+    });
+    const d = await r.json();
+    if (!r.ok) { toast('error', d.error || 'Save failed'); return; }
+    state.features = d;
+    toast('success', `${key.replace('_',' ')} ${enabled?'enabled':'disabled'}`);
+    render();
+  } catch (e) { toast('error', e.message); }
+}
+
 function renderSettingsUsers() {
   const roleName = (id) => state.roles.find(r => r.id === id)?.name || id;
   const groupName = (id) => state.groups.find(g => g.id === id)?.name || id;
@@ -4076,7 +4170,12 @@ function vmDetailHeader(vm) {
         <button class="btn btn-warning btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','STOP')">■ Shutdown</button>
         <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','RESTART')">↺ Restart</button>
         <button class="btn btn-danger btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','FORCESTOP')">⚡ Force Off</button>
-        <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="openMigrateDialog('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')" title="Live migrate to another host">↗ Migrate</button>
+        <button class="btn btn-secondary btn-sm" ${running || !featureOn('migrations') ? 'disabled':''}
+                onclick="openMigrateDialog('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')"
+                title="${featureOn('migrations')?'Live migrate to another host':'Migrations disabled by administrator'}">↗ Migrate</button>
+        <button class="btn btn-danger btn-sm" ${featureOn('vm_delete')?'':'disabled'}
+                onclick="openDeleteVMDialog('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')"
+                title="${featureOn('vm_delete')?'Permanently delete this VM':'VM deletion disabled by administrator'}">🗑 Delete</button>
       </div>
     </div>
   `;
@@ -4206,20 +4305,25 @@ function renderVMSummaryTab(vm) {
       <button class="btn btn-warning btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','STOP')" title="Graceful shutdown">■ Shutdown</button>
       <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','RESTART')" title="Restart">↺ Restart</button>
       <button class="btn btn-danger btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','FORCESTOP')" title="Force power off">⚡ Force Off</button>
-      <button class="btn btn-secondary btn-sm" onclick="openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')" title="Create snapshot">📷 Snapshot</button>
+      <button class="btn btn-secondary btn-sm" ${featureOn('snapshots')?'':'disabled'}
+              onclick="openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')"
+              title="${featureOn('snapshots')?'Create snapshot':'Snapshots disabled by administrator'}">📷 Snapshot</button>
+      <button class="btn btn-danger btn-sm" ${featureOn('vm_delete')?'':'disabled'}
+              onclick="openDeleteVMDialog('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')"
+              title="${featureOn('vm_delete')?'Permanently delete this VM':'VM deletion disabled by administrator'}">🗑 Delete</button>
     </div>
   `;
 
   // Left column: live thumbnail (clickable) + launch console button.
   // Thumbnail auto-refreshes on every polling tick via the data-vm-thumb
   // attribute (see startThumbnailRefresher below).
-  const consoleDisabled = running && host && host.ip ? '' : 'disabled';
-  const thumbURL = (running && host && host.ip)
+  const consoleDisabled = (running && host && host.ip && featureOn('console')) ? '' : 'disabled';
+  const thumbURL = (running && host && host.ip && featureOn('console'))
     ? `http://${host.ip}:${host.agent_port || 8081}/screenshot/${encodeURIComponent(vm.name)}?_t=${Date.now()}`
     : '';
   const leftCol = `
     <div>
-      <div class="vm-thumbnail ${running?'clickable':''}" ${running?`onclick="openConsole('${esc(vm.host_id)}','${esc(vm.name)}')"`:''}
+      <div class="vm-thumbnail ${running && featureOn('console')?'clickable':''}" ${running && featureOn('console')?`onclick="openConsole('${esc(vm.host_id)}','${esc(vm.name)}')"`:''}
            data-vm-thumb="${esc(vm.host_id)}|${esc(vm.name)}">
         ${thumbURL ? `<img class="vm-thumb-img" alt="" src="${esc(thumbURL)}"
                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">` : ''}
@@ -4230,9 +4334,10 @@ function renderVMSummaryTab(vm) {
           </svg>
         </div>
         <span class="state-label">${vm.state}</span>
-        ${running ? '<span class="thumb-hover-hint">Click to open console</span>' : ''}
+        ${running && featureOn('console') ? '<span class="thumb-hover-hint">Click to open console</span>' : ''}
       </div>
       <button class="console-launch" ${consoleDisabled}
+        title="${featureOn('console')?'':'Remote console disabled by administrator'}"
         onclick="openConsole('${esc(vm.host_id)}','${esc(vm.name)}')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="2" y="4" width="20" height="14" rx="2"/>
@@ -4473,7 +4578,9 @@ function renderVMSnapshotsTab(vm) {
       <div class="vm-actions-bar">
         <span class="vm-title">${esc(vm.name)}</span>
         <span class="vm-pill vm-state ${vm.state}">${vm.state}</span>
-        <button class="btn btn-secondary btn-sm" onclick="openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')">📷 Create Snapshot</button>
+        <button class="btn btn-secondary btn-sm" ${featureOn('snapshots')?'':'disabled'}
+                onclick="openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')"
+                title="${featureOn('snapshots')?'':'Snapshots disabled by administrator'}">📷 Create Snapshot</button>
       </div>
     </div>
   `;
@@ -4508,8 +4615,8 @@ function renderSnapshotDetailTable(vm, snaps) {
       <td style="color:var(--text-faded);font-size:11px">${s.parent ? esc(s.parent) : '—'}</td>
       <td>
         <div class="actions-row">
-          <button class="btn btn-primary btn-sm" ${s.is_current ? 'disabled' : ''} onclick="revertSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')">↶ Revert</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')">🗑 Delete</button>
+          <button class="btn btn-primary btn-sm" ${s.is_current || !featureOn('snapshots') ? 'disabled' : ''} onclick="revertSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')">↶ Revert</button>
+          <button class="btn btn-danger btn-sm" ${featureOn('snapshots')?'':'disabled'} onclick="deleteSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')">🗑 Delete</button>
         </div>
       </td>
     </tr>
@@ -5123,7 +5230,9 @@ function renderSnapshotDetail(vm, snaps) {
           <div style="font-size:11px;color:var(--text-faded);margin-top:2px">${esc(vm.host_id)} · <span class="vm-state ${vm.state}">${vm.state}</span></div>
         </div>
         <div style="display:flex;gap:6px">
-          <button class="btn btn-secondary btn-sm" onclick="openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')">📷 Create Snapshot</button>
+          <button class="btn btn-secondary btn-sm" ${featureOn('snapshots')?'':'disabled'}
+                onclick="openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')"
+                title="${featureOn('snapshots')?'':'Snapshots disabled by administrator'}">📷 Create Snapshot</button>
           <button class="btn btn-secondary btn-sm" onclick="refreshSnapshots()">↺ Refresh</button>
         </div>
       </div>
@@ -5246,6 +5355,141 @@ async function deleteSnapshot(hostID, vmName, snapName) {
 }
 
 // ── Commands ───────────────────────────────────────────────
+// ── VM deletion (multi-stage confirmation) ─────────────────
+// Three gates before libvirt sees DELETE_VM: an intent click, a
+// checkbox acknowledging disk loss, and typing the VM name verbatim.
+// The last step is the industry-standard "type the name to confirm"
+// pattern (GitHub, GitLab, Stripe) and prevents muscle-memory clicks
+// from nuking a production VM.
+let deleteVMState = null;
+
+function openDeleteVMDialog(hostID, vmUUID, vmName) {
+  if (!featureOn('vm_delete')) return;
+  deleteVMState = { step: 1, hostID, vmUUID, vmName, ackDisks: false, typed: '', submitting: false };
+  renderDeleteVMDialog();
+}
+function closeDeleteVMDialog() {
+  deleteVMState = null;
+  const el = document.getElementById('delete-vm-modal');
+  if (el) el.remove();
+}
+function renderDeleteVMDialog() {
+  const s = deleteVMState; if (!s) return;
+  let root = document.getElementById('delete-vm-modal');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'delete-vm-modal';
+    document.body.appendChild(root);
+  }
+  const vm = (state.vms || []).find(v => v.uuid === s.vmUUID) || { name: s.vmName };
+  const diskList = (vm.all_disks || []).filter(d => d.path).map(d => `
+    <li style="font-family:'SF Mono',monospace;font-size:11px;color:var(--text-body);padding:4px 0;border-bottom:1px solid var(--border)">
+      ${esc(d.path)} <span style="color:var(--text-faded)">· ${esc(d.disk_type || d.device || '')} · ${d.capacity_gb ? d.capacity_gb.toFixed(1)+' GB':''}</span>
+    </li>
+  `).join('') || '<li style="color:var(--text-faded);font-size:11px;padding:4px 0">No disks reported — nothing extra to unlink.</li>';
+
+  let body = '';
+  if (s.step === 1) {
+    body = `
+      <h3 style="color:#F85149">Delete VM — ${esc(s.vmName)}</h3>
+      <p style="margin-top:10px;color:var(--text-body);font-size:12px;line-height:1.55">
+        This will <strong>permanently destroy</strong> the domain <strong>${esc(s.vmName)}</strong> on
+        <code style="background:var(--bg-input);padding:1px 6px;border-radius:3px">${esc(s.hostID)}</code>.
+        The action can't be undone from this UI — restore from backup is the only recovery path.
+      </p>
+      <p style="margin-top:10px;color:var(--text-body);font-size:12px">The following will happen, in order:</p>
+      <ol style="margin:6px 0 0 20px;padding:0;color:var(--text-body);font-size:12px;line-height:1.7">
+        <li>Force-off if the VM is still running (<code>virsh destroy</code>).</li>
+        <li>Undefine the domain, including NVRAM, snapshot metadata, and managed-save state.</li>
+        <li>Remove these disk files:</li>
+      </ol>
+      <ul style="margin:8px 0 0 0;padding:0;list-style:none;max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:8px 12px;background:var(--bg-input)">
+        ${diskList}
+      </ul>
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn btn-secondary" onclick="closeDeleteVMDialog()">Cancel</button>
+        <button class="btn btn-danger" onclick="deleteVMAdvance(2)">Continue</button>
+      </div>
+    `;
+  } else if (s.step === 2) {
+    body = `
+      <h3 style="color:#F85149">Confirm disk destruction</h3>
+      <p style="margin-top:10px;color:var(--text-body);font-size:12px;line-height:1.55">
+        The disk files listed on the previous step will be <strong>deleted from disk</strong>.
+        Snapshots, NVRAM, and managed-save state are also removed — there is no trash bin.
+      </p>
+      <label style="margin-top:14px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:4px">
+        <input type="checkbox" ${s.ackDisks?'checked':''} onchange="deleteVMState.ackDisks=this.checked; renderDeleteVMDialog()">
+        <span style="font-size:12px;color:var(--text-body);line-height:1.5">
+          I understand that the VM's disks, snapshots, and all associated metadata will be permanently removed
+          from the host and cannot be recovered.
+        </span>
+      </label>
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn btn-secondary" onclick="deleteVMAdvance(1)">Back</button>
+        <button class="btn btn-danger" ${s.ackDisks?'':'disabled'} onclick="deleteVMAdvance(3)">I understand — continue</button>
+      </div>
+    `;
+  } else if (s.step === 3) {
+    const matches = s.typed === s.vmName;
+    body = `
+      <h3 style="color:#F85149">Final confirmation</h3>
+      <p style="margin-top:10px;color:var(--text-body);font-size:12px;line-height:1.55">
+        To confirm, type the VM name <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px;color:#F85149">${esc(s.vmName)}</code> below.
+      </p>
+      <input type="text" id="delete-vm-confirm" autofocus autocomplete="off" spellcheck="false"
+             style="margin-top:10px;width:100%;font-family:monospace"
+             value="${esc(s.typed)}"
+             oninput="deleteVMState.typed=this.value; renderDeleteVMDialog(); document.getElementById('delete-vm-confirm').focus()">
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn btn-secondary" ${s.submitting?'disabled':''} onclick="deleteVMAdvance(2)">Back</button>
+        <button class="btn btn-danger" ${matches && !s.submitting?'':'disabled'} onclick="deleteVMSubmit()">
+          ${s.submitting ? 'Deleting…' : 'Delete VM'}
+        </button>
+      </div>
+    `;
+  }
+  root.innerHTML = `
+    <div class="modal-overlay" style="display:flex" onclick="if(event.target===this)closeDeleteVMDialog()">
+      <div class="modal" style="width:560px;max-width:calc(100vw - 32px);max-height:90vh;overflow-y:auto">${body}</div>
+    </div>`;
+  // Preserve focus on the confirm-name input between re-renders.
+  if (s.step === 3) {
+    const el = document.getElementById('delete-vm-confirm');
+    if (el && document.activeElement !== el) el.focus();
+    if (el) el.setSelectionRange(el.value.length, el.value.length);
+  }
+}
+function deleteVMAdvance(step) {
+  if (!deleteVMState) return;
+  deleteVMState.step = step;
+  renderDeleteVMDialog();
+}
+async function deleteVMSubmit() {
+  const s = deleteVMState; if (!s || s.typed !== s.vmName) return;
+  s.submitting = true; renderDeleteVMDialog();
+  try {
+    const r = await fetch('/api/command', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host_id: s.hostID, vm_uuid: s.vmUUID, vm_name: s.vmName, action: 'DELETE_VM' }),
+    });
+    const d = await r.json();
+    if (!r.ok || d.success === false) {
+      toast('error', 'Delete failed: ' + (d.message || d.error || r.statusText));
+      s.submitting = false; renderDeleteVMDialog();
+      return;
+    }
+    toast('success', `${s.vmName} deleted`);
+    closeDeleteVMDialog();
+    // Bounce back to the VMs list — the VM detail view is now invalid.
+    state.view = 'all-vms'; state.selectedVM = null;
+    persistRoute(); refresh();
+  } catch (e) {
+    toast('error', 'Network error: ' + e.message);
+    s.submitting = false; renderDeleteVMDialog();
+  }
+}
+
 async function sendCmd(hostID, vmUUID, vmName, action) {
   toast(`info`, `Sending ${action} to ${vmName}…`);
   try {
@@ -5373,6 +5617,29 @@ function toggleTheme() {
 // ── Authentication ────────────────────────────────────────
 state.currentUser = null;
 state.permissions = [];
+state.features = {};  // populated on init; missing = everything enabled
+
+// featureOn('snapshots') returns false only when the admin has explicitly
+// disabled that feature — used to grey out buttons across the UI.
+function featureOn(key) {
+  const map = {
+    vm_create:        'disable_vm_create',
+    vm_delete:        'disable_vm_delete',
+    snapshots:        'disable_snapshots',
+    console:          'disable_console',
+    migrations:       'disable_migrations',
+    storage_upload:   'disable_storage_upload',
+    storage_delete:   'disable_storage_delete',
+  };
+  return !state.features[map[key]];
+}
+
+async function loadFeatures() {
+  try {
+    const r = await fetch('/api/settings', { credentials: 'same-origin' });
+    if (r.ok) state.features = await r.json() || {};
+  } catch {}
+}
 
 async function initAuth() {
   try {

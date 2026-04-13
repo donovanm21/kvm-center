@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -119,6 +120,42 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		}
 		args = append(args, vmTarget, uri)
 		out, err = exec.Command("virsh", args...).CombinedOutput()
+	case "DELETE_VM":
+		// Multi-stage destruction: force-off if still running, undefine with
+		// NVRAM + managed save + snapshot metadata, then remove the backing
+		// disks reported by dumpxml. The UI gates this behind its own
+		// multi-step confirmation, but we still refuse a half-complete
+		// state: if the domain is running and `virsh destroy` fails we
+		// stop rather than leaving an orphan disk on the host.
+		if out, derr := exec.Command("virsh", "destroy", vmTarget).CombinedOutput(); derr != nil {
+			// "domain is not running" is fine; anything else aborts.
+			msg := strings.ToLower(string(out))
+			if !strings.Contains(msg, "not running") && !strings.Contains(msg, "is not active") {
+				respond(w, false, "could not force-off VM: "+strings.TrimSpace(string(out)))
+				return
+			}
+		}
+		diskPaths := collectVMDiskPaths(vmTarget)
+		out, err = exec.Command("virsh", "undefine", vmTarget,
+			"--nvram", "--managed-save", "--snapshots-metadata",
+			"--remove-all-storage").CombinedOutput()
+		// --remove-all-storage only works when the disks live in a libvirt
+		// storage pool. If that failed, unlink them ourselves.
+		if err != nil && len(diskPaths) > 0 {
+			// Retry without storage-removal so the domain definition is gone
+			// either way; we'll unlink the files manually below.
+			if out2, err2 := exec.Command("virsh", "undefine", vmTarget,
+				"--nvram", "--managed-save", "--snapshots-metadata").CombinedOutput(); err2 == nil {
+				out, err = out2, nil
+			}
+		}
+		if err == nil {
+			for _, p := range diskPaths {
+				if rerr := removeDiskFile(p); rerr != nil {
+					log.Printf("delete_vm: could not remove %s: %v", p, rerr)
+				}
+			}
+		}
 	case "OFFLINE_MIGRATE":
 		dest := req.Params["destination"]
 		if dest == "" {
@@ -148,6 +185,55 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("command ok: %s vm=%s: %s", req.Action, vmTarget, msg)
 	respond(w, true, msg)
+}
+
+// collectVMDiskPaths scrapes the domain XML for the disk source paths so
+// we can unlink them after undefine when the disks weren't part of a
+// libvirt storage pool (very common for qcow2 images under
+// /var/lib/libvirt/images/). Returns an empty slice on any parse failure
+// — the caller already guarded the undefine itself.
+func collectVMDiskPaths(vmTarget string) []string {
+	xml, err := exec.Command("virsh", "dumpxml", vmTarget).CombinedOutput()
+	if err != nil {
+		return nil
+	}
+	var paths []string
+	for _, line := range strings.Split(string(xml), "\n") {
+		line = strings.TrimSpace(line)
+		// <source file='/var/lib/libvirt/images/vm.qcow2'/>
+		if !strings.HasPrefix(line, "<source ") {
+			continue
+		}
+		const key = "file='"
+		i := strings.Index(line, key)
+		if i < 0 {
+			continue
+		}
+		rest := line[i+len(key):]
+		j := strings.IndexByte(rest, '\'')
+		if j <= 0 {
+			continue
+		}
+		paths = append(paths, rest[:j])
+	}
+	return paths
+}
+
+func removeDiskFile(path string) error {
+	// Only operate on files under the common libvirt image directories.
+	// Refuse anything else so a compromised control plane can't use this
+	// as an arbitrary-delete primitive.
+	safe := false
+	for _, prefix := range []string{"/var/lib/libvirt/images/", "/var/lib/libvirt/boot/", "/tmp/"} {
+		if strings.HasPrefix(path, prefix) {
+			safe = true
+			break
+		}
+	}
+	if !safe {
+		return fmt.Errorf("refusing to remove %q: outside allowed libvirt image paths", path)
+	}
+	return os.Remove(path)
 }
 
 func respond(w http.ResponseWriter, success bool, message string) {
