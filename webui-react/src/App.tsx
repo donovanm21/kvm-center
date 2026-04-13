@@ -1,7 +1,10 @@
+import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { Layout } from './components/Layout';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import { subscribeToServerEvents } from './api/events';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 
@@ -17,6 +20,17 @@ export function App() {
 
 function Shell() {
   const { user, loading } = useAuth();
+  const qc = useQueryClient();
+
+  // Subscribe to the server push stream for the lifetime of the
+  // authenticated session. Server events invalidate the matching query
+  // keys so the UI reflects changes within ~100 ms instead of waiting
+  // for the 60 s safety-net poll.
+  useEffect(() => {
+    if (!user) return;
+    return subscribeToServerEvents(qc);
+  }, [user, qc]);
+
   if (loading) {
     return <div className="loading-screen">Loading…</div>;
   }
