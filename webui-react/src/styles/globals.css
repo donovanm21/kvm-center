@@ -1,0 +1,199 @@
+/* KVM Center v4 — design tokens come straight from docs/STYLE_GUIDE.md so
+   the React shell is visually indistinguishable from v3 during the port. */
+
+:root {
+  --accent: #E3571E;
+  --accent-hover: #FF8A3C;
+  --accent-dim: #C04512;
+  --accent-subtle: #2D1810;
+
+  --bg: #0B0E13;
+  --bg-input: #0D1117;
+  --surface: #161B22;
+  --surface-2: #1C2128;
+  --surface-3: #21262D;
+  --border: #30363D;
+  --border-subtle: #21262D;
+
+  --text-strong: #F0F6FC;
+  --text-body: #C9D1D9;
+  --text-muted: #8B949E;
+  --text-faded: #6E7681;
+  --text-disabled: #484F58;
+}
+
+body.light-mode {
+  --bg: #F6F8FA;
+  --bg-input: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-2: #F6F8FA;
+  --surface-3: #EAEEF2;
+  --border: #D0D7DE;
+  --border-subtle: #EAEEF2;
+
+  --text-strong: #1F2328;
+  --text-body: #3D434D;
+  --text-muted: #656D76;
+  --text-faded: #8B95A1;
+  --text-disabled: #AFB8C1;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text-body);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: #E3571E44; color: var(--text-strong); }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
+
+#root { display: flex; flex-direction: column; }
+
+.app-shell {
+  display: grid;
+  grid-template-rows: 64px 1fr;
+  height: 100%;
+}
+.app-body {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 0;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 20px;
+  background: #13161D;
+  border-bottom: 1px solid var(--border);
+}
+body.light-mode .topbar { background: #FFFFFF; }
+.topbar .logo { display: flex; align-items: center; gap: 12px; }
+.topbar .logo svg { filter: drop-shadow(0 0 8px rgba(227,87,30,0.25)); }
+.brand-text { display: flex; flex-direction: column; gap: 2px; line-height: 1; }
+.brand { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.brand .primary { color: var(--text-strong); }
+.brand .accent { color: var(--accent); margin-left: 2px; }
+.brand-sub {
+  font-size: 10px; color: var(--text-muted); font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.12em;
+}
+.spacer { flex: 1; }
+.version-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 12px;
+  background: var(--accent-subtle); color: var(--accent-hover);
+  font-size: 11px; font-weight: 600; border: 1px solid var(--accent-dim);
+}
+.version-badge::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+}
+body.light-mode .version-badge { background: #FFF4EC; color: #C04512; border-color: #E3571E; }
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+.sidebar {
+  background: #0F1217;
+  border-right: 1px solid var(--border);
+  padding: 14px 10px;
+  overflow-y: auto;
+}
+body.light-mode .sidebar { background: #FFFFFF; }
+.sidebar-section-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-faded);
+  padding: 12px 10px 6px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 5px;
+  font-size: 13px; color: var(--text-body); cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  text-decoration: none;
+}
+.nav-item:hover { background: var(--surface-2); color: var(--text-strong); }
+.nav-item.active {
+  background: var(--accent-subtle); color: var(--accent-hover);
+  border-left: 3px solid var(--accent); padding-left: 9px;
+}
+body.light-mode .nav-item.active { background: #FFF4EC; color: #C04512; }
+.nav-item svg { flex-shrink: 0; }
+
+/* ── Main content ────────────────────────────────────────── */
+.main {
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+  padding: 20px;
+}
+.breadcrumb {
+  font-size: 11px; color: var(--text-muted); margin-bottom: 14px;
+}
+.breadcrumb strong { color: var(--text-body); font-weight: 500; }
+
+/* ── Generic cards / panels ──────────────────────────────── */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px 18px;
+}
+.panel + .panel { margin-top: 12px; }
+.panel h2 {
+  margin: 0 0 12px 0;
+  font-size: 14px; font-weight: 600; color: var(--text-strong);
+}
+
+/* ── Auth screen ─────────────────────────────────────────── */
+.auth-screen {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+}
+.auth-card {
+  width: 380px; max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 32px 28px;
+}
+.auth-title { font-size: 18px; font-weight: 600; color: var(--text-strong); margin: 16px 0 6px; }
+.auth-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
+.auth-form label {
+  display: block; font-size: 11px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.08em; margin: 14px 0 6px;
+}
+.auth-form input {
+  width: 100%; height: 36px; padding: 0 12px;
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text-body); font-size: 13px;
+  outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.auth-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px #E3571E33; }
+.auth-submit {
+  width: 100%; height: 42px; margin-top: 20px;
+  background: linear-gradient(180deg, #F26419 0%, #E3571E 100%);
+  color: #fff; border: 1px solid #C04512; border-radius: 5px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.auth-submit:hover:not(:disabled) { background: linear-gradient(180deg, #FF7B3C 0%, #F26419 100%); }
+.auth-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.auth-error {
+  margin-top: 14px; padding: 8px 12px; border-radius: 5px;
+  background: #3D1E1E; color: #FFB3B3; border: 1px solid #A02929;
+  font-size: 12px;
+}
+body.light-mode .auth-error { background: #FFEBE9; color: #CF222E; border-color: #FF8182; }
+
+.loading-screen {
+  display: flex; align-items: center; justify-content: center;
+  height: 100vh; color: var(--text-muted); font-size: 13px;
+}

@@ -13,6 +13,13 @@ import (
 //go:embed static
 var staticFiles embed.FS
 
+// staticV4 embeds the built React SPA (webui-react/dist) produced by the
+// "vite build" step in the Docker image. In local dev the directory may
+// be empty — the /v4/ mux check below handles that gracefully so "go run
+// ./server" still works without a Node build pass.
+//go:embed all:staticv4
+var staticV4Files embed.FS
+
 // Version is injected at build time via -ldflags "-X main.Version=v1.0.0".
 // Defaults to "dev" for local go build.
 var Version = "dev"
@@ -121,6 +128,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("server: static embed error: %v", err)
 	}
+
+	// v4 React SPA — served under /v4/ so the legacy v3 UI at "/" stays
+	// intact during the port. The SPA uses client-side routing, so any
+	// unknown /v4/<path> should fall back to /v4/index.html.
+	if sub4, err := fs.Sub(staticV4Files, "staticv4/dist"); err == nil {
+		mux.Handle("/v4/", http.StripPrefix("/v4/", spaHandler(sub4)))
+	} else {
+		log.Printf("server: v4 SPA bundle not embedded (%v) — legacy UI only", err)
+	}
+
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 
 	handler := corsMiddleware(loggingMiddleware(authMiddleware(store, mux)))
