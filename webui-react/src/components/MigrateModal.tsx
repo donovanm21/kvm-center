@@ -108,6 +108,16 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
 
   const allOk = checks.every((c) => c.ok);
 
+  // Block submit if a migration is already in flight on either the source
+  // or the selected target host. The server rejects this too (409), but
+  // catching it client-side keeps the button disabled with a clear reason.
+  const blockingMigration = useMemo(() => {
+    const list = migrations.data ?? [];
+    return list.find(
+      (m) => m.status === 'running' && (m.source_host === vm.host_id || m.dest_host === effectiveTarget),
+    );
+  }, [migrations.data, vm.host_id, effectiveTarget]);
+
   const submit = () => {
     if (!target || !allOk) return;
     const params: Record<string, string> = { destination: target.ip };
@@ -116,14 +126,24 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
     } else {
       params.keep_raw = keepRaw ? 'true' : 'false';
     }
-    setSubmittedAt(Date.now());
-    cmd.mutate({
-      host_id: vm.host_id,
-      vm_uuid: vm.uuid,
-      vm_name: vm.name,
-      action: mode === 'live' ? 'MIGRATE' : 'OFFLINE_MIGRATE',
-      params,
-    });
+    const startedAt = Date.now();
+    setSubmittedAt(startedAt);
+    cmd.mutate(
+      {
+        host_id: vm.host_id,
+        vm_uuid: vm.uuid,
+        vm_name: vm.name,
+        action: mode === 'live' ? 'MIGRATE' : 'OFFLINE_MIGRATE',
+        params,
+      },
+      {
+        onError: () => {
+          // Server rejected (e.g. 409 — another migration on this host).
+          // Drop back to the form so the toast is the visible feedback.
+          setSubmittedAt((cur) => (cur === startedAt ? null : cur));
+        },
+      },
+    );
   };
 
   if (onlinePeers.length === 0) {
@@ -181,12 +201,21 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
       footer={
         <>
           <button className="btn-secondary-sm" onClick={onClose} disabled={cmd.isPending}>Cancel</button>
-          <button className="btn-primary-sm" onClick={submit} disabled={!allOk || cmd.isPending}>
+          <button
+            className="btn-primary-sm"
+            onClick={submit}
+            disabled={!allOk || cmd.isPending || !!blockingMigration}
+            title={blockingMigration
+              ? `Blocked: ${blockingMigration.vm_name} is already migrating ${blockingMigration.source_host} → ${blockingMigration.dest_host}`
+              : ''}
+          >
             {cmd.isPending
               ? 'Migrating…'
-              : mode === 'offline'
-                ? 'Shut Down & Migrate'
-                : 'Live Migrate'}
+              : blockingMigration
+                ? 'Host busy'
+                : mode === 'offline'
+                  ? 'Shut Down & Migrate'
+                  : 'Live Migrate'}
           </button>
         </>
       }
@@ -277,6 +306,20 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
               </span>
             </span>
           </label>
+        </div>
+      )}
+
+      {blockingMigration && (
+        <div style={{
+          marginTop: 14, padding: '10px 12px',
+          background: '#3D2510', border: '1px solid #5C3814', borderLeft: '3px solid #FF8A3C',
+          borderRadius: 4, fontSize: 12, color: '#FFB37A',
+        }}>
+          <strong>Host is busy.</strong>{' '}
+          <span style={{ color: '#FFD7B3' }}>{blockingMigration.vm_name}</span>{' '}
+          is migrating {blockingMigration.source_host} → {blockingMigration.dest_host}{' '}
+          ({blockingMigration.phase || 'starting'} · {blockingMigration.progress ?? 0}%).
+          Wait for it to finish, then try again.
         </div>
       )}
 

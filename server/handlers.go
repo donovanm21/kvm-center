@@ -217,11 +217,35 @@ func handleCommand(store *Store) http.HandlerFunc {
 				mode = "live"
 			}
 			destIP := req.Params["destination"]
+			destHost := resolveHostByIP(store, destIP)
+			// Guard against piling up concurrent migrations on the same
+			// source or destination host. The agent serialises offline
+			// migrations internally (only one /migrate-status slot), and
+			// live migrations stack but quickly thrash bandwidth + CPU.
+			// Reject early with a clear message rather than letting the
+			// agent fail mid-flight.
+			for _, m := range store.GetMigrations() {
+				if m.Status != "running" {
+					continue
+				}
+				if m.SourceHost == req.HostID {
+					writeError(w, http.StatusConflict,
+						fmt.Sprintf("a migration is already in progress on source host %s (vm=%s, phase=%s) — wait for it to finish before starting another",
+							req.HostID, m.VMName, m.Phase))
+					return
+				}
+				if destHost != "" && m.DestHost == destHost {
+					writeError(w, http.StatusConflict,
+						fmt.Sprintf("a migration is already in progress targeting %s (vm=%s, phase=%s) — wait for it to finish before starting another",
+							destHost, m.VMName, m.Phase))
+					return
+				}
+			}
 			migRec = &models.MigrationRecord{
 				ID:         fmt.Sprintf("%s-%d", req.VMName, time.Now().UnixNano()),
 				VMName:     req.VMName,
 				SourceHost: req.HostID,
-				DestHost:   resolveHostByIP(store, destIP),
+				DestHost:   destHost,
 				Mode:       mode,
 				Status:     "running",
 				StartedAt:  time.Now().Unix(),
