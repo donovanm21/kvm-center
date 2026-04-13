@@ -18,6 +18,7 @@ interface NavEntry {
 const NAV_MAIN: NavEntry[] = [
   { to: '/', label: 'Dashboard', icon: <HomeIcon /> },
   { to: '/vms', label: 'Virtual Machines', icon: <VMIcon />, requires: 'vm.view' },
+  { to: '/hosts', label: 'Hosts', icon: <HostIcon />, requires: 'host.view' },
   { to: '/storage', label: 'Storage', icon: <StorageIcon />, requires: 'storage.view' },
 ];
 
@@ -152,6 +153,13 @@ function Breadcrumb() {
 }
 
 /* ── Nav icons (inline so no web-font dependency) ───────── */
+function HostIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M14 1H2A1.5 1.5 0 0 0 .5 2.5v3A1.5 1.5 0 0 0 2 7h12a1.5 1.5 0 0 0 1.5-1.5v-3A1.5 1.5 0 0 0 14 1zM2 2h12a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5H2a.5.5 0 0 1-.5-.5v-3A.5.5 0 0 1 2 2zm1 1.5a1 1 0 1 0 2 0 1 1 0 0 0-2 0zM14 9H2a1.5 1.5 0 0 0-1.5 1.5v3A1.5 1.5 0 0 0 2 15h12a1.5 1.5 0 0 0 1.5-1.5v-3A1.5 1.5 0 0 0 14 9zM2 10h12a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5H2a.5.5 0 0 1-.5-.5v-3A.5.5 0 0 1 2 10zm1 1.5a1 1 0 1 0 2 0 1 1 0 0 0-2 0z" />
+    </svg>
+  );
+}
 function HomeIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
