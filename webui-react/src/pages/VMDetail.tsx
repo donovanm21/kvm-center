@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { NavLink, useMatch, useNavigate, useParams } from 'react-router-dom';
 
 import { ActionsMenu, type ActionGroup } from '@/components/ActionsMenu';
+import { MigrateModal } from '@/components/MigrateModal';
 import { Modal } from '@/components/Modal';
 import { useAuth } from '@/hooks/useAuth';
 import { useFeatures, useHosts, useVMs } from '@/hooks/useInventory';
@@ -11,11 +12,10 @@ import {
   useRevertSnapshot,
   useSnapshots,
 } from '@/hooks/useSnapshots';
-import { useToast } from '@/hooks/useToast';
 import { useVMCommand, type VMAction } from '@/hooks/useVMCommand';
 import type { GuestFS, Host, Snapshot, VM, VMDisk, VMNetwork, VMPCIDevice } from '@/types';
 
-type ModalKind = null | 'snapshot' | 'delete';
+type ModalKind = null | 'snapshot' | 'delete' | 'migrate';
 
 export function VMDetail() {
   const { uuid } = useParams<{ uuid: string }>();
@@ -45,6 +45,12 @@ export function VMDetail() {
       <TabBody vm={vm} host={host} />
       <CreateSnapshotModal vm={vm} open={modal === 'snapshot'} onClose={() => setModal(null)} />
       <DeleteVMModal vm={vm} open={modal === 'delete'} onClose={() => setModal(null)} />
+      <MigrateModal
+        vm={vm}
+        hosts={hosts.data ?? []}
+        open={modal === 'migrate'}
+        onClose={() => setModal(null)}
+      />
     </>
   );
 }
@@ -53,7 +59,6 @@ function DetailHeader({ vm, openModal }: { vm: VM; openModal: (k: ModalKind) => 
   const { hasPerm } = useAuth();
   const features = useFeatures();
   const cmd = useVMCommand();
-  const { toast } = useToast();
 
   const gate = (perm: string, featFlag?: keyof NonNullable<typeof features.data>): { ok: boolean; reason?: string } => {
     if (!hasPerm(perm)) return { ok: false, reason: `Requires the ${perm} permission` };
@@ -82,7 +87,7 @@ function DetailHeader({ vm, openModal }: { vm: VM; openModal: (k: ModalKind) => 
     {
       items: [
         { label: '📷 Snapshot', enabled: snap.ok, tooltip: snap.reason, onSelect: () => openModal('snapshot') },
-        { label: '↗ Migrate',   enabled: mig.ok, tooltip: mig.reason, onSelect: () => toast('info', 'Migration modal ships in the next commit') },
+        { label: '↗ Migrate',   enabled: mig.ok, tooltip: mig.reason, onSelect: () => openModal('migrate') },
       ],
     },
     {
