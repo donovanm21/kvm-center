@@ -130,6 +130,7 @@ export interface CurrentUser {
   enabled: boolean;
   role_ids?: string[];
   group_ids?: string[];
+  totp_enabled?: boolean;
 }
 
 export interface MeResponse {
