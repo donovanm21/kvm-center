@@ -126,6 +126,23 @@ export interface StorageBrowseResponse {
   entries: StorageEntry[];
 }
 
+export interface MigrationRecord {
+  id: string;
+  vm_name: string;
+  source_host: string;
+  dest_host: string;
+  mode: string;
+  status: 'running' | 'complete' | 'failed' | string;
+  started_at: number;
+  completed_at?: number;
+  elapsed_sec?: number;
+  disk_size_mb?: number;
+  detail?: string;
+  error?: string;
+  progress: number;
+  phase?: string;
+}
+
 export interface StoragePool {
   name: string;
   host_id: string;

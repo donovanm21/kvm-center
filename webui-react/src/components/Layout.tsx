@@ -20,9 +20,12 @@ const NAV_MAIN: NavEntry[] = [
   { to: '/vms', label: 'Virtual Machines', icon: <VMIcon />, requires: 'vm.view' },
   { to: '/hosts', label: 'Hosts', icon: <HostIcon />, requires: 'host.view' },
   { to: '/storage', label: 'Storage', icon: <StorageIcon />, requires: 'storage.view' },
+  { to: '/snapshots', label: 'Snapshots', icon: <SnapshotIcon />, requires: 'vm.view' },
+  { to: '/migrations', label: 'Migrations', icon: <MigrateIcon />, requires: 'vm.view' },
 ];
 
 const NAV_ADMIN: NavEntry[] = [
+  { to: '/deployment', label: 'Deployment', icon: <DeployIcon /> },
   { to: '/settings', label: 'Settings', icon: <GearIcon />, requires: 'user.manage' },
 ];
 
@@ -157,6 +160,29 @@ function HostIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
       <path d="M14 1H2A1.5 1.5 0 0 0 .5 2.5v3A1.5 1.5 0 0 0 2 7h12a1.5 1.5 0 0 0 1.5-1.5v-3A1.5 1.5 0 0 0 14 1zM2 2h12a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5H2a.5.5 0 0 1-.5-.5v-3A.5.5 0 0 1 2 2zm1 1.5a1 1 0 1 0 2 0 1 1 0 0 0-2 0zM14 9H2a1.5 1.5 0 0 0-1.5 1.5v3A1.5 1.5 0 0 0 2 15h12a1.5 1.5 0 0 0 1.5-1.5v-3A1.5 1.5 0 0 0 14 9zM2 10h12a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5H2a.5.5 0 0 1-.5-.5v-3A.5.5 0 0 1 2 10zm1 1.5a1 1 0 1 0 2 0 1 1 0 0 0-2 0z" />
+    </svg>
+  );
+}
+function SnapshotIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M15 12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h1.172a3 3 0 0 0 2.12-.879l.83-.828A1 1 0 0 1 6.827 3h2.344a1 1 0 0 1 .707.293l.828.828A3 3 0 0 0 12.828 5H14a1 1 0 0 1 1 1v6zM2 4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1.172a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 9.172 2H6.828a2 2 0 0 0-1.414.586l-.828.828A2 2 0 0 1 3.172 4H2z" />
+      <path d="M8 11a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zm0 1a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 6.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0z" />
+    </svg>
+  );
+}
+function MigrateIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M5.5 9.5A.5.5 0 0 1 6 10v1.5a.5.5 0 0 1-1 0V10a.5.5 0 0 1 .5-.5zm0-2A.5.5 0 0 1 6 8v4.5a.5.5 0 0 1-1 0V8a.5.5 0 0 1 .5-.5zm-2 0A.5.5 0 0 1 4 8v4.5a.5.5 0 0 1-1 0V8a.5.5 0 0 1 .5-.5zM14 6.5a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1 0-1h11a.5.5 0 0 1 .5.5zM1.646 6.354a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L2.707 6l2.647 2.646a.5.5 0 0 1-.708.708l-3-3z" />
+    </svg>
+  );
+}
+function DeployIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+      <path d=".5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />
+      <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z" />
     </svg>
   );
 }
