@@ -197,3 +197,61 @@ body.light-mode .auth-error { background: #FFEBE9; color: #CF222E; border-color:
   display: flex; align-items: center; justify-content: center;
   height: 100vh; color: var(--text-muted); font-size: 13px;
 }
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.btn-primary-sm, .btn-secondary-sm, .btn-danger-sm {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 12px;
+  border-radius: 4px; border: 1px solid transparent;
+  font-size: 12px; font-weight: 500; font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.btn-primary-sm {
+  background: linear-gradient(180deg, #F26419 0%, #E3571E 100%);
+  border-color: #C04512; color: #fff;
+}
+.btn-primary-sm:hover:not(:disabled) { background: linear-gradient(180deg, #FF7B3C 0%, #F26419 100%); }
+.btn-secondary-sm {
+  background: var(--surface-2); color: var(--text-body); border-color: var(--border);
+}
+.btn-secondary-sm:hover:not(:disabled) { background: var(--surface-3); color: var(--text-strong); }
+.btn-danger-sm {
+  background: #7A1C1C; border-color: #A02929; color: #FFB3B3;
+}
+.btn-danger-sm:hover:not(:disabled) { background: #A02929; color: #fff; }
+.btn-primary-sm:disabled, .btn-secondary-sm:disabled, .btn-danger-sm:disabled {
+  opacity: 0.45; cursor: not-allowed;
+}
+body.light-mode .btn-secondary-sm { background: #FFFFFF; color: #3D434D; border-color: #D0D7DE; }
+body.light-mode .btn-secondary-sm:hover:not(:disabled) { background: #F6F8FA; color: #1F2328; }
+body.light-mode .btn-danger-sm { background: #FFEBE9; color: #A40E26; border-color: #FF8182; }
+
+/* ── State pills ─────────────────────────────────────────── */
+.state-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 10px; border-radius: 10px;
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.state-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.state-pill.running { background: #1E3D23; color: #3FB950; }
+.state-pill.stopped { background: var(--surface-3); color: var(--text-muted); }
+.state-pill.paused  { background: #3d2a00; color: #ff9800; }
+.state-pill.crashed, .state-pill.unknown { background: #3D1E1E; color: #F85149; }
+body.light-mode .state-pill.running { background: #DAFBE1; color: #1A7F37; }
+body.light-mode .state-pill.stopped { background: #EAEEF2; color: #656D76; }
+body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
+
+/* ── Data tables ─────────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.data-table th {
+  text-align: left; padding: 10px;
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-faded); font-weight: 500;
+  border-bottom: 1px solid var(--border);
+}
+.data-table td { padding: 10px; border-bottom: 1px solid var(--border-subtle); }
+.data-table tbody tr { cursor: default; transition: background 0.1s; }
+.data-table tbody tr.clickable { cursor: pointer; }
+.data-table tbody tr.clickable:hover { background: var(--surface-2); }
