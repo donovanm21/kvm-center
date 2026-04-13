@@ -52,6 +52,11 @@ type Store struct {
 	idps       map[string]*models.IdentityProvider // keyed by provider ID
 	features   models.Features
 	dataFile   string
+
+	// hub is the SSE fan-out. Optional — nil is a no-op via SSEHub.Publish,
+	// which keeps the store usable in tests and by "go run" without the
+	// full HTTP wiring.
+	hub *SSEHub
 }
 
 // GetFeatures returns a copy of the current global feature flags.
@@ -67,6 +72,7 @@ func (s *Store) SetFeatures(f models.Features) {
 	s.features = f
 	s.mu.Unlock()
 	go s.Save()
+	s.hub.Publish(EventSettings, nil)
 }
 
 func NewStore(dataFile string) *Store {
@@ -177,6 +183,9 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 		pools[i] = &pool
 	}
 	s.storage[p.HostID] = pools
+	// Wake up every live SSE subscriber so the inventory view reflects
+	// the agent report immediately instead of on the next client poll.
+	s.hub.Publish(EventInventory, map[string]any{"host_id": p.HostID})
 }
 
 // applyVMSideData rehydrates notes and merges guest-tools data onto a VM record.
@@ -257,14 +266,17 @@ func (s *Store) ApplyGuestTelemetry(p *models.GuestTelemetryPayload) {
 // AddMigration inserts or updates a migration record.
 func (s *Store) AddMigration(r *models.MigrationRecord) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	for i, m := range s.migrations {
 		if m.ID == r.ID {
 			s.migrations[i] = r
+			s.mu.Unlock()
+			s.hub.Publish(EventMigration, map[string]any{"id": r.ID, "status": r.Status})
 			return
 		}
 	}
 	s.migrations = append(s.migrations, r)
+	s.mu.Unlock()
+	s.hub.Publish(EventMigration, map[string]any{"id": r.ID, "status": r.Status})
 }
 
 // GetMigrations returns all migration records, newest first.
@@ -358,11 +370,16 @@ func (s *Store) GetHostAgentAddr(hostID string) string {
 // MarkOfflineHosts sets hosts that haven't reported for >2 min to offline in memory.
 func (s *Store) MarkOfflineHosts() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	changed := false
 	for _, h := range s.hosts {
-		if time.Since(h.LastSeen) > 2*time.Minute {
+		if time.Since(h.LastSeen) > 2*time.Minute && h.Status != models.HostOffline {
 			h.Status = models.HostOffline
+			changed = true
 		}
+	}
+	s.mu.Unlock()
+	if changed {
+		s.hub.Publish(EventInventory, nil)
 	}
 }
 
