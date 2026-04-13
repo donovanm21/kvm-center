@@ -332,6 +332,21 @@ type Session struct {
 	UserAgent string    `json:"user_agent,omitempty"`
 }
 
+// Features is the global feature-flag set editable by an administrator
+// from Settings → General. A zero value means "everything enabled", so
+// existing deployments upgrade cleanly. Each flag is phrased as a
+// *disable* so you can't accidentally turn the whole product off by
+// forgetting a field.
+type Features struct {
+	DisableVMCreate      bool `json:"disable_vm_create"`
+	DisableVMDelete      bool `json:"disable_vm_delete"`
+	DisableSnapshots     bool `json:"disable_snapshots"`
+	DisableConsole       bool `json:"disable_console"`
+	DisableMigrations    bool `json:"disable_migrations"`
+	DisableStorageUpload bool `json:"disable_storage_upload"`
+	DisableStorageDelete bool `json:"disable_storage_delete"`
+}
+
 // Permission constants. PermAdmin is a wildcard granting everything.
 const (
 	PermAdmin         = "admin"

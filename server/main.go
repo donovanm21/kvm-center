@@ -92,6 +92,10 @@ func main() {
 	mux.Handle("/api/idps",     requirePerm(store, "user.manage", handleIDPsList(store)))
 	mux.Handle("/api/idps/new", requirePerm(store, "user.manage", handleIDPsCreate(store)))
 	mux.Handle("/api/idps/",    requirePerm(store, "user.manage", handleIDPUpdate(store)))
+	// Global feature flags. GET is readable by any signed-in user (the UI
+	// needs it to grey out disabled buttons); writes require user.manage.
+	mux.HandleFunc("/api/settings",       handleFeaturesGet(store))
+	mux.Handle("/api/settings/update",    requirePerm(store, "user.manage", handleFeaturesUpdate(store)))
 	// Admin-only user/group/role CRUD (require user.manage permission).
 	mux.Handle("/api/users",       requirePerm(store, "user.manage", handleUsersList(store)))
 	mux.Handle("/api/users/new",   requirePerm(store, "user.manage", handleUsersCreate(store)))

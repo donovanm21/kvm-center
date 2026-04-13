@@ -148,10 +148,27 @@ func handleCommand(store *Store) http.HandlerFunc {
 
 		action := strings.ToUpper(req.Action)
 		switch action {
-		case "START", "STOP", "FORCESTOP", "RESTART", "SNAPSHOT", "REVERT_SNAPSHOT", "DELETE_SNAPSHOT", "MIGRATE", "OFFLINE_MIGRATE":
+		case "START", "STOP", "FORCESTOP", "RESTART", "SNAPSHOT", "REVERT_SNAPSHOT", "DELETE_SNAPSHOT", "MIGRATE", "OFFLINE_MIGRATE", "DELETE_VM":
 		default:
 			writeError(w, http.StatusBadRequest, "unknown action: "+req.Action)
 			return
+		}
+
+		// Global feature-flag gating. Lifecycle (start/stop/restart/forcestop)
+		// is never gated — the admin can always regain control of a VM.
+		switch action {
+		case "SNAPSHOT", "REVERT_SNAPSHOT", "DELETE_SNAPSHOT":
+			if featureBlocked(w, store, "snapshots", "snapshots") {
+				return
+			}
+		case "MIGRATE", "OFFLINE_MIGRATE":
+			if featureBlocked(w, store, "migrations", "VM migrations") {
+				return
+			}
+		case "DELETE_VM":
+			if featureBlocked(w, store, "vm_delete", "deleting VMs") {
+				return
+			}
 		}
 
 		agentAddr := store.GetHostAgentAddr(req.HostID)
@@ -333,6 +350,9 @@ func handleStorageUpload(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusMethodNotAllowed, "POST only")
 			return
 		}
+		if featureBlocked(w, store, "storage_upload", "storage uploads") {
+			return
+		}
 		hostID := r.URL.Query().Get("host")
 		path := r.URL.Query().Get("path")
 		if hostID == "" || path == "" {
@@ -364,6 +384,9 @@ func handleStorageDelete(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
 			writeError(w, http.StatusMethodNotAllowed, "DELETE only")
+			return
+		}
+		if featureBlocked(w, store, "storage_delete", "storage file deletion") {
 			return
 		}
 		hostID := r.URL.Query().Get("host")
@@ -425,6 +448,9 @@ func handleVMCreate(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		if featureBlocked(w, store, "vm_create", "creating VMs") {
 			return
 		}
 		hostID := r.URL.Query().Get("host")
