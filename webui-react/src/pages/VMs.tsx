@@ -2,9 +2,12 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { CreateVMModal } from '@/components/CreateVMModal';
+import { SortableTH, useSort } from '@/components/SortableTH';
 import { useVMs, useFeatures } from '@/hooks/useInventory';
 import { useAuth } from '@/hooks/useAuth';
 import type { VM } from '@/types';
+
+type VMSortKey = 'name' | 'host_id' | 'state' | 'cpu_count' | 'mem_total_mb' | 'disk_total_gb' | 'guest_agent';
 
 export function VMs() {
   const vms = useVMs();
@@ -12,17 +15,18 @@ export function VMs() {
   const { hasPerm } = useAuth();
   const [query, setQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const { sort, onToggle, compare } = useSort<VMSortKey>('name');
 
   const canCreate = hasPerm('vm.create') && !features.data?.disable_vm_create;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = vms.data ?? [];
-    if (!q) return list;
-    return list.filter(
-      (v) => v.name.toLowerCase().includes(q) || v.host_id.toLowerCase().includes(q),
-    );
-  }, [vms.data, query]);
+    const base = !q
+      ? list
+      : list.filter((v) => v.name.toLowerCase().includes(q) || v.host_id.toLowerCase().includes(q));
+    return [...base].sort((a, b) => compare(a[sort.key], b[sort.key]));
+  }, [vms.data, query, sort, compare]);
 
   return (
     <>
@@ -52,13 +56,13 @@ export function VMs() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Host</th>
-                <th>State</th>
-                <th>CPUs</th>
-                <th>Memory</th>
-                <th>Disk</th>
-                <th>Guest tools</th>
+                <SortableTH colKey="name"           label="Name"         sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="host_id"        label="Host"         sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="state"          label="State"        sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="cpu_count"      label="CPUs"         sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="mem_total_mb"   label="Memory"       sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="disk_total_gb"  label="Disk"         sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="guest_agent"    label="Guest tools"  sort={sort} onToggle={onToggle} />
               </tr>
             </thead>
             <tbody>

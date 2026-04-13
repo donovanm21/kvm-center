@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { SortableTH, useSort } from '@/components/SortableTH';
 import { useHosts, useVMs } from '@/hooks/useInventory';
 import type { Host } from '@/types';
+
+type HostSortKey = 'id' | 'ip' | 'status' | 'vm_count' | 'cpu_usage' | 'mem_total_mb' | 'os' | 'uptime';
 
 export function Hosts() {
   const hosts = useHosts();
@@ -20,25 +23,21 @@ export function Hosts() {
     return out;
   }, [vms.data]);
 
+  const { sort, onToggle, compare } = useSort<HostSortKey>('id');
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = hosts.data ?? [];
-    if (!q) return list;
-    // Match against every field a user is likely to type: host id, IP,
-    // OS name, libvirt version, kernel. v3's sidebar tree matched on
-    // just the id which was too narrow for common operator searches.
-    return list.filter((h) => {
-      const hay = [
-        h.id,
-        h.ip,
-        h.os ?? '',
-        h.libvirt_ver ?? '',
-        h.kernel_ver ?? '',
-        h.status,
-      ].join(' ').toLowerCase();
-      return hay.includes(q);
-    });
-  }, [hosts.data, query]);
+    const base = !q
+      ? list
+      : list.filter((h) => {
+          const hay = [
+            h.id, h.ip, h.os ?? '', h.libvirt_ver ?? '', h.kernel_ver ?? '', h.status,
+          ].join(' ').toLowerCase();
+          return hay.includes(q);
+        });
+    return [...base].sort((a, b) => compare(a[sort.key], b[sort.key]));
+  }, [hosts.data, query, sort, compare]);
 
   return (
     <>
@@ -62,14 +61,14 @@ export function Hosts() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Host</th>
-                <th>IP</th>
-                <th>Status</th>
-                <th>VMs</th>
-                <th>CPU</th>
-                <th>Memory</th>
-                <th>OS</th>
-                <th>Uptime</th>
+                <SortableTH colKey="id"            label="Host"   sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="ip"            label="IP"     sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="status"        label="Status" sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="vm_count"      label="VMs"    sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="cpu_usage"     label="CPU"    sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="mem_total_mb"  label="Memory" sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="os"            label="OS"     sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="uptime"        label="Uptime" sort={sort} onToggle={onToggle} />
               </tr>
             </thead>
             <tbody>
