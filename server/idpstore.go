@@ -39,8 +39,14 @@ func (s *Store) GetIDP(id string) *models.IdentityProvider {
 func (s *Store) CreateIDP(p *models.IdentityProvider) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if p.Name == "" || p.ClientID == "" {
-		return errors.New("name and client_id required")
+	if p.Name == "" {
+		return errors.New("name required")
+	}
+	// client_id is only meaningful for OAuth2 / OIDC / SAML-via-OAuth
+	// providers. LDAP authenticates directly against the directory, so
+	// skip the check for that kind.
+	if p.Kind != "ldap" && p.ClientID == "" {
+		return errors.New("client_id required")
 	}
 	if p.ID == "" {
 		p.ID = newID("idp")
