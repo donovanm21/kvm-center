@@ -14,6 +14,7 @@ import { Hosts } from './pages/Hosts';
 import { HostDetail } from './pages/HostDetail';
 import { Storage } from './pages/Storage';
 import { SnapshotsOverview } from './pages/SnapshotsOverview';
+import { KVMTools } from './pages/KVMTools';
 import { Migrations } from './pages/Migrations';
 import { Deployment } from './pages/Deployment';
 import { Settings } from './pages/Settings';
@@ -63,6 +64,7 @@ function Shell() {
         <Route path="/snapshots" element={<SnapshotsOverview />} />
         <Route path="/snapshots/:uuid" element={<SnapshotsOverview />} />
         <Route path="/migrations" element={<Migrations />} />
+        <Route path="/kvm-tools" element={<KVMTools />} />
         <Route path="/deployment" element={<Deployment />} />
         <Route path="/settings/*" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
