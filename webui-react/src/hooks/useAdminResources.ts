@@ -169,3 +169,146 @@ export function useDeleteUser() {
     onError: (err) => toast('error', 'Delete failed: ' + (err instanceof Error ? err.message : String(err))),
   });
 }
+
+/* ── Group CRUD ─────────────────────────────────────────── */
+
+export interface GroupPayload {
+  name: string;
+  description?: string;
+  role_ids: string[];
+}
+
+export function useCreateGroup() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (p: GroupPayload) => apiPost<AdminGroup>('/api/groups/new', p),
+    onSuccess: () => {
+      toast('success', 'Group created');
+      qc.invalidateQueries({ queryKey: ['groups'] });
+    },
+    onError: (err) => toast('error', 'Create failed: ' + (err instanceof Error ? err.message : String(err))),
+  });
+}
+
+export function useUpdateGroup() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<GroupPayload> }) =>
+      apiPut<AdminGroup>(`/api/groups/${encodeURIComponent(id)}`, payload),
+    onSuccess: () => {
+      toast('success', 'Group updated');
+      qc.invalidateQueries({ queryKey: ['groups'] });
+      qc.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (err) => toast('error', 'Update failed: ' + (err instanceof Error ? err.message : String(err))),
+  });
+}
+
+export function useDeleteGroup() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(`/api/groups/${encodeURIComponent(id)}`),
+    onSuccess: () => {
+      toast('success', 'Group deleted');
+      qc.invalidateQueries({ queryKey: ['groups'] });
+      qc.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (err) => toast('error', 'Delete failed: ' + (err instanceof Error ? err.message : String(err))),
+  });
+}
+
+/* ── Role CRUD ──────────────────────────────────────────── */
+
+export interface RolePayload {
+  name: string;
+  description?: string;
+  permissions: string[];
+}
+
+export function useCreateRole() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (p: RolePayload) => apiPost<AdminRole>('/api/roles/new', p),
+    onSuccess: () => {
+      toast('success', 'Role created');
+      qc.invalidateQueries({ queryKey: ['roles'] });
+    },
+    onError: (err) => toast('error', 'Create failed: ' + (err instanceof Error ? err.message : String(err))),
+  });
+}
+
+export function useUpdateRole() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<RolePayload> }) =>
+      apiPut<AdminRole>(`/api/roles/${encodeURIComponent(id)}`, payload),
+    onSuccess: () => {
+      toast('success', 'Role updated');
+      qc.invalidateQueries({ queryKey: ['roles'] });
+    },
+    onError: (err) => toast('error', 'Update failed: ' + (err instanceof Error ? err.message : String(err))),
+  });
+}
+
+export function useDeleteRole() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(`/api/roles/${encodeURIComponent(id)}`),
+    onSuccess: () => {
+      toast('success', 'Role deleted');
+      qc.invalidateQueries({ queryKey: ['roles'] });
+      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: ['groups'] });
+    },
+    onError: (err) => toast('error', 'Delete failed: ' + (err instanceof Error ? err.message : String(err))),
+  });
+}
+
+/* ── Identity Provider CRUD ─────────────────────────────── */
+
+export function useCreateIDP() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (p: Partial<AdminIDP>) => apiPost<AdminIDP>('/api/idps/new', p),
+    onSuccess: () => {
+      toast('success', 'Provider created');
+      qc.invalidateQueries({ queryKey: ['idps'] });
+    },
+    onError: (err) => toast('error', 'Create failed: ' + (err instanceof Error ? err.message : String(err))),
+  });
+}
+
+export function useUpdateIDP() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    // Server accepts POST/PUT/PATCH for the update path.
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<AdminIDP> }) =>
+      apiPost(`/api/idps/${encodeURIComponent(id)}`, payload),
+    onSuccess: () => {
+      toast('success', 'Provider updated');
+      qc.invalidateQueries({ queryKey: ['idps'] });
+    },
+    onError: (err) => toast('error', 'Update failed: ' + (err instanceof Error ? err.message : String(err))),
+  });
+}
+
+export function useDeleteIDP() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(`/api/idps/${encodeURIComponent(id)}`),
+    onSuccess: () => {
+      toast('success', 'Provider deleted');
+      qc.invalidateQueries({ queryKey: ['idps'] });
+    },
+    onError: (err) => toast('error', 'Delete failed: ' + (err instanceof Error ? err.message : String(err))),
+  });
+}
