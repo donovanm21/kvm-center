@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
 import { Link, NavLink, useMatch, useParams } from 'react-router-dom';
 
-import { useHosts, useStorage, useVMs } from '@/hooks/useInventory';
+import { useAuth } from '@/hooks/useAuth';
+import { useFeatures, useHosts, useStorage, useVMs } from '@/hooks/useInventory';
+import { useVMCommand } from '@/hooks/useVMCommand';
 import type { Host, HostPCIDevice, StoragePool, VM } from '@/types';
 
 export function HostDetail() {
@@ -22,23 +24,9 @@ export function HostDetail() {
   }
   return (
     <>
-      <HeaderRow host={host} />
       <Tabs id={host.id} />
       <TabBody host={host} />
     </>
-  );
-}
-
-function HeaderRow({ host }: { host: Host }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-      <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)' }}>{host.id}</div>
-      <span className={`state-pill ${host.status === 'online' ? 'running' : 'stopped'}`}>{host.status}</span>
-      <div style={{ flex: 1 }} />
-      <span style={{ color: 'var(--text-muted)', fontSize: 11, fontFamily: "'SF Mono', monospace" }}>
-        {host.ip}:{host.agent_port || 8081}
-      </span>
-    </div>
   );
 }
 
@@ -80,35 +68,303 @@ function TabBody({ host }: { host: Host }) {
 
 /* ── Summary ─────────────────────────────────────────────── */
 function SummaryTab({ host }: { host: Host }) {
+  const vms = useVMs();
+  const storage = useStorage();
+
+  const hostVMs = useMemo(
+    () => (vms.data ?? []).filter((v) => v.host_id === host.id),
+    [vms.data, host.id],
+  );
+  const pools = useMemo(
+    () => (storage.data ?? []).filter((p) => p.host_id === host.id),
+    [storage.data, host.id],
+  );
+
+  const running = hostVMs.filter((v) => v.state === 'running').length;
   const cpuPct = Math.min(host.cpu_usage || 0, 100);
   const memUsed = host.mem_total_mb - host.mem_free_mb;
+  const memFreeGB = (host.mem_free_mb / 1024).toFixed(1);
+  const memTotalGB = (host.mem_total_mb / 1024).toFixed(1);
   const memPct = host.mem_total_mb > 0 ? (memUsed / host.mem_total_mb) * 100 : 0;
+
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-        <Stat label="CPU" value={`${cpuPct.toFixed(1)}%`} sub={`${host.cpu_count} cores`} tone={toneFor(cpuPct)} />
-        <Stat
-          label="Memory"
-          value={`${(memUsed / 1024).toFixed(1)} / ${(host.mem_total_mb / 1024).toFixed(0)} GB`}
-          sub={`${memPct.toFixed(0)}% used`}
-          tone={toneFor(memPct)}
-        />
-        <Stat label="VMs" value={`${host.vm_count}`} sub={host.status === 'online' ? 'reporting' : 'offline'} />
+    <div style={{ display: 'grid', gap: 16 }}>
+      {/* Heading block: host + IP + meta row + ONLINE pill */}
+      <div className="panel" style={{ padding: '18px 22px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-strong)', letterSpacing: '-0.01em' }}>
+              {host.id}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, fontFamily: "'SF Mono', monospace" }}>
+              {host.ip}
+            </div>
+          </div>
+          <span
+            style={{
+              padding: '4px 12px',
+              borderRadius: 12,
+              background: host.status === 'online' ? '#1E3D23' : 'var(--surface-3)',
+              color: host.status === 'online' ? '#3FB950' : 'var(--text-muted)',
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+            }}
+          >
+            {host.status}
+          </span>
+        </div>
+        <div
+          style={{
+            marginTop: 14,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <Meta label="Operating system" value={host.os || '—'} />
+          <Meta label="Kernel" value={host.kernel_ver || '—'} mono />
+          <Meta label="libvirt" value={host.libvirt_ver || '—'} />
+          <Meta label="Uptime" value={host.uptime || '—'} />
+          <Meta label="Agent port" value={`${host.agent_port || 8081}`} />
+          <Meta label="Last seen" value={relTime(host.last_seen)} />
+        </div>
       </div>
 
-      <div className="panel">
-        <h2>Host details</h2>
-        <KV label="ID" value={host.id} />
-        <KV label="IP address" value={`${host.ip}:${host.agent_port || 8081}`} mono />
-        <KV label="Operating system" value={host.os || '—'} />
-        <KV label="Kernel" value={host.kernel_ver || '—'} />
-        <KV label="libvirt version" value={host.libvirt_ver || '—'} />
-        <KV label="Uptime" value={host.uptime || '—'} />
-        <KV label="Last report" value={new Date(host.last_seen).toLocaleString()} />
+      {/* Four-up stat row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+        <BigStat
+          label="CPUs"
+          value={`${host.cpu_count}`}
+          sub="logical cores"
+          accent="#E3571E"
+        />
+        <BigStat
+          label="Memory"
+          value={`${memTotalGB} GB`}
+          sub={`${memFreeGB} GB free`}
+        />
+        <BigStat
+          label="VMs"
+          value={`${hostVMs.length}`}
+          sub={`${running} running`}
+          accent={running > 0 ? '#3FB950' : undefined}
+        />
+        <BigStat
+          label="Storage pools"
+          value={`${pools.length}`}
+          sub="libvirt pools"
+        />
+      </div>
+
+      {/* Resource utilisation */}
+      <div>
+        <div style={sectionHeader}>Resource utilisation</div>
+        <div className="panel" style={{ padding: '16px 20px' }}>
+          <UtilBar label="CPU Usage" pct={cpuPct} color="#E3571E" />
+          <div style={{ height: 12 }} />
+          <UtilBar label="Memory Usage" pct={memPct} color="#8B5CF6" />
+        </div>
+      </div>
+
+      {/* Virtual machines on this host */}
+      <div>
+        <div style={sectionHeader}>Virtual machines</div>
+        <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
+          {hostVMs.length === 0 ? (
+            <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+              No VMs reported on this host yet.
+            </div>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>State</th>
+                  <th>CPUs</th>
+                  <th>Memory</th>
+                  <th>Disk</th>
+                  <th style={{ width: 180 }}>CPU usage</th>
+                  <th style={{ width: 180 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hostVMs.map((v) => (
+                  <HostVMRow key={v.uuid} vm={v} host={host} />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
+function HostVMRow({ vm, host }: { vm: VM; host: Host }) {
+  const { hasPerm } = useAuth();
+  const features = useFeatures();
+  const cmd = useVMCommand();
+
+  const canLife = hasPerm('vm.lifecycle');
+  const canSnap = hasPerm('vm.snapshot') && !features.data?.disable_snapshots;
+  const canConsole = hasPerm('vm.console') && !features.data?.disable_console;
+
+  const running = vm.state === 'running';
+  const stopped = vm.state === 'stopped';
+  const run = (action: Parameters<typeof cmd.mutate>[0]['action']) => () =>
+    cmd.mutate({ host_id: vm.host_id, vm_uuid: vm.uuid, vm_name: vm.name, action });
+
+  const openConsole = () => {
+    if (!canConsole || !host.ip) return;
+    const url = `http://${host.ip}:${host.agent_port || 8081}/console/${encodeURIComponent(vm.name)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const cpuPct = Math.min(vm.cpu_usage || 0, 100);
+
+  return (
+    <tr>
+      <td>
+        <Link
+          to={`/vms/${encodeURIComponent(vm.uuid)}`}
+          style={{ color: 'var(--text-strong)', fontWeight: 500 }}
+        >
+          {vm.name}
+        </Link>
+      </td>
+      <td><span className={`state-pill ${vm.state}`}>{vm.state}</span></td>
+      <td>{vm.cpu_count}</td>
+      <td>
+        {vm.mem_total_mb > 0
+          ? `${(vm.mem_total_mb / 1024).toFixed(1)} GB`
+          : '—'}
+      </td>
+      <td>{vm.disk_total_gb > 0 ? `${vm.disk_total_gb.toFixed(0)} GB` : '—'}</td>
+      <td>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 100, height: 5, background: 'var(--surface-3)', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ width: `${cpuPct.toFixed(1)}%`, height: '100%', background: cpuPct > 85 ? '#F85149' : cpuPct > 65 ? '#FFB020' : '#E3571E' }} />
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 36 }}>{cpuPct.toFixed(1)}%</span>
+        </div>
+      </td>
+      <td>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <IconAction title="Start" tone="primary" disabled={!stopped || !canLife} onClick={run('START')} icon="▶" />
+          <IconAction title="Shutdown" tone="warn"    disabled={!running || !canLife} onClick={run('STOP')}    icon="■" />
+          <IconAction title="Restart"  tone="ghost"   disabled={!running || !canLife} onClick={run('RESTART')} icon="↺" />
+          <IconAction title="Snapshot" tone="ghost"   disabled={!canSnap} onClick={() => {/* modal lives in VM detail */}} icon="📷" />
+          <IconAction title="Console"  tone="ghost"   disabled={!running || !canConsole} onClick={openConsole} icon="🖥" />
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function IconAction({
+  title, tone, disabled, onClick, icon,
+}: { title: string; tone: 'primary' | 'warn' | 'ghost'; disabled?: boolean; onClick?: () => void; icon: string }) {
+  const bg =
+    disabled ? 'var(--surface-3)' :
+    tone === 'primary' ? '#E3571E' :
+    tone === 'warn' ? '#5A3A0A' :
+    'var(--surface-2)';
+  const color =
+    disabled ? 'var(--text-disabled)' :
+    tone === 'primary' ? '#fff' :
+    tone === 'warn' ? '#FFCC66' :
+    'var(--text-body)';
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        width: 28, height: 26,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        border: '1px solid var(--border)', borderRadius: 4,
+        background: bg, color, fontSize: 12,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      {icon}
+    </button>
+  );
+}
+
+function Meta({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-faded)' }}>
+        {label}
+      </div>
+      <div
+        style={{
+          marginTop: 4,
+          fontSize: 12,
+          color: 'var(--text-body)',
+          fontFamily: mono ? "'SF Mono', monospace" : 'inherit',
+          wordBreak: 'break-word',
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function BigStat({
+  label, value, sub, accent,
+}: { label: string; value: string; sub?: string; accent?: string }) {
+  return (
+    <div
+      className="panel"
+      style={{ padding: '16px 20px', borderLeft: accent ? `3px solid ${accent}` : undefined }}
+    >
+      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-faded)' }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 30, fontWeight: 300, color: 'var(--text-strong)', marginTop: 6 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function UtilBar({ label, pct, color }: { label: string; pct: number; color: string }) {
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-body)' }}>{label}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-strong)' }}>{pct.toFixed(1)}%</span>
+      </div>
+      <div style={{ width: '100%', height: 8, background: 'var(--surface-3)', borderRadius: 4, overflow: 'hidden' }}>
+        <div style={{ width: `${Math.min(pct, 100).toFixed(1)}%`, height: '100%', background: color, transition: 'width 0.3s' }} />
+      </div>
+    </>
+  );
+}
+
+function relTime(iso: string): string {
+  if (!iso) return '—';
+  const diff = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return `${Math.floor(diff)}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+const sectionHeader: React.CSSProperties = {
+  fontSize: 10,
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  color: 'var(--text-faded)',
+  margin: '4px 0 8px 4px',
+};
 
 /* ── VMs on this host ────────────────────────────────────── */
 function VMsTab({ host }: { host: Host }) {
@@ -273,25 +529,6 @@ function HardwareTab({ host }: { host: Host }) {
 }
 
 /* ── Shared bits ─────────────────────────────────────────── */
-function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'ok' | 'warn' | 'danger' }) {
-  const color = tone === 'danger' ? '#F85149' : tone === 'warn' ? '#FFB020' : 'var(--text-strong)';
-  return (
-    <div className="panel" style={{ padding: '14px 18px' }}>
-      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-faded)' }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 300, color, marginTop: 6 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
-    </div>
-  );
-}
-
-function toneFor(pct: number): 'ok' | 'warn' | 'danger' {
-  if (pct > 85) return 'danger';
-  if (pct > 65) return 'warn';
-  return 'ok';
-}
-
 function KV({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
     <div style={{ display: 'flex', padding: '6px 0', gap: 12 }}>
