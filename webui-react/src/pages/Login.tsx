@@ -1,11 +1,15 @@
 import { useState, type FormEvent } from 'react';
 
 import { BrandLogo } from '@/components/Brand';
+import { ErrorBanner } from '@/components/FormBits';
 import { useAuth } from '@/hooks/useAuth';
 
 export function Login() {
-  const { login } = useAuth();
+  const { login, register, firstRun } = useAuth();
+  const mode: 'register' | 'login' = firstRun ? 'register' : 'login';
+
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [totp, setTotp] = useState('');
   const [needsTOTP, setNeedsTOTP] = useState(false);
@@ -15,11 +19,17 @@ export function Login() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!username || !password) return;
+    if (mode === 'register' && password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
     setBusy(true);
     setError(null);
-    const res = await login(username, password, needsTOTP ? totp : undefined);
+    const res = mode === 'register'
+      ? await register(username, password, email || undefined)
+      : await login(username, password, needsTOTP ? totp : undefined);
     setBusy(false);
-    if (res.ok) return; // AuthProvider flipped state; App re-renders into main shell
+    if (res.ok) return;
     if ('needsTOTP' in res && res.needsTOTP) {
       setNeedsTOTP(true);
       return;
@@ -37,8 +47,12 @@ export function Login() {
             <span className="accent">center</span>
           </span>
         </div>
-        <div className="auth-title">Sign in</div>
-        <div className="auth-sub">Enter your credentials to manage the KVM Center cluster.</div>
+        <div className="auth-title">{mode === 'register' ? 'Create Admin Account' : 'Sign in'}</div>
+        <div className="auth-sub">
+          {mode === 'register'
+            ? 'No users exist yet. Create the first administrator account to start managing your cluster.'
+            : 'Enter your credentials to manage the KVM Center cluster.'}
+        </div>
         <form className="auth-form" onSubmit={onSubmit}>
           <label htmlFor="login-username">Username</label>
           <input
@@ -49,11 +63,25 @@ export function Login() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           />
-          <label htmlFor="login-password">Password</label>
+          {mode === 'register' && (
+            <>
+              <label htmlFor="login-email">Email (optional)</label>
+              <input
+                id="login-email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </>
+          )}
+          <label htmlFor="login-password">
+            Password{mode === 'register' ? ' (min 8 characters)' : ''}
+          </label>
           <input
             id="login-password"
             type="password"
-            autoComplete="current-password"
+            autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -75,9 +103,13 @@ export function Login() {
               />
             </>
           )}
-          {error && <div className="auth-error">{error}</div>}
+          <ErrorBanner message={error} />
           <button type="submit" className="auth-submit" disabled={busy}>
-            {busy ? 'Signing in…' : needsTOTP ? 'Verify & Sign In' : 'Sign In'}
+            {busy
+              ? mode === 'register' ? 'Creating…' : 'Signing in…'
+              : mode === 'register'
+                ? 'Create Admin & Sign In'
+                : needsTOTP ? 'Verify & Sign In' : 'Sign In'}
           </button>
         </form>
       </div>
