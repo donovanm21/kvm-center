@@ -4,17 +4,22 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { Layout } from './components/Layout';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import { ToastProvider } from './hooks/useToast';
 import { subscribeToServerEvents } from './api/events';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
+import { VMs } from './pages/VMs';
+import { VMDetail } from './pages/VMDetail';
 
 // Port of each v3 view lands as its own route and replaces the stub.
 // Phase 1 ships Dashboard parity only.
 export function App() {
   return (
-    <AuthProvider>
-      <Shell />
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <Shell />
+      </AuthProvider>
+    </ToastProvider>
   );
 }
 
@@ -41,7 +46,9 @@ function Shell() {
     <Layout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/vms" element={<ComingSoon title="Virtual Machines" />} />
+        <Route path="/vms" element={<VMs />} />
+        <Route path="/vms/:uuid" element={<VMDetail />} />
+        <Route path="/vms/:uuid/:tab" element={<VMDetail />} />
         <Route path="/storage" element={<ComingSoon title="Storage" />} />
         <Route path="/settings" element={<ComingSoon title="Settings" />} />
         <Route path="*" element={<Navigate to="/" replace />} />
