@@ -12,8 +12,6 @@ RUN npm run build
 # ── Stage 1b: Build the Go server ─────────────────────────────────────────────
 FROM golang:1.22-alpine AS builder
 
-ARG VERSION=dev
-
 WORKDIR /src
 COPY go.mod go.su[m] ./
 COPY . .
@@ -25,8 +23,9 @@ COPY --from=webui /webui/dist ./server/staticv4/dist
 # Resolve dependencies based on source imports. Works whether or not a
 # committed go.sum exists.
 RUN go mod tidy
+# Version is the committed const in server/main.go — single source of truth.
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w -X main.Version=${VERSION}" \
+    -ldflags="-s -w" \
     -o /out/kvm-center-server ./server
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
