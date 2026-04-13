@@ -219,12 +219,12 @@ function SnapshotDetail({ vm }: { vm: VM }) {
                 <td>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
-                      className="btn-primary-sm"
+                      className="btn-secondary-sm"
                       disabled={s.is_current || !canSnap}
                       onClick={() => revert.mutate({ host_id: vm.host_id, vm_uuid: vm.uuid, vm_name: vm.name, name: s.name })}
-                      title={!canSnap ? 'Requires vm.snapshot' : s.is_current ? 'Already current' : ''}
+                      title={!canSnap ? 'Requires vm.snapshot' : s.is_current ? 'Already current' : 'Revert the VM to this snapshot'}
                     >
-                      ↶ Revert
+                      <RevertIcon /> Revert
                     </button>
                     <button
                       className="btn-danger-sm"
@@ -235,7 +235,7 @@ function SnapshotDetail({ vm }: { vm: VM }) {
                         }
                       }}
                     >
-                      🗑 Delete
+                      <TrashIcon /> Delete
                     </button>
                   </div>
                 </td>
@@ -285,6 +285,23 @@ function CreateSnapshotModal({ vm, open, onClose }: { vm: VM; open: boolean; onC
         Snapshots only work on VMs with qcow2 disks.
       </div>
     </Modal>
+  );
+}
+
+function RevertIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+      <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
+      <path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z" />
+    </svg>
+  );
+}
+function TrashIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+      <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z" />
+      <path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3V2h11v1z" />
+    </svg>
   );
 }
 
