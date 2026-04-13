@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { NavLink, useMatch, useNavigate, useParams } from 'react-router-dom';
+import { Link, NavLink, useMatch, useNavigate, useParams } from 'react-router-dom';
 
 import { ActionsMenu, type ActionGroup } from '@/components/ActionsMenu';
 import { MigrateModal } from '@/components/MigrateModal';
@@ -163,81 +163,299 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  const cpuPct = Math.min(vm.cpu_usage || 0, 100);
+  const memPct = vm.mem_total_mb > 0 ? (vm.mem_usage_mb / vm.mem_total_mb) * 100 : 0;
+  const diskPct = vm.disk_total_gb > 0 ? (vm.disk_usage_gb / vm.disk_total_gb) * 100 : 0;
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16 }}>
-      <div>
-        <div
-          onClick={thumbURL ? openConsole : undefined}
-          style={{
-            position: 'relative',
-            aspectRatio: '4 / 3',
-            background: '#000',
-            border: '1px solid var(--border)',
-            borderRadius: 6,
-            overflow: 'hidden',
-            cursor: thumbURL ? 'pointer' : 'default',
-          }}
-        >
-          {thumbURL ? (
-            <img
-              src={thumbURL}
-              alt=""
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = 'none';
-              }}
-            />
-          ) : (
-            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <MonitorIcon />
-            </div>
-          )}
-          <span
+    <div style={{ display: 'grid', gap: 16 }}>
+      {/* Three-column layout: thumbnail · guest card · usage stack */}
+      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr 200px', gap: 16 }}>
+        <div>
+          <div
+            onClick={thumbURL ? openConsole : undefined}
             style={{
-              position: 'absolute', left: 8, bottom: 8,
-              fontSize: 10, color: 'var(--text-muted)',
-              textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600,
+              position: 'relative',
+              aspectRatio: '4 / 3',
+              background: '#000',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              overflow: 'hidden',
+              cursor: thumbURL ? 'pointer' : 'default',
             }}
           >
-            {vm.state}
-          </span>
+            {thumbURL ? (
+              <img
+                src={thumbURL}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <MonitorIcon />
+              </div>
+            )}
+            <span
+              style={{
+                position: 'absolute', left: 8, bottom: 8,
+                fontSize: 10, color: 'var(--text-muted)',
+                textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600,
+              }}
+            >
+              {vm.state}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={openConsole}
+            disabled={!thumbURL}
+            style={launchBtn}
+            title={canConsole ? '' : 'Remote console disabled or missing permission'}
+          >
+            🖥 Launch Console
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={openConsole}
-          disabled={!thumbURL}
-          style={launchBtn}
-          title={canConsole ? '' : 'Remote console disabled or missing permission'}
-        >
-          🖥 Launch Console
-        </button>
+
+        <div className="panel">
+          {vm.guest_agent && (
+            <div style={toolsPillStyle}>
+              ● KVM TOOLS: {vm.guest_source ?? 'present'}
+            </div>
+          )}
+          <KV label="Guest OS" value={vm.guest_os || '—'} />
+          <KV label="Hostname" value={vm.guest_hostname || '—'} />
+          <KV label="Kernel" value={vm.guest_kernel || '—'} />
+          <KV
+            label="IP Addresses"
+            value={vm.guest_ips && vm.guest_ips.length > 0 ? vm.guest_ips.join(', ') : '—'}
+            mono
+          />
+          <KV
+            label="Host"
+            valueNode={
+              <Link to={`/hosts/${encodeURIComponent(vm.host_id)}`} style={{ color: 'var(--accent)' }}>
+                {vm.host_id}
+                {host?.ip && <span style={{ color: 'var(--text-faded)', marginLeft: 6 }}>({host.ip})</span>}
+              </Link>
+            }
+          />
+          <KV label="UUID" value={vm.uuid} mono />
+          <KV
+            label="Power State"
+            valueNode={<span className={`state-pill ${vm.state}`}>{vm.state}</span>}
+          />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <UsageCard
+            icon={<CPUIcon />}
+            label="CPU Usage"
+            value={`${cpuPct.toFixed(1)}%`}
+          />
+          <UsageCard
+            icon={<MemIcon />}
+            label="Memory Usage"
+            value={vm.mem_total_mb > 0 ? `${vm.mem_usage_mb} MB` : '—'}
+            sub={vm.mem_total_mb > 0 ? `/ ${(vm.mem_total_mb / 1024).toFixed(1)} GB (${memPct.toFixed(0)}%)` : undefined}
+          />
+          <UsageCard
+            icon={<DiskIcon />}
+            label="Storage Usage"
+            value={vm.disk_total_gb > 0 ? `${vm.disk_usage_gb.toFixed(1)} GB` : '—'}
+            sub={vm.disk_total_gb > 0 ? `/ ${vm.disk_total_gb.toFixed(0)} GB (${diskPct.toFixed(0)}%)` : undefined}
+          />
+        </div>
       </div>
 
-      <div className="panel">
-        <h2>Guest details</h2>
-        <KV label="Guest OS" value={vm.guest_os || '—'} />
-        <KV label="Hostname" value={vm.guest_hostname || '—'} />
-        <KV label="Host" value={vm.host_id} />
-        <KV label="UUID" value={vm.uuid} mono />
-        <KV label="Power state" value={vm.state} />
-        <KV label="CPU" value={`${vm.cpu_count} vCPU · ${vm.cpu_usage.toFixed(1)}% usage`} />
-        <KV
-          label="Memory"
-          value={vm.mem_total_mb > 0
-            ? `${(vm.mem_usage_mb / 1024).toFixed(1)} / ${(vm.mem_total_mb / 1024).toFixed(0)} GB`
-            : '—'}
-        />
-        <KV
-          label="Disk"
-          value={vm.disk_total_gb > 0
-            ? `${vm.disk_usage_gb.toFixed(1)} / ${vm.disk_total_gb.toFixed(0)} GB (${vm.disk_type ?? 'qcow2'})`
-            : '—'}
-        />
-        <KV label="Guest tools" value={vm.guest_agent ? (vm.guest_source ?? 'present') : 'not installed'} />
+      {/* VM hardware quick-view + Notes */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
+        <HardwareQuickView vm={vm} />
+        <NotesPanel vm={vm} />
+      </div>
+
+      <RelatedObjects vm={vm} host={host} />
+    </div>
+  );
+}
+
+function UsageCard({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
+  return (
+    <div className="panel" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#2D1810', borderRadius: 4, color: '#E3571E' }}>
+        {icon}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-faded)' }}>
+          {label}
+        </div>
+        <div style={{ fontSize: 17, color: 'var(--text-strong)', fontWeight: 400, lineHeight: 1.2 }}>{value}</div>
+        {sub && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
       </div>
     </div>
   );
 }
+
+function HardwareQuickView({ vm }: { vm: VM }) {
+  const disk = vm.all_disks?.[0];
+  return (
+    <div className="panel">
+      <h2>VM Hardware</h2>
+      <KV label="CPUs" value={`${vm.cpu_count}`} />
+      <KV label="Memory" value={vm.mem_total_mb > 0 ? `${(vm.mem_total_mb / 1024).toFixed(1)} GB` : '—'} />
+      <KV label="Hard Disk" value={disk?.path || '—'} mono />
+      <KV label="Disk Size" value={vm.disk_total_gb > 0 ? `${vm.disk_total_gb.toFixed(1)} GB` : '—'} />
+
+      {vm.networks && vm.networks.length > 0 && (
+        <>
+          <div style={sectionHeaderStyle}>Network Adapters</div>
+          <table className="data-table" style={{ marginTop: 4 }}>
+            <thead>
+              <tr><th>Interface</th><th>Bridge</th><th>MAC</th><th>RX</th><th>TX</th></tr>
+            </thead>
+            <tbody>
+              {vm.networks.map((n) => (
+                <tr key={n.interface + n.mac}>
+                  <td>{n.interface}</td>
+                  <td>{n.bridge}</td>
+                  <td style={{ fontFamily: "'SF Mono', monospace", fontSize: 11, color: 'var(--text-muted)' }}>{n.mac}</td>
+                  <td>{fmtBytesShort(n.rx_bytes)}</td>
+                  <td>{fmtBytesShort(n.tx_bytes)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {vm.guest_fs && vm.guest_fs.length > 0 && (
+        <>
+          <div style={sectionHeaderStyle}>Guest Filesystems</div>
+          <table className="data-table" style={{ marginTop: 4 }}>
+            <thead>
+              <tr><th>Mountpoint</th><th>Type</th><th>Used</th><th>Total</th><th>Usage</th></tr>
+            </thead>
+            <tbody>
+              {vm.guest_fs.map((fs) => {
+                const pct = fs.total_gb > 0 ? (fs.used_gb / fs.total_gb) * 100 : 0;
+                const color = pct > 85 ? '#F85149' : pct > 65 ? '#FFB020' : '#3FB950';
+                return (
+                  <tr key={fs.mountpoint}>
+                    <td style={{ fontFamily: "'SF Mono', monospace" }}>{fs.mountpoint}</td>
+                    <td style={{ color: 'var(--text-muted)' }}>{fs.fstype}</td>
+                    <td>{fs.used_gb.toFixed(1)} GB</td>
+                    <td>{fs.total_gb.toFixed(1)} GB</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 80, height: 5, background: 'var(--surface-3)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', background: color }} />
+                        </div>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{pct.toFixed(0)}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </>
+      )}
+    </div>
+  );
+}
+
+function NotesPanel({ vm }: { vm: VM }) {
+  return (
+    <div className="panel">
+      <h2>Notes</h2>
+      {vm.notes ? (
+        <div style={{ fontSize: 12, color: 'var(--text-body)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{vm.notes}</div>
+      ) : (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          No notes. The VM detail Hardware tab has an inline editor (port pending).
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RelatedObjects({ vm, host }: { vm: VM; host: Host | undefined }) {
+  // Pools reported for this host give the Related Objects side the same
+  // at-a-glance view v3 had at the bottom of Summary.
+  const pools = Array.from(new Set((vm.all_disks ?? []).map((d) => d.path).filter(Boolean))).slice(0, 0);
+  void pools; // disk paths aren't pool names; skip until we wire the pool lookup
+  return (
+    <div className="panel">
+      <h2>Related Objects</h2>
+      <KV
+        label="Host"
+        valueNode={
+          <Link to={`/hosts/${encodeURIComponent(vm.host_id)}`} style={{ color: 'var(--accent)' }}>
+            {vm.host_id}
+            {host?.ip && <span style={{ color: 'var(--text-faded)', marginLeft: 6 }}>({host.ip})</span>}
+          </Link>
+        }
+      />
+      <KV label="Snapshots" value={`${vm.snapshot_count}`} />
+      <KV label="VM disks" value={`${(vm.all_disks ?? []).length}`} />
+      <KV label="PCI devices" value={`${(vm.pci_devices ?? []).length}`} />
+    </div>
+  );
+}
+
+function fmtBytesShort(b: number): string {
+  if (!b) return '0 B';
+  if (b > 1e9) return `${(b / 1e9).toFixed(1)} GB`;
+  if (b > 1e6) return `${(b / 1e6).toFixed(1)} MB`;
+  if (b > 1e3) return `${(b / 1e3).toFixed(1)} kB`;
+  return `${b} B`;
+}
+
+function CPUIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M5 0a.5.5 0 0 1 .5.5V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2A2 2 0 0 1 14 4h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14a2 2 0 0 1-2 2v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14H8v1.5a.5.5 0 0 1-1 0V14H6v1.5a.5.5 0 0 1-1 0V14a2 2 0 0 1-2-2H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2V8H.5a.5.5 0 0 1 0-1H2V6H.5a.5.5 0 0 1 0-1H2a2 2 0 0 1 2-2V.5A.5.5 0 0 1 5 0zm-1 4a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H4zm2 2h3a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z" />
+    </svg>
+  );
+}
+function MemIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M1 3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v1.5a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5V3zm2.5 0a.5.5 0 0 0-1 0v1a.5.5 0 0 0 1 0V3zm3 0a.5.5 0 0 0-1 0v1a.5.5 0 0 0 1 0V3zm-5 6a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1H1.5zM1 6a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 1 6z" />
+    </svg>
+  );
+}
+function DiskIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M8 0C5.243 0 3 .895 3 2v12c0 1.105 2.243 2 5 2s5-.895 5-2V2c0-1.105-2.243-2-5-2zm0 1c2.21 0 4 .672 4 1.5S10.21 4 8 4s-4-.672-4-1.5S5.79 1 8 1zm4 4.5V6c0 .828-1.79 1.5-4 1.5S4 6.828 4 6v-.5c.9.521 2.367.875 4 .875s3.1-.354 4-.875z" />
+    </svg>
+  );
+}
+
+const toolsPillStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '2px 10px',
+  marginBottom: 10,
+  background: '#1E3D23',
+  color: '#3FB950',
+  fontSize: 10,
+  fontWeight: 600,
+  borderRadius: 10,
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+};
+const sectionHeaderStyle: React.CSSProperties = {
+  marginTop: 14,
+  fontSize: 10,
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  color: 'var(--text-faded)',
+};
 
 /* ── Monitor ─────────────────────────────────────────────── */
 function MonitorTab({ vm }: { vm: VM }) {
@@ -745,7 +963,17 @@ function DeleteVMModal({ vm, open, onClose }: { vm: VM; open: boolean; onClose: 
 }
 
 /* ── Shared bits ────────────────────────────────────────── */
-function KV({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+function KV({
+  label,
+  value,
+  valueNode,
+  mono = false,
+}: {
+  label: string;
+  value?: string;
+  valueNode?: React.ReactNode;
+  mono?: boolean;
+}) {
   return (
     <div style={{ display: 'flex', padding: '6px 0', gap: 12 }}>
       <div style={{ width: 140, fontSize: 11, color: 'var(--text-muted)' }}>{label}</div>
@@ -757,7 +985,7 @@ function KV({ label, value, mono = false }: { label: string; value: string; mono
           wordBreak: 'break-all',
         }}
       >
-        {value}
+        {valueNode ?? value}
       </div>
     </div>
   );
