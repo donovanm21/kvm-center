@@ -7,8 +7,11 @@ interface AuthState {
   user: CurrentUser | null;
   permissions: string[];
   loading: boolean;
+  /** true when /api/auth/status reports zero users — the UI shows the register flow */
+  firstRun: boolean;
   hasPerm: (perm: string) => boolean;
   login: (username: string, password: string, totpCode?: string) => Promise<LoginResult>;
+  register: (username: string, password: string, email?: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -24,19 +27,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [firstRun, setFirstRun] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
       const d = await apiGet<MeResponse>('/api/auth/me');
       setUser(d.user);
       setPermissions(Array.isArray(d.permissions) ? d.permissions : []);
+      setFirstRun(false);
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         setUser(null);
         setPermissions([]);
+        // Not authenticated — check whether any user exists at all so the
+        // login page can flip into the first-run register flow.
+        try {
+          const s = await apiGet<{ has_users: boolean }>('/api/auth/status');
+          setFirstRun(!s.has_users);
+        } catch {
+          setFirstRun(false);
+        }
       } else {
-        // Network errors: keep the previous state so transient blips
-        // don't bounce the user to the login screen.
         console.error('auth refresh failed:', err);
       }
     } finally {
@@ -71,6 +82,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const register = useCallback(async (username: string, password: string, email?: string): Promise<LoginResult> => {
+    try {
+      const r = await fetch('/api/auth/register', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, email }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, error: d.error || 'Registration failed' };
+      setUser(d.user);
+      setPermissions(Array.isArray(d.permissions) ? d.permissions : []);
+      setFirstRun(false);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await apiPost('/api/auth/logout');
@@ -87,8 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<AuthState>(
-    () => ({ user, permissions, loading, hasPerm, login, logout, refresh }),
-    [user, permissions, loading, hasPerm, login, logout, refresh],
+    () => ({ user, permissions, loading, firstRun, hasPerm, login, register, logout, refresh }),
+    [user, permissions, loading, firstRun, hasPerm, login, register, logout, refresh],
   );
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
