@@ -3,10 +3,13 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { apiPost } from '@/api/client';
+import { SortableTH, useSort } from '@/components/SortableTH';
 import { useAuth } from '@/hooks/useAuth';
 import { useKVMToolsLatest, useVMs } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
 import type { VM } from '@/types';
+
+type KVMToolsSortKey = 'name' | 'host_id' | 'state' | 'kvm_tools_version' | 'status';
 
 type Filter = 'all' | 'warning' | 'current';
 
@@ -28,26 +31,40 @@ export function KVMTools() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const canUpdate = hasPerm('vm.edit');
 
+  // User-clickable sort; defaults to the operationally useful
+  // "status ascending" which pushes warnings to the top since
+  // STATUS_ORDER below buckets outdated/missing/no-tools before current.
+  const { sort, onToggle, compare } = useSort<KVMToolsSortKey>('status');
+
   const latestVer = latest.data?.version ?? '';
 
   const rows = useMemo(() => {
     const list = vms.data ?? [];
-    return list
-      .map((v) => ({ vm: v, status: classify(v, latestVer) }))
-      .filter((r) => {
-        if (filter === 'all') return true;
-        if (filter === 'warning') return r.status === 'outdated' || r.status === 'missing' || r.status === 'no-tools';
-        if (filter === 'current') return r.status === 'current';
-        return true;
-      })
-      .sort((a, b) => {
-        // Warnings first, then by VM name, so outdated VMs jump out on "all".
-        const order: Record<string, number> = { outdated: 0, missing: 1, 'no-tools': 2, current: 3 };
-        const d = (order[a.status] ?? 9) - (order[b.status] ?? 9);
-        if (d !== 0) return d;
-        return a.vm.name.localeCompare(b.vm.name);
-      });
-  }, [vms.data, latestVer, filter]);
+    const enriched = list.map((v) => ({ vm: v, status: classify(v, latestVer) }));
+    const filtered = enriched.filter((r) => {
+      if (filter === 'all') return true;
+      if (filter === 'warning') return r.status === 'outdated' || r.status === 'missing' || r.status === 'no-tools';
+      if (filter === 'current') return r.status === 'current';
+      return true;
+    });
+    return [...filtered].sort((a, b) => {
+      // Map sort key → comparable scalar on each row. Status gets a
+      // hand-ordered rank so "status asc" means "warnings first".
+      const key: KVMToolsSortKey = sort.key;
+      const valueOf = (r: typeof a) => {
+        switch (key) {
+          case 'status':            return STATUS_ORDER[r.status] ?? 9;
+          case 'kvm_tools_version': return r.vm.kvm_tools_version ?? '';
+          case 'state':             return r.vm.state ?? '';
+          case 'host_id':           return r.vm.host_id ?? '';
+          case 'name':              return r.vm.name ?? '';
+        }
+      };
+      const cmp = compare(valueOf(a), valueOf(b));
+      if (cmp !== 0) return cmp;
+      return a.vm.name.localeCompare(b.vm.name);
+    });
+  }, [vms.data, latestVer, filter, sort, compare]);
 
   const counts = useMemo(() => {
     const list = vms.data ?? [];
@@ -168,11 +185,11 @@ export function KVMTools() {
                     onChange={toggleAll}
                   />
                 </th>
-                <th>VM</th>
-                <th>Host</th>
-                <th>State</th>
-                <th>Reported version</th>
-                <th>Status</th>
+                <SortableTH colKey="name"              label="VM"               sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="host_id"           label="Host"             sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="state"             label="State"            sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="kvm_tools_version" label="Reported version" sort={sort} onToggle={onToggle} />
+                <SortableTH colKey="status"            label="Status"           sort={sort} onToggle={onToggle} />
               </tr>
             </thead>
             <tbody>
@@ -224,6 +241,16 @@ export function KVMTools() {
 }
 
 type Status = 'current' | 'outdated' | 'missing' | 'no-tools';
+
+// Hand-ordered rank so sorting the status column surfaces the most
+// operationally relevant rows first. outdated → missing → no-tools →
+// current (current last because it's the "nothing to do" bucket).
+const STATUS_ORDER: Record<Status, number> = {
+  outdated: 0,
+  missing: 1,
+  'no-tools': 2,
+  current: 3,
+};
 
 function classify(v: VM, latest: string): Status {
   if (!v.guest_agent) return 'no-tools';
