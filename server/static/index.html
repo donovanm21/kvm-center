@@ -1071,6 +1071,48 @@ body.light-mode .console-launch:hover:not(:disabled) { background: #E3571E; colo
   border-bottom: 1px solid #30363D;
   flex-shrink: 0;
 }
+.vm-actions-bar .spacer { flex: 1; }
+
+/* Actions dropdown — one trigger opens a menu with every power /
+   management command for the VM. Each item is individually gated by
+   the current power state and the global feature flags. */
+.vm-actions-wrap { position: relative; }
+.vm-actions-trigger {
+  display: inline-flex; align-items: center;
+}
+.vm-actions-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 200px;
+  background: var(--surface);
+  border: 1px solid #30363D;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  padding: 6px 0;
+  z-index: 200;
+  display: none;
+}
+.vm-actions-menu.open { display: block; }
+.vm-actions-item {
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text-body);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s, color 0.1s;
+}
+.vm-actions-item:hover:not(.disabled) { background: var(--surface-2, #1C2128); color: var(--text-strong); }
+.vm-actions-item.danger { color: #F85149; }
+.vm-actions-item.danger:hover:not(.disabled) { background: #3D1E1E; color: #FFB3B3; }
+.vm-actions-item.disabled { color: var(--text-disabled); cursor: not-allowed; opacity: 0.55; }
+.vm-actions-sep { height: 1px; background: #30363D; margin: 6px 0; }
+body.light-mode .vm-actions-menu { background: #FFFFFF; border-color: #D0D7DE; box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+body.light-mode .vm-actions-item:hover:not(.disabled) { background: #F6F8FA; }
+body.light-mode .vm-actions-item.danger { color: #CF222E; }
+body.light-mode .vm-actions-item.danger:hover:not(.disabled) { background: #FFEBE9; color: #A40E26; }
+body.light-mode .vm-actions-sep { background: #D0D7DE; }
+
 .vm-actions-bar .vm-title {
   font-size: 15px;
   font-weight: 600;
@@ -4166,26 +4208,80 @@ function renderVMView() {
 }
 
 function vmDetailHeader(vm) {
-  const running = vm.state === 'running';
   return `
     <div style="margin:-20px -20px 20px -20px">
       <div class="vm-actions-bar">
         <span class="vm-title">${esc(vm.name)}</span>
         <span class="vm-pill vm-state ${vm.state}">${vm.state}</span>
-        <button class="btn btn-primary btn-sm" ${vm.state==='stopped'?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','START')">▶ Start</button>
-        <button class="btn btn-warning btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','STOP')">■ Shutdown</button>
-        <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','RESTART')">↺ Restart</button>
-        <button class="btn btn-danger btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','FORCESTOP')">⚡ Force Off</button>
-        <button class="btn btn-secondary btn-sm" ${running || !featureOn('migrations') ? 'disabled':''}
-                onclick="openMigrateDialog('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')"
-                title="${featureOn('migrations')?'Live migrate to another host':'Migrations disabled by administrator'}">↗ Migrate</button>
-        <button class="btn btn-danger btn-sm" ${featureOn('vm_delete')?'':'disabled'}
-                onclick="openDeleteVMDialog('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')"
-                title="${featureOn('vm_delete')?'Permanently delete this VM':'VM deletion disabled by administrator'}">🗑 Delete</button>
+        <div class="spacer"></div>
+        ${vmActionsMenu(vm)}
       </div>
     </div>
   `;
 }
+
+// vmActionsMenu renders a single "Actions ▾" button that opens a dropdown
+// of every power / management action available for the VM. Each item
+// respects both the current power state and the global feature flags,
+// collapsing the old 6-button row into one menu that reflows cleanly on
+// narrow screens.
+function vmActionsMenu(vm) {
+  const running = vm.state === 'running';
+  const stopped = vm.state === 'stopped';
+  const id = 'vm-actions-' + vm.uuid.replace(/[^a-z0-9]/gi,'');
+  const items = [
+    { key:'start',    label:'▶ Start',       enabled: stopped,
+      action: `sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','START')` },
+    { key:'shutdown', label:'■ Shutdown',    enabled: running,
+      action: `sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','STOP')` },
+    { key:'restart',  label:'↺ Restart',     enabled: running,
+      action: `sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','RESTART')` },
+    { key:'force',    label:'⚡ Force Off',   enabled: running, danger: true,
+      action: `sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','FORCESTOP')` },
+    { sep: true },
+    { key:'snapshot', label:'📷 Snapshot',    enabled: featureOn('snapshots'),
+      disabledReason: 'Snapshots disabled by administrator',
+      action: `openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')` },
+    { key:'migrate',  label:'↗ Migrate',     enabled: featureOn('migrations'),
+      disabledReason: 'Migrations disabled by administrator',
+      action: `openMigrateDialog('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')` },
+    { sep: true },
+    { key:'delete',   label:'🗑 Delete VM',   enabled: featureOn('vm_delete'), danger: true,
+      disabledReason: 'VM deletion disabled by administrator',
+      action: `openDeleteVMDialog('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')` },
+  ];
+  const menu = items.map(it => {
+    if (it.sep) return `<div class="vm-actions-sep"></div>`;
+    const cls = 'vm-actions-item' + (it.danger ? ' danger' : '') + (it.enabled ? '' : ' disabled');
+    const handler = it.enabled ? `onclick="closeVMActionsMenu('${id}'); ${it.action}"` : '';
+    const title = !it.enabled && it.disabledReason ? ` title="${esc(it.disabledReason)}"` : '';
+    return `<div class="${cls}" ${handler}${title}>${it.label}</div>`;
+  }).join('');
+  return `
+    <div class="vm-actions-wrap" id="${id}-wrap">
+      <button class="btn btn-primary btn-sm vm-actions-trigger" onclick="toggleVMActionsMenu('${id}')">
+        Actions <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" style="margin-left:4px"><path d="M1 3l4 4 4-4z"/></svg>
+      </button>
+      <div class="vm-actions-menu" id="${id}">${menu}</div>
+    </div>
+  `;
+}
+
+function toggleVMActionsMenu(id) {
+  document.querySelectorAll('.vm-actions-menu.open').forEach(el => {
+    if (el.id !== id) el.classList.remove('open');
+  });
+  document.getElementById(id)?.classList.toggle('open');
+}
+function closeVMActionsMenu(id) {
+  document.getElementById(id)?.classList.remove('open');
+}
+document.addEventListener('click', (e) => {
+  document.querySelectorAll('.vm-actions-menu.open').forEach(el => {
+    const wrap = el.closest('.vm-actions-wrap');
+    if (wrap && !wrap.contains(e.target)) el.classList.remove('open');
+  });
+});
 
 function renderVMMonitorTab(vm) {
   const cpuPct = Math.min(vm.cpu_usage || 0, 100);
@@ -4302,21 +4398,13 @@ function renderVMSummaryTab(vm) {
   const hasTools = !!vm.guest_agent;
   const running = vm.state === 'running';
 
-  // Action bar (power buttons + console + actions)
+  // Action bar: title/state pill + consolidated Actions dropdown.
   const actionBar = `
     <div class="vm-actions-bar">
       <span class="vm-title">${esc(vm.name)}</span>
       <span class="vm-pill vm-state ${vm.state}">${vm.state}</span>
-      <button class="btn btn-primary btn-sm" ${vm.state==='stopped'?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','START')" title="Power on">▶ Start</button>
-      <button class="btn btn-warning btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','STOP')" title="Graceful shutdown">■ Shutdown</button>
-      <button class="btn btn-secondary btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','RESTART')" title="Restart">↺ Restart</button>
-      <button class="btn btn-danger btn-sm" ${running?'':'disabled'} onclick="sendCmd('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}','FORCESTOP')" title="Force power off">⚡ Force Off</button>
-      <button class="btn btn-secondary btn-sm" ${featureOn('snapshots')?'':'disabled'}
-              onclick="openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')"
-              title="${featureOn('snapshots')?'Create snapshot':'Snapshots disabled by administrator'}">📷 Snapshot</button>
-      <button class="btn btn-danger btn-sm" ${featureOn('vm_delete')?'':'disabled'}
-              onclick="openDeleteVMDialog('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')"
-              title="${featureOn('vm_delete')?'Permanently delete this VM':'VM deletion disabled by administrator'}">🗑 Delete</button>
+      <div class="spacer"></div>
+      ${vmActionsMenu(vm)}
     </div>
   `;
 
@@ -4584,9 +4672,8 @@ function renderVMSnapshotsTab(vm) {
       <div class="vm-actions-bar">
         <span class="vm-title">${esc(vm.name)}</span>
         <span class="vm-pill vm-state ${vm.state}">${vm.state}</span>
-        <button class="btn btn-secondary btn-sm" ${featureOn('snapshots')?'':'disabled'}
-                onclick="openSnapshot('${esc(vm.host_id)}','${esc(vm.uuid)}','${esc(vm.name)}')"
-                title="${featureOn('snapshots')?'':'Snapshots disabled by administrator'}">📷 Create Snapshot</button>
+        <div class="spacer"></div>
+        ${vmActionsMenu(vm)}
       </div>
     </div>
   `;
