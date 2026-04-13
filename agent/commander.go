@@ -122,11 +122,11 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		out, err = exec.Command("virsh", args...).CombinedOutput()
 	case "DELETE_VM":
 		// Multi-stage destruction: force-off if still running, undefine with
-		// NVRAM + managed save + snapshot metadata, then remove the backing
-		// disks reported by dumpxml. The UI gates this behind its own
-		// multi-step confirmation, but we still refuse a half-complete
-		// state: if the domain is running and `virsh destroy` fails we
-		// stop rather than leaving an orphan disk on the host.
+		// NVRAM + managed save + snapshot metadata, optionally remove the
+		// backing disks reported by dumpxml. The UI gates this behind its
+		// own multi-step confirmation; delete_disks defaults to false so
+		// an accidental DELETE doesn't lose data.
+		deleteDisks := req.Params["delete_disks"] == "true"
 		if out, derr := exec.Command("virsh", "destroy", vmTarget).CombinedOutput(); derr != nil {
 			// "domain is not running" is fine; anything else aborts.
 			msg := strings.ToLower(string(out))
@@ -136,25 +136,29 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		diskPaths := collectVMDiskPaths(vmTarget)
-		out, err = exec.Command("virsh", "undefine", vmTarget,
-			"--nvram", "--managed-save", "--snapshots-metadata",
-			"--remove-all-storage").CombinedOutput()
-		// --remove-all-storage only works when the disks live in a libvirt
-		// storage pool. If that failed, unlink them ourselves.
-		if err != nil && len(diskPaths) > 0 {
-			// Retry without storage-removal so the domain definition is gone
-			// either way; we'll unlink the files manually below.
+		undefArgs := []string{"undefine", vmTarget, "--nvram", "--managed-save", "--snapshots-metadata"}
+		if deleteDisks {
+			// --remove-all-storage only works when the disks live in a libvirt
+			// storage pool. If that fails we retry without and unlink files
+			// ourselves below.
+			undefArgs = append(undefArgs, "--remove-all-storage")
+		}
+		out, err = exec.Command("virsh", undefArgs...).CombinedOutput()
+		if err != nil && deleteDisks && len(diskPaths) > 0 {
 			if out2, err2 := exec.Command("virsh", "undefine", vmTarget,
 				"--nvram", "--managed-save", "--snapshots-metadata").CombinedOutput(); err2 == nil {
 				out, err = out2, nil
 			}
 		}
-		if err == nil {
+		if err == nil && deleteDisks {
 			for _, p := range diskPaths {
 				if rerr := removeDiskFile(p); rerr != nil {
 					log.Printf("delete_vm: could not remove %s: %v", p, rerr)
 				}
 			}
+		}
+		if err == nil && !deleteDisks && len(diskPaths) > 0 {
+			log.Printf("delete_vm: kept %d disk file(s) — delete_disks=false", len(diskPaths))
 		}
 	case "OFFLINE_MIGRATE":
 		dest := req.Params["destination"]

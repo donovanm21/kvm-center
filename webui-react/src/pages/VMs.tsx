@@ -162,21 +162,7 @@ function VMRow({ vm, lock }: { vm: VM; lock?: LockReason }) {
 function LockBadge({ reason }: { reason: LockReason }) {
   const isRollback = reason === 'rolled-back';
   return (
-    <span
-      style={{
-        marginLeft: 8,
-        display: 'inline-block',
-        padding: '1px 8px',
-        borderRadius: 8,
-        fontSize: 9,
-        fontWeight: 700,
-        textTransform: 'uppercase',
-        letterSpacing: '0.5px',
-        background: isRollback ? '#3D1E1E' : '#3D2510',
-        color: isRollback ? '#F85149' : '#FF8A3C',
-        border: '1px solid ' + (isRollback ? '#5C2A2A' : '#5C3814'),
-      }}
-    >
+    <span className={`lock-pill ${isRollback ? 'danger' : 'warn'}`}>
       {isRollback ? 'rolled back' : 'migrating'}
     </span>
   );
