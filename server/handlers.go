@@ -422,15 +422,23 @@ func handleGuestTelemetry(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "vm_uuid required")
 			return
 		}
-		store.ApplyGuestTelemetry(&p)
-		log.Printf("guest-telemetry: uuid=%s host=%s os=%q kvm-tools=%s", p.VMUUID, p.Hostname, p.OS, p.KVMToolsVersion)
+		originalUUID := p.VMUUID
+		canonical := store.ApplyGuestTelemetry(&p)
+		log.Printf("guest-telemetry: uuid=%s host=%s os=%q kvm-tools=%s", canonical, p.Hostname, p.OS, p.KVMToolsVersion)
 		// If the operator queued a kvm-tools self-update for this VM,
 		// hand back the binary URL so the in-guest daemon downloads it
 		// and re-execs. The queue clears immediately.
 		reply := map[string]string{"status": "ok"}
-		if store.ConsumeKVMToolsUpdate(p.VMUUID) {
+		if store.ConsumeKVMToolsUpdate(canonical) {
 			reply["update_url"] = kvmToolsBinaryURL(r)
-			log.Printf("kvm-tools-update: signalled %s → %s", p.VMUUID, reply["update_url"])
+			log.Printf("kvm-tools-update: signalled %s → %s", canonical, reply["update_url"])
+		}
+		// Echo the canonical UUID when it differs from what the guest
+		// claimed — the client caches this to local disk and pins it
+		// for subsequent reports, fixing cloned-VM DMI UUID collisions
+		// without operator intervention.
+		if !strings.EqualFold(canonical, originalUUID) {
+			reply["canonical_uuid"] = canonical
 		}
 		writeJSON(w, http.StatusOK, reply)
 	}
