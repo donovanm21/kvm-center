@@ -10,6 +10,7 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { VMs } from './pages/VMs';
 import { VMDetail } from './pages/VMDetail';
+import { Storage } from './pages/Storage';
 
 // Port of each v3 view lands as its own route and replaces the stub.
 // Phase 1 ships Dashboard parity only.
@@ -49,7 +50,7 @@ function Shell() {
         <Route path="/vms" element={<VMs />} />
         <Route path="/vms/:uuid" element={<VMDetail />} />
         <Route path="/vms/:uuid/:tab" element={<VMDetail />} />
-        <Route path="/storage" element={<ComingSoon title="Storage" />} />
+        <Route path="/storage" element={<Storage />} />
         <Route path="/settings" element={<ComingSoon title="Settings" />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
