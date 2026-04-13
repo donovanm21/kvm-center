@@ -2,8 +2,6 @@
 # and serves a download portal on port 8080 (python3 http.server).
 FROM golang:1.22-alpine
 
-ARG VERSION=dev
-
 RUN apk --no-cache add python3 tar
 
 WORKDIR /src
@@ -51,7 +49,10 @@ RUN mkdir -p /dist && \
 
 # Generate KVM Center styled download portal (matches the main web UI's
 # productized theme — see docs/STYLE_GUIDE.md for the token reference).
-RUN cat > /dist/index.html << EOF_PORTAL
+# VERSION is sourced from the committed server/VERSION file so the portal
+# badge stays in sync with the server binary without a build arg.
+RUN VERSION=$(cat /src/server/VERSION | tr -d '[:space:]') && \
+    cat > /dist/index.html << EOF_PORTAL
 <!DOCTYPE html>
 <html>
 <head>
