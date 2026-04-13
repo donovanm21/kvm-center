@@ -1,0 +1,4 @@
+Populated by `vite build` (webui-react) during the Docker build stage.
+Keeping this file ensures //go:embed finds a non-empty directory even
+for a go-only local build, in which case the /v4/ mux registration
+gracefully falls back to "v4 SPA bundle not embedded".
