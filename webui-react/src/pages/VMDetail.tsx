@@ -275,7 +275,7 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
       </div>
 
       {/* VM hardware quick-view + Notes */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
         <HardwareQuickView vm={vm} />
         <NotesPanel vm={vm} />
       </div>
