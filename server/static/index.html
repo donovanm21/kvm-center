@@ -3183,7 +3183,8 @@ async function loadSettingsData() {
 function setSettingsTab(t) {
   state.settingsTab = t;
   state.userForm = null; state.groupForm = null; state.roleForm = null; state.idpForm = null;
-  document.getElementById('idp-form-modal-root')?.remove();
+  ['user-form-modal-root','group-form-modal-root','role-form-modal-root','idp-form-modal-root']
+    .forEach(id => document.getElementById(id)?.remove());
   persistRoute();
   render();
 }
@@ -3309,8 +3310,21 @@ function renderSettingsUsers() {
         <tbody>${rows || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-faded)">No users</td></tr>'}</tbody>
       </table>
     </div>
-    ${state.userForm ? renderUserFormModal() : ''}
   `;
+}
+
+// Detached modal mount — keeps the form outside of the settings body so
+// the 15 s telemetry refresh (which re-renders via innerHTML) doesn't
+// wipe inputs while the user is typing.
+function mountSettingsModal(id, html) {
+  let root = document.getElementById(id);
+  if (!root) {
+    root = document.createElement('div');
+    root.id = id;
+    document.body.appendChild(root);
+  }
+  root.innerHTML = html || '';
+  if (!html) root.remove();
 }
 
 function openUserForm(mode, user) {
@@ -3320,9 +3334,12 @@ function openUserForm(mode, user) {
       username:'', email:'', password:'', enabled: true, role_ids: [], group_ids: [],
     },
   };
-  render();
+  mountSettingsModal('user-form-modal-root', renderUserFormModal());
 }
-function closeUserForm() { state.userForm = null; render(); }
+function closeUserForm() {
+  state.userForm = null;
+  mountSettingsModal('user-form-modal-root', '');
+}
 
 function renderUserFormModal() {
   const f = state.userForm;
@@ -3461,14 +3478,16 @@ function renderSettingsGroups() {
         <tbody>${rows || '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-faded)">No groups</td></tr>'}</tbody>
       </table>
     </div>
-    ${state.groupForm ? renderGroupFormModal() : ''}
   `;
 }
 function openGroupForm(mode, g) {
   state.groupForm = { mode, data: mode === 'edit' ? JSON.parse(JSON.stringify(g)) : { name:'', description:'', role_ids:[] } };
-  render();
+  mountSettingsModal('group-form-modal-root', renderGroupFormModal());
 }
-function closeGroupForm() { state.groupForm = null; render(); }
+function closeGroupForm() {
+  state.groupForm = null;
+  mountSettingsModal('group-form-modal-root', '');
+}
 function renderGroupFormModal() {
   const f = state.groupForm; if (!f) return '';
   const isNew = f.mode === 'new';
@@ -3560,14 +3579,16 @@ function renderSettingsRoles() {
         <tbody>${rows}</tbody>
       </table>
     </div>
-    ${state.roleForm ? renderRoleFormModal() : ''}
   `;
 }
 function openRoleForm(mode, r) {
   state.roleForm = { mode, data: mode === 'edit' ? JSON.parse(JSON.stringify(r)) : { name:'', description:'', permissions:[] } };
-  render();
+  mountSettingsModal('role-form-modal-root', renderRoleFormModal());
 }
-function closeRoleForm() { state.roleForm = null; render(); }
+function closeRoleForm() {
+  state.roleForm = null;
+  mountSettingsModal('role-form-modal-root', '');
+}
 function renderRoleFormModal() {
   const f = state.roleForm; if (!f) return '';
   const isNew = f.mode === 'new';
@@ -4743,8 +4764,8 @@ function renderSnapshotDetailTable(vm, snaps) {
       <td style="color:var(--text-faded);font-size:11px">${s.parent ? esc(s.parent) : '—'}</td>
       <td>
         <div class="actions-row">
-          <button class="btn btn-primary btn-sm" ${s.is_current || !featureOn('snapshots') ? 'disabled' : ''} onclick="revertSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')">↶ Revert</button>
-          <button class="btn btn-danger btn-sm" ${featureOn('snapshots')?'':'disabled'} onclick="deleteSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')">🗑 Delete</button>
+          <button class="btn btn-primary btn-sm" ${s.is_current || !hasPerm('vm.snapshot') || !featureOn('snapshots') ? 'disabled' : ''} onclick="revertSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')" title="${!hasPerm('vm.snapshot')?'Requires vm.snapshot':(featureOn('snapshots')?(s.is_current?'Already current':''):'Snapshots disabled by administrator')}">↶ Revert</button>
+          <button class="btn btn-danger btn-sm" ${hasPerm('vm.snapshot') && featureOn('snapshots')?'':'disabled'} onclick="deleteSnapshot('${esc(vm.host_id)}','${esc(vm.name)}','${esc(s.name)}')" title="${!hasPerm('vm.snapshot')?'Requires vm.snapshot':(featureOn('snapshots')?'':'Snapshots disabled by administrator')}">🗑 Delete</button>
         </div>
       </td>
     </tr>
