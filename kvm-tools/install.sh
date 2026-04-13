@@ -67,12 +67,25 @@ cp "$BIN_SRC" "$INSTALL_DIR/$BIN_NAME"
 chmod +x "$INSTALL_DIR/$BIN_NAME"
 info "Binary installed to $INSTALL_DIR/$BIN_NAME"
 
-# Verify DMI UUID is readable (matches libvirt domain UUID).
+# Verify DMI UUID is readable (matches libvirt domain UUID on non-cloned VMs).
 if [[ -r /sys/class/dmi/id/product_uuid ]]; then
   UUID="$(cat /sys/class/dmi/id/product_uuid)"
-  info "Detected VM UUID: $UUID"
+  info "Detected DMI UUID: $UUID"
 else
   warn "Cannot read /sys/class/dmi/id/product_uuid — kvm-tools may fail to start"
+fi
+
+# --uuid override: seed the persistent cache file that kvm-tools reads
+# on startup (preferred over DMI) — escape hatch for cloned VMs whose
+# SMBIOS UUID matches a different libvirt domain. The server-side
+# canonical_uuid resolution usually handles this automatically on the
+# first telemetry tick, but operators can bake the correct UUID in up
+# front too.
+if [[ -n "$UUID_OVERRIDE" ]]; then
+  mkdir -p /var/lib/kvm-tools
+  echo "$UUID_OVERRIDE" > /var/lib/kvm-tools/uuid
+  chmod 0644 /var/lib/kvm-tools/uuid
+  info "Pinned UUID override: $UUID_OVERRIDE → /var/lib/kvm-tools/uuid"
 fi
 
 cat > /etc/systemd/system/${SERVICE_NAME}.service <<EOF

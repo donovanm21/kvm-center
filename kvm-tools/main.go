@@ -65,14 +65,20 @@ type GuestTelemetryPayload struct {
 	Timestamp       time.Time        `json:"timestamp"`
 }
 
-// TelemetryReply is the server's response to a telemetry POST. When
-// UpdateURL is non-empty the daemon downloads the binary at that URL,
-// replaces its own binary in place, and exits — systemd's Restart=always
-// brings it back on the new version.
+// TelemetryReply is the server's response to a telemetry POST.
+// - UpdateURL triggers a self-update (download + rename(2) + exit,
+//   systemd's Restart=always brings it back on the new binary).
+// - CanonicalUUID is set when the server detected that our DMI UUID
+//   collides with a different VM (classic cloned-VM footgun). The
+//   daemon caches it to /var/lib/kvm-tools/uuid and uses that from
+//   then on, surviving reboots.
 type TelemetryReply struct {
-	Status    string `json:"status"`
-	UpdateURL string `json:"update_url,omitempty"`
+	Status        string `json:"status"`
+	UpdateURL     string `json:"update_url,omitempty"`
+	CanonicalUUID string `json:"canonical_uuid,omitempty"`
 }
+
+const uuidCacheFile = "/var/lib/kvm-tools/uuid"
 
 func main() {
 	serverURL := flag.String("server", envOr("KVM_TOOLS_SERVER", "http://10.10.100.8:8090"), "kvm-center server URL")
@@ -80,10 +86,19 @@ func main() {
 	interval := flag.Duration("interval", 30*time.Second, "report interval")
 	flag.Parse()
 
+	// UUID resolution order:
+	//   1. -uuid / $KVM_TOOLS_UUID override (operator escape hatch)
+	//   2. /var/lib/kvm-tools/uuid cache (written by a previous server
+	//      canonical_uuid correction or by install-kvm-tools.sh --uuid)
+	//   3. /sys/class/dmi/id/product_uuid
 	var uuid string
-	if *uuidOverride != "" {
+	switch {
+	case *uuidOverride != "":
 		uuid = strings.ToLower(strings.TrimSpace(*uuidOverride))
-	} else {
+	case cachedUUID() != "":
+		uuid = cachedUUID()
+		log.Printf("kvm-tools: using cached UUID %s (from %s)", uuid, uuidCacheFile)
+	default:
 		var err error
 		uuid, err = readDMIUUID()
 		if err != nil {
@@ -92,7 +107,7 @@ func main() {
 	}
 	log.Printf("kvm-tools %s: vm_uuid=%s  os=%s  server=%s  interval=%s", Version, uuid, runtime.GOOS, *serverURL, *interval)
 
-	send(*serverURL, uuid)
+	uuid = send(*serverURL, uuid)
 
 	ticker := time.NewTicker(*interval)
 	defer ticker.Stop()
@@ -103,7 +118,7 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			send(*serverURL, uuid)
+			uuid = send(*serverURL, uuid)
 		case s := <-sig:
 			log.Printf("kvm-tools: received %s, shutting down", s)
 			return
@@ -111,29 +126,52 @@ func main() {
 	}
 }
 
-func send(serverURL, uuid string) {
+func cachedUUID() string {
+	b, err := os.ReadFile(uuidCacheFile)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(string(b)))
+}
+
+func writeCachedUUID(uuid string) {
+	_ = os.MkdirAll("/var/lib/kvm-tools", 0o755)
+	_ = os.WriteFile(uuidCacheFile, []byte(uuid+"\n"), 0o644)
+}
+
+// send posts one telemetry report and returns the UUID the daemon
+// should use on the NEXT tick — normally the same one that was passed
+// in, but flipped to the canonical value when the server detects a
+// DMI UUID collision.
+func send(serverURL, uuid string) string {
 	p := collect(uuid)
 	body, err := json.Marshal(p)
 	if err != nil {
 		log.Printf("kvm-tools: marshal error: %v", err)
-		return
+		return uuid
 	}
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Post(serverURL+"/api/guest-telemetry", "application/json", bytes.NewReader(body))
 	if err != nil {
 		log.Printf("kvm-tools: send failed: %v", err)
-		return
+		return uuid
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("kvm-tools: server returned %d", resp.StatusCode)
-		return
+		return uuid
 	}
 	var reply TelemetryReply
 	if err := json.NewDecoder(resp.Body).Decode(&reply); err != nil {
 		// Older server versions returned a flat {status:"ok"} — that's
-		// still fine, just no update signal.
-		return
+		// still fine, just no update / canonical signal.
+		return uuid
+	}
+	next := uuid
+	if reply.CanonicalUUID != "" && !strings.EqualFold(reply.CanonicalUUID, uuid) {
+		log.Printf("kvm-tools: server corrected UUID %s → %s (likely cloned DMI); caching to %s", uuid, reply.CanonicalUUID, uuidCacheFile)
+		writeCachedUUID(reply.CanonicalUUID)
+		next = strings.ToLower(strings.TrimSpace(reply.CanonicalUUID))
 	}
 	if reply.UpdateURL != "" {
 		log.Printf("kvm-tools: server requested self-update from %s", reply.UpdateURL)
@@ -141,6 +179,7 @@ func send(serverURL, uuid string) {
 			log.Printf("kvm-tools: self-update failed: %v", err)
 		}
 	}
+	return next
 }
 
 // selfUpdate downloads a new kvm-tools binary, replaces /opt/kvm-tools/
