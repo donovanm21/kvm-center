@@ -32,18 +32,26 @@ type GuestFS struct {
 	UsedGB     float64 `json:"used_gb"`
 }
 
+type GuestInterface struct {
+	Name  string   `json:"name"`
+	MAC   string   `json:"mac,omitempty"`
+	Addrs []string `json:"addrs,omitempty"`
+	Kind  string   `json:"kind"` // primary | docker | container | vpn | bridge | other
+}
+
 type GuestTelemetryPayload struct {
-	VMUUID     string    `json:"vm_uuid"`
-	Hostname   string    `json:"hostname"`
-	OS         string    `json:"os"`
-	Kernel     string    `json:"kernel"`
-	Uptime     string    `json:"uptime"`
-	CPUCount   int       `json:"cpu_count"`
-	MemTotalMB uint64    `json:"mem_total_mb"`
-	MemUsedMB  uint64    `json:"mem_used_mb"`
-	IPs        []string  `json:"ips"`
-	FS         []GuestFS `json:"fs"`
-	Timestamp  time.Time `json:"timestamp"`
+	VMUUID     string           `json:"vm_uuid"`
+	Hostname   string           `json:"hostname"`
+	OS         string           `json:"os"`
+	Kernel     string           `json:"kernel"`
+	Uptime     string           `json:"uptime"`
+	CPUCount   int              `json:"cpu_count"`
+	MemTotalMB uint64           `json:"mem_total_mb"`
+	MemUsedMB  uint64           `json:"mem_used_mb"`
+	IPs        []string         `json:"ips"`
+	Interfaces []GuestInterface `json:"interfaces,omitempty"`
+	FS         []GuestFS        `json:"fs"`
+	Timestamp  time.Time        `json:"timestamp"`
 }
 
 func main() {
@@ -105,6 +113,13 @@ func send(serverURL, uuid string) {
 func collect(uuid string) GuestTelemetryPayload {
 	h, _ := os.Hostname()
 	memTotal, memUsed := readMem()
+	ifaces := readInterfaces()
+	// Keep IPs as the legacy flat list — derived from the same scan so
+	// older server versions that only read .ips still work.
+	var ips []string
+	for _, i := range ifaces {
+		ips = append(ips, i.Addrs...)
+	}
 	return GuestTelemetryPayload{
 		VMUUID:     uuid,
 		Hostname:   h,
@@ -114,20 +129,25 @@ func collect(uuid string) GuestTelemetryPayload {
 		CPUCount:   runtime.NumCPU(),
 		MemTotalMB: memTotal,
 		MemUsedMB:  memUsed,
-		IPs:        readIPs(),
+		IPs:        ips,
+		Interfaces: ifaces,
 		FS:         readFilesystems(),
 		Timestamp:  time.Now(),
 	}
 }
 
-// readIPs is the only collector that's natively cross-platform via net.Interfaces.
-func readIPs() []string {
-	ifaces, err := net.Interfaces()
+// readInterfaces returns every up, non-loopback NIC on the guest with
+// a heuristic Kind so the UI can flag Docker bridges and VPN tunnels.
+// Loopback and down interfaces are skipped — they're noise. The first
+// "real" NIC (no docker/container/vpn/bridge prefix) is tagged "primary".
+func readInterfaces() []GuestInterface {
+	raw, err := net.Interfaces()
 	if err != nil {
 		return nil
 	}
-	var out []string
-	for _, i := range ifaces {
+	var out []GuestInterface
+	primaryAssigned := false
+	for _, i := range raw {
 		if i.Flags&net.FlagLoopback != 0 || i.Flags&net.FlagUp == 0 {
 			continue
 		}
@@ -135,6 +155,7 @@ func readIPs() []string {
 		if err != nil {
 			continue
 		}
+		var addrStrs []string
 		for _, a := range addrs {
 			var ip net.IP
 			switch v := a.(type) {
@@ -146,10 +167,57 @@ func readIPs() []string {
 			if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
 				continue
 			}
-			out = append(out, ip.String())
+			addrStrs = append(addrStrs, ip.String())
 		}
+		// Skip interfaces with no usable addresses unless they're a
+		// recognisable bridge / docker / vpn — those are still useful
+		// to surface so the operator knows they exist.
+		kind := classifyInterface(i.Name)
+		if len(addrStrs) == 0 && kind == "other" {
+			continue
+		}
+		if !primaryAssigned && kind == "other" {
+			kind = "primary"
+			primaryAssigned = true
+		}
+		out = append(out, GuestInterface{
+			Name:  i.Name,
+			MAC:   i.HardwareAddr.String(),
+			Addrs: addrStrs,
+			Kind:  kind,
+		})
 	}
 	return out
+}
+
+// classifyInterface buckets a NIC by name so the UI can colour-code
+// Docker / container / VPN traffic distinctly from the primary uplink.
+// Patterns chosen from common defaults: docker0, br-<hex>, veth*,
+// virbr*, cni*, flannel*, weave, cali*, tailscale*, wg*, tun*, tap*.
+func classifyInterface(name string) string {
+	n := strings.ToLower(name)
+	switch {
+	case n == "docker0", strings.HasPrefix(n, "br-"):
+		return "docker"
+	case strings.HasPrefix(n, "veth"),
+		strings.HasPrefix(n, "cni"),
+		strings.HasPrefix(n, "flannel"),
+		strings.HasPrefix(n, "weave"),
+		strings.HasPrefix(n, "cali"),
+		strings.HasPrefix(n, "podman"),
+		strings.HasPrefix(n, "cnio"):
+		return "container"
+	case strings.HasPrefix(n, "wg"),
+		strings.HasPrefix(n, "tailscale"),
+		strings.HasPrefix(n, "tun"),
+		strings.HasPrefix(n, "tap"),
+		strings.HasPrefix(n, "zt"),
+		strings.HasPrefix(n, "ppp"):
+		return "vpn"
+	case strings.HasPrefix(n, "virbr"), strings.HasPrefix(n, "br"):
+		return "bridge"
+	}
+	return "other"
 }
 
 func envOr(key, def string) string {
