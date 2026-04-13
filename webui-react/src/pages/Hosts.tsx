@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { SortableTH, useSort } from '@/components/SortableTH';
 import { useHosts, useVMs } from '@/hooks/useInventory';
@@ -84,11 +84,15 @@ export function Hosts() {
 }
 
 function HostRow({ host, vmStats }: { host: Host; vmStats?: { total: number; running: number } }) {
+  const navigate = useNavigate();
   const memUsedGB = ((host.mem_total_mb - host.mem_free_mb) / 1024).toFixed(1);
   const memTotalGB = (host.mem_total_mb / 1024).toFixed(0);
   const cpuTone = host.cpu_usage > 85 ? '#F85149' : host.cpu_usage > 65 ? '#FFB020' : 'var(--text-body)';
   return (
-    <tr>
+    <tr
+      className="clickable"
+      onClick={() => navigate(`/hosts/${encodeURIComponent(host.id)}`)}
+    >
       <td>
         <Link to={`/hosts/${encodeURIComponent(host.id)}`} style={nameLink}>
           {host.id}

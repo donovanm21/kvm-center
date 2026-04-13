@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { CreateVMModal } from '@/components/CreateVMModal';
 import { SortableTH, useSort } from '@/components/SortableTH';
@@ -109,6 +109,7 @@ export function VMs() {
 }
 
 function VMRow({ vm, lock }: { vm: VM; lock?: LockReason }) {
+  const navigate = useNavigate();
   const locked = !!lock;
   const lockTitle = lock === 'migrating'
     ? 'Migration in progress — actions are disabled until it finishes'
@@ -118,8 +119,16 @@ function VMRow({ vm, lock }: { vm: VM; lock?: LockReason }) {
   const rowStyle: React.CSSProperties = locked
     ? { opacity: 0.45, cursor: 'not-allowed', background: 'var(--surface-2)' }
     : {};
+  const onRowClick = locked
+    ? undefined
+    : () => navigate(`/vms/${encodeURIComponent(vm.uuid)}`);
   return (
-    <tr className={locked ? '' : 'clickable'} style={rowStyle} title={lockTitle}>
+    <tr
+      className={locked ? '' : 'clickable'}
+      style={rowStyle}
+      title={lockTitle}
+      onClick={onRowClick}
+    >
       <td>
         {locked ? (
           <span style={{ ...nameLink, color: 'var(--text-muted)' }}>{vm.name}</span>
