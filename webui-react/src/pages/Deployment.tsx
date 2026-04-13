@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+
+type OS = 'rhel' | 'debian' | 'windows';
 
 /**
- * Deployment view mirrors v3's scripts landing page at a high level —
- * it points admins at the build portal (which hosts the agent /
- * kvm-tools binaries and the full installer instructions) and calls
- * out the one-liner curl snippets for quick reference.
+ * Deployment page — one place that hands out install snippets for the
+ * two agents (guest-side kvm-tools and host-side kvm-center-agent), a
+ * direct-download manifest for the build-portal artefacts, and the
+ * verification curls. Ported from the v3 snippets view.
  *
- * Keeping it short on purpose: the portal page is the canonical
- * source of truth for install commands, and we don't want two copies
- * of snippets drifting out of sync.
+ * The portal URL is derived at runtime from the current hostname so
+ * port-forwards and reverse-proxied deploys just work without any
+ * configuration.
  */
 export function Deployment() {
   const portalURL = `${location.protocol}//${location.hostname}:8097`;
@@ -24,79 +26,190 @@ export function Deployment() {
   }, [portalURL]);
 
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
-      <div className="panel" style={{ borderLeft: '3px solid var(--accent)' }}>
-        <h2>Build portal</h2>
-        <p style={{ margin: 0, color: 'var(--text-body)', fontSize: 12, lineHeight: 1.55 }}>
-          The build container publishes the hypervisor agent, guest daemon, and install
-          scripts at the address below. Open it in a new tab for browsable downloads and
-          the full install instructions.
-        </p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
-          <a
-            href={portalURL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-primary-sm"
-            style={{ textDecoration: 'none' }}
-          >
-            Open portal ↗
-          </a>
-          <code style={codeStyle}>{portalURL}</code>
-          <PortalStatus state={reachable} />
-        </div>
-      </div>
+    <div style={{ display: 'grid', gap: 14 }}>
+      <IntroBanner portalURL={portalURL} />
 
-      <div className="panel">
-        <h2>Quick-install snippets</h2>
-        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12 }}>
-          Run on a freshly-provisioned hypervisor (replace <code style={chipStyle}>SERVER</code> with this
-          kvm-center's URL; the build portal URL is baked in below).
-        </p>
-
-        <SnippetBlock
-          title="Hypervisor agent"
-          body={`curl -fsSL ${portalURL}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
-curl -fsSL ${portalURL}/install-agent.sh     -o /tmp/install-agent.sh
-chmod +x /tmp/install-agent.sh /tmp/kvm-center-agent-amd64
-sudo /tmp/install-agent.sh --server ${serverURL}`}
-        />
-
-        <SnippetBlock
-          title="Guest tools (Linux)"
-          body={`curl -fsSL ${portalURL}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
-curl -fsSL ${portalURL}/install-kvm-tools.sh  -o /tmp/install-kvm-tools.sh
+      <PackageCard
+        icon={<span style={{ ...iconTileStyle, background: '#2D1810', color: '#E3571E' }}>✚</span>}
+        title="KVM Tools (Guest VM Daemon)"
+        description={
+          <>
+            Install inside a guest VM to surface guest OS, hostname, IP addresses, and
+            per-mountpoint filesystem usage in the kvm-center UI. Reports to{' '}
+            <code style={inlineCode}>{serverURL}</code> every 30 seconds. Once installed, the
+            VM's pill in the Summary tab flips to{' '}
+            <strong style={{ color: '#3FB950' }}>KVM Tools: running</strong>.
+          </>
+        }
+        portalStatus={reachable}
+        snippets={{
+          rhel: {
+            label: '🎩 RHEL / Rocky',
+            body:
+              `# Run as root on the guest VM (Rocky / RHEL / CentOS / Fedora)
+curl -fsSL ${portalURL}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
+curl -fsSL ${portalURL}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
 chmod +x /tmp/install-kvm-tools.sh /tmp/kvm-tools-amd64
-sudo /tmp/install-kvm-tools.sh --server ${serverURL}`}
-        />
-      </div>
+sudo /tmp/install-kvm-tools.sh --server ${serverURL}`,
+            footer: 'Installs /opt/kvm-tools/kvm-tools and a systemd unit. Requires root.',
+          },
+          debian: {
+            label: '🐧 Debian / Ubuntu',
+            body:
+              `# Run as root on the guest VM (Debian / Ubuntu / Mint)
+curl -fsSL ${portalURL}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
+curl -fsSL ${portalURL}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
+chmod +x /tmp/install-kvm-tools.sh /tmp/kvm-tools-amd64
+sudo /tmp/install-kvm-tools.sh --server ${serverURL}`,
+            footer: 'Installs /opt/kvm-tools/kvm-tools and a systemd unit. Requires root.',
+          },
+          windows: {
+            label: '⊞ Windows (PowerShell)',
+            body:
+              `# Run from an elevated PowerShell prompt on the guest VM
+$portal = '${portalURL}'
+$server = '${serverURL}'
+$tmp = Join-Path $env:TEMP 'kvm-tools-install'
+New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+Invoke-WebRequest -Uri "$portal/kvm-tools-windows-amd64.exe" -OutFile "$tmp\\kvm-tools.exe" -UseBasicParsing
+Invoke-WebRequest -Uri "$portal/install-kvm-tools.ps1"       -OutFile "$tmp\\install-kvm-tools.ps1" -UseBasicParsing
+Set-Location $tmp
+.\\install-kvm-tools.ps1 -Server $server`,
+            footer: 'Registers a scheduled task running as SYSTEM on next boot.',
+          },
+        }}
+      />
 
-      <div className="panel">
-        <h2>Verify an install</h2>
-        <SnippetBlock
-          title=""
-          body={`# 1. Server liveness
-curl -s ${serverURL}/health
+      <PackageCard
+        icon={<span style={{ ...iconTileStyle, background: '#1E2340', color: '#8B5CF6' }}>↓</span>}
+        title="KVM Center Agent (Hypervisor)"
+        description={
+          <>
+            Install on a new KVM hypervisor (Rocky / RHEL / Debian etc.) to add it to the
+            kvm-center fleet. Collects host metrics, lists VMs / snapshots / storage pools,
+            and serves the per-VM VNC console + power actions. Listens on port{' '}
+            <code style={inlineCode}>8081</code> for command routing from the server.
+          </>
+        }
+        portalStatus={reachable}
+        snippets={{
+          rhel: {
+            label: '🎩 RHEL / Rocky',
+            body:
+              `# Run as root on the new KVM hypervisor (Rocky / RHEL / CentOS)
+curl -fsSL ${portalURL}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
+curl -fsSL ${portalURL}/install-agent.sh       -o /tmp/install-agent.sh
+chmod +x /tmp/install-agent.sh /tmp/kvm-center-agent-amd64
+# Open the agent command port (only required if firewalld is active)
+sudo firewall-cmd --add-port=8081/tcp --permanent && sudo firewall-cmd --reload
+sudo /tmp/install-agent.sh --server ${serverURL}`,
+            footer:
+              'Requires libvirtd running and virsh in PATH. The installer writes /etc/systemd/system/kvm-center-agent.service and enables it at boot.',
+          },
+          debian: {
+            label: '🐧 Debian / Ubuntu',
+            body:
+              `# Run as root on the new KVM hypervisor (Debian / Ubuntu)
+curl -fsSL ${portalURL}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
+curl -fsSL ${portalURL}/install-agent.sh       -o /tmp/install-agent.sh
+chmod +x /tmp/install-agent.sh /tmp/kvm-center-agent-amd64
+# Open the agent command port (only required if ufw is active)
+sudo ufw allow 8081/tcp
+sudo /tmp/install-agent.sh --server ${serverURL}`,
+            footer:
+              'Requires libvirtd running and virsh in PATH. The installer writes /etc/systemd/system/kvm-center-agent.service and enables it at boot.',
+          },
+        }}
+      />
 
-# 2. Hosts the server knows about
-curl -s ${serverURL}/api/hosts | python3 -m json.tool
+      <DirectDownloads portalURL={portalURL} />
 
-# 3. All VMs (look for guest_agent: true after kvm-tools installs)
-curl -s ${serverURL}/api/vms | python3 -m json.tool`}
-        />
-        <p style={{ margin: '8px 0 0 0', fontSize: 11, color: 'var(--text-faded)' }}>
-          The kvm-tools daemon waits for the next 30 s tick before its first telemetry
-          burst, so VM detail takes up to a minute to flip to "guest tools: kvm-tools".
-        </p>
+      <VerifyCard serverURL={serverURL} />
+    </div>
+  );
+}
+
+/* ── Intro ───────────────────────────────────────────────── */
+function IntroBanner({ portalURL }: { portalURL: string }) {
+  return (
+    <div style={introBannerStyle}>
+      <div>
+        <strong style={{ color: 'var(--text-strong)' }}>One-shot installs.</strong>{' '}
+        Copy a snippet, paste it on the target host, done. The download portal is hosted at{' '}
+        <a href={portalURL} target="_blank" rel="noopener noreferrer" style={introLinkStyle}>
+          {portalURL}
+        </a>{' '}
+        and serves the latest cross-compiled binaries built from this repository.
       </div>
     </div>
   );
 }
 
-function PortalStatus({ state }: { state: 'checking' | 'ok' | 'down' }) {
-  if (state === 'checking') {
-    return <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Probing…</span>;
-  }
+/* ── Per-package card ────────────────────────────────────── */
+interface SnippetDef { label: string; body: string; footer?: string }
+interface PackageCardProps {
+  icon: React.ReactNode;
+  title: string;
+  description: React.ReactNode;
+  snippets: Partial<Record<OS, SnippetDef>>;
+  portalStatus: 'checking' | 'ok' | 'down';
+}
+function PackageCard({ icon, title, description, snippets, portalStatus }: PackageCardProps) {
+  const available = useMemo(
+    () => (Object.keys(snippets) as OS[]).filter((k) => snippets[k]),
+    [snippets],
+  );
+  const [active, setActive] = useState<OS>(available[0]);
+  const current = snippets[active];
+
+  return (
+    <div className="panel" style={{ padding: 22 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        {icon}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text-strong)' }}>{title}</h2>
+            <PortalPill state={portalStatus} />
+          </div>
+          <p style={{ margin: '6px 0 0 0', fontSize: 12, color: 'var(--text-body)', lineHeight: 1.55 }}>
+            {description}
+          </p>
+        </div>
+      </div>
+
+      {available.length > 1 && (
+        <div style={tabsStyle}>
+          {available.map((k) => (
+            <div
+              key={k}
+              role="tab"
+              aria-selected={active === k}
+              onClick={() => setActive(k)}
+              style={{
+                cursor: 'pointer',
+                padding: '6px 14px',
+                fontSize: 12,
+                borderBottom: `2px solid ${active === k ? 'var(--accent)' : 'transparent'}`,
+                color: active === k ? 'var(--text-strong)' : 'var(--text-muted)',
+              }}
+            >
+              {snippets[k]!.label}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {current && <CopyBlock body={current.body} />}
+      {current?.footer && (
+        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-faded)' }}>{current.footer}</div>
+      )}
+    </div>
+  );
+}
+
+function PortalPill({ state }: { state: 'checking' | 'ok' | 'down' }) {
+  if (state === 'checking') return <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Probing…</span>;
+  const ok = state === 'ok';
   return (
     <span
       style={{
@@ -104,19 +217,97 @@ function PortalStatus({ state }: { state: 'checking' | 'ok' | 'down' }) {
         alignItems: 'center',
         gap: 6,
         fontSize: 11,
-        padding: '2px 8px',
+        padding: '2px 10px',
         borderRadius: 10,
-        background: state === 'ok' ? '#1E3D23' : '#3D1E1E',
-        color: state === 'ok' ? '#3FB950' : '#F85149',
+        background: ok ? '#1E3D23' : '#3D1E1E',
+        color: ok ? '#3FB950' : '#F85149',
         fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.04em',
       }}
     >
-      {state === 'ok' ? '● online' : '● unreachable'}
+      ● Portal {ok ? 'online' : 'unreachable'}
     </span>
   );
 }
 
-function SnippetBlock({ title, body }: { title: string; body: string }) {
+/* ── Direct downloads ────────────────────────────────────── */
+function DirectDownloads({ portalURL }: { portalURL: string }) {
+  const files: { name: string; desc: string }[] = [
+    { name: 'kvm-tools-linux-amd64',        desc: 'KVM Tools — Linux x86_64' },
+    { name: 'kvm-tools-linux-arm64',        desc: 'KVM Tools — Linux ARM64' },
+    { name: 'kvm-tools-windows-amd64.exe',  desc: 'KVM Tools — Windows x86_64' },
+    { name: 'install-kvm-tools.sh',         desc: 'KVM Tools installer (Linux)' },
+    { name: 'install-kvm-tools.ps1',        desc: 'KVM Tools installer (Windows)' },
+    { name: 'kvm-center-agent-amd64',       desc: 'Hypervisor agent — Linux x86_64' },
+    { name: 'kvm-center-agent-arm64',       desc: 'Hypervisor agent — Linux ARM64' },
+    { name: 'install-agent.sh',             desc: 'Hypervisor agent installer' },
+  ];
+  return (
+    <div className="panel" style={{ padding: 22 }}>
+      <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ color: '#3FB950' }}>↓</span> Direct Downloads
+      </h2>
+      <p style={{ margin: '4px 0 14px 0', fontSize: 12, color: 'var(--text-muted)' }}>
+        Cross-compiled from the latest commit by the build container at{' '}
+        <a href={portalURL} target="_blank" rel="noopener noreferrer" style={introLinkStyle}>{portalURL}</a>
+      </p>
+      <table className="data-table">
+        <thead>
+          <tr><th>File</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          {files.map((f) => (
+            <tr key={f.name}>
+              <td>
+                <a
+                  href={`${portalURL}/${f.name}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--accent-hover)', fontFamily: "'SF Mono', monospace", fontSize: 12 }}
+                >
+                  {f.name}
+                </a>
+              </td>
+              <td style={{ color: 'var(--text-muted)' }}>{f.desc}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ── Verification ────────────────────────────────────────── */
+function VerifyCard({ serverURL }: { serverURL: string }) {
+  const snippet = `# 1. Server liveness
+curl -s ${serverURL}/health
+
+# 2. List all hosts the server knows about
+curl -s ${serverURL}/api/hosts | python3 -m json.tool
+
+# 3. List all VMs (look for guest_agent: true after kvm-tools install)
+curl -s ${serverURL}/api/vms | python3 -m json.tool`;
+  return (
+    <div className="panel" style={{ padding: 22 }}>
+      <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ color: '#FFB020' }}>✓</span> Verifying a Successful Install
+      </h2>
+      <p style={{ margin: '4px 0 14px 0', fontSize: 12, color: 'var(--text-muted)' }}>
+        After running the installer the new agent or kvm-tools should appear in the kvm-center inventory
+        within 30 seconds. Use these checks to confirm.
+      </p>
+      <CopyBlock body={snippet} />
+      <p style={{ margin: '10px 0 0 0', fontSize: 11, color: 'var(--text-faded)' }}>
+        The kvm-tools daemon waits for the next 30 s tick before its first telemetry burst, so VM detail
+        takes up to a minute to flip to "guest tools: kvm-tools".
+      </p>
+    </div>
+  );
+}
+
+/* ── Copy block ──────────────────────────────────────────── */
+function CopyBlock({ body }: { body: string }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -124,46 +315,71 @@ function SnippetBlock({ title, body }: { title: string; body: string }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      /* user rejected clipboard permission */
+      /* clipboard perm denied */
     }
   };
   return (
-    <div style={{ marginTop: title ? 14 : 10 }}>
-      {title && <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-faded)', marginBottom: 6 }}>{title}</div>}
-      <div style={{ position: 'relative' }}>
-        <pre style={preStyle}>{body}</pre>
-        <button type="button" onClick={copy} style={copyBtnStyle}>
-          {copied ? 'Copied!' : 'Copy'}
-        </button>
-      </div>
+    <div style={{ position: 'relative', marginTop: 10 }}>
+      <pre style={preStyle}>{body}</pre>
+      <button type="button" onClick={copy} style={copyBtnStyle}>
+        {copied ? 'Copied!' : 'Copy'}
+      </button>
     </div>
   );
 }
 
-const codeStyle: React.CSSProperties = {
-  fontFamily: "'SF Mono', monospace",
-  fontSize: 11,
-  padding: '3px 8px',
-  borderRadius: 3,
-  background: 'var(--bg-input)',
+/* ── Styles ──────────────────────────────────────────────── */
+const introBannerStyle: React.CSSProperties = {
+  background: 'var(--surface)',
   border: '1px solid var(--border)',
+  borderLeft: '3px solid var(--accent)',
+  borderRadius: 6,
+  padding: '12px 16px',
+  fontSize: 12,
   color: 'var(--text-body)',
+  lineHeight: 1.6,
 };
-const chipStyle: React.CSSProperties = {
+const introLinkStyle: React.CSSProperties = {
+  color: 'var(--accent-hover)',
   fontFamily: "'SF Mono', monospace",
   background: 'var(--bg-input)',
   padding: '1px 6px',
   borderRadius: 3,
+  textDecoration: 'none',
+};
+const inlineCode: React.CSSProperties = {
+  background: 'var(--bg-input)',
+  padding: '1px 6px',
+  borderRadius: 3,
   color: 'var(--accent-hover)',
+  fontFamily: "'SF Mono', monospace",
+  fontSize: 11,
+};
+const iconTileStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 28,
+  height: 28,
+  borderRadius: 14,
+  fontSize: 14,
+  fontWeight: 700,
+  flexShrink: 0,
+};
+const tabsStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 4,
+  marginTop: 14,
+  borderBottom: '1px solid var(--border)',
 };
 const preStyle: React.CSSProperties = {
   margin: 0,
-  padding: '12px 14px',
+  padding: '14px 16px',
   background: 'var(--bg-input)',
   border: '1px solid var(--border)',
-  borderRadius: 4,
+  borderRadius: 5,
   fontFamily: "'SF Mono', monospace",
-  fontSize: 11,
+  fontSize: 12,
   color: 'var(--text-strong)',
   whiteSpace: 'pre',
   overflowX: 'auto',
@@ -171,14 +387,16 @@ const preStyle: React.CSSProperties = {
 };
 const copyBtnStyle: React.CSSProperties = {
   position: 'absolute',
-  top: 6,
-  right: 6,
-  height: 24,
-  padding: '0 10px',
+  top: 8,
+  right: 8,
+  height: 26,
+  padding: '0 12px',
   fontSize: 11,
-  background: 'var(--surface-2)',
-  color: 'var(--text-body)',
-  border: '1px solid var(--border)',
+  background: '#2D1810',
+  color: '#FF8A3C',
+  border: '1px solid #C04512',
   borderRadius: 3,
   cursor: 'pointer',
+  fontWeight: 600,
+  letterSpacing: '0.04em',
 };

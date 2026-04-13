@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
+import { Modal } from '@/components/Modal';
+import { Field, TextInput } from '@/components/FormBits';
 import { useVMs } from '@/hooks/useInventory';
 import {
+  useCreateSnapshot,
   useDeleteSnapshot,
   useRevertSnapshot,
   useSnapshots,
@@ -127,24 +130,53 @@ function SnapshotDetail({ vm }: { vm: VM }) {
   const { hasPerm } = useAuth();
   const features = useFeatures();
   const nav = useNavigate();
+  const [createOpen, setCreateOpen] = useState(false);
   const canSnap = hasPerm('vm.snapshot') && !features.data?.disable_snapshots;
 
   return (
     <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '14px 18px',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
         <div>
           <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-strong)' }}>{vm.name}</div>
           <div style={{ fontSize: 11, color: 'var(--text-faded)', marginTop: 2 }}>
             {vm.host_id} · <span className={`state-pill ${vm.state}`}>{vm.state}</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn-secondary-sm"
-          onClick={() => nav(`/vms/${encodeURIComponent(vm.uuid)}/snapshots`)}
-        >
-          Open in VM view →
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            type="button"
+            className="btn-primary-sm"
+            onClick={() => setCreateOpen(true)}
+            disabled={!canSnap}
+            title={!canSnap ? 'Requires vm.snapshot or feature disabled' : 'Create a new snapshot of this VM'}
+          >
+            📷 Create Snapshot
+          </button>
+          <button
+            type="button"
+            className="btn-secondary-sm"
+            onClick={() => snaps.refetch()}
+            disabled={snaps.isFetching}
+          >
+            ↻ Refresh
+          </button>
+          <button
+            type="button"
+            className="btn-secondary-sm"
+            onClick={() => nav(`/vms/${encodeURIComponent(vm.uuid)}/snapshots`)}
+          >
+            Open in VM view →
+          </button>
+        </div>
       </div>
 
       {snaps.isLoading && <div style={{ padding: 18, fontSize: 12, color: 'var(--text-muted)' }}>Loading snapshots…</div>}
@@ -212,8 +244,54 @@ function SnapshotDetail({ vm }: { vm: VM }) {
           </tbody>
         </table>
       )}
+
+      <CreateSnapshotModal vm={vm} open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   );
+}
+
+function CreateSnapshotModal({ vm, open, onClose }: { vm: VM; open: boolean; onClose: () => void }) {
+  const [name, setName] = useState(defaultSnapshotName());
+  const create = useCreateSnapshot();
+  const submit = async () => {
+    if (!name.trim()) return;
+    await create.mutateAsync({ host_id: vm.host_id, vm_uuid: vm.uuid, vm_name: vm.name, name: name.trim() });
+    onClose();
+    setName(defaultSnapshotName());
+  };
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Create Snapshot — ${vm.name}`}
+      footer={
+        <>
+          <button className="btn-secondary-sm" onClick={onClose}>Cancel</button>
+          <button className="btn-primary-sm" onClick={submit} disabled={!name.trim() || create.isPending}>
+            {create.isPending ? 'Creating…' : 'Create Snapshot'}
+          </button>
+        </>
+      }
+    >
+      <Field label="Name">
+        <TextInput
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          style={{ fontFamily: "'SF Mono', monospace" }}
+        />
+      </Field>
+      <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-faded)' }}>
+        Snapshots only work on VMs with qcow2 disks.
+      </div>
+    </Modal>
+  );
+}
+
+function defaultSnapshotName(): string {
+  const d = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `snap-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
 }
 
 const listHeaderStyle: React.CSSProperties = {
