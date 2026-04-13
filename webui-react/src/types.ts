@@ -98,6 +98,8 @@ export interface VM {
   guest_ips?: string[];
   guest_fs?: GuestFS[];
   guest_interfaces?: GuestInterface[];
+  kvm_tools_version?: string;
+  kvm_tools_update_queued?: boolean;
   disk_type?: string;
   firmware?: string;
   machine_type?: string;

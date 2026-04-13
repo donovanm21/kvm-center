@@ -30,3 +30,11 @@ export const useMigrations = () =>
     queryFn: () => apiGet<MigrationRecord[]>('/api/migrations'),
     refetchInterval: SAFETY_POLL_MS,
   });
+
+/** Latest kvm-tools version the server is shipping (== committed VERSION). */
+export const useKVMToolsLatest = () =>
+  useQuery({
+    queryKey: ['kvm-tools-latest'],
+    queryFn: () => apiGet<{ version: string; binary_url: string }>('/api/kvm-tools/version'),
+    staleTime: 5 * 60_000,
+  });
