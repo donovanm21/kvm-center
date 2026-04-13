@@ -24,6 +24,7 @@ type persistData struct {
 	Roles      map[string]*models.Role             `json:"roles,omitempty"`
 	Sessions   map[string]*models.Session          `json:"sessions,omitempty"`
 	IDPs       map[string]*models.IdentityProvider `json:"idps,omitempty"`
+	Features   *models.Features                    `json:"features,omitempty"`
 }
 
 // guestEntry is one cached report from a kvm-tools daemon running in a guest.
@@ -49,7 +50,23 @@ type Store struct {
 	roles      map[string]*models.Role  // keyed by role ID
 	sessions   map[string]*models.Session // keyed by session token (memory-only)
 	idps       map[string]*models.IdentityProvider // keyed by provider ID
+	features   models.Features
 	dataFile   string
+}
+
+// GetFeatures returns a copy of the current global feature flags.
+func (s *Store) GetFeatures() models.Features {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.features
+}
+
+// SetFeatures replaces the global feature flags and persists them.
+func (s *Store) SetFeatures(f models.Features) {
+	s.mu.Lock()
+	s.features = f
+	s.mu.Unlock()
+	go s.Save()
 }
 
 func NewStore(dataFile string) *Store {
@@ -364,6 +381,7 @@ func (s *Store) Save() {
 		Roles:      s.roles,
 		Sessions:   s.sessions,
 		IDPs:       s.idps,
+		Features:   &s.features,
 	}
 	s.mu.RUnlock()
 
@@ -426,6 +444,9 @@ func (s *Store) load() {
 	}
 	if d.IDPs != nil {
 		s.idps = d.IDPs
+	}
+	if d.Features != nil {
+		s.features = *d.Features
 	}
 	log.Printf("store: loaded %d hosts, %d users, %d groups, %d roles from %s",
 		len(s.hosts), len(s.users), len(s.groups), len(s.roles), s.dataFile)
