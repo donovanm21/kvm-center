@@ -18,6 +18,7 @@ func StartCommandServer(addr string) {
 	mux.HandleFunc("/command", handleCommand)
 	mux.HandleFunc("/console/", handleConsolePage)
 	mux.HandleFunc("/ws/", handleConsoleWS)
+	mux.HandleFunc("/screenshot/", handleVMScreenshot)
 	mux.HandleFunc("/snapshots/", handleSnapshotList)
 	mux.HandleFunc("/migrate-status", handleMigrateStatus)
 	mux.HandleFunc("/storage-browse", handleStorageBrowse)

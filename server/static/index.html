@@ -868,28 +868,58 @@ thead th.sortable.desc { color: var(--text-body); }
   right: 8px;
   text-align: left;
 }
-.vm-thumbnail svg { opacity: 0.3; }
-.vm-thumbnail .console-launch {
+.vm-thumbnail .vm-thumb-fallback svg { opacity: 0.3; }
+.vm-thumbnail .vm-thumb-fallback {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%;
+}
+.vm-thumbnail .vm-thumb-img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: contain;
+  background: #000;
   display: block;
+}
+.vm-thumbnail.clickable { cursor: pointer; transition: border-color 0.15s, transform 0.15s; }
+.vm-thumbnail.clickable:hover { border-color: #E3571E; }
+.vm-thumbnail .thumb-hover-hint {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.55);
+  color: #fff; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  opacity: 0; transition: opacity 0.15s;
+  pointer-events: none;
+}
+.vm-thumbnail.clickable:hover .thumb-hover-hint { opacity: 1; }
+
+/* Standalone Launch Console button (lives outside the thumbnail). */
+.console-launch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
   margin-top: 10px;
+  height: 34px;
+  padding: 0 14px;
   color: #E3571E;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
   text-decoration: none;
-  padding: 6px 12px;
   border: 1px solid #E3571E;
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
   cursor: pointer;
   font-family: inherit;
+  transition: background 0.15s, color 0.15s;
 }
-.vm-thumbnail .console-launch:hover:not(:disabled) {
-  background: #E3571E;
-  color: #fff;
-}
-.vm-thumbnail .console-launch:disabled { opacity: 0.3; cursor: not-allowed; }
+.console-launch:hover:not(:disabled) { background: #E3571E; color: #fff; }
+.console-launch:disabled { opacity: 0.35; cursor: not-allowed; }
+.console-launch svg { flex-shrink: 0; }
+body.light-mode .console-launch { background: #FFFFFF; color: #C04512; border-color: #E3571E; }
+body.light-mode .console-launch:hover:not(:disabled) { background: #E3571E; color: #fff; }
 
 .vm-info-card {
   background: var(--surface);
@@ -1791,10 +1821,22 @@ async function refresh() {
     state.migrations = migrations || [];
     setConnected(true);
     render();
+    refreshVMThumbnails();
   } catch (e) {
     setConnected(false);
     console.error('refresh failed:', e);
   }
+}
+
+// Bump the cache-busting query on every visible VM thumbnail so the
+// browser re-fetches the framebuffer PNG from the agent. Agent caches
+// for ~8 s, so the dashboard refresh cadence governs perceived freshness.
+function refreshVMThumbnails() {
+  const imgs = document.querySelectorAll('.vm-thumbnail[data-vm-thumb] img.vm-thumb-img');
+  imgs.forEach(img => {
+    const base = img.src.split('?')[0];
+    img.src = base + '?_t=' + Date.now();
+  });
 }
 
 async function fetchJSON(path) {
@@ -3273,20 +3315,35 @@ function renderVMSummaryTab(vm) {
     </div>
   `;
 
-  // Left column: thumbnail + launch console
+  // Left column: live thumbnail (clickable) + launch console button.
+  // Thumbnail auto-refreshes on every polling tick via the data-vm-thumb
+  // attribute (see startThumbnailRefresher below).
   const consoleDisabled = running && host && host.ip ? '' : 'disabled';
+  const thumbURL = (running && host && host.ip)
+    ? `http://${host.ip}:${host.agent_port || 8081}/screenshot/${encodeURIComponent(vm.name)}?_t=${Date.now()}`
+    : '';
   const leftCol = `
     <div>
-      <div class="vm-thumbnail">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#FF8A3C" stroke-width="1.5">
+      <div class="vm-thumbnail ${running?'clickable':''}" ${running?`onclick="openConsole('${esc(vm.host_id)}','${esc(vm.name)}')"`:''}
+           data-vm-thumb="${esc(vm.host_id)}|${esc(vm.name)}">
+        ${thumbURL ? `<img class="vm-thumb-img" alt="" src="${esc(thumbURL)}"
+                           onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">` : ''}
+        <div class="vm-thumb-fallback" ${thumbURL?'style="display:none"':''}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#FF8A3C" stroke-width="1.5">
+            <rect x="2" y="4" width="20" height="14" rx="2"/>
+            <path d="M8 22h8M12 18v4"/>
+          </svg>
+        </div>
+        <span class="state-label">${vm.state}</span>
+        ${running ? '<span class="thumb-hover-hint">Click to open console</span>' : ''}
+      </div>
+      <button class="console-launch" ${consoleDisabled}
+        onclick="openConsole('${esc(vm.host_id)}','${esc(vm.name)}')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="2" y="4" width="20" height="14" rx="2"/>
           <path d="M8 22h8M12 18v4"/>
         </svg>
-        <span class="state-label">${vm.state}</span>
-      </div>
-      <button class="console-launch" ${consoleDisabled} style="width:100%;margin-top:10px"
-        onclick="openConsole('${esc(vm.host_id)}','${esc(vm.name)}')">
-        🖥 Launch Console
+        <span>Launch Console</span>
       </button>
     </div>
   `;
