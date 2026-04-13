@@ -298,8 +298,8 @@ func (s *Store) QueuedKVMToolsUpdates() []string {
 // live VM. Returns the canonical libvirt UUID the telemetry was stored
 // under — if the guest's reported DMI UUID collided with another VM
 // (classic cloned-VM footgun, ark-srv01 vs LLM) the server resolves by
-// NIC MAC and hostname and returns the corrected UUID so the guest can
-// pin itself for subsequent reports.
+// NIC MAC and returns the corrected UUID so the guest can pin itself
+// for subsequent reports.
 func (s *Store) ApplyGuestTelemetry(p *models.GuestTelemetryPayload) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -307,32 +307,52 @@ func (s *Store) ApplyGuestTelemetry(p *models.GuestTelemetryPayload) string {
 		p.Timestamp = time.Now()
 	}
 	canonical := s.resolveCanonicalUUID(p)
+	originalLower := strings.ToLower(p.VMUUID)
 	if !strings.EqualFold(canonical, p.VMUUID) {
-		log.Printf("guest-telemetry: UUID collision — payload %s resolved to %s (likely cloned DMI UUID)", p.VMUUID, canonical)
+		log.Printf("guest-telemetry: UUID collision — payload %s resolved to %s (MAC match)", p.VMUUID, canonical)
+		// Evict the stale slot this payload claimed so VMs that share
+		// the colliding DMI UUID stop inheriting this guest's data.
+		delete(s.guestData, originalLower)
 		p.VMUUID = canonical
 	}
 	key := strings.ToLower(canonical)
 	s.guestData[key] = &guestEntry{Payload: *p, UpdatedAt: time.Now()}
+	// Also clear any stale fields on the VM whose UUID the payload was
+	// previously misattributed to — otherwise it keeps showing the
+	// impostor hostname/IPs until the 5-minute freshness window expires.
 	for _, vms := range s.vms {
 		for _, v := range vms {
 			if strings.EqualFold(v.UUID, canonical) {
 				s.applyVMSideData(v)
+			} else if originalLower != "" && strings.EqualFold(v.UUID, originalLower) && originalLower != key {
+				clearStaleGuestData(v)
 			}
 		}
 	}
 	return canonical
 }
 
+// clearStaleGuestData wipes fields that came from a misattributed
+// telemetry post so a cloned-DMI collision doesn't leave the "wrong" VM
+// showing ghosted data for 5 minutes after the resolver corrects itself.
+func clearStaleGuestData(v *models.VM) {
+	v.GuestAgent = false
+	v.GuestSource = ""
+	v.GuestOS = ""
+	v.GuestHostname = ""
+	v.GuestKernel = ""
+	v.GuestUptime = ""
+	v.GuestIPs = nil
+	v.GuestFS = nil
+	v.GuestInterfaces = nil
+	v.KVMToolsVersion = ""
+}
+
 // resolveCanonicalUUID picks the libvirt UUID this telemetry payload
-// really belongs to. Scoring beats direct UUID match because DMI UUIDs
-// can collide across cloned VMs; NIC MACs are globally unique on a
-// properly configured libvirt stack and are the tie-breaker.
-//
-// Score per candidate VM:
-//   +20 libvirt UUID == payload UUID
-//   +10 any libvirt NIC MAC matches a payload interface MAC
-//    +5 libvirt domain name matches payload Hostname
-//    +1 VM state is "running" (stopped VMs shouldn't be reporting)
+// really belongs to. MAC is the primary signal because NIC MACs are
+// globally unique on a libvirt stack, whereas DMI UUIDs can be
+// duplicated by cloning. UUID-only match is the fallback for older
+// kvm-tools builds that don't send Interfaces yet.
 //
 // Called under s.mu; caller must hold the write lock.
 func (s *Store) resolveCanonicalUUID(p *models.GuestTelemetryPayload) string {
@@ -342,48 +362,56 @@ func (s *Store) resolveCanonicalUUID(p *models.GuestTelemetryPayload) string {
 			payloadMACs[strings.ToLower(i.MAC)] = true
 		}
 	}
-	type cand struct {
-		uuid  string
-		score int
-	}
-	var best cand
-	var directUUIDMatch bool
+
+	// Pass 1: collect every VM whose libvirt NICs include any payload
+	// MAC. Globally unique, so normally 0 or 1 hits. Multiple hits can
+	// happen briefly mid-migration (both source and dest advertise the
+	// same MAC) — prefer running + matching-UUID in that case.
+	var macHits []*models.VM
 	for _, vms := range s.vms {
 		for _, v := range vms {
-			score := 0
-			if strings.EqualFold(v.UUID, p.VMUUID) {
-				score += 20
-				directUUIDMatch = true
-			}
 			for _, n := range v.Networks {
 				if n.MAC != "" && payloadMACs[strings.ToLower(n.MAC)] {
-					score += 10
+					macHits = append(macHits, v)
 					break
 				}
 			}
-			if p.Hostname != "" && strings.EqualFold(v.Name, p.Hostname) {
-				score += 5
+		}
+	}
+	if len(macHits) == 1 {
+		return macHits[0].UUID
+	}
+	if len(macHits) > 1 {
+		// Tie-breaker: prefer the VM whose libvirt UUID matches the
+		// payload's claim (likely the real owner, not a mid-migration
+		// ghost). Else the running one. Else the first hit.
+		for _, v := range macHits {
+			if strings.EqualFold(v.UUID, p.VMUUID) {
+				return v.UUID
 			}
+		}
+		for _, v := range macHits {
 			if v.State == "running" {
-				score++
+				return v.UUID
 			}
-			if score > best.score {
-				best = cand{uuid: v.UUID, score: score}
+		}
+		return macHits[0].UUID
+	}
+
+	// Pass 2: no MAC info (older kvm-tools or guest hasn't populated
+	// Interfaces yet) — fall back to direct UUID match, which is safe
+	// when the guest hasn't been cloned.
+	for _, vms := range s.vms {
+		for _, v := range vms {
+			if strings.EqualFold(v.UUID, p.VMUUID) {
+				return v.UUID
 			}
 		}
 	}
-	// If no single candidate stood out, keep whatever the payload claimed —
-	// fresh VMs may send telemetry before the agent has reported them yet.
-	if best.score == 0 {
-		return p.VMUUID
-	}
-	// If the best match is the same VM the payload UUID points to, pass
-	// through. Otherwise the payload UUID is ambiguous (clone) and the
-	// MAC-scored winner takes it.
-	if directUUIDMatch && best.score < 15 {
-		return p.VMUUID
-	}
-	return best.uuid
+	// Totally unknown — let the caller store under whatever the payload
+	// claimed. Fresh VMs may post telemetry before their hvnode agent
+	// has reported them.
+	return p.VMUUID
 }
 
 // AddMigration inserts or updates a migration record.
