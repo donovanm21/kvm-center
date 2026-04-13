@@ -2,10 +2,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 
-// The SPA ships under /v4/ during the v3→v4 co-exist period. Once parity
-// is reached the base can flip back to '/' and /api/* stays unchanged.
+// v4.0.0 cutover: SPA is now the primary UI served at '/'. The legacy
+// v3 HTML still lives at /legacy/ for a grace window so operators with
+// muscle memory can fall back if they hit a snag. /api/* is unchanged.
 export default defineConfig({
-  base: '/v4/',
+  base: '/',
   plugins: [react()],
   resolve: {
     alias: {
