@@ -5,3 +5,4 @@ data.json
 *.tar.gz
 node_modules/
 server/staticv4/dist/
+.claude/
