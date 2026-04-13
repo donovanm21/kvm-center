@@ -6,16 +6,42 @@ import type { MigrationRecord } from '@/types';
 export function Migrations() {
   const migrations = useMigrations();
 
-  const { active, past } = useMemo(() => {
+  const { active, past, successful, failed } = useMemo(() => {
     const list = migrations.data ?? [];
     return {
       active: list.filter((m) => m.status === 'running'),
       past: list.filter((m) => m.status !== 'running'),
+      successful: list.filter((m) => m.status === 'complete').length,
+      failed: list.filter((m) => m.status === 'failed').length,
     };
   }, [migrations.data]);
 
+  const total = (migrations.data ?? []).length;
+
   return (
     <>
+      {/* Summary row: total / successful / failed — mirrors v3. Each card
+          carries a tone cue on the left edge so the state is legible
+          from across the room. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 14 }}>
+        <StatCard
+          label="Total migrations"
+          value={total}
+          sub={`${active.length} active`}
+          accent="#E3571E"
+        />
+        <StatCard
+          label="Successful"
+          value={successful}
+          accent="#3FB950"
+        />
+        <StatCard
+          label="Failed"
+          value={failed}
+          accent={failed > 0 ? '#F85149' : '#3FB950'}
+        />
+      </div>
+
       {migrations.isLoading && (
         <div className="panel" style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading migration history…</div>
       )}
@@ -86,6 +112,21 @@ export function Migrations() {
         )}
       </div>
     </>
+  );
+}
+
+function StatCard({ label, value, sub, accent }: { label: string; value: number; sub?: string; accent: string }) {
+  return (
+    <div
+      className="panel"
+      style={{ padding: '14px 18px', borderLeft: `3px solid ${accent}` }}
+    >
+      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-faded)' }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 30, fontWeight: 300, color: 'var(--text-strong)', marginTop: 6 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
+    </div>
   );
 }
 
