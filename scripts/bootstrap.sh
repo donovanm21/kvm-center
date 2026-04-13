@@ -88,20 +88,31 @@ case "$MODE" in
 
   --update-agents)
     # Roll the latest agent binary out to every host the server knows
-    # about. Reads /api/hosts from the running server, then SSHes to
-    # each host's IP and runs update-agent.sh in-place. Requires either:
-    #   - sshpass + KVM_HVNODE_SSH_PASS env var, OR
-    #   - passwordless SSH from this host to root@<hvnode>.
-    SERVER_API="${KVM_CENTER_API:-http://localhost:8090}"
+    # about. Host discovery order:
+    #   1. KVM_HVNODE_IPS env (space-separated)
+    #   2. data.json inside the kvm-center-server container (no auth needed)
+    #   3. /api/hosts (requires the server to allow unauth read; usually fails)
+    # SSH auth: passwordless preferred, or sshpass + KVM_HVNODE_SSH_PASS.
     BUILD_URL="${KVM_CENTER_BUILD_URL:-http://REDACTED-HOST:8097}"
     SSH_USER="${KVM_HVNODE_SSH_USER:-root}"
-    if ! command -v curl >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
-      echo "ERROR: --update-agents needs curl + jq" >&2
+    if ! command -v curl >/dev/null 2>&1; then
+      echo "ERROR: --update-agents needs curl" >&2
       exit 1
     fi
-    HOSTS=$(curl -fsS "$SERVER_API/api/hosts" | jq -r '.[].ip' || true)
+    HOSTS=""
+    if [[ -n "${KVM_HVNODE_IPS:-}" ]]; then
+      HOSTS="$KVM_HVNODE_IPS"
+    elif command -v jq >/dev/null 2>&1 && command -v docker >/dev/null 2>&1 && \
+         docker inspect kvm-center-server >/dev/null 2>&1; then
+      HOSTS=$(docker exec kvm-center-server cat /var/lib/kvm-center/data.json 2>/dev/null \
+              | jq -r '.hosts[].ip' 2>/dev/null || true)
+    fi
+    if [[ -z "$HOSTS" ]] && command -v jq >/dev/null 2>&1; then
+      SERVER_API="${KVM_CENTER_API:-http://localhost:8090}"
+      HOSTS=$(curl -fsS "$SERVER_API/api/hosts" 2>/dev/null | jq -r '.[].ip' 2>/dev/null || true)
+    fi
     if [[ -z "$HOSTS" ]]; then
-      echo "No hosts returned from $SERVER_API/api/hosts — nothing to do."
+      echo "No hosts to update. Set KVM_HVNODE_IPS=\"ip1 ip2 …\" or run from the docker host." >&2
       exit 0
     fi
     for ip in $HOSTS; do
