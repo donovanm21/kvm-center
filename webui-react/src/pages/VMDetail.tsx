@@ -837,10 +837,11 @@ function NetworksTab({ vm }: { vm: VM }) {
       {guestIPs.length > 0 && (
         <div className="panel">
           <h2>Guest IP addresses</h2>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {guestIPs.map((ip) => (
-              <span key={ip} style={ipPillStyle}>{ip}</span>
-            ))}
+          <div style={{ fontSize: 11, color: 'var(--text-faded)', marginBottom: 8 }}>
+            Click any address to copy it to the clipboard.
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {guestIPs.map((ip) => <IPBadge key={ip} ip={ip} />)}
           </div>
         </div>
       )}
@@ -912,10 +913,9 @@ function GuestKindPill({ kind }: { kind: string }) {
 }
 
 /**
- * Compact IP renderer — shows the first 2 addresses inline and
- * collapses the rest behind a clickable "+N more" pill that toggles
- * the full list. Used both for Guest IPs in Summary and per-interface
- * Addresses in the Networks tab.
+ * Compact IP renderer — shows the first 2 addresses as clickable
+ * copy-to-clipboard badges and collapses the rest behind a "+N more"
+ * pill that toggles the full list.
  */
 function IPList({ ips, max = 2 }: { ips: string[]; max?: number }) {
   const [expanded, setExpanded] = useState(false);
@@ -926,12 +926,7 @@ function IPList({ ips, max = 2 }: { ips: string[]; max?: number }) {
   const remaining = ips.length - show.length;
   return (
     <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-      {show.map((ip, i) => (
-        <span key={ip}>
-          <span style={{ fontFamily: "'SF Mono', monospace" }}>{ip}</span>
-          {i < show.length - 1 && <span style={{ color: 'var(--text-faded)' }}>,</span>}
-        </span>
-      ))}
+      {show.map((ip) => <IPBadge key={ip} ip={ip} />)}
       {remaining > 0 && (
         <button
           type="button"
@@ -955,6 +950,76 @@ function IPList({ ips, max = 2 }: { ips: string[]; max?: number }) {
     </span>
   );
 }
+
+/**
+ * Clickable IP box that copies the address to clipboard on click and
+ * flashes a "copied" state. navigator.clipboard needs a secure context
+ * (HTTPS or localhost); the kvm-center UI typically serves over plain
+ * HTTP on the LAN, so we fall back to a legacy textarea + execCommand
+ * path that works anywhere.
+ */
+export function IPBadge({ ip }: { ip: string }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const flash = (s: 'copied' | 'failed') => {
+    setState(s);
+    setTimeout(() => setState('idle'), 1400);
+  };
+  const copy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.isSecureContext && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(ip);
+        flash('copied');
+        return;
+      } catch { /* fall through */ }
+    }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = ip;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      flash(ok ? 'copied' : 'failed');
+    } catch {
+      flash('failed');
+    }
+  };
+  const label = state === 'copied' ? '✓ copied' : state === 'failed' ? '✕ copy failed' : ip;
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={state === 'failed' ? 'Browser blocked the copy — select the text manually.' : `Copy ${ip} to clipboard`}
+      style={{
+        ...ipBadgeBaseStyle,
+        background: state === 'copied' ? '#1E3D23' : state === 'failed' ? '#3D1E1E' : 'var(--bg-input)',
+        color: state === 'copied' ? '#3FB950' : state === 'failed' ? '#F85149' : 'var(--text-body)',
+        borderColor: state === 'copied' ? '#2E5E35' : state === 'failed' ? '#5C2A2A' : 'var(--border)',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+const ipBadgeBaseStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  height: 22,
+  padding: '0 8px',
+  fontFamily: "'SF Mono', monospace",
+  fontSize: 11,
+  fontWeight: 500,
+  border: '1px solid var(--border)',
+  borderRadius: 4,
+  cursor: 'pointer',
+  transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+};
 
 const ipMoreBtnStyle: React.CSSProperties = {
   background: 'transparent',
@@ -1353,16 +1418,6 @@ const launchBtn: React.CSSProperties = {
   background: 'transparent',
   cursor: 'pointer',
   fontFamily: 'inherit',
-};
-const ipPillStyle: React.CSSProperties = {
-  display: 'inline-block',
-  padding: '6px 12px',
-  background: 'var(--bg-input)',
-  border: '1px solid var(--border)',
-  borderRadius: 4,
-  fontFamily: "'SF Mono', monospace",
-  fontSize: 11,
-  color: 'var(--text-body)',
 };
 const codeChip: React.CSSProperties = {
   background: 'var(--bg-input)', padding: '1px 6px', borderRadius: 3,
