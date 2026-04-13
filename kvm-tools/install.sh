@@ -81,7 +81,7 @@ fi
 # canonical_uuid resolution usually handles this automatically on the
 # first telemetry tick, but operators can bake the correct UUID in up
 # front too.
-if [[ -n "$UUID_OVERRIDE" ]]; then
+if [[ -n "${UUID_OVERRIDE:-}" ]]; then
   mkdir -p /var/lib/kvm-tools
   echo "$UUID_OVERRIDE" > /var/lib/kvm-tools/uuid
   chmod 0644 /var/lib/kvm-tools/uuid
