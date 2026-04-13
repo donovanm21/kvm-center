@@ -371,15 +371,25 @@ func handleUserUpdate(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}
+		// Hoist the "last admin" guards OUT of the UpdateUser callback —
+		// UpdateUser holds a write lock on store.mu, and isLastAdminID
+		// calls store.ListUsers() which takes a read lock on the SAME
+		// mutex. sync.RWMutex isn't re-entrant, so running the check
+		// inside the callback deadlocks the request (what the user hit
+		// when editing bob's roles from the UI).
+		if req.Enabled != nil && !*req.Enabled && isLastAdminID(store, id) {
+			writeError(w, http.StatusBadRequest, "cannot disable the last admin user")
+			return
+		}
+		if req.RoleIDs != nil && isLastAdminID(store, id) && !containsString(*req.RoleIDs, "role_admin") {
+			writeError(w, http.StatusBadRequest, "cannot remove admin role from the last admin user")
+			return
+		}
 		err := store.UpdateUser(id, func(u *models.User) error {
 			if req.Email != nil {
 				u.Email = *req.Email
 			}
 			if req.Enabled != nil {
-				// Guard: last admin can't disable themselves.
-				if !*req.Enabled && isLastAdminID(store, id) {
-					return errorString("cannot disable the last admin user")
-				}
 				u.Enabled = *req.Enabled
 			}
 			if req.Password != nil && *req.Password != "" {
@@ -390,10 +400,6 @@ func handleUserUpdate(store *Store) http.HandlerFunc {
 				u.PasswordHash = h
 			}
 			if req.RoleIDs != nil {
-				// Guard: last admin can't strip themselves of admin role.
-				if isLastAdminID(store, id) && !containsString(*req.RoleIDs, "role_admin") {
-					return errorString("cannot remove admin role from the last admin user")
-				}
 				u.RoleIDs = *req.RoleIDs
 			}
 			if req.GroupIDs != nil {
