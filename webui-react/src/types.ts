@@ -6,6 +6,14 @@
 export type HostStatus = 'online' | 'offline';
 export type VMState = 'running' | 'stopped' | 'paused' | 'crashed' | 'unknown';
 
+export interface HostPCIDevice {
+  address: string;
+  type: string;
+  description: string;
+  iommu_group: number;
+  in_use_by_vm?: string;
+}
+
 export interface Host {
   id: string;
   ip: string;
@@ -23,6 +31,12 @@ export interface Host {
   libvirt_ver?: string;
   uptime?: string;
   cpu_model?: string;
+  sockets?: number;
+  cores_per_socket?: number;
+  threads_per_core?: number;
+  numa_nodes?: number;
+  host_pci_devices?: HostPCIDevice[];
+  gpus?: string[];
 }
 
 export interface VMDisk {

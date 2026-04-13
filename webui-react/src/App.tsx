@@ -10,6 +10,8 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { VMs } from './pages/VMs';
 import { VMDetail } from './pages/VMDetail';
+import { Hosts } from './pages/Hosts';
+import { HostDetail } from './pages/HostDetail';
 import { Storage } from './pages/Storage';
 import { Settings } from './pages/Settings';
 
@@ -51,6 +53,9 @@ function Shell() {
         <Route path="/vms" element={<VMs />} />
         <Route path="/vms/:uuid" element={<VMDetail />} />
         <Route path="/vms/:uuid/:tab" element={<VMDetail />} />
+        <Route path="/hosts" element={<Hosts />} />
+        <Route path="/hosts/:id" element={<HostDetail />} />
+        <Route path="/hosts/:id/:tab" element={<HostDetail />} />
         <Route path="/storage" element={<Storage />} />
         <Route path="/settings/*" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
