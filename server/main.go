@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -20,12 +21,14 @@ var staticFiles embed.FS
 //go:embed all:staticv4
 var staticV4Files embed.FS
 
-// Version is the committed release tag shown in the UI and /api/version.
-// Bump this alongside the git tag on each release. The Dockerfile's
-// -ldflags "-X main.Version=..." can still override it at build time,
-// but the committed default is the source of truth when no override is
-// passed (e.g. bootstrap.sh --deploy, local go build).
-var Version = "v4.1.2"
+// Version is read from the committed /VERSION file at compile time via
+// go:embed — single source of truth shared by the server binary, the
+// build-portal page, and anything else that needs to stamp a release.
+// Bump the VERSION file alongside the git tag on each release.
+//
+//go:embed VERSION
+var versionRaw string
+var Version = strings.TrimSpace(versionRaw)
 
 func main() {
 	addr := flag.String("addr", envOrDefault("KVM_CENTER_ADDR", ":8090"), "listen address")
