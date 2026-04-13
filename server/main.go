@@ -42,6 +42,8 @@ func main() {
 	}
 
 	store := NewStore(*dataFile)
+	hub := NewSSEHub()
+	store.hub = hub // state-changing store methods publish via this handle
 
 	// Background: mark offline hosts and persist every 30 seconds.
 	go func() {
@@ -56,6 +58,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// API routes.
+	mux.HandleFunc("/api/events",    handleSSEEvents(hub))
 	mux.HandleFunc("/api/telemetry", handleTelemetry(store))
 	mux.HandleFunc("/api/hosts", handleGetHosts(store))
 	mux.HandleFunc("/api/hosts/", handleGetHost(store))
