@@ -2007,14 +2007,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (badge) badge.textContent = d.version;
   }).catch(() => {});
   // Gate the main app behind authentication.
-  const ok = await initAuth();
-  if (ok) {
-    await loadFeatures();
-    refresh();
-    // Settings lives outside the main telemetry refresh loop, so a deep-link
-    // refresh (e.g. landing directly on #/settings) needs its own fetch.
-    if (state.view === 'settings') loadSettingsData();
-    setInterval(refresh, 15000);
+  try {
+    const ok = await initAuth();
+    if (ok) {
+      try { await loadFeatures(); } catch (e) { console.error('loadFeatures:', e); }
+      refresh();
+      if (state.view === 'settings') loadSettingsData();
+      setInterval(refresh, 15000);
+    }
+  } catch (e) {
+    console.error('init failed:', e);
   }
 });
 
@@ -5803,12 +5805,15 @@ async function initAuth() {
     const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
     if (r.ok) {
       const d = await r.json();
-      state.currentUser = d.user;
-      state.permissions = d.permissions || [];
-      applyAuthUI();
+      state.currentUser = d.user || {};
+      state.permissions = Array.isArray(d.permissions) ? d.permissions : [];
+      // Wrap in try/catch so any DOM-level failure here (missing element,
+      // bad field on d.user, etc.) can't kill the init sequence and leave
+      // refresh() uncalled.
+      try { applyAuthUI(); } catch (e) { console.error('applyAuthUI failed:', e); }
       return true;
     }
-  } catch {}
+  } catch (e) { console.error('initAuth /me failed:', e); }
   // Not authenticated — show registration on first run, login otherwise.
   let hasUsers = true;
   try {
@@ -5825,16 +5830,18 @@ function hasPerm(p) {
 
 function applyAuthUI() {
   hideAuthScreen();
-  // Show user menu + role text in topbar.
+  // Show user menu + role text in topbar. Every DOM lookup is optional
+  // because an older cached HTML (pre-user-menu) could still be serving.
   const menu = document.getElementById('user-menu');
   if (menu && state.currentUser) {
     menu.style.display = '';
-    document.getElementById('user-avatar').textContent =
-      (state.currentUser.username || '?').slice(0, 2);
-    document.getElementById('user-dropdown-name').textContent =
-      state.currentUser.username;
-    document.getElementById('user-dropdown-role').textContent =
-      hasPerm('admin') ? 'Administrator' : 'User';
+    const uname = String(state.currentUser.username || '?');
+    const avatar = document.getElementById('user-avatar');
+    if (avatar) avatar.textContent = uname.slice(0, 2);
+    const dropName = document.getElementById('user-dropdown-name');
+    if (dropName) dropName.textContent = uname;
+    const dropRole = document.getElementById('user-dropdown-role');
+    if (dropRole) dropRole.textContent = hasPerm('admin') ? 'Administrator' : 'User';
   }
   // Hide Administration section if user lacks user.manage and isn't admin.
   const adminSep = document.getElementById('admin-separator');
