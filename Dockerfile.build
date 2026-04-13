@@ -7,6 +7,8 @@ RUN apk --no-cache add python3 tar
 WORKDIR /src
 COPY go.mod go.su[m] ./
 COPY . .
+# Single source of truth: kvm-tools embeds the same VERSION as the server.
+RUN cp /src/server/VERSION /src/kvm-tools/VERSION
 RUN go mod tidy
 
 # Build server (linux/amd64 - runs in container)
