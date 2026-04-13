@@ -106,9 +106,9 @@ function Topbar() {
           type="button"
           onClick={() => setCenterOpen(true)}
           title={`${activeCount} active migration${activeCount === 1 ? '' : 's'} — click to view progress`}
-          style={migrationBadgeStyle}
+          className="topbar-mig-badge"
         >
-          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#FF8A3C', animation: 'kvmPulse 1.4s ease-in-out infinite' }} />
+          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'currentColor', animation: 'kvmPulse 1.4s ease-in-out infinite' }} />
           {activeCount} migrating
         </button>
       )}
@@ -128,15 +128,6 @@ function Topbar() {
   );
 }
 
-const migrationBadgeStyle: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 8,
-  height: 28, padding: '0 12px', marginRight: 4,
-  background: '#3D2510', color: '#FF8A3C',
-  border: '1px solid #5C3814', borderRadius: 14,
-  fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
-  textTransform: 'uppercase', letterSpacing: '0.5px',
-  cursor: 'pointer',
-};
 
 function MoonIcon() {
   return (
