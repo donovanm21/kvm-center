@@ -13,6 +13,9 @@ import { VMDetail } from './pages/VMDetail';
 import { Hosts } from './pages/Hosts';
 import { HostDetail } from './pages/HostDetail';
 import { Storage } from './pages/Storage';
+import { SnapshotsOverview } from './pages/SnapshotsOverview';
+import { Migrations } from './pages/Migrations';
+import { Deployment } from './pages/Deployment';
 import { Settings } from './pages/Settings';
 
 // Port of each v3 view lands as its own route and replaces the stub.
@@ -57,6 +60,10 @@ function Shell() {
         <Route path="/hosts/:id" element={<HostDetail />} />
         <Route path="/hosts/:id/:tab" element={<HostDetail />} />
         <Route path="/storage" element={<Storage />} />
+        <Route path="/snapshots" element={<SnapshotsOverview />} />
+        <Route path="/snapshots/:uuid" element={<SnapshotsOverview />} />
+        <Route path="/migrations" element={<Migrations />} />
+        <Route path="/deployment" element={<Deployment />} />
         <Route path="/settings/*" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

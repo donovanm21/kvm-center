@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { apiGet } from '@/api/client';
-import type { Host, StoragePool, VM, Features } from '@/types';
+import type { Host, MigrationRecord, StoragePool, VM, Features } from '@/types';
 
 // SSE is the primary mechanism — the server publishes "inventory" and
 // "settings" events that invalidate the matching keys in the React
@@ -22,3 +22,11 @@ export const useStorage = () =>
 
 export const useFeatures = () =>
   useQuery({ queryKey: ['features'], queryFn: () => apiGet<Features>('/api/settings'), refetchInterval: SAFETY_POLL_MS });
+
+/** Migrations are small and event-driven — SSE + a 60 s safety net. */
+export const useMigrations = () =>
+  useQuery({
+    queryKey: ['migrations'],
+    queryFn: () => apiGet<MigrationRecord[]>('/api/migrations'),
+    refetchInterval: SAFETY_POLL_MS,
+  });
