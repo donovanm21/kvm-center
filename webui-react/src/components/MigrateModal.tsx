@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { Modal } from './Modal';
 import { MigrationProgressCard } from './MigrationCenter';
@@ -41,6 +42,16 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
   const [submittedAt, setSubmittedAt] = useState<number | null>(null);
   const cmd = useVMCommand();
   const migrations = useMigrations();
+  const navigate = useNavigate();
+
+  // "Run in background" routes the user away from the in-flight VM so
+  // they can't accidentally fire follow-up actions against it. Going to
+  // the Migrations page also makes the live progress card visible
+  // without an extra click on the Topbar badge.
+  const sendToBackground = () => {
+    onClose();
+    navigate('/migrations');
+  };
 
   // Reset transient state every time the modal is reopened.
   useEffect(() => {
@@ -168,11 +179,11 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
     return (
       <Modal
         open={open}
-        onClose={onClose}
+        onClose={sendToBackground}
         width={520}
         title={`Migrating — ${vm.name}`}
         footer={
-          <button className="btn-secondary-sm" onClick={onClose}>
+          <button className="btn-secondary-sm" onClick={sendToBackground}>
             Run in background
           </button>
         }
@@ -185,8 +196,8 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
           </div>
         )}
         <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-faded)' }}>
-          You can close this modal — the migration will continue on the source agent.
-          Reopen progress at any time from the Migration Center button in the top bar.
+          "Run in background" sends you to the Migrations page where you can keep
+          watching progress. The migration continues on the source agent regardless.
         </div>
       </Modal>
     );
