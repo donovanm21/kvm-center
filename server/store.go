@@ -50,6 +50,10 @@ type Store struct {
 	roles      map[string]*models.Role  // keyed by role ID
 	sessions   map[string]*models.Session // keyed by session token (memory-only)
 	idps       map[string]*models.IdentityProvider // keyed by provider ID
+	// kvmToolsUpdateQueue marks VM UUIDs that should be told to self-
+	// update on their next telemetry POST. The next /api/guest-telemetry
+	// reply for that UUID returns an update_url and the entry clears.
+	kvmToolsUpdateQueue map[string]bool
 	features   models.Features
 	dataFile   string
 
@@ -86,8 +90,9 @@ func NewStore(dataFile string) *Store {
 		groups:    make(map[string]*models.Group),
 		roles:     make(map[string]*models.Role),
 		sessions:  make(map[string]*models.Session),
-		idps:      make(map[string]*models.IdentityProvider),
-		dataFile:  dataFile,
+		idps:                make(map[string]*models.IdentityProvider),
+		kvmToolsUpdateQueue: make(map[string]bool),
+		dataFile:            dataFile,
 	}
 	s.load()
 	s.ensureBuiltInRoles()
@@ -227,6 +232,10 @@ func (s *Store) applyVMSideData(v *models.VM) {
 	if len(p.Interfaces) > 0 {
 		v.GuestInterfaces = p.Interfaces
 	}
+	if p.KVMToolsVersion != "" {
+		v.KVMToolsVersion = p.KVMToolsVersion
+	}
+	v.KVMToolsUpdateQueued = s.kvmToolsUpdateQueue[strings.ToLower(p.VMUUID)]
 }
 
 // SetVMNotes updates the note for the given VM UUID and rewrites any in-memory copies.
@@ -246,6 +255,43 @@ func (s *Store) SetVMNotes(uuid, notes string) {
 			}
 		}
 	}
+}
+
+// QueueKVMToolsUpdate marks a set of VM UUIDs to be told to self-update
+// on their next telemetry POST. UUIDs are lowercased for the lookup.
+func (s *Store) QueueKVMToolsUpdate(uuids []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, u := range uuids {
+		s.kvmToolsUpdateQueue[strings.ToLower(strings.TrimSpace(u))] = true
+	}
+	s.hub.Publish(EventInventory, nil)
+}
+
+// ConsumeKVMToolsUpdate returns and clears the queued flag for one
+// VM UUID — called from handleGuestTelemetry on each report.
+func (s *Store) ConsumeKVMToolsUpdate(uuid string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := strings.ToLower(uuid)
+	if !s.kvmToolsUpdateQueue[key] {
+		return false
+	}
+	delete(s.kvmToolsUpdateQueue, key)
+	return true
+}
+
+// QueuedKVMToolsUpdates returns the set of UUIDs currently queued for
+// self-update — used by the UI's Update Center to render the
+// pending state.
+func (s *Store) QueuedKVMToolsUpdates() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]string, 0, len(s.kvmToolsUpdateQueue))
+	for k := range s.kvmToolsUpdateQueue {
+		out = append(out, k)
+	}
+	return out
 }
 
 // ApplyGuestTelemetry stores a kvm-tools report and re-merges it onto any live VM.

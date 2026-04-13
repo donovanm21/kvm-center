@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -422,8 +423,68 @@ func handleGuestTelemetry(store *Store) http.HandlerFunc {
 			return
 		}
 		store.ApplyGuestTelemetry(&p)
-		log.Printf("guest-telemetry: uuid=%s host=%s os=%q", p.VMUUID, p.Hostname, p.OS)
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		log.Printf("guest-telemetry: uuid=%s host=%s os=%q kvm-tools=%s", p.VMUUID, p.Hostname, p.OS, p.KVMToolsVersion)
+		// If the operator queued a kvm-tools self-update for this VM,
+		// hand back the binary URL so the in-guest daemon downloads it
+		// and re-execs. The queue clears immediately.
+		reply := map[string]string{"status": "ok"}
+		if store.ConsumeKVMToolsUpdate(p.VMUUID) {
+			reply["update_url"] = kvmToolsBinaryURL(r)
+			log.Printf("kvm-tools-update: signalled %s → %s", p.VMUUID, reply["update_url"])
+		}
+		writeJSON(w, http.StatusOK, reply)
+	}
+}
+
+// kvmToolsBinaryURL returns the build-portal URL the in-guest daemon
+// should pull from. Hard-codes the linux/amd64 binary because that's
+// the only arch we ship today; the build portal lives on the same host
+// as the kvm-center server, just on a separate compose-mapped port.
+func kvmToolsBinaryURL(r *http.Request) string {
+	host := r.Host
+	if i := strings.Index(host, ":"); i >= 0 {
+		host = host[:i]
+	}
+	if env := os.Getenv("KVM_TOOLS_BINARY_URL"); env != "" {
+		return env
+	}
+	return fmt.Sprintf("http://%s:8097/kvm-tools-amd64", host)
+}
+
+// GET /api/kvm-tools/version — returns the kvm-tools build the server
+// is shipping (== the committed VERSION). UI uses this to mark guest
+// daemons as "outdated".
+func handleKVMToolsVersion(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{
+		"version":    Version,
+		"binary_url": kvmToolsBinaryURL(r),
+	})
+}
+
+// POST /api/kvm-tools/update — accepts {"uuids": [...]} and queues each
+// VM for a self-update on its next telemetry POST. Idempotent.
+func handleKVMToolsUpdate(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		var req struct {
+			UUIDs []string `json:"uuids"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+			return
+		}
+		if len(req.UUIDs) == 0 {
+			writeError(w, http.StatusBadRequest, "uuids must be non-empty")
+			return
+		}
+		store.QueueKVMToolsUpdate(req.UUIDs)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status": "queued",
+			"count":  len(req.UUIDs),
+		})
 	}
 }
 

@@ -83,6 +83,8 @@ func main() {
 	mux.HandleFunc("/api/migrations/record", handlePostMigration(store))
 	mux.Handle("/api/migrations/cancel", requirePerm(store, "vm.migrate", http.HandlerFunc(handleCancelMigration(store))))
 	mux.HandleFunc("/api/migrate-status", handleMigrateStatus(store))
+	mux.HandleFunc("/api/kvm-tools/version", handleKVMToolsVersion)
+	mux.Handle("/api/kvm-tools/update", requirePerm(store, "vm.edit", http.HandlerFunc(handleKVMToolsUpdate(store))))
 	mux.HandleFunc("/health", handleHealth)
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

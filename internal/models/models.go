@@ -104,9 +104,11 @@ type VM struct {
 	GuestHostname string    `json:"guest_hostname,omitempty"`
 	GuestKernel   string    `json:"guest_kernel,omitempty"`
 	GuestUptime   string    `json:"guest_uptime,omitempty"`
-	GuestIPs        []string         `json:"guest_ips,omitempty"`
-	GuestFS         []GuestFS        `json:"guest_fs,omitempty"`
-	GuestInterfaces []GuestInterface `json:"guest_interfaces,omitempty"`
+	GuestIPs            []string         `json:"guest_ips,omitempty"`
+	GuestFS             []GuestFS        `json:"guest_fs,omitempty"`
+	GuestInterfaces     []GuestInterface `json:"guest_interfaces,omitempty"`
+	KVMToolsVersion     string           `json:"kvm_tools_version,omitempty"`
+	KVMToolsUpdateQueued bool            `json:"kvm_tools_update_queued,omitempty"`
 
 	// User-editable, persisted in server store (rehydrated by UUID).
 	Notes string `json:"notes,omitempty"`
@@ -166,10 +168,11 @@ type GuestTelemetryPayload struct {
 	CPUCount   int       `json:"cpu_count"`
 	MemTotalMB uint64    `json:"mem_total_mb"`
 	MemUsedMB  uint64    `json:"mem_used_mb"`
-	IPs        []string         `json:"ips"`
-	Interfaces []GuestInterface `json:"interfaces,omitempty"`
-	FS         []GuestFS        `json:"fs"`
-	Timestamp  time.Time        `json:"timestamp"`
+	IPs             []string         `json:"ips"`
+	Interfaces      []GuestInterface `json:"interfaces,omitempty"`
+	FS              []GuestFS        `json:"fs"`
+	KVMToolsVersion string           `json:"kvm_tools_version,omitempty"`
+	Timestamp       time.Time        `json:"timestamp"`
 }
 
 // Snapshot represents a libvirt domain snapshot.

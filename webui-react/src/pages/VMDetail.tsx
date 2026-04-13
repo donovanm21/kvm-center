@@ -7,7 +7,7 @@ import { MigrateModal } from '@/components/MigrateModal';
 import { Modal } from '@/components/Modal';
 import { apiPost } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useFeatures, useHosts, useMigrations, useVMs } from '@/hooks/useInventory';
+import { useFeatures, useHosts, useKVMToolsLatest, useMigrations, useVMs } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
 import {
   useCreateSnapshot,
@@ -252,15 +252,7 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
         </div>
 
         <div className="panel">
-          {vm.guest_agent ? (
-            <div style={toolsPillStyle}>
-              ● KVM TOOLS: {vm.guest_source ?? 'present'}
-            </div>
-          ) : (
-            <div style={toolsPillMissingStyle} title="Install kvm-tools (or qemu-guest-agent) inside the guest to expose hostname, IP addresses, and filesystem usage.">
-              ● KVM TOOLS: not installed
-            </div>
-          )}
+          <KVMToolsPill vm={vm} />
           <KV label="Guest OS" value={vm.guest_os || '—'} />
           <KV label="Hostname" value={vm.guest_hostname || '—'} />
           <KV label="Kernel" value={vm.guest_kernel || '—'} />
@@ -543,6 +535,53 @@ function DiskIcon() {
   );
 }
 
+/**
+ * KVM tools status pill on the VM Summary. Shows the running version,
+ * flips to a warning tone with ⚠ when the guest's reported version
+ * lags the build the server is shipping. Whole pill is a Link to the
+ * Update Center so a click takes the operator straight to the page
+ * where they can queue an update.
+ */
+function KVMToolsPill({ vm }: { vm: VM }) {
+  const latest = useKVMToolsLatest();
+  const present = vm.guest_agent;
+  const reported = vm.kvm_tools_version || '';
+  const latestVer = latest.data?.version || '';
+  const outdated = present && latestVer && reported && reported !== latestVer;
+
+  if (!present) {
+    return (
+      <Link
+        to="/kvm-tools"
+        style={toolsPillMissingStyle}
+        title="Install kvm-tools inside the guest to expose hostname, IP addresses, and filesystem usage. Click for the Update Center."
+      >
+        ● KVM TOOLS: not installed
+      </Link>
+    );
+  }
+  if (outdated) {
+    return (
+      <Link
+        to="/kvm-tools"
+        style={toolsPillOutdatedStyle}
+        title={`Guest reports ${reported}, server ships ${latestVer}. Click to queue an update.`}
+      >
+        ● KVM TOOLS: {reported} ⚠ outdated
+      </Link>
+    );
+  }
+  return (
+    <Link
+      to="/kvm-tools"
+      style={toolsPillStyle}
+      title="kvm-tools is reporting. Click for the Update Center."
+    >
+      ● KVM TOOLS: {reported || (vm.guest_source ?? 'present')}
+    </Link>
+  );
+}
+
 const toolsPillStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -556,12 +595,22 @@ const toolsPillStyle: React.CSSProperties = {
   borderRadius: 10,
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
+  textDecoration: 'none',
+  cursor: 'pointer',
 };
 const toolsPillMissingStyle: React.CSSProperties = {
   ...toolsPillStyle,
   background: 'var(--surface-3)',
   color: 'var(--text-faded)',
-  cursor: 'help',
+  cursor: 'pointer',
+  textDecoration: 'none',
+};
+const toolsPillOutdatedStyle: React.CSSProperties = {
+  ...toolsPillStyle,
+  background: '#3D2510',
+  color: '#FF8A3C',
+  cursor: 'pointer',
+  textDecoration: 'none',
 };
 const sectionHeaderStyle: React.CSSProperties = {
   marginTop: 14,

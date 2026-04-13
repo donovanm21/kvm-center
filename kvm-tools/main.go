@@ -10,9 +10,11 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -22,6 +24,14 @@ import (
 	"strings"
 	"time"
 )
+
+// Version is read from the committed VERSION file at compile time. The
+// Dockerfile.build step copies server/VERSION → kvm-tools/VERSION so
+// the daemon and the server share a single source of truth.
+//
+//go:embed VERSION
+var versionRaw string
+var Version = strings.TrimSpace(versionRaw)
 
 // GuestFS mirrors models.GuestFS. Defined locally to keep this binary free of
 // internal package imports so it can be built and distributed standalone.
@@ -40,18 +50,28 @@ type GuestInterface struct {
 }
 
 type GuestTelemetryPayload struct {
-	VMUUID     string           `json:"vm_uuid"`
-	Hostname   string           `json:"hostname"`
-	OS         string           `json:"os"`
-	Kernel     string           `json:"kernel"`
-	Uptime     string           `json:"uptime"`
-	CPUCount   int              `json:"cpu_count"`
-	MemTotalMB uint64           `json:"mem_total_mb"`
-	MemUsedMB  uint64           `json:"mem_used_mb"`
-	IPs        []string         `json:"ips"`
-	Interfaces []GuestInterface `json:"interfaces,omitempty"`
-	FS         []GuestFS        `json:"fs"`
-	Timestamp  time.Time        `json:"timestamp"`
+	VMUUID          string           `json:"vm_uuid"`
+	Hostname        string           `json:"hostname"`
+	OS              string           `json:"os"`
+	Kernel          string           `json:"kernel"`
+	Uptime          string           `json:"uptime"`
+	CPUCount        int              `json:"cpu_count"`
+	MemTotalMB      uint64           `json:"mem_total_mb"`
+	MemUsedMB       uint64           `json:"mem_used_mb"`
+	IPs             []string         `json:"ips"`
+	Interfaces      []GuestInterface `json:"interfaces,omitempty"`
+	FS              []GuestFS        `json:"fs"`
+	KVMToolsVersion string           `json:"kvm_tools_version,omitempty"`
+	Timestamp       time.Time        `json:"timestamp"`
+}
+
+// TelemetryReply is the server's response to a telemetry POST. When
+// UpdateURL is non-empty the daemon downloads the binary at that URL,
+// replaces its own binary in place, and exits — systemd's Restart=always
+// brings it back on the new version.
+type TelemetryReply struct {
+	Status    string `json:"status"`
+	UpdateURL string `json:"update_url,omitempty"`
 }
 
 func main() {
@@ -70,7 +90,7 @@ func main() {
 			log.Fatalf("kvm-tools: cannot read DMI UUID (is this running in a VM?): %v", err)
 		}
 	}
-	log.Printf("kvm-tools: vm_uuid=%s  os=%s  server=%s  interval=%s", uuid, runtime.GOOS, *serverURL, *interval)
+	log.Printf("kvm-tools %s: vm_uuid=%s  os=%s  server=%s  interval=%s", Version, uuid, runtime.GOOS, *serverURL, *interval)
 
 	send(*serverURL, uuid)
 
@@ -104,10 +124,77 @@ func send(serverURL, uuid string) {
 		log.Printf("kvm-tools: send failed: %v", err)
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("kvm-tools: server returned %d", resp.StatusCode)
+		return
 	}
+	var reply TelemetryReply
+	if err := json.NewDecoder(resp.Body).Decode(&reply); err != nil {
+		// Older server versions returned a flat {status:"ok"} — that's
+		// still fine, just no update signal.
+		return
+	}
+	if reply.UpdateURL != "" {
+		log.Printf("kvm-tools: server requested self-update from %s", reply.UpdateURL)
+		if err := selfUpdate(reply.UpdateURL); err != nil {
+			log.Printf("kvm-tools: self-update failed: %v", err)
+		}
+	}
+}
+
+// selfUpdate downloads a new kvm-tools binary, replaces /opt/kvm-tools/
+// kvm-tools (or whatever path the running process was exec'd from) in
+// place via mv, and exits cleanly. systemd's Restart=always relaunches
+// the unit with the new binary on the next supervisor cycle.
+//
+// Linux allows mv onto a running ELF — the kernel keeps the old inode
+// alive for the running process, the new inode replaces the dirent.
+// The old process keeps running until exit; the new process starts
+// from the new inode.
+func selfUpdate(url string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("os.Executable: %w", err)
+	}
+	resp, err := (&http.Client{Timeout: 60 * time.Second}).Get(url)
+	if err != nil {
+		return fmt.Errorf("download: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download status %d", resp.StatusCode)
+	}
+	// Write to a sibling tmp in the same directory so we can atomically
+	// rename onto the executable (mv across filesystems would fail).
+	dir := exe + ".new"
+	out, err := os.OpenFile(dir, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
+	if err != nil {
+		return fmt.Errorf("create tmp: %w", err)
+	}
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		out.Close()
+		os.Remove(dir)
+		return fmt.Errorf("write tmp: %w", err)
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(dir)
+		return fmt.Errorf("close tmp: %w", err)
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		os.Remove(dir)
+		return fmt.Errorf("chmod: %w", err)
+	}
+	if err := os.Rename(dir, exe); err != nil {
+		os.Remove(dir)
+		return fmt.Errorf("rename: %w", err)
+	}
+	log.Printf("kvm-tools: replaced %s — exiting so systemd restarts on the new binary", exe)
+	// Exit cleanly so systemd's Restart=always kicks in. Sleep briefly
+	// so the log line lands before the process dies.
+	time.Sleep(200 * time.Millisecond)
+	os.Exit(0)
+	return nil
 }
 
 func collect(uuid string) GuestTelemetryPayload {
@@ -129,10 +216,11 @@ func collect(uuid string) GuestTelemetryPayload {
 		CPUCount:   runtime.NumCPU(),
 		MemTotalMB: memTotal,
 		MemUsedMB:  memUsed,
-		IPs:        ips,
-		Interfaces: ifaces,
-		FS:         readFilesystems(),
-		Timestamp:  time.Now(),
+		IPs:             ips,
+		Interfaces:      ifaces,
+		FS:              readFilesystems(),
+		KVMToolsVersion: Version,
+		Timestamp:       time.Now(),
 	}
 }
 
