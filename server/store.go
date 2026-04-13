@@ -294,22 +294,96 @@ func (s *Store) QueuedKVMToolsUpdates() []string {
 	return out
 }
 
-// ApplyGuestTelemetry stores a kvm-tools report and re-merges it onto any live VM.
-func (s *Store) ApplyGuestTelemetry(p *models.GuestTelemetryPayload) {
+// ApplyGuestTelemetry stores a kvm-tools report and re-merges it onto any
+// live VM. Returns the canonical libvirt UUID the telemetry was stored
+// under — if the guest's reported DMI UUID collided with another VM
+// (classic cloned-VM footgun, ark-srv01 vs LLM) the server resolves by
+// NIC MAC and hostname and returns the corrected UUID so the guest can
+// pin itself for subsequent reports.
+func (s *Store) ApplyGuestTelemetry(p *models.GuestTelemetryPayload) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if p.Timestamp.IsZero() {
 		p.Timestamp = time.Now()
 	}
-	key := strings.ToLower(p.VMUUID)
+	canonical := s.resolveCanonicalUUID(p)
+	if !strings.EqualFold(canonical, p.VMUUID) {
+		log.Printf("guest-telemetry: UUID collision — payload %s resolved to %s (likely cloned DMI UUID)", p.VMUUID, canonical)
+		p.VMUUID = canonical
+	}
+	key := strings.ToLower(canonical)
 	s.guestData[key] = &guestEntry{Payload: *p, UpdatedAt: time.Now()}
 	for _, vms := range s.vms {
 		for _, v := range vms {
-			if strings.EqualFold(v.UUID, p.VMUUID) {
+			if strings.EqualFold(v.UUID, canonical) {
 				s.applyVMSideData(v)
 			}
 		}
 	}
+	return canonical
+}
+
+// resolveCanonicalUUID picks the libvirt UUID this telemetry payload
+// really belongs to. Scoring beats direct UUID match because DMI UUIDs
+// can collide across cloned VMs; NIC MACs are globally unique on a
+// properly configured libvirt stack and are the tie-breaker.
+//
+// Score per candidate VM:
+//   +20 libvirt UUID == payload UUID
+//   +10 any libvirt NIC MAC matches a payload interface MAC
+//    +5 libvirt domain name matches payload Hostname
+//    +1 VM state is "running" (stopped VMs shouldn't be reporting)
+//
+// Called under s.mu; caller must hold the write lock.
+func (s *Store) resolveCanonicalUUID(p *models.GuestTelemetryPayload) string {
+	payloadMACs := make(map[string]bool)
+	for _, i := range p.Interfaces {
+		if i.MAC != "" {
+			payloadMACs[strings.ToLower(i.MAC)] = true
+		}
+	}
+	type cand struct {
+		uuid  string
+		score int
+	}
+	var best cand
+	var directUUIDMatch bool
+	for _, vms := range s.vms {
+		for _, v := range vms {
+			score := 0
+			if strings.EqualFold(v.UUID, p.VMUUID) {
+				score += 20
+				directUUIDMatch = true
+			}
+			for _, n := range v.Networks {
+				if n.MAC != "" && payloadMACs[strings.ToLower(n.MAC)] {
+					score += 10
+					break
+				}
+			}
+			if p.Hostname != "" && strings.EqualFold(v.Name, p.Hostname) {
+				score += 5
+			}
+			if v.State == "running" {
+				score++
+			}
+			if score > best.score {
+				best = cand{uuid: v.UUID, score: score}
+			}
+		}
+	}
+	// If no single candidate stood out, keep whatever the payload claimed —
+	// fresh VMs may send telemetry before the agent has reported them yet.
+	if best.score == 0 {
+		return p.VMUUID
+	}
+	// If the best match is the same VM the payload UUID points to, pass
+	// through. Otherwise the payload UUID is ambiguous (clone) and the
+	// MAC-scored winner takes it.
+	if directUUIDMatch && best.score < 15 {
+		return p.VMUUID
+	}
+	return best.uuid
 }
 
 // AddMigration inserts or updates a migration record.
