@@ -83,7 +83,14 @@ echo ""
 # ── Install ────────────────────────────────────────────────────────────────────
 mkdir -p "$INSTALL_DIR"
 cp "$BINARY" "${INSTALL_DIR}/${BINARY_NAME}"
-chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
+chown root:root "${INSTALL_DIR}/${BINARY_NAME}"
+chmod 0755 "${INSTALL_DIR}/${BINARY_NAME}"
+# SELinux: a binary copied in from /tmp or a curl-piped temp dir inherits
+# user_tmp_t which systemd refuses to exec. Reset to the parent dir's
+# context (usr_t under default policy). Tolerate non-SELinux systems.
+if command -v restorecon >/dev/null 2>&1; then
+  restorecon -F "${INSTALL_DIR}/${BINARY_NAME}" || true
+fi
 
 # ── Systemd unit ───────────────────────────────────────────────────────────────
 cat > "/etc/systemd/system/${SERVICE_NAME}.service" << EOF
