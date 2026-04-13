@@ -1,4 +1,15 @@
-# ── Stage 1: Build ────────────────────────────────────────────────────────────
+# ── Stage 1a: Build the React SPA ─────────────────────────────────────────────
+# Produces webui-react/dist, which the Go stage copies into
+# server/staticv4/dist before `go build` so //go:embed can pick it up.
+FROM node:20-alpine AS webui
+
+WORKDIR /webui
+COPY webui-react/package.json webui-react/package-lock.jso[n] ./
+RUN npm install --no-audit --no-fund --loglevel=error
+COPY webui-react/ ./
+RUN npm run build
+
+# ── Stage 1b: Build the Go server ─────────────────────────────────────────────
 FROM golang:1.22-alpine AS builder
 
 ARG VERSION=dev
@@ -6,6 +17,11 @@ ARG VERSION=dev
 WORKDIR /src
 COPY go.mod go.su[m] ./
 COPY . .
+# Drop in the built SPA so the Go //go:embed directive finds a populated
+# staticv4 tree. The directory is .gitignored in dev; CI produces it.
+RUN rm -rf server/staticv4/dist
+COPY --from=webui /webui/dist ./server/staticv4/dist
+
 # Resolve dependencies based on source imports. Works whether or not a
 # committed go.sum exists.
 RUN go mod tidy
