@@ -308,21 +308,53 @@ curl -s ${serverURL}/api/vms | python3 -m json.tool`;
 
 /* ── Copy block ──────────────────────────────────────────── */
 function CopyBlock({ body }: { body: string }) {
-  const [copied, setCopied] = useState(false);
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const flash = (s: 'copied' | 'failed') => {
+    setState(s);
+    setTimeout(() => setState('idle'), 1800);
+  };
   const copy = async () => {
+    // navigator.clipboard requires a secure context (HTTPS or localhost).
+    // The kvm-center UI is typically served over plain HTTP on a homelab
+    // LAN, so fall back to the legacy execCommand('copy') path which
+    // works without a secure context.
+    if (window.isSecureContext && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(body);
+        flash('copied');
+        return;
+      } catch {
+        // permission denied (rare) — fall through to the textarea path
+      }
+    }
     try {
-      await navigator.clipboard.writeText(body);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      const ta = document.createElement('textarea');
+      ta.value = body;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      flash(ok ? 'copied' : 'failed');
     } catch {
-      /* clipboard perm denied */
+      flash('failed');
     }
   };
   return (
     <div style={{ position: 'relative', marginTop: 10 }}>
       <pre style={preStyle}>{body}</pre>
-      <button type="button" onClick={copy} style={copyBtnStyle}>
-        {copied ? 'Copied!' : 'Copy'}
+      <button
+        type="button"
+        onClick={copy}
+        style={copyBtnStyle}
+        title={state === 'failed' ? 'Browser blocked the copy — select the text and copy manually.' : ''}
+      >
+        {state === 'copied' ? 'Copied!' : state === 'failed' ? 'Copy failed' : 'Copy'}
       </button>
     </div>
   );
