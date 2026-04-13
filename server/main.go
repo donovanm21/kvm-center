@@ -127,21 +127,29 @@ func main() {
 	}()
 
 	// Serve embedded web UI for everything else.
-	sub, err := fs.Sub(staticFiles, "static")
+	legacySub, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		log.Fatalf("server: static embed error: %v", err)
 	}
 
-	// v4 React SPA — served under /v4/ so the legacy v3 UI at "/" stays
-	// intact during the port. The SPA uses client-side routing, so any
-	// unknown /v4/<path> should fall back to /v4/index.html.
-	if sub4, err := fs.Sub(staticV4Files, "staticv4/dist"); err == nil {
-		mux.Handle("/v4/", http.StripPrefix("/v4/", spaHandler(sub4)))
+	// v4.0.0 cutover: the React SPA is now the primary UI served at "/".
+	// The legacy v3 HTML stays available at "/legacy/" for a grace window;
+	// its absolute-URL fetches to /api, /icon-192.svg, and /manifest.json
+	// all still resolve at the root paths the SPA bundle publishes.
+	sub4, err := fs.Sub(staticV4Files, "staticv4/dist")
+	if err != nil {
+		// In a minimal "go run ./server" without a Node build there is no
+		// SPA bundle. Fall through to legacy-only so local-dev still boots.
+		log.Printf("server: v4 SPA bundle not embedded (%v) — falling back to legacy UI at /", err)
+		mux.Handle("/", http.FileServer(http.FS(legacySub)))
 	} else {
-		log.Printf("server: v4 SPA bundle not embedded (%v) — legacy UI only", err)
+		mux.Handle("/", spaHandler(sub4))
+		mux.Handle("/legacy", http.RedirectHandler("/legacy/", http.StatusMovedPermanently))
+		mux.Handle("/legacy/", http.StripPrefix("/legacy", http.FileServer(http.FS(legacySub))))
 	}
-
-	mux.Handle("/", http.FileServer(http.FS(sub)))
+	// Any lingering /v4/... bookmark from the alpha period gets punted to /.
+	mux.Handle("/v4", http.RedirectHandler("/", http.StatusMovedPermanently))
+	mux.Handle("/v4/", http.RedirectHandler("/", http.StatusMovedPermanently))
 
 	handler := corsMiddleware(loggingMiddleware(authMiddleware(store, mux)))
 
