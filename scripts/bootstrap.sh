@@ -20,7 +20,8 @@ Modes:
   --agent           Run the agent locally (go run, for testing)
   --stack           Build and start the full Docker stack (server + webui)
   --build           Run the Dockerfile.build container (compiles + serves artifacts on :8080)
-  --deploy          Pull latest git and rebuild Docker stack
+  --deploy          Pull latest git, rebuild Docker stack, push agent updates
+  --update-agents   Push the latest agent binary to every known hypervisor
   --logs            Tail Docker stack logs
   --status          Show Docker container status
   --stop            Stop Docker stack
@@ -79,7 +80,40 @@ case "$MODE" in
     git reset --hard origin/main
     docker compose build
     docker compose up -d
+    echo "Stack deployed. Pushing fresh agent binary to each hypervisor…"
+    "$REPO_DIR/scripts/bootstrap.sh" --update-agents || \
+      echo "WARN: agent push had errors — run './scripts/bootstrap.sh --update-agents' manually"
     echo "Deploy complete."
+    ;;
+
+  --update-agents)
+    # Roll the latest agent binary out to every host the server knows
+    # about. Reads /api/hosts from the running server, then SSHes to
+    # each host's IP and runs update-agent.sh in-place. Requires either:
+    #   - sshpass + KVM_HVNODE_SSH_PASS env var, OR
+    #   - passwordless SSH from this host to root@<hvnode>.
+    SERVER_API="${KVM_CENTER_API:-http://localhost:8090}"
+    BUILD_URL="${KVM_CENTER_BUILD_URL:-http://10.10.100.8:8097}"
+    SSH_USER="${KVM_HVNODE_SSH_USER:-root}"
+    if ! command -v curl >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+      echo "ERROR: --update-agents needs curl + jq" >&2
+      exit 1
+    fi
+    HOSTS=$(curl -fsS "$SERVER_API/api/hosts" | jq -r '.[].ip' || true)
+    if [[ -z "$HOSTS" ]]; then
+      echo "No hosts returned from $SERVER_API/api/hosts — nothing to do."
+      exit 0
+    fi
+    for ip in $HOSTS; do
+      echo "── $ip ───────────────────────────"
+      SSH_CMD=(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 "$SSH_USER@$ip"
+        "curl -fsSL ${BUILD_URL}/update-agent.sh | KVM_CENTER_BUILD_URL=${BUILD_URL} bash")
+      if [[ -n "${KVM_HVNODE_SSH_PASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
+        sshpass -p "$KVM_HVNODE_SSH_PASS" "${SSH_CMD[@]}" || echo "  ✕ failed on $ip"
+      else
+        "${SSH_CMD[@]}" || echo "  ✕ failed on $ip (set KVM_HVNODE_SSH_PASS for password auth)"
+      fi
+    done
     ;;
 
   --logs)

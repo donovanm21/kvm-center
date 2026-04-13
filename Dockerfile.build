@@ -38,9 +38,10 @@ RUN mkdir -p /dist && \
     cp /out/kvm-tools-linux-arm64 /dist/ && \
     cp /out/kvm-tools-windows-amd64.exe /dist/ && \
     cp /src/scripts/install-agent.sh /dist/ && \
+    cp /src/scripts/update-agent.sh /dist/ && \
     cp /src/kvm-tools/install.sh /dist/install-kvm-tools.sh && \
     cp /src/kvm-tools/install.ps1 /dist/install-kvm-tools.ps1 && \
-    chmod +x /dist/install-agent.sh /dist/install-kvm-tools.sh && \
+    chmod +x /dist/install-agent.sh /dist/update-agent.sh /dist/install-kvm-tools.sh && \
     (cp /src/migration-keys/kvm-migrator-key /dist/kvm-migrator-key 2>/dev/null || true) && \
     (cp /src/migration-keys/kvm-migrator-key.pub /dist/kvm-migrator-key.pub 2>/dev/null || true) && \
     cd /out && tar czf /dist/kvm-center-server.tar.gz kvm-center-server && \
