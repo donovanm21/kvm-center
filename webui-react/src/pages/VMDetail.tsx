@@ -312,9 +312,7 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
 function UsageCard({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
   return (
     <div className="panel" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
-      <div style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#2D1810', borderRadius: 4, color: '#E3571E' }}>
-        {icon}
-      </div>
+      <div className="tone-icon-tile accent">{icon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-faded)' }}>
           {label}
@@ -549,69 +547,29 @@ function KVMToolsPill({ vm }: { vm: VM }) {
   const latestVer = latest.data?.version || '';
   const outdated = present && latestVer && reported && reported !== latestVer;
 
-  if (!present) {
-    return (
-      <Link
-        to="/kvm-tools"
-        style={toolsPillMissingStyle}
-        title="Install kvm-tools inside the guest to expose hostname, IP addresses, and filesystem usage. Click for the Update Center."
-      >
-        ● KVM TOOLS: not installed
-      </Link>
-    );
-  }
-  if (outdated) {
-    return (
-      <Link
-        to="/kvm-tools"
-        style={toolsPillOutdatedStyle}
-        title={`Guest reports ${reported}, server ships ${latestVer}. Click to queue an update.`}
-      >
-        ● KVM TOOLS: {reported} ⚠ outdated
-      </Link>
-    );
-  }
+  const cls = !present ? 'muted' : outdated ? 'warn' : 'ok';
+  const label = !present
+    ? '● KVM TOOLS: not installed'
+    : outdated
+      ? `● KVM TOOLS: ${reported} ⚠ outdated`
+      : `● KVM TOOLS: ${reported || (vm.guest_source ?? 'present')}`;
+  const title = !present
+    ? 'Install kvm-tools inside the guest to expose hostname, IP addresses, and filesystem usage. Click for the Update Center.'
+    : outdated
+      ? `Guest reports ${reported}, server ships ${latestVer}. Click to queue an update.`
+      : 'kvm-tools is reporting. Click for the Update Center.';
   return (
     <Link
       to="/kvm-tools"
-      style={toolsPillStyle}
-      title="kvm-tools is reporting. Click for the Update Center."
+      className={`tone-pill ${cls}`}
+      title={title}
+      style={{ marginBottom: 10, gap: 6, textDecoration: 'none', textTransform: 'uppercase' }}
     >
-      ● KVM TOOLS: {reported || (vm.guest_source ?? 'present')}
+      {label}
     </Link>
   );
 }
 
-const toolsPillStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '2px 10px',
-  marginBottom: 10,
-  background: '#1E3D23',
-  color: '#3FB950',
-  fontSize: 10,
-  fontWeight: 600,
-  borderRadius: 10,
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px',
-  textDecoration: 'none',
-  cursor: 'pointer',
-};
-const toolsPillMissingStyle: React.CSSProperties = {
-  ...toolsPillStyle,
-  background: 'var(--surface-3)',
-  color: 'var(--text-faded)',
-  cursor: 'pointer',
-  textDecoration: 'none',
-};
-const toolsPillOutdatedStyle: React.CSSProperties = {
-  ...toolsPillStyle,
-  background: '#3D2510',
-  color: '#FF8A3C',
-  cursor: 'pointer',
-  textDecoration: 'none',
-};
 const sectionHeaderStyle: React.CSSProperties = {
   marginTop: 14,
   fontSize: 10,
@@ -891,25 +849,17 @@ function GuestInterfacesPanel({ ifaces }: { ifaces: NonNullable<VM['guest_interf
   );
 }
 
-const GUEST_KIND_TONE: Record<string, { bg: string; fg: string; label: string }> = {
-  primary:   { bg: '#1E3D23', fg: '#3FB950', label: 'PRIMARY' },
-  docker:    { bg: '#0F2A4A', fg: '#58A6FF', label: 'DOCKER' },
-  container: { bg: '#21304A', fg: '#79C0FF', label: 'CONTAINER' },
-  vpn:       { bg: '#3D2510', fg: '#FF8A3C', label: 'VPN' },
-  bridge:    { bg: '#2D2D2D', fg: '#C9D1D9', label: 'BRIDGE' },
-  other:     { bg: 'var(--surface-3)', fg: 'var(--text-muted)', label: 'OTHER' },
+const GUEST_KIND_TONE: Record<string, { tone: 'ok' | 'warn' | 'danger' | 'info' | 'muted'; label: string }> = {
+  primary:   { tone: 'ok',    label: 'PRIMARY' },
+  docker:    { tone: 'info',  label: 'DOCKER' },
+  container: { tone: 'info',  label: 'CONTAINER' },
+  vpn:       { tone: 'warn',  label: 'VPN' },
+  bridge:    { tone: 'muted', label: 'BRIDGE' },
+  other:     { tone: 'muted', label: 'OTHER' },
 };
 function GuestKindPill({ kind }: { kind: string }) {
-  const tone = GUEST_KIND_TONE[kind] ?? GUEST_KIND_TONE.other;
-  return (
-    <span style={{
-      display: 'inline-block', padding: '1px 8px', borderRadius: 8,
-      fontSize: 9, fontWeight: 700, letterSpacing: '0.5px',
-      background: tone.bg, color: tone.fg,
-    }}>
-      {tone.label}
-    </span>
-  );
+  const t = GUEST_KIND_TONE[kind] ?? GUEST_KIND_TONE.other;
+  return <span className={`tone-pill ${t.tone}`}>{t.label}</span>;
 }
 
 /**
@@ -990,36 +940,18 @@ export function IPBadge({ ip }: { ip: string }) {
     }
   };
   const label = state === 'copied' ? '✓ copied' : state === 'failed' ? '✕ copy failed' : ip;
+  const cls = state === 'copied' ? 'copied' : state === 'failed' ? 'failed' : '';
   return (
     <button
       type="button"
       onClick={copy}
+      className={`ip-badge ${cls}`.trim()}
       title={state === 'failed' ? 'Browser blocked the copy — select the text manually.' : `Copy ${ip} to clipboard`}
-      style={{
-        ...ipBadgeBaseStyle,
-        background: state === 'copied' ? '#1E3D23' : state === 'failed' ? '#3D1E1E' : 'var(--bg-input)',
-        color: state === 'copied' ? '#3FB950' : state === 'failed' ? '#F85149' : 'var(--text-body)',
-        borderColor: state === 'copied' ? '#2E5E35' : state === 'failed' ? '#5C2A2A' : 'var(--border)',
-      }}
     >
       {label}
     </button>
   );
 }
-
-const ipBadgeBaseStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  height: 22,
-  padding: '0 8px',
-  fontFamily: "'SF Mono', monospace",
-  fontSize: 11,
-  fontWeight: 500,
-  border: '1px solid var(--border)',
-  borderRadius: 4,
-  cursor: 'pointer',
-  transition: 'background 0.12s, color 0.12s, border-color 0.12s',
-};
 
 const ipMoreBtnStyle: React.CSSProperties = {
   background: 'transparent',

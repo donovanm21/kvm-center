@@ -321,13 +321,12 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
       )}
 
       {blockingMigration && (
-        <div style={{
-          marginTop: 14, padding: '10px 12px',
-          background: '#3D2510', border: '1px solid #5C3814', borderLeft: '3px solid #FF8A3C',
-          borderRadius: 4, fontSize: 12, color: '#FFB37A',
-        }}>
+        <div
+          className="tone-panel warn"
+          style={{ marginTop: 14, padding: '10px 12px', borderLeftWidth: 3, fontSize: 12 }}
+        >
           <strong>Host is busy.</strong>{' '}
-          <span style={{ color: '#FFD7B3' }}>{blockingMigration.vm_name}</span>{' '}
+          <span style={{ fontWeight: 600 }}>{blockingMigration.vm_name}</span>{' '}
           is migrating {blockingMigration.source_host} → {blockingMigration.dest_host}{' '}
           ({blockingMigration.phase || 'starting'} · {blockingMigration.progress ?? 0}%).
           Wait for it to finish, then try again.

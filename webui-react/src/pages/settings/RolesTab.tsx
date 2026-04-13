@@ -196,8 +196,8 @@ const permPillStyle: React.CSSProperties = {
   fontFamily: "'SF Mono', monospace",
 };
 const adminPillStyle: React.CSSProperties = {
-  background: '#2D1810',
-  color: '#FF8A3C',
+  background: 'var(--accent-subtle)',
+  color: 'var(--accent)',
   fontWeight: 600,
 };
 const builtInBadge: React.CSSProperties = {

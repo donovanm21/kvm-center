@@ -274,7 +274,7 @@ function ActiveCard({ m }: { m: MigrationRecord }) {
         <span style={{ fontSize: 12, color: 'var(--text-strong)' }}>{pct}%</span>
       </div>
       <div style={{ height: 8, background: 'var(--surface-3)', borderRadius: 4, overflow: 'hidden' }}>
-        <div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', background: '#E3571E', transition: 'width 0.5s' }} />
+        <div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', background: 'var(--accent)', transition: 'width 0.5s' }} />
       </div>
       <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-faded)' }}>
         {m.detail || ''} · Started {fmtTime(m.started_at)}
@@ -284,23 +284,19 @@ function ActiveCard({ m }: { m: MigrationRecord }) {
 }
 
 function StatusPill({ status }: { status: string }) {
-  const bg =
-    status === 'running' ? '#3D2510' :
-    status === 'complete' ? '#1E3D23' :
-    status === 'failed' ? '#3D1E1E' :
-    'var(--surface-3)';
-  const color =
-    status === 'running' ? '#FF8A3C' :
-    status === 'complete' ? '#3FB950' :
-    status === 'failed' ? '#F85149' :
-    'var(--text-muted)';
-  return <span style={{ ...pillStyle, background: bg, color }}>{status}</span>;
+  const tone =
+    status === 'running'  ? 'warn' :
+    status === 'complete' ? 'ok' :
+    status === 'failed'   ? 'danger' :
+    'muted';
+  return <span className={`tone-pill ${tone}`}>{status}</span>;
 }
 
 function ModePill({ mode }: { mode: string }) {
-  const bg = mode === 'live' ? '#3D2510' : '#2D1810';
-  const color = mode === 'live' ? '#ff9800' : '#FF8A3C';
-  return <span style={{ ...pillStyle, background: bg, color }}>{mode}</span>;
+  // Both modes are "informational" but live is slightly hotter since it
+  // carries more risk (stream-in-flight). Use warn for live, info for
+  // offline so they're visually distinct without reading.
+  return <span className={`tone-pill ${mode === 'live' ? 'warn' : 'info'}`}>{mode}</span>;
 }
 
 function SectionHeader({ label, style }: { label: string; style?: React.CSSProperties }) {
@@ -332,13 +328,3 @@ function fmtDuration(sec?: number): string {
   return `${Math.floor(sec / 60)}m ${sec % 60}s`;
 }
 
-const pillStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: '2px 10px',
-  borderRadius: 10,
-  fontSize: 10,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px',
-};

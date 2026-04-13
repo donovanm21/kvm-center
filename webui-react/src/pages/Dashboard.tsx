@@ -179,20 +179,7 @@ function HostCard({ host, vms, pools }: { host: Host; vms: VM[]; pools: StorageP
 
 function StatusPill({ online }: { online: boolean }) {
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        fontSize: 10,
-        fontWeight: 700,
-        padding: '1px 8px',
-        borderRadius: 3,
-        background: online ? '#1E3D23' : 'var(--surface-3)',
-        color: online ? '#3FB950' : 'var(--text-muted)',
-        letterSpacing: '0.04em',
-      }}
-    >
+    <span className={`tone-pill ${online ? 'ok' : 'muted'}`} style={{ padding: '1px 8px', borderRadius: 3 }}>
       {online ? 'UP' : 'DOWN'}
     </span>
   );
@@ -239,10 +226,13 @@ function HostChipIcon() {
 }
 
 const cardStyle: React.CSSProperties = { padding: '16px 18px' };
+// Big accent-tinted square behind the host-card emoji; uses the same
+// accent colour-pair as the .tone-icon-tile.accent class scaled up.
 const hostIconStyle: React.CSSProperties = {
   width: 72,
   height: 72,
-  background: '#2D1810',
+  background: 'var(--accent-subtle, #2D1810)',
+  color: 'var(--accent)',
   border: '1px solid var(--border)',
   borderRadius: 6,
   display: 'flex',

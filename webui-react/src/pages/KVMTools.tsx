@@ -282,34 +282,21 @@ function statusDetail(status: Status, v: VM, latest: string): string {
 }
 
 function StatusPill({ status, queued }: { status: Status; queued?: boolean }) {
-  if (queued) {
-    return <span className="lock-pill warn">queued</span>;
-  }
+  if (queued) return <span className="tone-pill warn">QUEUED</span>;
   const tone = STATUS_TONE[status];
-  return <span style={{
-    display: 'inline-block', padding: '2px 10px', borderRadius: 10,
-    fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
-    background: tone.bg, color: tone.fg,
-  }}>{tone.label}</span>;
+  return <span className={`tone-pill ${tone.tone}`}>{tone.label}</span>;
 }
 
-const STATUS_TONE: Record<Status, { bg: string; fg: string; label: string }> = {
-  current:    { bg: '#1E3D23', fg: '#3FB950', label: 'CURRENT' },
-  outdated:   { bg: '#3D2510', fg: '#FF8A3C', label: 'OUTDATED' },
-  missing:    { bg: '#3D1E1E', fg: '#F85149', label: 'MISSING' },
-  'no-tools': { bg: 'var(--surface-3)', fg: 'var(--text-faded)', label: 'NO TOOLS' },
+const STATUS_TONE: Record<Status, { tone: 'ok' | 'warn' | 'danger' | 'muted'; label: string }> = {
+  current:    { tone: 'ok',     label: 'CURRENT' },
+  outdated:   { tone: 'warn',   label: 'OUTDATED' },
+  missing:    { tone: 'danger', label: 'MISSING' },
+  'no-tools': { tone: 'muted',  label: 'NO TOOLS' },
 };
 
 function PillCount({ label, value, tone }: { label: string; value: number; tone: 'ok' | 'warn' | 'danger' | 'muted' }) {
-  const colors: Record<string, { bg: string; fg: string }> = {
-    ok:     { bg: '#1E3D23', fg: '#3FB950' },
-    warn:   { bg: '#3D2510', fg: '#FF8A3C' },
-    danger: { bg: '#3D1E1E', fg: '#F85149' },
-    muted:  { bg: 'var(--surface-3)', fg: 'var(--text-faded)' },
-  };
-  const c = colors[tone];
   return (
-    <div style={{ background: c.bg, color: c.fg, padding: '6px 12px', borderRadius: 6, minWidth: 80, textAlign: 'center' }}>
+    <div className={`tone-panel ${tone}`} style={{ padding: '6px 12px', minWidth: 80, textAlign: 'center' }}>
       <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.8 }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 600 }}>{value}</div>
     </div>

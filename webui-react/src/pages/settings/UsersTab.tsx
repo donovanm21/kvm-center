@@ -50,9 +50,9 @@ export function UsersTab() {
                 <tr key={u.id}>
                   <td style={{ fontWeight: 500, color: 'var(--text-strong)' }}>
                     {u.username}
-                    {u.totp_enabled && <span style={totpBadge} title="TOTP 2FA enrolled">2FA</span>}
+                    {u.totp_enabled && <span className="tone-pill ok" style={totpBadge} title="TOTP 2FA enrolled">2FA</span>}
                     {u.external_ids && u.external_ids.length > 0 && (
-                      <span style={extBadge} title="Federated identity">ext</span>
+                      <span className="tone-pill warn" style={extBadge} title="Federated identity">ext</span>
                     )}
                   </td>
                   <td style={{ color: 'var(--text-muted)' }}>{u.email || '—'}</td>
@@ -231,7 +231,7 @@ function UserFormModal({ form, onClose }: { form: FormMode; onClose: () => void 
       </label>
 
       {err && (
-        <div style={{ marginTop: 10, padding: '8px 12px', background: '#3D1E1E', color: '#FFB3B3', border: '1px solid #A02929', borderRadius: 4, fontSize: 12 }}>
+        <div className="tone-panel danger" style={{ marginTop: 10, padding: '8px 12px', borderRadius: 4, fontSize: 12 }}>
           {err}
         </div>
       )}
@@ -323,21 +323,7 @@ const pillStyle: React.CSSProperties = {
   marginRight: 4,
   color: 'var(--text-body)',
 };
-const totpBadge: React.CSSProperties = {
-  marginLeft: 8,
-  fontSize: 9,
-  padding: '1px 6px',
-  borderRadius: 10,
-  background: '#1E3D23',
-  color: '#3FB950',
-  fontWeight: 600,
-};
-const extBadge: React.CSSProperties = {
-  marginLeft: 6,
-  fontSize: 9,
-  padding: '1px 6px',
-  borderRadius: 10,
-  background: '#2D1810',
-  color: '#FF8A3C',
-  fontWeight: 600,
-};
+// Compact badge wrappers — give the tone via className, let CSS handle
+// both themes. Kept around as CSSProperties only for the margin nudges.
+const totpBadge: React.CSSProperties = { marginLeft: 8 };
+const extBadge:  React.CSSProperties = { marginLeft: 6 };
