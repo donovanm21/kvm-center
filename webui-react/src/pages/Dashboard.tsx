@@ -157,7 +157,7 @@ function HostCard({ host, vms, pools }: { host: Host; vms: VM[]; pools: StorageP
             <span>{stoppedVMs} stopped</span>
             <span>{pools.length} storage pool{pools.length === 1 ? '' : 's'}</span>
             <span>◎ {host.cpu_count} CPU</span>
-            <span>💾 {ramGB} GB RAM</span>
+            <span>{ramGB} GB RAM</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 10 }}>
             <MetricBar label="CPU" pct={cpuPct} />

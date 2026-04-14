@@ -14,6 +14,7 @@ interface Channel {
   webhook_format?: '' | 'discord' | 'slack' | 'generic';
   email_to?: string;
   email_from?: string;
+  event_types?: Record<string, boolean>;
   last_send_at?: string;
   last_send_error?: string;
   last_send_count?: number;
@@ -108,7 +109,10 @@ export function NotificationsTab() {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div className="panel">
-        <div style={sectionHeader}>Event subscriptions</div>
+        <div style={sectionHeader}>Default event subscriptions</div>
+        <p style={{ margin: '0 0 10px 0', fontSize: 11, color: 'var(--text-muted)' }}>
+          Channels without their own subscription use these defaults. Override per-channel below to route different events to different places.
+        </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 6 }}>
           {allTypes.map((t) => (
             <label key={t} style={checkboxRow}>
@@ -219,6 +223,17 @@ export function NotificationsTab() {
                   </Field>
                 </div>
               )}
+              <ChannelSubscription
+                ch={ch}
+                allTypes={allTypes}
+                onToggle={(t, on) => {
+                  const next = { ...(ch.event_types || {}) };
+                  next[t] = on;
+                  updateChannel(idx, { event_types: next });
+                }}
+                onResetToDefault={() => updateChannel(idx, { event_types: undefined })}
+                onCopyFromDefault={() => updateChannel(idx, { event_types: { ...form.event_types } })}
+              />
               {(ch.last_send_at || ch.last_send_error) && (
                 <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-faded)' }}>
                   Last send: {ch.last_send_at || '—'}
@@ -278,6 +293,61 @@ export function NotificationsTab() {
           {save.isPending ? 'Saving…' : 'Save settings'}
         </button>
       </div>
+    </div>
+  );
+}
+
+function ChannelSubscription({
+  ch, allTypes, onToggle, onResetToDefault, onCopyFromDefault,
+}: {
+  ch: Channel;
+  allTypes: string[];
+  onToggle: (t: string, on: boolean) => void;
+  onResetToDefault: () => void;
+  onCopyFromDefault: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasOverride = !!ch.event_types && Object.keys(ch.event_types).length > 0;
+  const enabledCount = hasOverride ? Object.values(ch.event_types!).filter(Boolean).length : null;
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+        <button
+          type="button"
+          className="btn-secondary-sm"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? '▾' : '▸'} Event routing
+        </button>
+        {hasOverride
+          ? <span className="tone-pill accent" style={{ fontSize: 10 }}>override: {enabledCount} events</span>
+          : <span className="tone-pill" style={{ fontSize: 10 }}>using defaults</span>}
+        {hasOverride && (
+          <button type="button" className="btn-secondary-sm" onClick={onResetToDefault}>
+            Clear override
+          </button>
+        )}
+        {!hasOverride && (
+          <button type="button" className="btn-secondary-sm" onClick={onCopyFromDefault}>
+            Start from defaults
+          </button>
+        )}
+      </div>
+      {open && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 4, marginTop: 8 }}>
+          {allTypes.map((t) => (
+            <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-body)' }}>
+              <input
+                type="checkbox"
+                checked={!!ch.event_types?.[t]}
+                onChange={(e) => onToggle(t, e.target.checked)}
+              />
+              <span>{EVENT_LABELS[t] || t}</span>
+              <span style={{ color: 'var(--text-faded)', fontSize: 10, marginLeft: 'auto' }}>{t}</span>
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

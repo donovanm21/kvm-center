@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"strings"
 	"sync"
@@ -42,6 +44,12 @@ type persistData struct {
 	// on first use; persisted so agents that cached it don't need a
 	// re-fetch after a server restart.
 	ConsoleSecret string `json:"console_secret,omitempty"`
+
+	// Dirty is a transient hint to the persistence backend listing
+	// which cold collections changed since the last save. Never
+	// serialised — mongo backend reads it to skip unchanged
+	// collections, JSON backend ignores it (file is whole-state).
+	Dirty map[string]bool `json:"-" bson:"-"`
 }
 
 // guestEntry is one cached report from a kvm-tools daemon running in a guest.
@@ -727,6 +735,58 @@ func (s *Store) MarkOfflineHosts() {
 	}
 }
 
+// lastHashes caches FNV hashes of each cold collection from the
+// previous Save, letting us compute a dirty set automatically instead
+// of instrumenting every mutator. Access is serialised by s.mu.
+var lastHashes = struct {
+	mu sync.Mutex
+	m  map[string]uint64
+}{m: map[string]uint64{}}
+
+// computeDirty hashes each cold collection's JSON form, compares to
+// the previous snapshot, and returns the set that changed. First call
+// returns nil (save everything) so Mongo reaches a known-good state.
+func computeDirty(d *persistData) map[string]bool {
+	lastHashes.mu.Lock()
+	defer lastHashes.mu.Unlock()
+	first := len(lastHashes.m) == 0
+	out := map[string]bool{}
+	fields := map[string]any{
+		"users":             d.Users,
+		"groups":            d.Groups,
+		"roles":             d.Roles,
+		"idps":              d.IDPs,
+		"sessions":          d.Sessions,
+		"features":          d.Features,
+		"server_meta":       d.ConsoleSecret,
+		"notifications":     d.Notifications,
+		"audit_shipping":    d.AuditShipping,
+		"api_tokens":        d.APITokens,
+		"snapshot_policies": d.SnapshotPolicies,
+	}
+	for name, v := range fields {
+		h := hashJSON(v)
+		if first || lastHashes.m[name] != h {
+			out[name] = true
+		}
+		lastHashes.m[name] = h
+	}
+	if first {
+		return nil // nil == write everything on first Save
+	}
+	return out
+}
+
+func hashJSON(v any) uint64 {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return 0
+	}
+	h := fnv.New64a()
+	h.Write(b)
+	return h.Sum64()
+}
+
 // Save persists the current store state through the configured
 // backend (JSON file or Mongo).
 func (s *Store) Save() {
@@ -752,6 +812,7 @@ func (s *Store) Save() {
 		ConsoleSecret:    s.consoleSecret,
 	}
 	s.mu.RUnlock()
+	d.Dirty = computeDirty(&d)
 
 	if s.backend == nil {
 		log.Printf("store: no backend configured, skipping save")

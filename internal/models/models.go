@@ -144,6 +144,14 @@ type NotificationChannel struct {
 	EmailTo   string `json:"email_to,omitempty"`   // comma-separated
 	EmailFrom string `json:"email_from,omitempty"`
 
+	// EventTypes (v5.7) is this channel's event subscription. When
+	// non-empty it overrides the global NotificationConfig.EventTypes
+	// for this channel — so operators can route e.g. "migration.failed"
+	// to a PagerDuty webhook and "vm.crashed" to a quieter Discord
+	// channel. When empty, the channel inherits the global set (old
+	// broadcast behaviour, no breaking change).
+	EventTypes map[string]bool `json:"event_types,omitempty"`
+
 	// Observability.
 	LastSendAt    string `json:"last_send_at,omitempty"`
 	LastSendError string `json:"last_send_error,omitempty"`
