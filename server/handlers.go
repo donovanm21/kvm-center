@@ -330,12 +330,14 @@ func handleCommand(store *Store) http.HandlerFunc {
 					return
 				}
 			}
-			// Offline migrations always use SSH+scp; live migrations use
-			// whatever handleCommand decided upstream (tls when both
-			// hosts are enrolled, else ssh).
-			transport := "ssh"
-			if action == "MIGRATE" && req.Params["migration_transport"] == "tls" {
-				transport = "tls"
+			// v5.11.4: both live and offline honour the server's auto-
+			// selected transport (or the operator's pin). Legacy
+			// behaviour was "offline always ssh" but offline now
+			// participates in the grant workflow when both hosts are
+			// mTLS-ready, so the record should reflect that.
+			transport := req.Params["migration_transport"]
+			if transport == "" {
+				transport = "ssh"
 			}
 			migRec = &models.MigrationRecord{
 				ID:         fmt.Sprintf("%s-%d", req.VMName, time.Now().UnixNano()),
