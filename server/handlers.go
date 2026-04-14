@@ -755,16 +755,33 @@ func handleVMCreate(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "host not found")
 			return
 		}
+		// Buffer the body so we can re-use it for the agent POST while
+		// still being able to peek at the VM name for the audit event.
+		bodyBytes, _ := io.ReadAll(r.Body)
+		var meta struct {
+			Name string `json:"name"`
+		}
+		_ = json.Unmarshal(bodyBytes, &meta)
+
 		client := &http.Client{Timeout: 5 * time.Minute}
 		resp, err := client.Post(
 			fmt.Sprintf("http://%s/vm-create", agentAddr),
-			"application/json", r.Body)
+			"application/json", bytes.NewReader(bodyBytes))
 		if err != nil {
 			writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
 			return
 		}
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
+		// Audit the create attempt either way — failures are
+		// operationally important too. Resource is "vm/<name>" since
+		// we don't know the libvirt UUID until after the agent replies.
+		ok := resp.StatusCode < 400
+		errMsg := ""
+		if !ok {
+			errMsg = strings.TrimSpace(string(body))
+		}
+		audit(store, r, AuditVMCreate, "vm/"+meta.Name, map[string]string{"host_id": hostID}, ok, errMsg)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
 		w.Write(body)

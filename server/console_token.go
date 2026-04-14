@@ -107,7 +107,9 @@ func handleConsoleToken(store *Store) http.HandlerFunc {
 			port = 8081
 		}
 		token, exp, nonce := store.SignConsoleToken(hostID, vmName)
-		audit(store, r, AuditConsoleOpen, "vm/"+vmName, map[string]string{"host_id": hostID}, true, "")
+		// (vm.console audit lives on handleConsolePage now — see
+		// console_proxy.go. Keeping that call avoids double events
+		// when the SPA still hits this legacy token endpoint.)
 
 		consoleURL := fmt.Sprintf("http://%s:%d/console/%s?token=%s&exp=%d&nonce=%s",
 			h.IP, port, url.PathEscape(vmName),
