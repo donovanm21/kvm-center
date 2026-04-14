@@ -488,8 +488,16 @@ func offlineMigrate(ctx context.Context, vmName, dest string, keepRaw bool) erro
 	setMigStatus("cleanup", 98, "Cleaning up source host")
 	logStep("cleaning up source — VM confirmed running on target")
 
-	// Undefine the VM on source.
-	exec.Command("virsh", "undefine", vmName).Run()
+	// Undefine the VM on source. Match the flags DELETE_VM uses so
+	// EFI-firmware VMs (NVRAM present) and VMs with managed-save or
+	// snapshot metadata don't leave a ghost "shut off" entry behind,
+	// which was the v5.2 Test VM bug. Log the error rather than
+	// swallowing — the operator can't fix what they don't see.
+	if out, err := exec.Command("virsh", "undefine", vmName,
+		"--nvram", "--managed-save", "--snapshots-metadata").CombinedOutput(); err != nil {
+		logStep(fmt.Sprintf("warning: virsh undefine on source failed: %s — ghost may remain, clean up manually",
+			strings.TrimSpace(string(out))))
+	}
 
 	// Delete source disk files (the originals, not backing files from snapshots).
 	for _, path := range sourceDiskPaths {
