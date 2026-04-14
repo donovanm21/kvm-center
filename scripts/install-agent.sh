@@ -97,9 +97,15 @@ echo ""
 
 # ── Install ────────────────────────────────────────────────────────────────────
 mkdir -p "$INSTALL_DIR"
-cp "$BINARY" "${INSTALL_DIR}/${BINARY_NAME}"
-chown root:root "${INSTALL_DIR}/${BINARY_NAME}"
-chmod 0755 "${INSTALL_DIR}/${BINARY_NAME}"
+# Use atomic rename so re-running this script against a host where the
+# agent is already executing doesn't fail with "Text file busy" — the
+# kernel tolerates unlink + replace of a running mapped binary.
+TARGET="${INSTALL_DIR}/${BINARY_NAME}"
+TMP_TARGET="${TARGET}.new"
+cp "$BINARY" "$TMP_TARGET"
+chown root:root "$TMP_TARGET"
+chmod 0755 "$TMP_TARGET"
+mv -f "$TMP_TARGET" "$TARGET"
 # SELinux: a binary copied in from /tmp or a curl-piped temp dir inherits
 # user_tmp_t which systemd refuses to exec. Reset to the parent dir's
 # context (usr_t under default policy). Tolerate non-SELinux systems.
@@ -232,26 +238,26 @@ print("  Issued cert valid until", d.get("not_after","?"))
   chmod 644 "$CERT_PATH" "$CA_PATH"
   echo "  PKI bundle ready: $CERT_PATH, $KEY_PATH, $CA_PATH"
 
-  # ── libvirt qemu+tls:// configuration (v5.10.1) ───────────────────────
+  # ── libvirt qemu+tls:// configuration (v5.10.1+) ──────────────────────
   # Install the issued bundle to the paths libvirtd reads so migrations
-  # can run over qemu+tls:// with mutual cert auth. Both sides need
-  # matching CAs — every hypervisor enrolls against the same kvm-center
-  # CA so their client/server certs chain to the same root.
+  # can run over qemu+tls:// with mutual cert auth. Every hypervisor
+  # enrolls against the same cluster CA, so their client + server certs
+  # chain to the same root.
   if command -v virsh >/dev/null 2>&1; then
     echo "  Installing cert bundle for libvirt…"
     install -d -m 755 /etc/pki/CA /etc/pki/libvirt /etc/pki/libvirt/private
-    install -m 644 "$CA_PATH" /etc/pki/CA/cacert.pem
-    # libvirtd uses the SAME file for server + client auth in mutual-TLS
-    # mode — the cert is valid for both roles (extKeyUsage includes both).
+    install -m 644 "$CA_PATH"   /etc/pki/CA/cacert.pem
+    # libvirtd uses the same cert for server + client auth in mutual-TLS
+    # mode — the issued leaf has both ExtKeyUsage bits set.
     install -m 644 "$CERT_PATH" /etc/pki/libvirt/servercert.pem
     install -m 644 "$CERT_PATH" /etc/pki/libvirt/clientcert.pem
     install -m 600 "$KEY_PATH"  /etc/pki/libvirt/private/serverkey.pem
     install -m 600 "$KEY_PATH"  /etc/pki/libvirt/private/clientkey.pem
 
-    # Enable listen_tls in libvirtd.conf. Idempotent — grep-and-replace.
+    # libvirtd.conf — keep the legacy knobs in case a peer still speaks
+    # qemu+tcp, but the actual listener is driven by systemd sockets.
     LVCONF=/etc/libvirt/libvirtd.conf
     if [[ -f "$LVCONF" ]]; then
-      # Turn TLS listener on; turn insecure TCP listener off.
       for pair in 'listen_tls=1' 'listen_tcp=0' 'tls_no_verify_certificate=0'; do
         key="${pair%%=*}"
         if grep -qE "^${key}\s*=" "$LVCONF"; then
@@ -260,18 +266,33 @@ print("  Issued cert valid until", d.get("not_after","?"))
           echo "$pair" >> "$LVCONF"
         fi
       done
-      # RHEL-family needs libvirtd started with --listen; systemd drop-in
-      # wraps the existing unit without editing the vendor file.
-      install -d -m 755 /etc/systemd/system/libvirtd.service.d
-      cat > /etc/systemd/system/libvirtd.service.d/10-kvm-center-listen.conf <<'UNIT'
-[Service]
-Environment=LIBVIRTD_ARGS="--listen"
-UNIT
-      systemctl daemon-reload
-      systemctl restart libvirtd || echo "  WARNING: libvirtd restart failed — review manually"
-      echo "  libvirtd configured for qemu+tls:// migrations (listen_tls=1, listen_tcp=0)"
+    fi
+
+    # Clean up any legacy --listen drop-in that pre-v5.10.1 installs
+    # may have planted — incompatible with socket-activated libvirtd
+    # on current RHEL / Rocky 9+.
+    rm -f /etc/systemd/system/libvirtd.service.d/10-kvm-center-listen.conf
+    rmdir /etc/systemd/system/libvirtd.service.d 2>/dev/null || true
+
+    # Enable the socket units instead of --listen. libvirtd-tls.socket
+    # listens on :16514; the plain TCP socket is explicitly disabled.
+    systemctl daemon-reload
+    systemctl stop    libvirtd-tcp.socket 2>/dev/null || true
+    systemctl disable libvirtd-tcp.socket 2>/dev/null || true
+    systemctl enable  --now libvirtd-tls.socket 2>/dev/null || true
+    systemctl restart libvirtd || echo "  WARNING: libvirtd restart failed — review manually"
+    echo "  libvirtd-tls.socket active on :16514 (qemu+tls:// migrations enabled)"
+
+    # Firewall — open the TLS control port + QEMU migration data range.
+    # No-op when firewalld isn't running. iptables / nftables users
+    # should open these manually.
+    if systemctl is-active --quiet firewalld; then
+      firewall-cmd --permanent --add-port=16514/tcp         >/dev/null 2>&1 || true
+      firewall-cmd --permanent --add-port=49152-49215/tcp   >/dev/null 2>&1 || true
+      firewall-cmd --reload                                 >/dev/null 2>&1 || true
+      echo "  Firewall opened: 16514/tcp (TLS control), 49152-49215/tcp (migration data)"
     else
-      echo "  WARNING: $LVCONF not found — skip TLS listener configuration"
+      echo "  firewalld inactive — ensure 16514/tcp + 49152-49215/tcp are reachable for migrations"
     fi
   fi
 fi
