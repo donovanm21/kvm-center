@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -43,6 +44,23 @@ var (
 	grantPubKeyMu   sync.RWMutex
 	consumedGrants  = map[string]time.Time{} // grant_id → accepted_at (expiry cleanup on set)
 	consumedGrantsMu sync.Mutex
+	// activeGrantsByVM tracks recently-accepted grants keyed by VM
+	// name so the libvirt qemu hook can ask "is there an authorised
+	// migration for <vm> in flight?". Distinct from consumedGrants
+	// (which is keyed by grant_id for replay defence) — same event
+	// populates both.
+	activeGrantsByVM = map[string]*activeGrant{}
+)
+
+type activeGrant struct {
+	ID        string
+	AcceptedAt time.Time
+	ExpiresAt time.Time
+}
+
+const (
+	grantLogPath    = "/var/lib/kvm-center/consumed-grants.log"
+	activeGrantTTL  = 10 * time.Minute // hook consultation window
 )
 
 // loadGrantPubKey fetches the server's Ed25519 public key and caches
@@ -117,8 +135,9 @@ func verifyGrantEnvelope(pub ed25519.PublicKey, envelope string) (*models.Migrat
 
 // recordConsumedGrant returns (accepted, reason). Rejects a repeat of
 // the same grant ID. Drops entries whose original grant TTL has
-// passed so the map stays bounded.
-func recordConsumedGrant(id string) (bool, string) {
+// passed so the map stays bounded. Also appends to a durable log so
+// a daemon restart doesn't reset replay defence.
+func recordConsumedGrant(g *models.MigrationGrant) (bool, string) {
 	consumedGrantsMu.Lock()
 	defer consumedGrantsMu.Unlock()
 	now := time.Now()
@@ -127,11 +146,65 @@ func recordConsumedGrant(id string) (bool, string) {
 			delete(consumedGrants, k)
 		}
 	}
-	if _, exists := consumedGrants[id]; exists {
+	if _, exists := consumedGrants[g.ID]; exists {
 		return false, "replay"
 	}
-	consumedGrants[id] = now
+	consumedGrants[g.ID] = now
+	activeGrantsByVM[g.VMName] = &activeGrant{
+		ID:         g.ID,
+		AcceptedAt: now,
+		ExpiresAt:  time.Unix(g.ExpiresAt, 0),
+	}
+	persistConsumedGrant(g.ID, now)
 	return true, ""
+}
+
+// persistConsumedGrant appends a line to the replay log. Best-effort
+// — failures are logged but don't abort the migration, matching the
+// "safe write path" intent (operator can still manually inspect).
+func persistConsumedGrant(id string, at time.Time) {
+	if err := os.MkdirAll(filepath.Dir(grantLogPath), 0o700); err != nil {
+		log.Printf("grants: mkdir log dir: %v", err)
+		return
+	}
+	f, err := os.OpenFile(grantLogPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+	if err != nil {
+		log.Printf("grants: open log: %v", err)
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s %d\n", id, at.Unix())
+}
+
+// LoadConsumedGrantsLog rehydrates the replay set from disk at
+// startup. Caller is main().
+func LoadConsumedGrantsLog() {
+	f, err := os.Open(grantLogPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("grants: load log: %v", err)
+		}
+		return
+	}
+	defer f.Close()
+	consumedGrantsMu.Lock()
+	defer consumedGrantsMu.Unlock()
+	count := 0
+	cutoff := time.Now().Add(-2 * time.Hour)
+	var id string
+	var ts int64
+	for {
+		if _, err := fmt.Fscanf(f, "%s %d\n", &id, &ts); err != nil {
+			break
+		}
+		at := time.Unix(ts, 0)
+		if at.Before(cutoff) {
+			continue // drop stale entries on load
+		}
+		consumedGrants[id] = at
+		count++
+	}
+	log.Printf("grants: %d consumed grants rehydrated from %s", count, grantLogPath)
 }
 
 // forwardGrantToDest — called from the source agent's MIGRATE branch
@@ -198,7 +271,7 @@ func handlePrepareGrant(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "grant: destination mismatch", http.StatusForbidden)
 		return
 	}
-	if ok, reason := recordConsumedGrant(g.ID); !ok {
+	if ok, reason := recordConsumedGrant(g); !ok {
 		log.Printf("grants: reject id=%s reason=%s", g.ID, reason)
 		http.Error(w, "grant: "+reason, http.StatusConflict)
 		return
@@ -207,6 +280,35 @@ func handlePrepareGrant(w http.ResponseWriter, r *http.Request) {
 		g.ID, g.Source, g.Dest, g.VMUUID, g.ExpiresAt-g.IssuedAt)
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "accepted", "grant_id": g.ID})
+}
+
+// handleGrantActive — the libvirt qemu hook dials this on the dest
+// side right before libvirtd accepts a migration. 200 means "an
+// authorised migration for this VM was accepted in the last
+// activeGrantTTL"; 403 means bypass (out-of-band virsh migrate).
+func handleGrantActive(w http.ResponseWriter, r *http.Request) {
+	vm := r.URL.Query().Get("vm")
+	if vm == "" {
+		http.Error(w, "vm required", http.StatusBadRequest)
+		return
+	}
+	consumedGrantsMu.Lock()
+	defer consumedGrantsMu.Unlock()
+	g, ok := activeGrantsByVM[vm]
+	if !ok {
+		http.Error(w, "no active grant for vm", http.StatusForbidden)
+		return
+	}
+	if time.Since(g.AcceptedAt) > activeGrantTTL {
+		delete(activeGrantsByVM, vm)
+		http.Error(w, "active grant expired", http.StatusForbidden)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"grant_id":    g.ID,
+		"accepted_at": g.AcceptedAt.Format(time.RFC3339),
+		"expires_at":  g.ExpiresAt.Format(time.RFC3339),
+	})
 }
 
 // agentIdentityNames returns the strings a grant's Dest field is
