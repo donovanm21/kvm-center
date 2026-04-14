@@ -325,19 +325,47 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
       </Field>
 
       {mode === 'offline' && (
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 14 }}>
           <button
             type="button"
             onClick={() => setAdvancedOpen((v) => !v)}
             style={{
-              padding: 0, background: 'transparent', border: 'none',
-              color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer',
+              width: '100%',
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 14px',
+              background: advancedOpen ? 'var(--surface-2, var(--bg-input))' : 'var(--bg-input)',
+              border: '1px solid var(--border)',
+              borderRadius: advancedOpen ? '6px 6px 0 0' : 6,
+              borderBottom: advancedOpen ? '1px solid var(--border)' : '1px solid var(--border)',
+              color: 'var(--text-strong)',
+              fontSize: 13, fontWeight: 600,
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'background 0.12s',
             }}
           >
-            {advancedOpen ? '▾' : '▸'} Advanced — target pool, rename, regenerate MACs
+            <span style={{
+              display: 'inline-flex', width: 18, height: 18, alignItems: 'center', justifyContent: 'center',
+              borderRadius: 4, background: 'var(--accent-subtle)', color: 'var(--accent)', fontSize: 11, fontWeight: 700,
+            }}>
+              {advancedOpen ? '−' : '+'}
+            </span>
+            <span>Advanced</span>
+            <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--text-muted)' }}>
+              target pool · rename · regenerate MACs
+            </span>
+            {(targetPool && targetPool !== 'default') || newVMName || regenerateMAC ? (
+              <span className="tone-pill accent" style={{ marginLeft: 'auto', fontSize: 10 }}>
+                customised
+              </span>
+            ) : null}
           </button>
           {advancedOpen && (
-            <div style={{ marginTop: 8, padding: 12, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-input)', display: 'grid', gap: 10 }}>
+            <div style={{
+              padding: 14, border: '1px solid var(--border)', borderTop: 'none',
+              borderRadius: '0 0 6px 6px', background: 'var(--bg-input)',
+              display: 'grid', gap: 10,
+            }}>
               <Field label="Target storage pool">
                 {poolsQuery.isLoading && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading pools from {effectiveTarget}…</div>}
                 {poolsQuery.error && <div style={{ fontSize: 12, color: 'var(--danger-text, #F85149)' }}>Failed: {(poolsQuery.error as Error).message}</div>}
