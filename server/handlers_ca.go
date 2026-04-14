@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -161,6 +162,7 @@ func handleCASign(store *Store, ca *ClusterCA) http.HandlerFunc {
 			EnrollToken string   `json:"enroll_token"`
 			CSR         string   `json:"csr"` // PEM
 			DNSNames    []string `json:"dns_names,omitempty"`
+			IPAddresses []string `json:"ip_addresses,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
@@ -172,7 +174,22 @@ func handleCASign(store *Store, ca *ClusterCA) http.HandlerFunc {
 			writeError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
-		certPEM, serial, fp, notBefore, notAfter, serr := ca.SignHypervisorCSR([]byte(req.CSR), hostID, req.DNSNames)
+		// Automatically include the host's known IP in the SAN list so
+		// peers can connect by IP without the hostname check failing.
+		// The Host record is authoritative — anything the enrolling
+		// agent claims via req.IPAddresses is appended in addition.
+		ipAddrs := append([]string{}, req.IPAddresses...)
+		if h := store.GetHost(hostID); h != nil && h.IP != "" {
+			ipAddrs = append(ipAddrs, h.IP)
+		}
+		// Also drop the FQDN for this host if the operator configured a
+		// cluster DNS domain via KVM_CENTER_CLUSTER_DOMAIN (e.g.
+		// "don.homelab" → cert SAN includes "<hostID>.don.homelab").
+		dnsNames := append([]string{}, req.DNSNames...)
+		if dom := strings.TrimSpace(os.Getenv("KVM_CENTER_CLUSTER_DOMAIN")); dom != "" {
+			dnsNames = append(dnsNames, hostID+"."+strings.TrimPrefix(dom, "."))
+		}
+		certPEM, serial, fp, notBefore, notAfter, serr := ca.SignHypervisorCSR([]byte(req.CSR), hostID, dnsNames, ipAddrs)
 		if serr != nil {
 			auditAs(store, r, issuedBy, "enrollment", AuditCASign, "hypervisor/"+hostID, nil, false, serr.Error())
 			writeError(w, http.StatusBadRequest, serr.Error())
