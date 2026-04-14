@@ -59,6 +59,27 @@ type Host struct {
 	MaintenanceReason    string    `json:"maintenance_reason,omitempty"`
 }
 
+// SnapshotPolicy (v5.3) describes a recurring snapshot job: what to
+// snapshot, how often, and how many to keep. The scheduler goroutine
+// in snapshot_scheduler.go wakes once a minute, finds policies whose
+// LastRunAt + EveryMinutes < now, issues a SNAPSHOT command through
+// the usual agent plumbing, and prunes older policy-generated
+// snapshots so RetentionKeep is honoured. Manual snapshots are left
+// alone because cleanup only touches names that match the policy's
+// snapshot-name prefix.
+type SnapshotPolicy struct {
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Enabled      bool      `json:"enabled"`
+	VMUUIDs      []string  `json:"vm_uuids"`      // the VMs this policy covers
+	EveryMinutes int       `json:"every_minutes"` // e.g. 60 hourly, 1440 daily, 10080 weekly
+	RetentionKeep int      `json:"retention_keep"` // keep last N policy-generated snapshots
+	CreatedAt    time.Time `json:"created_at"`
+	LastRunAt    time.Time `json:"last_run_at,omitempty"`
+	LastRunError string    `json:"last_run_error,omitempty"`
+	LastRunCount int       `json:"last_run_count,omitempty"` // successful snapshots on last tick
+}
+
 // AuditShipping (v5.2.1) configures one external sink that receives
 // every audit event as it's recorded. Keeps a compliance SIEM or log
 // aggregator in sync without the operator scraping /api/audit.
