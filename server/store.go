@@ -97,6 +97,10 @@ type Store struct {
 	// hostOnlinePrev mirrors the same idea for hosts so we only fire
 	// host.offline once per outage.
 	hostOnlinePrev map[string]bool
+	// migrationNotified keys terminal-state notifications by migration
+	// ID so we never fan out the same "complete"/"failed" twice when
+	// the record is mutated in place by handleCommand → finalize.
+	migrationNotified map[string]bool
 	features      models.Features
 	dataFile      string
 	// backend is the pluggable persistence layer (JSON file or Mongo).
@@ -548,11 +552,9 @@ func (s *Store) resolveCanonicalUUID(p *models.GuestTelemetryPayload) string {
 // AddMigration inserts or updates a migration record.
 func (s *Store) AddMigration(r *models.MigrationRecord) {
 	s.mu.Lock()
-	var prevStatus string
 	found := false
 	for i, m := range s.migrations {
 		if m.ID == r.ID {
-			prevStatus = m.Status
 			s.migrations[i] = r
 			found = true
 			break
@@ -561,11 +563,25 @@ func (s *Store) AddMigration(r *models.MigrationRecord) {
 	if !found {
 		s.migrations = append(s.migrations, r)
 	}
+	// Fire-once tracker for terminal-state notifications. Callers
+	// (finalizeMigration / pollMigrationStatus) often mutate the same
+	// *r in place before calling us, so a prevStatus comparison off
+	// the slice doesn't work — the slice already holds the new value.
+	// A per-ID notified set is the simple, correct alternative.
+	shouldNotify := false
+	if r.Status == "complete" || r.Status == "failed" {
+		if s.migrationNotified == nil {
+			s.migrationNotified = map[string]bool{}
+		}
+		if !s.migrationNotified[r.ID] {
+			s.migrationNotified[r.ID] = true
+			shouldNotify = true
+		}
+	}
 	s.mu.Unlock()
 	s.hub.Publish(EventMigration, map[string]any{"id": r.ID, "status": r.Status})
 
-	// Fire one notification per migration terminal-state transition.
-	if prevStatus != r.Status {
+	if shouldNotify {
 		switch r.Status {
 		case "complete":
 			s.fireNotification(&models.NotificationEvent{
