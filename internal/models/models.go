@@ -507,6 +507,12 @@ type APIToken struct {
 	ID         string    `json:"id"`
 	Name       string    `json:"name"`
 	OwnerID    string    `json:"owner_id"`
+	// Kind distinguishes user-minted tokens (self-service, default 30d
+	// expiry, managed from the user menu) from system-level tokens
+	// (admin-minted, longer-lived, managed from Settings). Both types
+	// still inherit their owner's permissions — "system" just means the
+	// owner is typically an admin used as a service account.
+	Kind       string    `json:"kind"` // "user" | "system"
 	Hash       string    `json:"hash,omitempty"` // never returned via API
 	CreatedAt  time.Time `json:"created_at"`
 	ExpiresAt  time.Time `json:"expires_at,omitempty"`

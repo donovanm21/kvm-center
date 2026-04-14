@@ -837,6 +837,13 @@ func (s *Store) load() {
 		s.notifications = d.Notifications
 	}
 	if d.APITokens != nil {
+		// Backfill kind on pre-v5.6 tokens. They were all minted from the
+		// admin-gated endpoint so "system" preserves existing behavior.
+		for _, t := range d.APITokens {
+			if t.Kind == "" {
+				t.Kind = "system"
+			}
+		}
 		s.apiTokens = d.APITokens
 	}
 	log.Printf("store: loaded %d hosts, %d users, %d groups, %d roles from %s",
