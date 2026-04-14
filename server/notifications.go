@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"net/smtp"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -164,7 +165,7 @@ func sendWebhook(ch *models.NotificationChannel, ev *models.NotificationEvent) e
 	if ch.WebhookURL == "" {
 		return errors.New("webhook url required")
 	}
-	body, err := json.Marshal(ev)
+	body, err := webhookPayload(ch.WebhookURL, ev)
 	if err != nil {
 		return err
 	}
@@ -189,6 +190,51 @@ func sendWebhook(ch *models.NotificationChannel, ev *models.NotificationEvent) e
 		return fmt.Errorf("%s replied %d", ch.WebhookURL, resp.StatusCode)
 	}
 	return nil
+}
+
+// webhookPayload picks a body shape compatible with the destination.
+// Discord and Slack want a chat-message envelope; everything else
+// gets the raw event JSON so generic receivers (n8n, Zapier, custom
+// HTTP listeners) keep all the structured fields.
+func webhookPayload(rawURL string, ev *models.NotificationEvent) ([]byte, error) {
+	host := ""
+	if u, err := url.Parse(rawURL); err == nil {
+		host = strings.ToLower(u.Host)
+	}
+	icon := severityIcon(ev.Severity)
+	text := icon + " **" + ev.Title + "**\n" + ev.Message
+	if ev.Resource != "" {
+		text += "\n_" + ev.Resource + "_"
+	}
+	switch {
+	case strings.HasSuffix(host, "discord.com") || strings.HasSuffix(host, "discordapp.com"):
+		// Discord caps content at 2000 chars and rejects empty bodies.
+		if len(text) > 1900 {
+			text = text[:1900] + "…"
+		}
+		return json.Marshal(map[string]any{
+			"username": "kvm-center",
+			"content":  text,
+		})
+	case strings.HasSuffix(host, "slack.com"):
+		return json.Marshal(map[string]any{
+			"text":     text,
+			"username": "kvm-center",
+		})
+	default:
+		return json.Marshal(ev)
+	}
+}
+
+func severityIcon(sev string) string {
+	switch sev {
+	case "critical":
+		return "🔴"
+	case "warning":
+		return "🟡"
+	default:
+		return "🟢"
+	}
 }
 
 func sendEmail(cfg *models.NotificationConfig, ch *models.NotificationChannel, ev *models.NotificationEvent) error {
