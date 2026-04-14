@@ -31,6 +31,7 @@ type persistData struct {
 	Sessions   map[string]*models.Session          `json:"sessions,omitempty"`
 	IDPs       map[string]*models.IdentityProvider `json:"idps,omitempty"`
 	Features   *models.Features                    `json:"features,omitempty"`
+	Audit      []*models.AuditEvent                `json:"audit,omitempty"`
 	// ConsoleSecret is the HMAC-SHA256 key the server uses to mint
 	// per-session VM console tokens (see console_token.go). Generated
 	// on first use; persisted so agents that cached it don't need a
@@ -68,6 +69,9 @@ type Store struct {
 	// consoleSecret is loaded from the JSON store and re-persisted on
 	// first access; see GetOrCreateConsoleSecret in console_token.go.
 	consoleSecret string
+	// audit is the in-memory event ring buffer; capped at
+	// auditRetentionMax (see audit.go).
+	audit []*models.AuditEvent
 	features      models.Features
 	dataFile      string
 	// backend is the pluggable persistence layer (JSON file or Mongo).
@@ -592,6 +596,7 @@ func (s *Store) Save() {
 		Sessions:   s.sessions,
 		IDPs:          s.idps,
 		Features:      &s.features,
+		Audit:         s.audit,
 		ConsoleSecret: s.consoleSecret,
 	}
 	s.mu.RUnlock()
@@ -666,6 +671,9 @@ func (s *Store) load() {
 	}
 	if d.ConsoleSecret != "" {
 		s.consoleSecret = d.ConsoleSecret
+	}
+	if d.Audit != nil {
+		s.audit = d.Audit
 	}
 	log.Printf("store: loaded %d hosts, %d users, %d groups, %d roles from %s",
 		len(s.hosts), len(s.users), len(s.groups), len(s.roles), s.dataFile)

@@ -155,6 +155,31 @@ func handleCommand(store *Store) http.HandlerFunc {
 		}
 
 		action := strings.ToUpper(req.Action)
+		// Audit every command that reaches this handler, regardless of
+		// outcome. We re-audit with success=false in the error paths
+		// below; RBAC/feature rejections are covered in the overarching
+		// middleware which already 401/403s before we get here.
+		defer func() {
+			// Detail tag records which agent was called and which action
+			// verb; lifecycle/snapshot ops all funnel through /api/command
+			// so the action column alone isn't specific enough.
+			detail := map[string]string{"action": action, "host_id": req.HostID}
+			resource := "vm/" + req.VMUUID
+			switch action {
+			case "START", "STOP", "FORCESTOP", "RESTART":
+				audit(store, r, AuditVMAction, resource, detail, true, "")
+			case "SNAPSHOT":
+				audit(store, r, AuditVMSnapshot, resource, detail, true, "")
+			case "REVERT_SNAPSHOT":
+				audit(store, r, AuditVMRevert, resource, detail, true, "")
+			case "DELETE_SNAPSHOT":
+				audit(store, r, AuditVMSnapDelete, resource, detail, true, "")
+			case "MIGRATE", "OFFLINE_MIGRATE":
+				audit(store, r, AuditMigrationStart, resource, detail, true, "")
+			case "DELETE_VM":
+				audit(store, r, AuditVMDelete, resource, detail, true, "")
+			}
+		}()
 		var needPerm string
 		switch action {
 		case "START", "STOP", "FORCESTOP", "RESTART":
@@ -226,6 +251,14 @@ func handleCommand(store *Store) http.HandlerFunc {
 			}
 			destIP := req.Params["destination"]
 			destHost := resolveHostByIP(store, destIP)
+			// Maintenance gate: refuse migrations INTO a host that's
+			// draining for patch/reboot. The whole point of maintenance
+			// mode is to move workload off the host, not onto it.
+			if destHost != "" && store.IsHostInMaintenance(destHost) {
+				writeError(w, http.StatusConflict,
+					"destination host "+destHost+" is in maintenance mode — pick a different target")
+				return
+			}
 			// Guard against piling up concurrent migrations on the same
 			// source or destination host. The agent serialises offline
 			// migrations internally (only one /migrate-status slot), and
@@ -705,6 +738,13 @@ func handleVMCreate(store *Store) http.HandlerFunc {
 		hostID := r.URL.Query().Get("host")
 		if hostID == "" {
 			writeError(w, http.StatusBadRequest, "host required")
+			return
+		}
+		// Maintenance gate: reject new-VM placement on draining hosts.
+		// Mirror of the block in handleCommand's migration path.
+		if store.IsHostInMaintenance(hostID) {
+			writeError(w, http.StatusConflict,
+				"host "+hostID+" is in maintenance mode — choose a different target")
 			return
 		}
 		agentAddr := store.GetHostAgentAddr(hostID)
