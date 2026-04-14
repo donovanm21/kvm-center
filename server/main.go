@@ -98,6 +98,11 @@ func main() {
 	serverGrantSigner = grantSigner
 	log.Printf("grants: Ed25519 signer ready (pub=%s…)", grantSigner.PublicKeyHex()[:16])
 
+	// Metrics sink (v5.13). No-op until the operator enables it via
+	// Settings → Metrics; starting the worker early avoids a race
+	// where the first telemetry tick arrives before the queue exists.
+	store.startMetricsWorker(context.Background())
+
 	store.startAuditShipper(context.Background())
 	store.startSnapshotScheduler(context.Background())
 	store.startNotificationDispatcher(context.Background())
@@ -200,6 +205,8 @@ func main() {
 	mux.Handle("/api/settings/audit-shipping/test",  requirePerm(store, "user.manage", http.HandlerFunc(handleAuditShippingTest(store))))
 	mux.Handle("/api/settings/notifications",      requirePerm(store, "user.manage", http.HandlerFunc(handleNotifications(store))))
 	mux.Handle("/api/settings/notifications/test", requirePerm(store, "user.manage", http.HandlerFunc(handleNotificationTest(store))))
+	mux.Handle("/api/settings/metrics",      requirePerm(store, "user.manage", http.HandlerFunc(handleMetricsSettings(store))))
+	mux.Handle("/api/settings/metrics/test", requirePerm(store, "user.manage", http.HandlerFunc(handleMetricsTest(store))))
 	// Admin-scoped system tokens (user.manage).
 	mux.Handle("/api/tokens",  requirePerm(store, "user.manage", http.HandlerFunc(handleAPITokens(store))))
 	// Self-service user tokens (any signed-in user). More-specific path

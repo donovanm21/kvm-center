@@ -193,6 +193,31 @@ type NotificationEvent struct {
 	Detail    map[string]string `json:"detail,omitempty"`
 }
 
+// MetricsConfig (v5.13) configures the InfluxDB v2 telemetry sink.
+// Disabled by default; writes host + VM samples + migration
+// outcomes to an external Influx bucket so operators can build
+// Grafana dashboards without scraping the API.
+type MetricsConfig struct {
+	Enabled bool   `json:"enabled"`
+	URL     string `json:"url,omitempty"`    // e.g. "https://influx.example.com:8086"
+	Org     string `json:"org,omitempty"`
+	Bucket  string `json:"bucket,omitempty"`
+	Token   string `json:"token,omitempty"`
+
+	// Measurement-name prefix. Defaults to "kvm_center_". Avoids
+	// collisions on shared Influx buckets.
+	MeasurementPrefix string `json:"measurement_prefix,omitempty"`
+
+	// Batch tuning — matches AuditShipping for operator familiarity.
+	BatchSize    int `json:"batch_size,omitempty"`
+	FlushSeconds int `json:"flush_seconds,omitempty"`
+
+	// Observability.
+	LastWriteAt    string `json:"last_write_at,omitempty"`
+	LastWriteError string `json:"last_write_error,omitempty"`
+	LastWriteCount int64  `json:"last_write_count,omitempty"`
+}
+
 // AuditEvent (v5.2) records a single mutating operation. Every handler
 // that changes persisted state calls audit(...) — see server/audit.go
 // — to produce one of these. Surfaced read-only in Settings → Audit
