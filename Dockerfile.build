@@ -57,7 +57,8 @@ RUN mkdir -p /dist && \
     cp /src/kvm-tools/install.ps1 /dist/install-kvm-tools.ps1 && \
     cp /src/scripts/install-kvmctl.sh /dist/install-kvmctl.sh && \
     cp /src/scripts/install-kvmctl.ps1 /dist/install-kvmctl.ps1 && \
-    chmod +x /dist/install-agent.sh /dist/update-agent.sh /dist/install-kvm-tools.sh /dist/install-kvmctl.sh && \
+    cp /src/scripts/libvirt-hooks-qemu.sh /dist/libvirt-hooks-qemu.sh && \
+    chmod +x /dist/install-agent.sh /dist/update-agent.sh /dist/install-kvm-tools.sh /dist/install-kvmctl.sh /dist/libvirt-hooks-qemu.sh && \
     (cp /src/migration-keys/kvm-migrator-key /dist/kvm-migrator-key 2>/dev/null || true) && \
     (cp /src/migration-keys/kvm-migrator-key.pub /dist/kvm-migrator-key.pub 2>/dev/null || true) && \
     cd /out && tar czf /dist/kvm-center-server.tar.gz kvm-center-server && \

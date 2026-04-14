@@ -26,6 +26,9 @@ func StartCommandServer(addr string) {
 	// incoming migration grant right before libvirtd handshakes with
 	// the source over qemu+tls.
 	mux.HandleFunc("/prepare-grant", handlePrepareGrant)
+	// v5.11.1: consulted by /etc/libvirt/hooks/qemu to enforce that a
+	// migration the dest is about to accept was actually authorised.
+	mux.HandleFunc("/grant-active", handleGrantActive)
 	mux.HandleFunc("/cancel-migrate", handleCancelMigrate)
 	mux.HandleFunc("/storage-browse", handleStorageBrowse)
 	mux.HandleFunc("/storage-upload", handleStorageUpload)
