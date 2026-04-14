@@ -58,6 +58,11 @@ const ACTIONS: { value: string; label: string }[] = [
   { value: 'idp.update', label: 'idp.update' },
   { value: 'idp.delete', label: 'idp.delete' },
   { value: 'kvm-tools.queue-update', label: 'kvm-tools.queue-update' },
+  { value: 'snapshot.policy.create', label: 'snapshot.policy.create' },
+  { value: 'snapshot.policy.update', label: 'snapshot.policy.update' },
+  { value: 'snapshot.policy.delete', label: 'snapshot.policy.delete' },
+  { value: 'snapshot.policy.run', label: 'snapshot.policy.run' },
+  { value: 'audit.shipping.update', label: 'audit.shipping.update' },
 ];
 
 const DEFAULT_LIMIT = 100;
