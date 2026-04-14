@@ -46,6 +46,9 @@ func main() {
 	// Expose the server URL to other agent packages (grants.go needs it
 	// to fetch the signer's public key on demand).
 	telemetryServerURL = *serverURL
+	// Rehydrate consumed-grant replay log so a restart doesn't reset
+	// single-use enforcement.
+	LoadConsumedGrantsLog()
 
 	// Pick the outbound HTTP client based on the server URL scheme;
 	// logs the "TLS skip-verify" warning when we flip to https.

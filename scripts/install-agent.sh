@@ -283,6 +283,32 @@ print("  Issued cert valid until", d.get("not_after","?"))
     systemctl restart libvirtd || echo "  WARNING: libvirtd restart failed — review manually"
     echo "  libvirtd-tls.socket active on :16514 (qemu+tls:// migrations enabled)"
 
+    # libvirt qemu hook (v5.11.1) — enforces that incoming migrations
+    # were authorised by kvm-center. Installed idempotently; the hook
+    # fails open if the agent is unreachable so migrations aren't
+    # gated on agent liveness.
+    HOOK_SRC="${SCRIPT_DIR}/libvirt-hooks-qemu.sh"
+    HOOK_DST="/etc/libvirt/hooks/qemu"
+    # Fall back to the build portal when the hook isn't colocated with
+    # this installer (curl | bash style).
+    if [[ ! -f "$HOOK_SRC" ]]; then
+      # Derive portal from SERVER_URL host + :8097.
+      PORTAL_HOST="$(echo "$SERVER_URL" | sed -E 's|^https?://||; s|[:/].*||')"
+      if [[ -n "$PORTAL_HOST" ]]; then
+        TMP_HOOK="$(mktemp)"
+        if curl -fsSL "http://${PORTAL_HOST}:8097/libvirt-hooks-qemu.sh" -o "$TMP_HOOK" 2>/dev/null; then
+          HOOK_SRC="$TMP_HOOK"
+        fi
+      fi
+    fi
+    if [[ -f "$HOOK_SRC" ]]; then
+      install -d -m 755 /etc/libvirt/hooks
+      install -m 755 "$HOOK_SRC" "$HOOK_DST"
+      # libvirtd reloads hooks on SIGHUP without dropping connections.
+      systemctl reload libvirtd 2>/dev/null || systemctl kill -s HUP libvirtd 2>/dev/null || true
+      echo "  Installed migration-grant hook at $HOOK_DST"
+    fi
+
     # Firewall — open the TLS control port + QEMU migration data range.
     # No-op when firewalld isn't running. iptables / nftables users
     # should open these manually.
