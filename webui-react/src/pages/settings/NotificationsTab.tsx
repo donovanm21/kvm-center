@@ -47,7 +47,7 @@ const EVENT_LABELS: Record<string, string> = {
 
 export function NotificationsTab() {
   const qc = useQueryClient();
-  const toast = useToast();
+  const { toast } = useToast();
   const q = useQuery({
     queryKey: ['notifications'],
     queryFn: () => apiGet<Reply>('/api/settings/notifications'),
@@ -66,20 +66,20 @@ export function NotificationsTab() {
   const save = useMutation({
     mutationFn: (cfg: NotifConfig) => apiPut('/api/settings/notifications', cfg),
     onSuccess: () => {
-      toast.success('Notification settings saved');
+      toast("success", 'Notification settings saved');
       qc.invalidateQueries({ queryKey: ['notifications'] });
     },
-    onError: (e: Error) => toast.error('Save failed: ' + e.message),
+    onError: (e: Error) => toast("error", 'Save failed: ' + e.message),
   });
 
   const test = useMutation({
     mutationFn: (channelID: string) =>
       apiPost('/api/settings/notifications/test', { channel_id: channelID }),
     onSuccess: () => {
-      toast.success('Test notification sent');
+      toast("success", 'Test notification sent');
       qc.invalidateQueries({ queryKey: ['notifications'] });
     },
-    onError: (e: Error) => toast.error('Test failed: ' + e.message),
+    onError: (e: Error) => toast("error", 'Test failed: ' + e.message),
   });
 
   if (q.isLoading || !form) return <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading…</div>;
