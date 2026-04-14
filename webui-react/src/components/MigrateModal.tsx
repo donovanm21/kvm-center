@@ -33,10 +33,25 @@ interface Props {
  * VM's CPU state is being streamed to the new host mid-flight.
  */
 export function MigrateModal({ vm, hosts, open, onClose }: Props) {
+  // Sort alphabetically so the list stays stable across telemetry
+  // ticks — prevents a host jumping into the slot you were about to
+  // click. Filter text further narrows the visible set.
   const onlinePeers = useMemo(
-    () => hosts.filter((h) => h.id !== vm.host_id && h.status === 'online'),
+    () => hosts
+      .filter((h) => h.id !== vm.host_id && h.status === 'online')
+      .sort((a, b) => a.id.localeCompare(b.id)),
     [hosts, vm.host_id],
   );
+  const [targetFilter, setTargetFilter] = useState('');
+  const filteredPeers = useMemo(() => {
+    const q = targetFilter.trim().toLowerCase();
+    if (!q) return onlinePeers;
+    return onlinePeers.filter((h) =>
+      h.id.toLowerCase().includes(q) ||
+      h.ip.toLowerCase().includes(q) ||
+      (h.cpu_model || '').toLowerCase().includes(q),
+    );
+  }, [onlinePeers, targetFilter]);
   const [mode, setMode] = useState<Mode>('offline');
   const [targetID, setTargetID] = useState<string>('');
   const [copyStorage, setCopyStorage] = useState(true);
@@ -81,6 +96,7 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
       setNewVMName('');
       setRegenerateMAC(false);
       setAdvancedOpen(false);
+      setTargetFilter('');
     }
   }, [open]);
 
@@ -93,7 +109,7 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
       .sort((a, b) => b.started_at - a.started_at)[0];
   }, [migrations.data, vm.name, submittedAt]);
 
-  const effectiveTarget = targetID || onlinePeers[0]?.id;
+  const effectiveTarget = targetID || filteredPeers[0]?.id || onlinePeers[0]?.id;
   const sourceHost = hosts.find((h) => h.id === vm.host_id);
   const target = hosts.find((h) => h.id === effectiveTarget);
 
@@ -321,18 +337,40 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
       </Field>
 
       <Field label="Target host">
-        <select
-          value={effectiveTarget ?? ''}
-          onChange={(e) => setTargetID(e.target.value)}
-          style={selectStyle}
-        >
-          {onlinePeers.map((h) => (
-            <option key={h.id} value={h.id}>
-              {h.id} ({h.ip}) — {(h.mem_free_mb / 1024).toFixed(1)} GB free
-              {h.mtls_ready ? ' · mTLS' : ''}
-            </option>
-          ))}
-        </select>
+        <div style={{ display: 'grid', gap: 6 }}>
+          {onlinePeers.length > 4 && (
+            <input
+              type="search"
+              placeholder="Filter hosts…"
+              value={targetFilter}
+              onChange={(e) => setTargetFilter(e.target.value)}
+              style={{
+                padding: '6px 10px', fontSize: 13,
+                background: 'var(--bg-input)', border: '1px solid var(--border)',
+                borderRadius: 4, color: 'var(--text-body)', fontFamily: 'inherit',
+              }}
+            />
+          )}
+          <select
+            value={effectiveTarget ?? ''}
+            onChange={(e) => setTargetID(e.target.value)}
+            style={selectStyle}
+            size={Math.min(Math.max(filteredPeers.length, 1), 6)}
+          >
+            {filteredPeers.length === 0 && (
+              <option value="" disabled>No hosts match "{targetFilter}"</option>
+            )}
+            {filteredPeers.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.id} ({h.ip}) — {(h.mem_free_mb / 1024).toFixed(1)} GB free
+                {h.mtls_ready ? ' · mTLS' : ''}
+              </option>
+            ))}
+          </select>
+          <div style={{ fontSize: 11, color: 'var(--text-faded)' }}>
+            {filteredPeers.length} of {onlinePeers.length} online peer{onlinePeers.length === 1 ? '' : 's'}
+          </div>
+        </div>
       </Field>
 
       <Field label="Transport">
