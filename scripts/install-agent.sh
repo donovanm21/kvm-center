@@ -17,27 +17,42 @@ SERVER_URL=""
 AGENT_PORT=8081
 INTERVAL="30s"
 ARCH="$(uname -m)"
+ENROLL_TOKEN=""
+TLS_DIR="/etc/kvm-center/tls"
+HOST_ID=""
+PKI_SERVER=""
 
 usage() {
   echo "Usage: $0 --server <url> [--port <port>] [--interval <duration>]"
-  echo "  --server    Control plane URL (required), e.g. http://10.10.100.8:8090"
-  echo "  --port      Agent command port (default: 8081)"
-  echo "  --interval  Telemetry interval (default: 30s)"
+  echo "                      [--enroll-token <token>] [--pki-server <url>] [--host-id <id>]"
+  echo "  --server        Control plane URL (required), e.g. http://10.10.100.8:8090"
+  echo "  --port          Agent command port (default: 8081)"
+  echo "  --interval      Telemetry interval (default: 30s)"
+  echo "  --enroll-token  One-time token from kvm-center admin — exchanges a CSR for a"
+  echo "                  signed leaf cert stored under $TLS_DIR (v5.10.0+)"
+  echo "  --pki-server    Override the server URL for /api/ca/sign (defaults to --server)"
+  echo "  --host-id       Host ID (default: hostname). Must match the ID used when the"
+  echo "                  enrollment token was issued."
   exit 1
 }
 
 # ── Parse arguments ────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --server)   SERVER_URL="$2"; shift 2 ;;
-    --port)     AGENT_PORT="$2"; shift 2 ;;
-    --interval) INTERVAL="$2";  shift 2 ;;
-    --help|-h)  usage ;;
+    --server)       SERVER_URL="$2"; shift 2 ;;
+    --port)         AGENT_PORT="$2"; shift 2 ;;
+    --interval)     INTERVAL="$2";  shift 2 ;;
+    --enroll-token) ENROLL_TOKEN="$2"; shift 2 ;;
+    --pki-server)   PKI_SERVER="$2"; shift 2 ;;
+    --host-id)      HOST_ID="$2"; shift 2 ;;
+    --help|-h)      usage ;;
     *) echo "Unknown argument: $1"; usage ;;
   esac
 done
 
 [[ -z "$SERVER_URL" ]] && { echo "ERROR: --server is required"; usage; }
+[[ -z "$HOST_ID" ]] && HOST_ID="$(hostname -s)"
+[[ -z "$PKI_SERVER" ]] && PKI_SERVER="$SERVER_URL"
 
 # ── Root check ────────────────────────────────────────────────────────────────
 if [[ $EUID -ne 0 ]]; then
@@ -174,6 +189,49 @@ chown -R kvm-migrator:kvm-migrator "$MIGRATOR_SSH"
 chmod 700 "$MIGRATOR_SSH"
 chmod 600 "${MIGRATOR_SSH}/id_ed25519" "${MIGRATOR_SSH}/authorized_keys"
 echo "  Migration keypair ready"
+
+# ── Hypervisor PKI enrollment (v5.10.0) ────────────────────────────────────────
+# When an --enroll-token is supplied, generate a private key + CSR and swap
+# them with the kvm-center server for a signed leaf certificate. The bundle
+# lands under $TLS_DIR for the upcoming mTLS migration channel. No-op when
+# the token is blank so existing deploys keep working unchanged.
+if [[ -n "$ENROLL_TOKEN" ]]; then
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "ERROR: openssl is required for --enroll-token flow"
+    exit 1
+  fi
+  mkdir -p "$TLS_DIR"
+  chmod 700 "$TLS_DIR"
+  KEY_PATH="$TLS_DIR/agent.key"
+  CSR_PATH="$TLS_DIR/agent.csr"
+  CERT_PATH="$TLS_DIR/agent.crt"
+  CA_PATH="$TLS_DIR/ca.crt"
+
+  echo "  Generating agent keypair + CSR for host ID '$HOST_ID'…"
+  openssl ecparam -name prime256v1 -genkey -noout -out "$KEY_PATH" 2>/dev/null
+  chmod 600 "$KEY_PATH"
+  openssl req -new -key "$KEY_PATH" -subj "/CN=${HOST_ID}" -out "$CSR_PATH" 2>/dev/null
+
+  CSR_PEM=$(cat "$CSR_PATH")
+  # Escape JSON (newlines → literal \n, quotes → \").
+  CSR_ESC=$(printf '%s' "$CSR_PEM" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')
+  BODY="{\"enroll_token\":\"${ENROLL_TOKEN}\",\"csr\":${CSR_ESC}}"
+
+  echo "  Exchanging CSR with ${PKI_SERVER}/api/ca/sign…"
+  RESP=$(curl -fsS -k -H "Content-Type: application/json" -d "$BODY" "${PKI_SERVER}/api/ca/sign") || {
+    echo "ERROR: CSR sign request failed. Is the enrollment token still valid?"
+    exit 1
+  }
+  echo "$RESP" | python3 -c '
+import json, sys
+d = json.loads(sys.stdin.read())
+with open("'"$CERT_PATH"'","w") as f: f.write(d["cert"])
+with open("'"$CA_PATH"'","w") as f: f.write(d["ca_cert"])
+print("  Issued cert valid until", d.get("not_after","?"))
+'
+  chmod 644 "$CERT_PATH" "$CA_PATH"
+  echo "  PKI bundle ready: $CERT_PATH, $KEY_PATH, $CA_PATH"
+fi
 
 # ── Enable and start ───────────────────────────────────────────────────────────
 systemctl daemon-reload

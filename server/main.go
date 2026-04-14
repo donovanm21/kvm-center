@@ -45,6 +45,7 @@ func main() {
 	tlsDir := flag.String("tls-dir", envOrDefault("KVM_CENTER_TLS_DIR", "/var/lib/kvm-center/tls"), "directory for the auto-generated self-signed cert when -cert/-key are blank")
 	disableTLS := flag.Bool("no-tls", envOrDefault("KVM_CENTER_NO_TLS", "") == "1", "run plain HTTP only (skip cert bootstrap)")
 	dataFile := flag.String("data", envOrDefault("KVM_CENTER_DATA", "/var/lib/kvm-center/data.json"), "JSON persistence file")
+	caDir := flag.String("ca-dir", envOrDefault("KVM_CENTER_CA_DIR", "/var/lib/kvm-center/ca"), "directory for the cluster CA cert + private key (auto-generated on first boot)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -78,6 +79,14 @@ func main() {
 	// Kick off the audit-log shipper worker. Safe to call even when
 	// no shipping config exists yet — worker no-ops until the operator
 	// saves a config via Settings → Audit Log → Shipping.
+	// Bootstrap the cluster CA (v5.10.0). Controls the PKI used for
+	// hypervisor mTLS + signed migration grants in upcoming patches.
+	clusterCA, err := EnsureClusterCA(*caDir)
+	if err != nil {
+		log.Fatalf("server: cluster CA: %v", err)
+	}
+	log.Printf("ca: cluster CA loaded from %s (NotAfter=%s)", *caDir, clusterCA.Cert().NotAfter.Format(time.RFC3339))
+
 	store.startAuditShipper(context.Background())
 	store.startSnapshotScheduler(context.Background())
 	store.startNotificationDispatcher(context.Background())
@@ -188,6 +197,15 @@ func main() {
 	mux.Handle("/api/tokens/me",  http.HandlerFunc(handleMyAPITokens(store)))
 	mux.Handle("/api/tokens/me/", http.HandlerFunc(handleMyAPIToken(store)))
 	mux.Handle("/api/tokens/",    requirePerm(store, "user.manage", http.HandlerFunc(handleAPIToken(store))))
+
+	// Hypervisor PKI (v5.10.0). Admin-gated except /sign (which is
+	// protected by the one-time enrollment token) and /bundle (public
+	// trust anchor).
+	mux.Handle("/api/ca/enroll", requirePerm(store, "tls.manage", http.HandlerFunc(handleCAEnroll(store))))
+	mux.HandleFunc("/api/ca/sign", handleCASign(store, clusterCA))
+	mux.HandleFunc("/api/ca/bundle", handleCABundle(clusterCA))
+	mux.Handle("/api/ca/hypervisors",  requirePerm(store, "tls.manage", http.HandlerFunc(handleCAHypervisors(store, clusterCA))))
+	mux.Handle("/api/ca/hypervisors/", requirePerm(store, "tls.manage", http.HandlerFunc(handleCARevoke(store))))
 	mux.HandleFunc("/api/vms", handleGetVMs(store))
 	mux.HandleFunc("/api/vms/snapshots", handleVMSnapshots(store))
 	mux.HandleFunc("/api/vms/screenshot", handleVMScreenshot(store))

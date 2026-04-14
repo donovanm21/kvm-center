@@ -56,6 +56,7 @@ const (
 	mcoSnapshotPolicies = "snapshot_policies"
 	mcoNotifications    = "notifications" // singleton _id:"singleton"
 	mcoAPITokens        = "api_tokens"    // keyed by token ID
+	mcoHypervisorCerts  = "hypervisor_certs" // keyed by host ID
 )
 
 func NewMongoBackend(uri, dbName string) *MongoBackend {
@@ -344,6 +345,12 @@ func (b *MongoBackend) Load(ctx context.Context) (*persistData, error) {
 		return nil, err
 	}
 
+	// Hypervisor certs (v5.10.0).
+	pd.HypervisorCerts = map[string]*models.HypervisorCert{}
+	if err := loadMapByID[models.HypervisorCert](ctx, db, mcoHypervisorCerts, pd.HypervisorCerts, func(c *models.HypervisorCert) string { return c.HostID }); err != nil {
+		return nil, err
+	}
+
 	// Notifications (v5.4) singleton.
 	var notif models.NotificationConfig
 	err = db.Collection(mcoNotifications).FindOne(ctx, bson.D{{Key: "_id", Value: "singleton"}}).Decode(&notif)
@@ -558,6 +565,16 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 		); err != nil {
 			return err
 		}
+	}
+
+	// Hypervisor certs
+	if err := replaceMapIfDirty(ctx, db, mcoHypervisorCerts, "hypervisor_certs", d, mapToDocs(d.HypervisorCerts, func(c *models.HypervisorCert) any {
+		return struct {
+			ID string `bson:"_id"`
+			*models.HypervisorCert `bson:",inline"`
+		}{c.HostID, c}
+	})); err != nil {
+		return err
 	}
 
 	// Snapshot policies

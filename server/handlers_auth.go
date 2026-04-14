@@ -614,6 +614,11 @@ var publicAPIPrefixes = []string{
 	"/api/telemetry",
 	"/api/guest-telemetry",
 	"/api/version",
+	// Hypervisor PKI: /sign is protected by the one-time enrollment
+	// token (fresh agents have no session); /bundle returns the CA
+	// public cert (trust anchor, safe to expose).
+	"/api/ca/sign",
+	"/api/ca/bundle",
 }
 
 func authMiddleware(store *Store, next http.Handler) http.Handler {
