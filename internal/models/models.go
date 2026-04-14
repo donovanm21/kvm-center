@@ -59,6 +59,44 @@ type Host struct {
 	MaintenanceReason    string    `json:"maintenance_reason,omitempty"`
 }
 
+// AuditShipping (v5.2.1) configures one external sink that receives
+// every audit event as it's recorded. Keeps a compliance SIEM or log
+// aggregator in sync without the operator scraping /api/audit.
+// Disabled when Enabled=false — which is also the default so an
+// upgraded server never starts shipping to a stale endpoint.
+type AuditShipping struct {
+	Enabled bool `json:"enabled"`
+
+	// Transport: "syslog" or "http".
+	Type string `json:"type,omitempty"`
+
+	// Endpoint:
+	//   syslog → "host:port" (UDP) or "tcp://host:port"
+	//   http   → "https://aggregator.example.com/path"
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// Optional HTTP auth. Bearer token ships as "Authorization: Bearer <v>".
+	// Basic creds form "user:pass" and ship base64-encoded.
+	BearerToken string `json:"bearer_token,omitempty"`
+	BasicAuth   string `json:"basic_auth,omitempty"`
+
+	// Syslog RFC 5424 facility/app-name. Default facility 1 (user-level),
+	// app-name "kvm-center".
+	SyslogFacility int    `json:"syslog_facility,omitempty"`
+	SyslogAppName  string `json:"syslog_app_name,omitempty"`
+
+	// Batching. Events queue up in memory until either BatchSize is
+	// reached or FlushSeconds elapses, then are shipped together.
+	BatchSize    int `json:"batch_size,omitempty"`    // default 50
+	FlushSeconds int `json:"flush_seconds,omitempty"` // default 10
+
+	// Operator-friendly observability: set by the worker after every
+	// flush attempt so the UI can tell if shipping is actually working.
+	LastShipAt    string `json:"last_ship_at,omitempty"`
+	LastShipError string `json:"last_ship_error,omitempty"`
+	LastShipCount int64  `json:"last_ship_count,omitempty"`
+}
+
 // AuditEvent (v5.2) records a single mutating operation. Every handler
 // that changes persisted state calls audit(...) — see server/audit.go
 // — to produce one of these. Surfaced read-only in Settings → Audit

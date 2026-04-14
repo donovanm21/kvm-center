@@ -59,6 +59,7 @@ const (
 	AuditHostMaintEnter = "host.maintenance.enter"
 	AuditHostMaintExit  = "host.maintenance.exit"
 	AuditKVMToolsQueue  = "kvm-tools.queue-update"
+	AuditAuditShipping  = "audit.shipping.update"
 )
 
 // AddAuditEvent appends a new event, trims if we're over retention.
@@ -84,6 +85,17 @@ func (s *Store) AddAuditEvent(ev *models.AuditEvent) {
 	s.mu.Unlock()
 	// Async persist so log-heavy requests don't block on Mongo write.
 	go s.Save()
+	// Best-effort enqueue to the shipper worker. Non-blocking — a
+	// stuck aggregator must never back-pressure the audit-write path.
+	if s.auditShipQueue != nil {
+		select {
+		case s.auditShipQueue <- ev:
+		default:
+			// Queue full; drop on the floor and log so the operator
+			// knows to investigate the downstream sink.
+			log.Printf("audit-shipping: queue full, dropped event id=%s action=%s", ev.ID, ev.Action)
+		}
+	}
 }
 
 // GetAuditEvents returns the most-recent-first slice, filtered by the
