@@ -1,0 +1,302 @@
+package main
+
+import (
+	"context"
+	"encoding/xml"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+)
+
+// Offline migration over qemu+tls:// (v5.11.6). Parallel to
+// offlineMigrate() which still handles the SSH+scp path; dispatch is
+// in startOfflineMigrate. When the operator pins keep_raw=true or
+// either host isn't enrolled in the cluster CA, we fall back to the
+// SSH path transparently.
+//
+// Trust model:
+//   - All remote commands run over the libvirt remote API at
+//     qemu+tls://<dest>/system. Mutual-cert auth; cluster CA trusts
+//     both endpoints.
+//   - Disk bytes flow through libvirtd's vol-upload stream (same
+//     connection, no out-of-band scp).
+//   - No kvm-migrator ssh keypair required on the hot path.
+//
+// Scope in v5.11.6:
+//   - Targets the "default" storage pool on the destination. v5.11.7
+//     adds an operator-selected pool via the advanced modal.
+//   - keep_raw (raw→qcow2→raw round-trip) stays on the legacy path —
+//     vol-upload alone can't convert formats mid-stream.
+
+const defaultRemotePool = "default"
+
+func offlineMigrateMTLS(ctx context.Context, vmName, dest string) error {
+	logStep := func(msg string) { log.Printf("offline-migrate-mtls %s→%s: %s", vmName, dest, msg) }
+	uri := fmt.Sprintf("qemu+tls://%s/system", dest)
+
+	// ── State tracking for rollback ────────────────────────────
+	wasRunning := false
+	vmShutDown := false
+	var sourceDiskPaths []string
+	var uploadedVols []string // pool/name pairs so rollback can vol-delete
+	definedOnTarget := false
+	var tmpFiles []string
+
+	rollback := func(reason string) {
+		logStep("ROLLBACK: " + reason)
+		setMigStatus("failed", 0, "Rolling back: "+reason)
+		for _, f := range tmpFiles {
+			os.Remove(f)
+		}
+		if definedOnTarget {
+			exec.Command("virsh", "-c", uri, "destroy", vmName).Run()
+			exec.Command("virsh", "-c", uri, "undefine", vmName, "--nvram", "--managed-save", "--snapshots-metadata").Run()
+			logStep("ROLLBACK: dest libvirt cleanup issued")
+		}
+		for _, vol := range uploadedVols {
+			exec.Command("virsh", "-c", uri, "vol-delete", "--pool", defaultRemotePool, vol).Run()
+		}
+		if vmShutDown && wasRunning {
+			logStep("ROLLBACK: restarting VM on source")
+			if out, err := exec.Command("virsh", "start", vmName).CombinedOutput(); err != nil {
+				logStep("ROLLBACK: virsh start failed: " + strings.TrimSpace(string(out)))
+			} else {
+				logStep("ROLLBACK: source VM restarted")
+			}
+		}
+	}
+
+	// ── 1. Pool sanity check ───────────────────────────────────
+	setMigStatus("prepare", 2, "Verifying destination storage pool")
+	if out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "pool-info", defaultRemotePool).CombinedOutput(); err != nil {
+		return fmt.Errorf("destination pool %q not reachable via %s: %s — install-agent.sh enrolled the host but the 'default' pool is missing. Falling back requires reissuing with transport=ssh", defaultRemotePool, uri, strings.TrimSpace(string(out)))
+	}
+
+	// ── 2. Current VM state ───────────────────────────────────
+	stateOut, err := exec.Command("virsh", "domstate", vmName).Output()
+	if err != nil {
+		return fmt.Errorf("domstate: %w", err)
+	}
+	wasRunning = strings.TrimSpace(string(stateOut)) == "running"
+
+	// ── 3. Shutdown source VM ─────────────────────────────────
+	if wasRunning {
+		setMigStatus("shutdown", 5, "Gracefully shutting down "+vmName)
+		logStep("shutting down VM")
+		if out, err := exec.Command("virsh", "shutdown", vmName).CombinedOutput(); err != nil {
+			rollback("shutdown failed")
+			return fmt.Errorf("shutdown: %s", strings.TrimSpace(string(out)))
+		}
+		// Wait up to 60s.
+		deadline := time.Now().Add(60 * time.Second)
+		for time.Now().Before(deadline) {
+			time.Sleep(2 * time.Second)
+			if err := checkCancel(ctx); err != nil {
+				rollback("cancelled during shutdown")
+				return err
+			}
+			s, _ := exec.Command("virsh", "domstate", vmName).Output()
+			if strings.TrimSpace(string(s)) == "shut off" {
+				vmShutDown = true
+				break
+			}
+		}
+		if !vmShutDown {
+			logStep("graceful shutdown timed out — forcing destroy")
+			exec.Command("virsh", "destroy", vmName).Run()
+			vmShutDown = true
+		}
+	} else {
+		vmShutDown = true
+	}
+	setMigStatus("shutdown", 15, vmName+" is shut off")
+	logStep("VM is shut off")
+
+	// ── 4. Dump XML ───────────────────────────────────────────
+	xmlData, err := exec.Command("virsh", "dumpxml", "--inactive", vmName).Output()
+	if err != nil {
+		rollback("dumpxml failed")
+		return fmt.Errorf("dumpxml: %w", err)
+	}
+
+	// ── 5. Parse disks ───────────────────────────────────────
+	type domDisk struct {
+		Device string `xml:"device,attr"`
+		Driver struct{ Type string `xml:"type,attr"` } `xml:"driver"`
+		Source struct{ File string `xml:"file,attr"` } `xml:"source"`
+		Target struct{ Dev  string `xml:"dev,attr"` } `xml:"target"`
+	}
+	type domXML struct {
+		XMLName xml.Name  `xml:"domain"`
+		Disks   []domDisk `xml:"devices>disk"`
+	}
+	var dom domXML
+	if err := xml.Unmarshal(xmlData, &dom); err != nil {
+		rollback("XML parse failed")
+		return fmt.Errorf("parse XML: %w", err)
+	}
+
+	// ── 6. Convert + vol-upload each disk ─────────────────────
+	diskCount := 0
+	for _, d := range dom.Disks {
+		if d.Device == "disk" && d.Source.File != "" {
+			diskCount++
+		}
+	}
+	if diskCount == 0 {
+		return errors.New("no writable disks found in domain XML")
+	}
+
+	diskIdx := 0
+	for _, d := range dom.Disks {
+		if d.Device != "disk" || d.Source.File == "" {
+			continue
+		}
+		srcPath := d.Source.File
+		sourceDiskPaths = append(sourceDiskPaths, srcPath)
+		volName := vmName + "-" + d.Target.Dev + ".qcow2"
+		tmpQcow := "/tmp/" + vmName + "-" + d.Target.Dev + ".qcow2"
+
+		convertBase := 15 + (35*diskIdx)/diskCount
+		convertEnd := 15 + (35*(diskIdx+1))/diskCount
+		setMigStatus("convert", convertBase, fmt.Sprintf("Compressing %s (qemu-img convert -c)", d.Target.Dev))
+		logStep(fmt.Sprintf("converting %s → compact qcow2", srcPath))
+		start := time.Now()
+		if out, err := exec.CommandContext(ctx, "qemu-img", "convert", "-c", "-O", "qcow2", srcPath, tmpQcow).CombinedOutput(); err != nil {
+			os.Remove(tmpQcow)
+			rollback("qemu-img convert failed for " + d.Target.Dev)
+			return fmt.Errorf("qemu-img convert %s: %s", d.Target.Dev, strings.TrimSpace(string(out)))
+		}
+		tmpFiles = append(tmpFiles, tmpQcow)
+		fi, _ := os.Stat(tmpQcow)
+		sizeMB := int64(0)
+		if fi != nil {
+			sizeMB = fi.Size() / (1024 * 1024)
+		}
+		setMigStatus("convert", convertEnd, fmt.Sprintf("Compressed %s to %d MB in %ds", d.Target.Dev, sizeMB, int(time.Since(start).Seconds())))
+
+		// Delete an existing volume at the target to make room.
+		exec.CommandContext(ctx, "virsh", "-c", uri, "vol-delete", "--pool", defaultRemotePool, volName).Run()
+
+		// Create the target volume. Capacity = the domain's virtual
+		// size, pulled from the source qcow2 — ensures vol-upload
+		// has enough room even though the compressed image is
+		// smaller. `qemu-img info --output=json` would be more
+		// robust but requires pulling encoding/json for one field,
+		// so use the raw --output=size path via `qemu-img measure`.
+		virtualBytes, err := sourceVirtualSize(srcPath)
+		if err != nil {
+			rollback("qemu-img info failed")
+			return err
+		}
+		transferBase := 50 + (35*diskIdx)/diskCount
+		setMigStatus("transfer", transferBase, fmt.Sprintf("Creating target volume %s (%d MB virtual)", volName, virtualBytes/(1024*1024)))
+		if out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "vol-create-as",
+			defaultRemotePool, volName, fmt.Sprintf("%d", virtualBytes), "--format", "qcow2").CombinedOutput(); err != nil {
+			rollback("vol-create-as failed for " + d.Target.Dev)
+			return fmt.Errorf("vol-create-as: %s", strings.TrimSpace(string(out)))
+		}
+		uploadedVols = append(uploadedVols, volName)
+
+		// Upload the converted qcow2. vol-upload streams through
+		// libvirtd over the same qemu+tls connection.
+		logStep(fmt.Sprintf("vol-upload %s → %s (%d MB)", tmpQcow, volName, sizeMB))
+		start = time.Now()
+		if out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "vol-upload",
+			"--pool", defaultRemotePool, volName, tmpQcow).CombinedOutput(); err != nil {
+			rollback("vol-upload failed for " + d.Target.Dev)
+			return fmt.Errorf("vol-upload %s: %s", d.Target.Dev, strings.TrimSpace(string(out)))
+		}
+		os.Remove(tmpQcow)
+		logStep(fmt.Sprintf("uploaded %s in %ds", d.Target.Dev, int(time.Since(start).Seconds())))
+		diskIdx++
+	}
+
+	// ── 7. Define VM on target ────────────────────────────────
+	setMigStatus("define", 88, "Defining VM on "+dest)
+	// Pipe XML into `virsh define /dev/stdin` on the remote.
+	defineCmd := exec.CommandContext(ctx, "virsh", "-c", uri, "define", "/dev/stdin")
+	defineCmd.Stdin = strings.NewReader(string(xmlData))
+	if out, err := defineCmd.CombinedOutput(); err != nil {
+		rollback("remote virsh define failed")
+		return fmt.Errorf("define on %s: %s", dest, strings.TrimSpace(string(out)))
+	}
+	definedOnTarget = true
+
+	// ── 8. Start VM on target ─────────────────────────────────
+	setMigStatus("start", 92, "Starting "+vmName+" on "+dest)
+	if out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "start", vmName).CombinedOutput(); err != nil {
+		rollback("remote virsh start failed")
+		return fmt.Errorf("start on %s: %s", dest, strings.TrimSpace(string(out)))
+	}
+
+	// ── 9. Verify running on target ───────────────────────────
+	setMigStatus("verify", 95, "Verifying "+vmName+" is running on "+dest)
+	verified := false
+	deadline := time.Now().Add(60 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(2 * time.Second)
+		s, _ := exec.CommandContext(ctx, "virsh", "-c", uri, "domstate", vmName).Output()
+		if strings.TrimSpace(string(s)) == "running" {
+			verified = true
+			break
+		}
+	}
+	if !verified {
+		rollback("VM did not reach running state on target")
+		return errors.New("target VM failed to start")
+	}
+	logStep("VM verified running on target")
+
+	// ── 10. Cleanup source ────────────────────────────────────
+	setMigStatus("cleanup", 98, "Cleaning up source")
+	// Remove source domain definition + disk files. Mirror of the
+	// SSH path's cleanup so the source side looks identical no
+	// matter which transport was used.
+	if out, err := exec.Command("virsh", "undefine", vmName,
+		"--nvram", "--managed-save", "--snapshots-metadata").CombinedOutput(); err != nil {
+		logStep("source undefine warning: " + strings.TrimSpace(string(out)))
+	}
+	for _, p := range sourceDiskPaths {
+		if rerr := os.Remove(p); rerr != nil {
+			logStep("source disk remove: " + rerr.Error())
+		} else {
+			logStep("removed source disk: " + p)
+		}
+	}
+	setMigStatus("complete", 100, "Migration completed successfully")
+	return nil
+}
+
+// sourceVirtualSize returns the virtual size in bytes for a qcow2 or
+// raw disk image by invoking `qemu-img info --output=json`. Used to
+// size the target volume before vol-upload.
+func sourceVirtualSize(path string) (uint64, error) {
+	out, err := exec.Command("qemu-img", "info", "--output=json", path).Output()
+	if err != nil {
+		return 0, fmt.Errorf("qemu-img info: %w", err)
+	}
+	// We only need virtual-size. Parse the line cheaply instead of
+	// pulling encoding/json into the migration path — qemu-img's
+	// output format is stable and this saves an import.
+	const key = `"virtual-size":`
+	idx := strings.Index(string(out), key)
+	if idx < 0 {
+		return 0, errors.New("virtual-size not in qemu-img info output")
+	}
+	tail := string(out[idx+len(key):])
+	end := strings.IndexAny(tail, ",}\n")
+	if end < 0 {
+		return 0, errors.New("virtual-size value unterminated")
+	}
+	num := strings.TrimSpace(tail[:end])
+	var v uint64
+	if _, err := fmt.Sscanf(num, "%d", &v); err != nil {
+		return 0, fmt.Errorf("parse virtual-size %q: %w", num, err)
+	}
+	return v, nil
+}
