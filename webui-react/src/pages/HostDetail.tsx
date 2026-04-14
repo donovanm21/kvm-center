@@ -20,6 +20,8 @@ function MaintenanceToggle({ host }: { host: Host }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [reason, setReason] = useState('');
+  const [drain, setDrain] = useState(false);
+  const [mode, setMode] = useState<'live' | 'offline'>('live');
   const [asking, setAsking] = useState(false);
   const canManage = hasPerm('host.manage');
   const on = !!host.maintenance_mode;
@@ -27,20 +29,28 @@ function MaintenanceToggle({ host }: { host: Host }) {
   const toggle = useMutation({
     mutationFn: () => apiPost(
       `/api/hosts/${encodeURIComponent(host.id)}/maintenance/${on ? 'exit' : 'enter'}`,
-      on ? undefined : { reason },
+      on ? undefined : { reason, drain, mode },
     ),
     onSuccess: () => {
-      toast('success', on ? 'Host back in service' : 'Host entered maintenance mode');
+      toast(
+        'success',
+        on
+          ? 'Host back in service'
+          : drain
+            ? `Host entered maintenance — draining VMs (${mode})`
+            : 'Host entered maintenance mode',
+      );
       qc.invalidateQueries({ queryKey: ['hosts'] });
       setAsking(false);
       setReason('');
+      setDrain(false);
     },
     onError: (e) => toast('error', `Failed: ${e instanceof Error ? e.message : String(e)}`),
   });
 
   if (asking && !on) {
     return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'inline-flex', flexDirection: 'column', gap: 6, padding: 8, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface-2)' }}>
         <input
           type="text"
           placeholder="Reason (e.g. kernel patch)"
@@ -49,14 +59,34 @@ function MaintenanceToggle({ host }: { host: Host }) {
           style={{
             height: 28, padding: '0 8px', fontSize: 12,
             background: 'var(--bg-input)', border: '1px solid var(--border)',
-            borderRadius: 4, color: 'var(--text-body)', fontFamily: 'inherit', width: 220,
+            borderRadius: 4, color: 'var(--text-body)', fontFamily: 'inherit', width: 280,
           }}
         />
-        <button type="button" className="btn-primary-sm" onClick={() => toggle.mutate()} disabled={toggle.isPending}>
-          {toggle.isPending ? 'Entering…' : 'Enter maintenance'}
-        </button>
-        <button type="button" className="btn-secondary-sm" onClick={() => { setAsking(false); setReason(''); }}>Cancel</button>
-      </span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-body)' }}>
+          <input type="checkbox" checked={drain} onChange={(e) => setDrain(e.target.checked)} />
+          Drain VMs to other hosts
+        </label>
+        {drain && (
+          <div style={{ display: 'flex', gap: 12, fontSize: 12, color: 'var(--text-body)', paddingLeft: 18 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <input type="radio" name="drain-mode" checked={mode === 'live'} onChange={() => setMode('live')} />
+              Live (running VMs)
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <input type="radio" name="drain-mode" checked={mode === 'offline'} onChange={() => setMode('offline')} />
+              Offline (any state)
+            </label>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button type="button" className="btn-primary-sm" onClick={() => toggle.mutate()} disabled={toggle.isPending}>
+            {toggle.isPending ? 'Entering…' : drain ? 'Enter & drain' : 'Enter maintenance'}
+          </button>
+          <button type="button" className="btn-secondary-sm" onClick={() => { setAsking(false); setReason(''); setDrain(false); }}>
+            Cancel
+          </button>
+        </div>
+      </div>
     );
   }
 
