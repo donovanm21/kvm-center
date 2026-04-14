@@ -115,7 +115,12 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		uri := migrationURI(dest, req.Params["migration_transport"])
-		args := []string{"migrate", "--live", "--persistent", "--verbose"}
+		// --undefinesource removes the source domain definition once the
+		// live migration completes. Without it the UI still lists the
+		// "ghost" VM on the source host until the next libvirtd restart,
+		// surfacing as a duplicate inventory entry (exactly what bit us
+		// on the offline path in v5.4.3).
+		args := []string{"migrate", "--live", "--persistent", "--undefinesource", "--verbose"}
 		if req.Params["copy_storage"] == "true" {
 			args = append(args, "--copy-storage-all")
 		}
