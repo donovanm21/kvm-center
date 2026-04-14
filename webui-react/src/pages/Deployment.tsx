@@ -13,14 +13,20 @@ type OS = 'rhel' | 'debian' | 'windows';
  * configuration.
  */
 export function Deployment() {
-  const portalURL = `${location.protocol}//${location.hostname}:8097`;
+  // Build portal serves plain HTTP on :8097 (agents/guests fetch over
+  // HTTP without our self-signed CA). Force http:// so the probe and
+  // snippets stay reachable when the SPA itself is served over HTTPS.
+  const portalURL = `http://${location.hostname}:8097`;
   const serverURL = `${location.protocol}//${location.host}`;
   const [reachable, setReachable] = useState<'checking' | 'ok' | 'down'>('checking');
 
   useEffect(() => {
     const ctrl = new AbortController();
-    fetch(portalURL, { mode: 'no-cors', signal: ctrl.signal })
-      .then(() => setReachable('ok'))
+    // Probe via the server to dodge mixed-content blocks under HTTPS
+    // (the build portal is plain HTTP on :8097 and won't have TLS).
+    fetch('/api/portal/health', { signal: ctrl.signal })
+      .then((r) => r.json())
+      .then((j) => setReachable(j.ok ? 'ok' : 'down'))
       .catch(() => setReachable('down'));
     return () => ctrl.abort();
   }, [portalURL]);

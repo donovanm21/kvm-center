@@ -215,6 +215,7 @@ func main() {
 		mux.Handle("/api/tls/regenerate", requirePerm(store, "tls.manage", auditTLSHandler(store, AuditTLSRegenerate, handleTLSRegenerate(certPath, keyPath))))
 	}
 	mux.HandleFunc("/health", handleHealth)
+	mux.HandleFunc("/api/portal/health", handlePortalHealth)
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"version":"` + Version + `"}`))
