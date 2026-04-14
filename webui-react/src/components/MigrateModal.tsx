@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+
+import { apiGet } from '@/api/client';
 
 import { Modal } from './Modal';
 import { MigrationProgressCard } from './MigrationCenter';
@@ -41,6 +44,11 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
   // on host mTLS-readiness; operators who want to pin legacy ssh
   // during mTLS rollout can override here.
   const [transport, setTransport] = useState<'' | 'tls' | 'ssh'>('');
+  // v5.11.7 advanced-modal options. Offline-only; all optional.
+  const [targetPool, setTargetPool] = useState<string>('');
+  const [newVMName, setNewVMName] = useState<string>('');
+  const [regenerateMAC, setRegenerateMAC] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   // Tracks whether we've already kicked off a migration in this modal
   // session — once true we swap the form for a live progress view.
   const [submittedAt, setSubmittedAt] = useState<number | null>(null);
@@ -74,6 +82,23 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
   const effectiveTarget = targetID || onlinePeers[0]?.id;
   const sourceHost = hosts.find((h) => h.id === vm.host_id);
   const target = hosts.find((h) => h.id === effectiveTarget);
+
+  // Pull the destination's pool list only when the advanced section
+  // is open. Auto-selects "default" when the list loads so the
+  // operator doesn't have to click when the fleet is uniform.
+  const poolsQuery = useQuery({
+    queryKey: ['host-pools', effectiveTarget],
+    queryFn: () => apiGet<{ name: string; path: string; type: string; capacity_gb: number; available_gb: number }[]>(
+      '/api/hosts/pools?host=' + encodeURIComponent(effectiveTarget || ''),
+    ),
+    enabled: advancedOpen && mode === 'offline' && !!effectiveTarget,
+    staleTime: 15_000,
+  });
+  useEffect(() => {
+    if (!targetPool && poolsQuery.data?.some((p) => p.name === 'default')) {
+      setTargetPool('default');
+    }
+  }, [poolsQuery.data, targetPool]);
 
   const checks: Check[] = useMemo(() => {
     if (!target) return [];
@@ -147,6 +172,11 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
     // Operator-pinned transport. Empty string = let the server auto-
     // pick based on host mTLS-readiness.
     if (transport) params.migration_transport = transport;
+    if (mode === 'offline') {
+      if (targetPool)  params.target_pool  = targetPool;
+      if (newVMName && newVMName !== vm.name) params.new_vm_name = newVMName;
+      if (regenerateMAC) params.regenerate_mac = 'true';
+    }
     const startedAt = Date.now();
     setSubmittedAt(startedAt);
     cmd.mutate(
@@ -293,6 +323,70 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
           onChange={setTransport}
         />
       </Field>
+
+      {mode === 'offline' && (
+        <div style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen((v) => !v)}
+            style={{
+              padding: 0, background: 'transparent', border: 'none',
+              color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer',
+            }}
+          >
+            {advancedOpen ? '▾' : '▸'} Advanced — target pool, rename, regenerate MACs
+          </button>
+          {advancedOpen && (
+            <div style={{ marginTop: 8, padding: 12, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-input)', display: 'grid', gap: 10 }}>
+              <Field label="Target storage pool">
+                {poolsQuery.isLoading && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading pools from {effectiveTarget}…</div>}
+                {poolsQuery.error && <div style={{ fontSize: 12, color: 'var(--danger-text, #F85149)' }}>Failed: {(poolsQuery.error as Error).message}</div>}
+                {poolsQuery.data && (
+                  <select
+                    value={targetPool}
+                    onChange={(e) => setTargetPool(e.target.value)}
+                    style={selectStyle}
+                  >
+                    {poolsQuery.data.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.name} — {p.type}, {p.available_gb.toFixed(1)} GB free / {p.capacity_gb.toFixed(1)} GB ({p.path})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+
+              <Field label="Rename VM on destination (optional)">
+                <input
+                  type="text"
+                  value={newVMName}
+                  onChange={(e) => setNewVMName(e.target.value)}
+                  placeholder={vm.name}
+                  style={{
+                    padding: '6px 10px', fontSize: 13,
+                    background: 'var(--bg-input)', border: '1px solid var(--border)',
+                    borderRadius: 4, color: 'var(--text-body)', fontFamily: 'inherit',
+                  }}
+                />
+              </Field>
+
+              <label style={{ ...checkboxLabel, alignSelf: 'flex-start' }}>
+                <input
+                  type="checkbox"
+                  checked={regenerateMAC}
+                  onChange={(e) => setRegenerateMAC(e.target.checked)}
+                />
+                <span>
+                  <strong>Regenerate MAC addresses</strong>{' '}
+                  <span style={{ color: 'var(--text-faded)' }}>
+                    — issues a fresh 52:54:00 MAC per interface. Use when cloning so the original VM keeps its network identity.
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
+        </div>
+      )}
 
       {mode === 'live' && (
         <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 4 }}>

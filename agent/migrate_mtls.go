@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -11,6 +12,9 @@ import (
 	"strings"
 	"time"
 )
+
+// randRead is a thin wrapper so the test variant can stub it.
+var randRead = rand.Read
 
 // Offline migration over qemu+tls:// (v5.11.6). Parallel to
 // offlineMigrate() which still handles the SSH+scp path; dispatch is
@@ -32,11 +36,19 @@ import (
 //   - keep_raw (raw→qcow2→raw round-trip) stays on the legacy path —
 //     vol-upload alone can't convert formats mid-stream.
 
-const defaultRemotePool = "default"
+const defaultMTLSPool = "default"
 
-func offlineMigrateMTLS(ctx context.Context, vmName, dest string) error {
+func offlineMigrateMTLS(ctx context.Context, vmName, dest string, opts MTLSOptions) error {
 	logStep := func(msg string) { log.Printf("offline-migrate-mtls %s→%s: %s", vmName, dest, msg) }
 	uri := fmt.Sprintf("qemu+tls://%s/system", dest)
+	pool := opts.TargetPool
+	if pool == "" {
+		pool = defaultMTLSPool
+	}
+	finalVMName := opts.NewVMName
+	if finalVMName == "" {
+		finalVMName = vmName
+	}
 
 	// ── State tracking for rollback ────────────────────────────
 	wasRunning := false
@@ -53,12 +65,12 @@ func offlineMigrateMTLS(ctx context.Context, vmName, dest string) error {
 			os.Remove(f)
 		}
 		if definedOnTarget {
-			exec.Command("virsh", "-c", uri, "destroy", vmName).Run()
-			exec.Command("virsh", "-c", uri, "undefine", vmName, "--nvram", "--managed-save", "--snapshots-metadata").Run()
+			exec.Command("virsh", "-c", uri, "destroy", finalVMName).Run()
+			exec.Command("virsh", "-c", uri, "undefine", finalVMName, "--nvram", "--managed-save", "--snapshots-metadata").Run()
 			logStep("ROLLBACK: dest libvirt cleanup issued")
 		}
 		for _, vol := range uploadedVols {
-			exec.Command("virsh", "-c", uri, "vol-delete", "--pool", defaultRemotePool, vol).Run()
+			exec.Command("virsh", "-c", uri, "vol-delete", "--pool", pool, vol).Run()
 		}
 		if vmShutDown && wasRunning {
 			logStep("ROLLBACK: restarting VM on source")
@@ -72,8 +84,8 @@ func offlineMigrateMTLS(ctx context.Context, vmName, dest string) error {
 
 	// ── 1. Pool sanity check ───────────────────────────────────
 	setMigStatus("prepare", 2, "Verifying destination storage pool")
-	if out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "pool-info", defaultRemotePool).CombinedOutput(); err != nil {
-		return fmt.Errorf("destination pool %q not reachable via %s: %s — install-agent.sh enrolled the host but the 'default' pool is missing. Falling back requires reissuing with transport=ssh", defaultRemotePool, uri, strings.TrimSpace(string(out)))
+	if out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "pool-info", pool).CombinedOutput(); err != nil {
+		return fmt.Errorf("destination pool %q not reachable via %s: %s — install-agent.sh enrolled the host but the 'default' pool is missing. Falling back requires reissuing with transport=ssh", pool, uri, strings.TrimSpace(string(out)))
 	}
 
 	// ── 2. Current VM state ───────────────────────────────────
@@ -180,7 +192,7 @@ func offlineMigrateMTLS(ctx context.Context, vmName, dest string) error {
 		setMigStatus("convert", convertEnd, fmt.Sprintf("Compressed %s to %d MB in %ds", d.Target.Dev, sizeMB, int(time.Since(start).Seconds())))
 
 		// Delete an existing volume at the target to make room.
-		exec.CommandContext(ctx, "virsh", "-c", uri, "vol-delete", "--pool", defaultRemotePool, volName).Run()
+		exec.CommandContext(ctx, "virsh", "-c", uri, "vol-delete", "--pool", pool, volName).Run()
 
 		// Create the target volume. Capacity = the domain's virtual
 		// size, pulled from the source qcow2 — ensures vol-upload
@@ -196,7 +208,7 @@ func offlineMigrateMTLS(ctx context.Context, vmName, dest string) error {
 		transferBase := 50 + (35*diskIdx)/diskCount
 		setMigStatus("transfer", transferBase, fmt.Sprintf("Creating target volume %s (%d MB virtual)", volName, virtualBytes/(1024*1024)))
 		if out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "vol-create-as",
-			defaultRemotePool, volName, fmt.Sprintf("%d", virtualBytes), "--format", "qcow2").CombinedOutput(); err != nil {
+			pool, volName, fmt.Sprintf("%d", virtualBytes), "--format", "qcow2").CombinedOutput(); err != nil {
 			rollback("vol-create-as failed for " + d.Target.Dev)
 			return fmt.Errorf("vol-create-as: %s", strings.TrimSpace(string(out)))
 		}
@@ -207,7 +219,7 @@ func offlineMigrateMTLS(ctx context.Context, vmName, dest string) error {
 		logStep(fmt.Sprintf("vol-upload %s → %s (%d MB)", tmpQcow, volName, sizeMB))
 		start = time.Now()
 		if out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "vol-upload",
-			"--pool", defaultRemotePool, volName, tmpQcow).CombinedOutput(); err != nil {
+			"--pool", pool, volName, tmpQcow).CombinedOutput(); err != nil {
 			rollback("vol-upload failed for " + d.Target.Dev)
 			return fmt.Errorf("vol-upload %s: %s", d.Target.Dev, strings.TrimSpace(string(out)))
 		}
@@ -216,31 +228,47 @@ func offlineMigrateMTLS(ctx context.Context, vmName, dest string) error {
 		diskIdx++
 	}
 
-	// ── 7. Define VM on target ────────────────────────────────
+	// ── 7. Rewrite XML per advanced-modal options ────────────
+	// Rename the VM by swapping <name> — keeps the UUID stable so
+	// the UI's per-VM state (notes, guest-telemetry cache, console
+	// secret) follows the migration. Regenerating MACs is a safety
+	// option for cloning workflows: a fresh random locally-admin
+	// MAC per <interface> avoids duplicate-MAC collisions when the
+	// source VM stays around.
+	xmlMut := string(xmlData)
+	if finalVMName != vmName {
+		xmlMut = replaceDomainName(xmlMut, finalVMName)
+		logStep(fmt.Sprintf("renaming %s → %s on target", vmName, finalVMName))
+	}
+	if opts.RegenerateMAC {
+		xmlMut = regenerateAllMACs(xmlMut)
+		logStep("regenerated MAC addresses for all interfaces")
+	}
+
+	// ── 8. Define VM on target ────────────────────────────────
 	setMigStatus("define", 88, "Defining VM on "+dest)
-	// Pipe XML into `virsh define /dev/stdin` on the remote.
 	defineCmd := exec.CommandContext(ctx, "virsh", "-c", uri, "define", "/dev/stdin")
-	defineCmd.Stdin = strings.NewReader(string(xmlData))
+	defineCmd.Stdin = strings.NewReader(xmlMut)
 	if out, err := defineCmd.CombinedOutput(); err != nil {
 		rollback("remote virsh define failed")
 		return fmt.Errorf("define on %s: %s", dest, strings.TrimSpace(string(out)))
 	}
 	definedOnTarget = true
 
-	// ── 8. Start VM on target ─────────────────────────────────
-	setMigStatus("start", 92, "Starting "+vmName+" on "+dest)
-	if out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "start", vmName).CombinedOutput(); err != nil {
+	// ── 9. Start VM on target ─────────────────────────────────
+	setMigStatus("start", 92, "Starting "+finalVMName+" on "+dest)
+	if out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "start", finalVMName).CombinedOutput(); err != nil {
 		rollback("remote virsh start failed")
 		return fmt.Errorf("start on %s: %s", dest, strings.TrimSpace(string(out)))
 	}
 
-	// ── 9. Verify running on target ───────────────────────────
-	setMigStatus("verify", 95, "Verifying "+vmName+" is running on "+dest)
+	// ── 10. Verify running on target ──────────────────────────
+	setMigStatus("verify", 95, "Verifying "+finalVMName+" is running on "+dest)
 	verified := false
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		time.Sleep(2 * time.Second)
-		s, _ := exec.CommandContext(ctx, "virsh", "-c", uri, "domstate", vmName).Output()
+		s, _ := exec.CommandContext(ctx, "virsh", "-c", uri, "domstate", finalVMName).Output()
 		if strings.TrimSpace(string(s)) == "running" {
 			verified = true
 			break
@@ -270,6 +298,59 @@ func offlineMigrateMTLS(ctx context.Context, vmName, dest string) error {
 	}
 	setMigStatus("complete", 100, "Migration completed successfully")
 	return nil
+}
+
+// replaceDomainName swaps the first <name>…</name> element's text
+// with newName. libvirt's domain XML places the domain name as the
+// first top-level child of <domain>, so a string-level swap is both
+// correct and safe against more complex inner elements further down.
+func replaceDomainName(xmlStr, newName string) string {
+	start := strings.Index(xmlStr, "<name>")
+	if start < 0 {
+		return xmlStr
+	}
+	end := strings.Index(xmlStr[start:], "</name>")
+	if end < 0 {
+		return xmlStr
+	}
+	return xmlStr[:start+len("<name>")] + newName + xmlStr[start+end:]
+}
+
+// regenerateAllMACs rewrites every `<mac address="..."/>` in the
+// domain XML with a fresh locally-administered unicast MAC. Simple
+// string-level rewrite keeps the rest of the XML untouched — libvirt
+// will re-parse and apply on define.
+func regenerateAllMACs(xmlStr string) string {
+	var out strings.Builder
+	out.Grow(len(xmlStr))
+	remaining := xmlStr
+	for {
+		idx := strings.Index(remaining, `<mac address="`)
+		if idx < 0 {
+			out.WriteString(remaining)
+			break
+		}
+		out.WriteString(remaining[:idx+len(`<mac address="`)])
+		end := strings.Index(remaining[idx:], `"/>`)
+		if end < 0 {
+			out.WriteString(remaining[idx+len(`<mac address="`):])
+			break
+		}
+		out.WriteString(randomLocalMAC())
+		out.WriteString(`"/>`)
+		remaining = remaining[idx+end+len(`"/>`):]
+	}
+	return out.String()
+}
+
+// randomLocalMAC returns a 52:54:00-prefixed MAC — libvirt's
+// conventional KVM prefix — with the trailing three bytes random.
+// Keeps the OUI consistent so ARP/DHCP infrastructure that keys off
+// the QEMU prefix still matches.
+func randomLocalMAC() string {
+	var b [3]byte
+	_, _ = randRead(b[:])
+	return fmt.Sprintf("52:54:00:%02x:%02x:%02x", b[0], b[1], b[2])
 }
 
 // sourceVirtualSize returns the virtual size in bytes for a qcow2 or
