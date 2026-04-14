@@ -61,13 +61,19 @@ func parseConsolePath(reqPath, prefix string) (string, string) {
 // packet rides the HTTPS session cookie. Auth is enforced by the
 // vm.console requirePerm wrapper in main.go — this handler only runs
 // for users carrying the permission.
-func handleConsolePage(_ *Store) http.HandlerFunc {
+func handleConsolePage(_store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		hostID, vmName := parseConsolePath(r.URL.Path, "/api/console")
 		if hostID == "" || vmName == "" {
 			http.Error(w, "path must be /api/console/<host>/<vm>", http.StatusBadRequest)
 			return
 		}
+		// Audit on the page open — captures intent. The WebSocket
+		// upgrade that follows isn't audited separately because a
+		// single Launch Console click produces both, and double-
+		// counting clutters the operator's view of "who opened
+		// what console".
+		audit(_store, r, AuditConsoleOpen, "vm/"+vmName, map[string]string{"host_id": hostID}, true, "")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = serverConsoleTmpl.Execute(w, map[string]any{
 			"VMName": vmName,
