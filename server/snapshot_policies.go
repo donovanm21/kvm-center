@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -98,11 +97,11 @@ func (s *Store) runOneSnapshotPolicy(ctx context.Context, p *models.SnapshotPoli
 			errs = append(errs, "vm "+uuid+" not found in inventory")
 			continue
 		}
-		if vm.State != "running" && vm.State != "paused" {
+		if string(vm.State) != "running" && string(vm.State) != "paused" {
 			// Offline snapshot would require domain-xml manipulation
 			// the agent doesn't expose; skip with a clear reason so
 			// the operator sees why in LastRunError.
-			errs = append(errs, "vm "+vm.Name+" skipped (state="+vm.State+")")
+			errs = append(errs, "vm "+vm.Name+" skipped (state="+string(vm.State)+")")
 			continue
 		}
 		name := snapshotName(p.ID, now)
