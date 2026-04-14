@@ -79,7 +79,10 @@ func (s *Store) recordHypervisorCert(rec *models.HypervisorCert) {
 	s.mu.Lock()
 	s.hypervisorCerts[rec.HostID] = rec
 	s.mu.Unlock()
-	go s.Save()
+	// Synchronous — cert issuance is rare and must durable before the
+	// HTTP response returns. Async Save() races lost a cert on v5.10.4
+	// restart during validation.
+	s.Save()
 }
 
 func (s *Store) listHypervisorCerts() []*models.HypervisorCert {
@@ -96,18 +99,22 @@ func (s *Store) listHypervisorCerts() []*models.HypervisorCert {
 
 func (s *Store) revokeHypervisorCert(hostID, actor, reason string) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	c, ok := s.hypervisorCerts[hostID]
 	if !ok {
+		s.mu.Unlock()
 		return errors.New("no cert for host")
 	}
 	if !c.RevokedAt.IsZero() {
+		s.mu.Unlock()
 		return errors.New("already revoked")
 	}
 	c.RevokedAt = time.Now().UTC()
 	c.RevokedBy = actor
 	c.RevokeReason = reason
-	go s.Save()
+	s.mu.Unlock()
+	// Synchronous — revocation must be durable before we tell the
+	// operator it succeeded.
+	s.Save()
 	return nil
 }
 
