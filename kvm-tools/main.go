@@ -10,6 +10,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	_ "embed"
 	"encoding/json"
 	"flag"
@@ -107,6 +108,8 @@ func main() {
 	}
 	log.Printf("kvm-tools %s: vm_uuid=%s  os=%s  server=%s  interval=%s", Version, uuid, runtime.GOOS, *serverURL, *interval)
 
+	initHTTPClient(*serverURL)
+
 	uuid = send(*serverURL, uuid)
 
 	ticker := time.NewTicker(*interval)
@@ -139,6 +142,32 @@ func writeCachedUUID(uuid string) {
 	_ = os.WriteFile(uuidCacheFile, []byte(uuid+"\n"), 0o644)
 }
 
+// httpClient is initialised at startup by initHTTPClient — when the
+// server URL is https:// we set InsecureSkipVerify and log a loud
+// warning, since the server's auto-generated self-signed cert is
+// trusted only by design in homelab deployments.
+var httpClient = &http.Client{Timeout: 10 * time.Second}
+var tlsInsecureWarningShown bool
+
+func initHTTPClient(serverURL string) {
+	if !strings.HasPrefix(serverURL, "https://") {
+		httpClient = &http.Client{Timeout: 10 * time.Second}
+		return
+	}
+	httpClient = &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // homelab trust model — see comment
+		},
+	}
+	if !tlsInsecureWarningShown {
+		log.Printf("⚠ kvm-tools: TLS verification DISABLED for %s — trusting any certificate. "+
+			"Acceptable for homelab servers running the auto-generated self-signed cert; "+
+			"install a trusted cert on the server and swap the URL when you're ready.", serverURL)
+		tlsInsecureWarningShown = true
+	}
+}
+
 // send posts one telemetry report and returns the UUID the daemon
 // should use on the NEXT tick — normally the same one that was passed
 // in, but flipped to the canonical value when the server detects a
@@ -150,8 +179,7 @@ func send(serverURL, uuid string) string {
 		log.Printf("kvm-tools: marshal error: %v", err)
 		return uuid
 	}
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(serverURL+"/api/guest-telemetry", "application/json", bytes.NewReader(body))
+	resp, err := httpClient.Post(serverURL+"/api/guest-telemetry", "application/json", bytes.NewReader(body))
 	if err != nil {
 		log.Printf("kvm-tools: send failed: %v", err)
 		return uuid
@@ -196,7 +224,13 @@ func selfUpdate(url string) error {
 	if err != nil {
 		return fmt.Errorf("os.Executable: %w", err)
 	}
-	resp, err := (&http.Client{Timeout: 60 * time.Second}).Get(url)
+	// Self-update binary downloads reuse httpClient — if we're talking
+	// to an HTTPS control plane the same skip-verify + warning applies
+	// to the binary fetch, and if the build portal is plain-HTTP nothing
+	// changes. Bump the timeout because binaries are bigger than JSON.
+	dlClient := *httpClient
+	dlClient.Timeout = 60 * time.Second
+	resp, err := dlClient.Get(url)
 	if err != nil {
 		return fmt.Errorf("download: %w", err)
 	}

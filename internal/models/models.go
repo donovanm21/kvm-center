@@ -387,6 +387,7 @@ const (
 	PermStorageUpload = "storage.upload"
 	PermStorageDelete = "storage.delete"
 	PermUserManage    = "user.manage" // create/update/disable users, groups, roles
+	PermTLSManage     = "tls.manage"  // upload / regenerate / download server TLS cert
 )
 
 // AllPermissions is the full list used for UI dropdowns and role editing.
@@ -396,7 +397,7 @@ var AllPermissions = []string{
 	PermVMMigrate, PermVMSnapshot, PermVMConsole, PermVMEdit,
 	PermHostView, PermHostManage,
 	PermStorageView, PermStorageUpload, PermStorageDelete,
-	PermUserManage,
+	PermUserManage, PermTLSManage,
 }
 
 // MigrationRecord is one completed or failed migration, persisted in the server store.
