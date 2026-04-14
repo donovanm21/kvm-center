@@ -118,6 +118,61 @@ type AuditShipping struct {
 	LastShipCount int64  `json:"last_ship_count,omitempty"`
 }
 
+// NotificationChannel (v5.4) is one delivery target — webhook or
+// email. Channels are referenced by ID from NotificationConfig.Events
+// so the operator can route different event types to different sinks
+// (e.g. a noisy "vm.action" stream into a chat webhook, but
+// "host.offline" alerts into PagerDuty + email).
+type NotificationChannel struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`              // "webhook" | "email"
+	Enabled bool   `json:"enabled"`
+
+	// Webhook-only.
+	WebhookURL    string `json:"webhook_url,omitempty"`
+	WebhookSecret string `json:"webhook_secret,omitempty"` // optional HMAC-SHA256 signature header
+
+	// Email-only. SMTP creds; if SMTPHost blank use the server's default
+	// (set once on the global config).
+	EmailTo   string `json:"email_to,omitempty"`   // comma-separated
+	EmailFrom string `json:"email_from,omitempty"`
+
+	// Observability.
+	LastSendAt    string `json:"last_send_at,omitempty"`
+	LastSendError string `json:"last_send_error,omitempty"`
+	LastSendCount int64  `json:"last_send_count,omitempty"`
+}
+
+// NotificationConfig (v5.4) wires channels to event types. EventTypes
+// is a map of event-type → enabled bool; the dispatcher fans every
+// fired event out to every enabled channel whose event type is true.
+// Keep the model dead-simple: per-channel routing was rejected as
+// over-engineering for a homelab fleet of <100 VMs.
+type NotificationConfig struct {
+	Channels   []*NotificationChannel `json:"channels"`
+	EventTypes map[string]bool        `json:"event_types"` // "vm.crashed", "host.offline", etc.
+
+	// Global SMTP defaults — channel-level overrides win.
+	SMTPHost     string `json:"smtp_host,omitempty"`
+	SMTPPort     int    `json:"smtp_port,omitempty"`
+	SMTPUser     string `json:"smtp_user,omitempty"`
+	SMTPPassword string `json:"smtp_password,omitempty"`
+	SMTPFrom     string `json:"smtp_from,omitempty"`
+	SMTPStartTLS bool   `json:"smtp_starttls,omitempty"`
+}
+
+// NotificationEvent is one fired notification handed to the dispatcher.
+type NotificationEvent struct {
+	Type      string            `json:"type"`     // canonical event key, e.g. "vm.crashed"
+	Title     string            `json:"title"`    // short subject line
+	Message   string            `json:"message"`  // body / context
+	Resource  string            `json:"resource,omitempty"`
+	Severity  string            `json:"severity"` // "info" | "warning" | "critical"
+	At        time.Time         `json:"at"`
+	Detail    map[string]string `json:"detail,omitempty"`
+}
+
 // AuditEvent (v5.2) records a single mutating operation. Every handler
 // that changes persisted state calls audit(...) — see server/audit.go
 // — to produce one of these. Surfaced read-only in Settings → Audit

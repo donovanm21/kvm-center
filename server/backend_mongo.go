@@ -54,6 +54,7 @@ const (
 	mcoServerMeta  = "server_meta" // _id:"singleton" — console_secret etc.
 	mcoAuditEvents     = "audit_events"
 	mcoSnapshotPolicies = "snapshot_policies"
+	mcoNotifications    = "notifications" // singleton _id:"singleton"
 )
 
 func NewMongoBackend(uri, dbName string) *MongoBackend {
@@ -336,6 +337,15 @@ func (b *MongoBackend) Load(ctx context.Context) (*persistData, error) {
 		return nil, err
 	}
 
+	// Notifications (v5.4) singleton.
+	var notif models.NotificationConfig
+	err = db.Collection(mcoNotifications).FindOne(ctx, bson.D{{Key: "_id", Value: "singleton"}}).Decode(&notif)
+	if err == nil {
+		pd.Notifications = &notif
+	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
+	}
+
 	return pd, nil
 }
 
@@ -512,6 +522,21 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	}
 	if err := replaceMap(ctx, db, mcoAuditEvents, auditDocs); err != nil {
 		return err
+	}
+
+	// Notifications singleton
+	if d.Notifications != nil {
+		if _, err := db.Collection(mcoNotifications).ReplaceOne(
+			ctx,
+			bson.D{{Key: "_id", Value: "singleton"}},
+			struct {
+				ID string `bson:"_id"`
+				*models.NotificationConfig `bson:",inline"`
+			}{"singleton", d.Notifications},
+			options.Replace().SetUpsert(true),
+		); err != nil {
+			return err
+		}
 	}
 
 	// Snapshot policies

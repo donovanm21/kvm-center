@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -34,6 +35,7 @@ type persistData struct {
 	Audit            []*models.AuditEvent     `json:"audit,omitempty"`
 	AuditShipping    *models.AuditShipping    `json:"audit_shipping,omitempty"`
 	SnapshotPolicies map[string]*models.SnapshotPolicy `json:"snapshot_policies,omitempty"`
+	Notifications    *models.NotificationConfig        `json:"notifications,omitempty"`
 	// ConsoleSecret is the HMAC-SHA256 key the server uses to mint
 	// per-session VM console tokens (see console_token.go). Generated
 	// on first use; persisted so agents that cached it don't need a
@@ -84,6 +86,17 @@ type Store struct {
 	// non-blockingly sends into it so a slow aggregator can't back up
 	// the UI write path.
 	auditShipQueue chan *models.AuditEvent
+	// notifications (v5.4) — config + dispatch queue. Worker started
+	// from main; AddNotification non-blockingly sends into notifyQueue.
+	notifications *models.NotificationConfig
+	notifyQueue   chan *models.NotificationEvent
+	// vmStatePrev tracks the last-seen state of each VM so the
+	// notification trigger code can detect transitions
+	// (e.g. running→crashed) instead of firing on every telemetry tick.
+	vmStatePrev map[string]models.VMState
+	// hostOnlinePrev mirrors the same idea for hosts so we only fire
+	// host.offline once per outage.
+	hostOnlinePrev map[string]bool
 	features      models.Features
 	dataFile      string
 	// backend is the pluggable persistence layer (JSON file or Mongo).
@@ -139,6 +152,8 @@ func NewStoreWithBackend(backend Backend, dataFile string) *Store {
 		idps:                make(map[string]*models.IdentityProvider),
 		kvmToolsUpdateQueue: make(map[string]bool),
 		snapshotPolicies:    make(map[string]*models.SnapshotPolicy),
+		vmStatePrev:         make(map[string]models.VMState),
+		hostOnlinePrev:      make(map[string]bool),
 		dataFile:            dataFile,
 		backend:             backend,
 	}
@@ -217,6 +232,11 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 
 	// Stamp host_id onto VMs coming from agent (it may omit it).
 	vms := make([]*models.VM, len(p.VMs))
+	type stateTransition struct {
+		uuid, name, host string
+		from, to         models.VMState
+	}
+	var transitions []stateTransition
 	for i := range p.VMs {
 		v := p.VMs[i]
 		v.HostID = p.HostID
@@ -225,6 +245,17 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 		}
 		s.applyVMSideData(&v)
 		vms[i] = &v
+		// Track VM state transitions so the dispatcher can fire
+		// vm.crashed / vm.recovered notifications. Skip the first
+		// observation (prev unset) — otherwise every VM appears to
+		// "transition" on server boot.
+		key := strings.ToLower(v.UUID)
+		if key != "" {
+			if prev, ok := s.vmStatePrev[key]; ok && prev != v.State {
+				transitions = append(transitions, stateTransition{v.UUID, v.Name, p.HostID, prev, v.State})
+			}
+			s.vmStatePrev[key] = v.State
+		}
 	}
 	s.vms[p.HostID] = vms
 	host.VMCount = len(vms)
@@ -236,9 +267,51 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 		pools[i] = &pool
 	}
 	s.storage[p.HostID] = pools
+	// Mark this host as online for the offline-recovery edge detector.
+	wasOnline, knownHost := s.hostOnlinePrev[p.HostID]
+	s.hostOnlinePrev[p.HostID] = true
 	// Wake up every live SSE subscriber so the inventory view reflects
 	// the agent report immediately instead of on the next client poll.
 	s.hub.Publish(EventInventory, map[string]any{"host_id": p.HostID})
+
+	// Notification side effects — fan out outside the lock.
+	go func() {
+		if knownHost && !wasOnline {
+			s.fireNotification(&models.NotificationEvent{
+				Type:     NotifyHostRecovered,
+				Title:    "Host recovered: " + p.HostID,
+				Message:  p.HostID + " is reporting telemetry again.",
+				Resource: "host/" + p.HostID,
+				Severity: "info",
+				At:       time.Now().UTC(),
+			})
+		}
+		for _, t := range transitions {
+			switch t.to {
+			case models.VMCrashed:
+				s.fireNotification(&models.NotificationEvent{
+					Type:     NotifyVMCrashed,
+					Title:    "VM crashed: " + t.name,
+					Message:  t.name + " on " + t.host + " transitioned " + string(t.from) + " → crashed.",
+					Resource: "vm/" + t.uuid,
+					Severity: "critical",
+					At:       time.Now().UTC(),
+					Detail:   map[string]string{"host": t.host, "from": string(t.from), "to": string(t.to)},
+				})
+			case models.VMRunning:
+				if t.from == models.VMCrashed || t.from == models.VMUnknown {
+					s.fireNotification(&models.NotificationEvent{
+						Type:     NotifyVMRecovered,
+						Title:    "VM recovered: " + t.name,
+						Message:  t.name + " on " + t.host + " is running again (was " + string(t.from) + ").",
+						Resource: "vm/" + t.uuid,
+						Severity: "info",
+						At:       time.Now().UTC(),
+					})
+				}
+			}
+		}
+	}()
 }
 
 // applyVMSideData rehydrates notes and merges guest-tools data onto a VM record.
@@ -475,17 +548,44 @@ func (s *Store) resolveCanonicalUUID(p *models.GuestTelemetryPayload) string {
 // AddMigration inserts or updates a migration record.
 func (s *Store) AddMigration(r *models.MigrationRecord) {
 	s.mu.Lock()
+	var prevStatus string
+	found := false
 	for i, m := range s.migrations {
 		if m.ID == r.ID {
+			prevStatus = m.Status
 			s.migrations[i] = r
-			s.mu.Unlock()
-			s.hub.Publish(EventMigration, map[string]any{"id": r.ID, "status": r.Status})
-			return
+			found = true
+			break
 		}
 	}
-	s.migrations = append(s.migrations, r)
+	if !found {
+		s.migrations = append(s.migrations, r)
+	}
 	s.mu.Unlock()
 	s.hub.Publish(EventMigration, map[string]any{"id": r.ID, "status": r.Status})
+
+	// Fire one notification per migration terminal-state transition.
+	if prevStatus != r.Status {
+		switch r.Status {
+		case "complete":
+			s.fireNotification(&models.NotificationEvent{
+				Type:     NotifyMigrationDone,
+				Title:    "Migration complete: " + r.VMName,
+				Message:  fmt.Sprintf("%s migrated %s → %s in %ds.", r.VMName, r.SourceHost, r.DestHost, r.ElapsedSec),
+				Resource: "migration/" + r.ID,
+				Severity: "info",
+			})
+		case "failed":
+			s.fireNotification(&models.NotificationEvent{
+				Type:     NotifyMigrationFailed,
+				Title:    "Migration failed: " + r.VMName,
+				Message:  fmt.Sprintf("%s migration %s → %s failed: %s", r.VMName, r.SourceHost, r.DestHost, r.Error),
+				Resource: "migration/" + r.ID,
+				Severity: "critical",
+				Detail:   map[string]string{"error": r.Error, "phase": r.Phase},
+			})
+		}
+	}
 }
 
 // GetMigrations returns all migration records, newest first.
@@ -580,15 +680,30 @@ func (s *Store) GetHostAgentAddr(hostID string) string {
 func (s *Store) MarkOfflineHosts() {
 	s.mu.Lock()
 	changed := false
-	for _, h := range s.hosts {
+	var nowOffline []string
+	for id, h := range s.hosts {
 		if time.Since(h.LastSeen) > 2*time.Minute && h.Status != models.HostOffline {
 			h.Status = models.HostOffline
 			changed = true
+			if s.hostOnlinePrev[id] {
+				nowOffline = append(nowOffline, id)
+			}
+			s.hostOnlinePrev[id] = false
 		}
 	}
 	s.mu.Unlock()
 	if changed {
 		s.hub.Publish(EventInventory, nil)
+	}
+	for _, id := range nowOffline {
+		s.fireNotification(&models.NotificationEvent{
+			Type:     NotifyHostOffline,
+			Title:    "Host offline: " + id,
+			Message:  id + " has not reported telemetry for >2 minutes.",
+			Resource: "host/" + id,
+			Severity: "critical",
+			At:       time.Now().UTC(),
+		})
 	}
 }
 
@@ -612,6 +727,7 @@ func (s *Store) Save() {
 		Audit:            s.audit,
 		AuditShipping:    s.auditShipping,
 		SnapshotPolicies: s.snapshotPolicies,
+		Notifications:    s.notifications,
 		ConsoleSecret:    s.consoleSecret,
 	}
 	s.mu.RUnlock()
@@ -695,6 +811,9 @@ func (s *Store) load() {
 	}
 	if d.SnapshotPolicies != nil {
 		s.snapshotPolicies = d.SnapshotPolicies
+	}
+	if d.Notifications != nil {
+		s.notifications = d.Notifications
 	}
 	log.Printf("store: loaded %d hosts, %d users, %d groups, %d roles from %s",
 		len(s.hosts), len(s.users), len(s.groups), len(s.roles), s.dataFile)
