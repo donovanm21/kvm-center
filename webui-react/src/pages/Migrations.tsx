@@ -313,7 +313,11 @@ function TransportPill({ transport }: { transport?: string }) {
     );
   }
   if (transport === 'ssh') {
-    return <span className="tone-pill" style={pillStyle} title="qemu+ssh:// via the shared kvm-migrator keypair (legacy)">SSH</span>;
+    return (
+      <span className="tone-pill warn" style={pillStyle} title="qemu+ssh:// via the shared kvm-migrator keypair (legacy)">
+        SSH
+      </span>
+    );
   }
   return <span style={{ fontSize: 10, color: 'var(--text-faded)' }}>—</span>;
 }
