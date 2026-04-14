@@ -78,3 +78,34 @@ fmt:
 
 vet:
 	go vet ./...
+
+# ── Quality gates (v5.12) ─────────────────────────────────────────────────────
+# `make test`  — go test across every package.
+# `make lint`  — gofmt check (no writes) + go vet. golangci-lint runs when
+#                it's on PATH; skipped otherwise so contributors without the
+#                extra tool get useful output anyway.
+.PHONY: test lint lint-fix check
+
+test:
+	go test ./...
+
+lint:
+	@echo "→ gofmt check"
+	@changed=$$(gofmt -l .); if [ -n "$$changed" ]; then \
+		echo "  files need gofmt:"; echo "$$changed" | sed 's/^/    /'; \
+		exit 1; \
+	fi
+	@echo "→ go vet"
+	go vet ./...
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		echo "→ golangci-lint"; \
+		golangci-lint run ./...; \
+	else \
+		echo "→ golangci-lint not installed — skipping (brew install golangci-lint to enable)"; \
+	fi
+
+lint-fix:
+	gofmt -w .
+	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint run --fix ./... || true
+
+check: lint test
