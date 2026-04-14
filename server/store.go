@@ -656,12 +656,17 @@ func (s *Store) GetHosts() []*models.Host {
 }
 
 // hypervisorHasActiveCert — caller holds s.mu (read lock ok).
+//
+// Caveat: time.Time zero round-tripped through Mongo comes back as
+// time.Unix(-62135596800,0) which has non-zero wall/ext, so IsZero()
+// reports false for an un-revoked cert loaded from the DB. Check the
+// year instead — anything year<1000 means "no revocation recorded".
 func (s *Store) hypervisorHasActiveCert(hostID string) bool {
 	c, ok := s.hypervisorCerts[hostID]
 	if !ok {
 		return false
 	}
-	if !c.RevokedAt.IsZero() {
+	if c.RevokedAt.Year() > 1 {
 		return false
 	}
 	return time.Now().Before(c.NotAfter)
