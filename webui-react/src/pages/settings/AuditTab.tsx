@@ -346,7 +346,7 @@ export function AuditTab() {
       {isLoading && <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading audit log…</div>}
       {error && <div className="tone-panel danger" style={{ padding: 12, fontSize: 12 }}>Failed to load: {(error as Error).message}</div>}
       {!isLoading && !error && (
-        <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="panel" style={{ padding: 0, overflow: 'auto', maxHeight: 'calc(100vh - 320px)' }}>
           {events.length === 0 ? (
             <div style={{ padding: 20, textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
               {hasFilters ? 'No audit events match the current filters.' : 'Audit log is empty — new events will show up here.'}
@@ -357,6 +357,7 @@ export function AuditTab() {
                 <tr>
                   <th>Time</th>
                   <th>Actor</th>
+                  <th>Via</th>
                   <th>Action</th>
                   <th>Resource</th>
                   <th>Detail</th>
@@ -373,10 +374,13 @@ export function AuditTab() {
                       <div style={{ fontSize: 12, color: 'var(--text-body)' }}>{ev.actor_name || '—'}</div>
                       {ev.actor_ip && <div style={{ fontSize: 10, color: 'var(--text-faded)', fontFamily: "'SF Mono', monospace" }}>{ev.actor_ip}</div>}
                     </td>
+                    <td>
+                      <ViaPill detail={ev.detail} actorID={ev.actor_id} />
+                    </td>
                     <td style={{ fontFamily: "'SF Mono', monospace", fontSize: 12, color: 'var(--text-strong)' }}>{ev.action}</td>
                     <td style={{ fontFamily: "'SF Mono', monospace", fontSize: 11, color: 'var(--text-muted)' }}>{ev.resource || '—'}</td>
                     <td style={{ fontSize: 11, color: 'var(--text-muted)', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={detailTitle(ev.detail)}>
-                      {formatDetail(ev.detail)}
+                      {formatDetail(stripVia(ev.detail))}
                     </td>
                     <td>
                       <span className={`tone-pill ${ev.success ? 'ok' : 'danger'}`}>{ev.success ? 'success' : 'failed'}</span>
@@ -391,6 +395,27 @@ export function AuditTab() {
       )}
     </>
   );
+}
+
+function ViaPill({ detail, actorID }: { detail?: Record<string, string>; actorID?: string }) {
+  const via = detail?.via;
+  if (via && via.startsWith('token:')) {
+    return (
+      <span className="tone-pill accent" style={{ fontFamily: "'SF Mono', monospace", fontSize: 10 }} title={via}>
+        CLI · {via.slice('token:'.length)}
+      </span>
+    );
+  }
+  if (actorID === 'system') {
+    return <span className="tone-pill warn" style={{ fontSize: 10 }}>System</span>;
+  }
+  return <span className="tone-pill" style={{ fontSize: 10 }}>WebUI</span>;
+}
+
+function stripVia(d?: Record<string, string>): Record<string, string> | undefined {
+  if (!d) return d;
+  const { via: _via, ...rest } = d;
+  return rest;
 }
 
 function formatDetail(d?: Record<string, string>): string {
