@@ -37,6 +37,10 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
   const [targetID, setTargetID] = useState<string>('');
   const [copyStorage, setCopyStorage] = useState(true);
   const [keepRaw, setKeepRaw] = useState(false);
+  // Transport override (v5.11.4). "" lets the server auto-pick based
+  // on host mTLS-readiness; operators who want to pin legacy ssh
+  // during mTLS rollout can override here.
+  const [transport, setTransport] = useState<'' | 'tls' | 'ssh'>('');
   // Tracks whether we've already kicked off a migration in this modal
   // session — once true we swap the form for a live progress view.
   const [submittedAt, setSubmittedAt] = useState<number | null>(null);
@@ -140,6 +144,9 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
     } else {
       params.keep_raw = keepRaw ? 'true' : 'false';
     }
+    // Operator-pinned transport. Empty string = let the server auto-
+    // pick based on host mTLS-readiness.
+    if (transport) params.migration_transport = transport;
     const startedAt = Date.now();
     setSubmittedAt(startedAt);
     cmd.mutate(
@@ -272,9 +279,19 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
           {onlinePeers.map((h) => (
             <option key={h.id} value={h.id}>
               {h.id} ({h.ip}) — {(h.mem_free_mb / 1024).toFixed(1)} GB free
+              {h.mtls_ready ? ' · mTLS' : ''}
             </option>
           ))}
         </select>
+      </Field>
+
+      <Field label="Transport">
+        <TransportToggle
+          value={transport}
+          sourceReady={!!sourceHost?.mtls_ready}
+          targetReady={!!target?.mtls_ready}
+          onChange={setTransport}
+        />
       </Field>
 
       {mode === 'live' && (
@@ -362,6 +379,76 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
         </div>
       </div>
     </Modal>
+  );
+}
+
+function TransportToggle({
+  value, sourceReady, targetReady, onChange,
+}: {
+  value: '' | 'tls' | 'ssh';
+  sourceReady: boolean;
+  targetReady: boolean;
+  onChange: (v: '' | 'tls' | 'ssh') => void;
+}) {
+  const autoChoice = sourceReady && targetReady ? 'mTLS' : 'SSH';
+  const tlsAvailable = sourceReady && targetReady;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'inline-flex', borderRadius: 6, border: '1px solid var(--border)', overflow: 'hidden', alignSelf: 'flex-start' }}>
+        <TransportTab label={`Auto (${autoChoice})`} active={value === ''} onClick={() => onChange('')} />
+        <TransportTab
+          label="mTLS (Recommended)"
+          active={value === 'tls'}
+          onClick={() => onChange('tls')}
+          disabled={!tlsAvailable}
+          tone="ok"
+        />
+        <TransportTab label="SSH (Legacy)" active={value === 'ssh'} onClick={() => onChange('ssh')} tone="warn" />
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text-faded)' }}>
+        {!tlsAvailable
+          ? 'mTLS not available — both hosts must have an active hypervisor cert. Using SSH fallback.'
+          : value === 'ssh'
+            ? 'Legacy path via the shared kvm-migrator keypair.'
+            : value === 'tls'
+              ? 'qemu+tls:// with a server-signed one-time grant.'
+              : 'Server auto-selects mTLS when both hosts are enrolled.'}
+      </div>
+    </div>
+  );
+}
+
+function TransportTab({
+  label, active, onClick, disabled, tone,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: 'ok' | 'warn';
+}) {
+  const bg = active
+    ? tone === 'ok'
+      ? 'var(--success-bg, #1E3D23)'
+      : tone === 'warn'
+        ? 'var(--warn-bg, #3b2e10)'
+        : 'var(--accent-subtle)'
+    : 'transparent';
+  const color = disabled ? 'var(--text-faded)' : 'var(--text-strong)';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        padding: '5px 12px', fontSize: 11, fontWeight: 500,
+        border: 'none', background: bg, color,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        borderRight: '1px solid var(--border)',
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
