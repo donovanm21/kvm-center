@@ -51,6 +51,7 @@ services:
       - KVM_CENTER_ADDR=:8090
       - KVM_CENTER_TLS_ADDR=:8190
       - KVM_CENTER_TLS_DIR=/var/lib/kvm-center/tls
+      - KVM_CENTER_CA_DIR=/var/lib/kvm-center/ca
       - KVM_CENTER_DATA=/var/lib/kvm-center/data.json
       # v5.1+: point the server at the compose-local Mongo. First boot
       # migrates the legacy JSON store into the Mongo database and
