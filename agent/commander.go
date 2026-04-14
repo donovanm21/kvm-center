@@ -195,10 +195,18 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		keepRaw := req.Params["keep_raw"] == "true"
-		// Offline migration uses SSH+scp transport regardless of PKI
-		// state — it doesn't ride qemu+<scheme>://. mTLS plumbing
-		// applies to live migrations only in v5.10.1.
-		log.Printf("command: offline-migrate vm=%s → %s keep_raw=%v (async)", vmTarget, dest, keepRaw)
+		// v5.11.4: if the server attached a grant (transport=tls),
+		// forward it to the destination so the libvirt hook on dest
+		// authorises the eventual VM start. v5.11.5 will switch the
+		// data transfer itself to qemu+tls vol-upload; v5.11.4 still
+		// uses scp but ties offline into the same grant path.
+		if grant := req.Params["grant"]; grant != "" && req.Params["migration_transport"] == "tls" {
+			if err := forwardGrantToDest(dest, grant); err != nil {
+				respond(w, false, "destination rejected migration grant: "+err.Error())
+				return
+			}
+		}
+		log.Printf("command: offline-migrate vm=%s → %s keep_raw=%v transport=%s (async)", vmTarget, dest, keepRaw, req.Params["migration_transport"])
 		startOfflineMigrate(vmTarget, dest, keepRaw)
 		respond(w, true, "offline migration started — poll /migrate-status for progress")
 		return

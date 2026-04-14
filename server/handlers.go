@@ -230,28 +230,39 @@ func handleCommand(store *Store) http.HandlerFunc {
 			return
 		}
 
-		// v5.10.1: prefer qemu+tls:// when both source and destination
-		// have an active hypervisor cert. Falls back to legacy qemu+ssh
-		// when either side isn't enrolled yet — so a mixed fleet during
-		// the v5.10 roll-out keeps working.
-		if action == "MIGRATE" {
+		// v5.10.1 + v5.11.4: prefer qemu+tls:// (+ signed grants) when
+		// both source and destination have an active hypervisor cert.
+		// Applies to BOTH live (MIGRATE) and offline (OFFLINE_MIGRATE)
+		// so the two paths share one authorisation story. Falls back
+		// to legacy qemu+ssh when either side isn't enrolled yet — so
+		// a mixed fleet during rollout keeps working.
+		if action == "MIGRATE" || action == "OFFLINE_MIGRATE" {
 			destHostID := resolveHostByIP(store, req.Params["destination"])
 			if req.Params == nil {
 				req.Params = map[string]string{}
 			}
+			// Auto-select unless the operator pinned a transport in
+			// the UI (v5.11.4 toggle).
 			if _, already := req.Params["migration_transport"]; !already {
 				if destHostID != "" && store.HostMTLSReady(req.HostID) && store.HostMTLSReady(destHostID) {
 					req.Params["migration_transport"] = "tls"
-					log.Printf("migration: %s → %s using qemu+tls:// (both hosts mTLS-ready)", req.HostID, destHostID)
 				} else {
 					req.Params["migration_transport"] = "ssh"
 				}
 			}
-			// v5.11: mint a signed grant for mTLS migrations. The source
-			// agent forwards it to the destination before virsh migrate;
-			// destination validates signature + src/dst binding + TTL.
+			modeLabel := "live"
+			if action == "OFFLINE_MIGRATE" {
+				modeLabel = "offline"
+			}
+			if req.Params["migration_transport"] == "tls" {
+				log.Printf("migration(%s): %s → %s using qemu+tls://", modeLabel, req.HostID, destHostID)
+			}
+			// Mint a signed grant whenever the transport is mTLS,
+			// regardless of live/offline. Source agent forwards it
+			// pre-migration; dest agent records it so the libvirt
+			// hook can enforce.
 			if req.Params["migration_transport"] == "tls" && serverGrantSigner != nil && destHostID != "" {
-				envelope, grant, gerr := serverGrantSigner.Issue(req.HostID, destHostID, req.VMUUID, req.VMName, "live")
+				envelope, grant, gerr := serverGrantSigner.Issue(req.HostID, destHostID, req.VMUUID, req.VMName, modeLabel)
 				if gerr != nil {
 					log.Printf("grants: issue failed for %s→%s vm=%s: %v", req.HostID, destHostID, req.VMName, gerr)
 				} else {
@@ -260,6 +271,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 						"grant_id": grant.ID,
 						"src":      grant.Source,
 						"dst":      grant.Dest,
+						"mode":     grant.Mode,
 						"ttl":      fmt.Sprintf("%ds", grant.ExpiresAt-grant.IssuedAt),
 					}, true, "")
 				}
