@@ -29,10 +29,6 @@ func StartCommandServer(addr string) {
 	// v5.11.1: consulted by /etc/libvirt/hooks/qemu to enforce that a
 	// migration the dest is about to accept was actually authorised.
 	mux.HandleFunc("/grant-active", handleGrantActive)
-	// v5.11.7: pool discovery for the migrate modal's advanced
-	// offline options. Read-only — no auth beyond the localhost
-	// listener.
-	mux.HandleFunc("/pools", handlePools)
 	mux.HandleFunc("/cancel-migrate", handleCancelMigrate)
 	mux.HandleFunc("/storage-browse", handleStorageBrowse)
 	mux.HandleFunc("/storage-upload", handleStorageUpload)
