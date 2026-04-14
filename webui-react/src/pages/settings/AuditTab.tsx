@@ -63,6 +63,10 @@ const ACTIONS: { value: string; label: string }[] = [
   { value: 'snapshot.policy.delete', label: 'snapshot.policy.delete' },
   { value: 'snapshot.policy.run', label: 'snapshot.policy.run' },
   { value: 'audit.shipping.update', label: 'audit.shipping.update' },
+  { value: 'notifications.update', label: 'notifications.update' },
+  { value: 'notifications.test', label: 'notifications.test' },
+  { value: 'token.create', label: 'token.create' },
+  { value: 'token.revoke', label: 'token.revoke' },
 ];
 
 const DEFAULT_LIMIT = 100;
@@ -327,7 +331,11 @@ export function AuditTab() {
           </label>
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: 11, color: 'var(--text-faded)' }}>
-            {total > 0 ? `${offset + 1}–${Math.min(offset + limit, total)} of ${total} matching events` : '—'}
+            {total === 0
+              ? '—'
+              : total <= limit
+                ? `${total} matching event${total === 1 ? '' : 's'} (fits in one page of ${limit})`
+                : `${offset + 1}–${Math.min(offset + limit, total)} of ${total} matching events`}
           </span>
           <button type="button" className="btn-secondary-sm" onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0 || isFetching}>Newer</button>
           <button type="button" className="btn-secondary-sm" onClick={() => setOffset(offset + limit)} disabled={offset + limit >= total || isFetching}>Older</button>

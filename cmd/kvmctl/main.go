@@ -1,0 +1,410 @@
+// kvmctl — minimal CLI for kvm-center, authenticated via API token.
+//
+// Config lives at $XDG_CONFIG_HOME/kvm-center/config.json (or
+// ~/.config/kvm-center/config.json). Created by `kvmctl login`.
+//
+// Commands (v5.5):
+//
+//   kvmctl login --server <url> --token <token>
+//   kvmctl hosts
+//   kvmctl vms [--host <id>] [--state running|stopped|...]
+//   kvmctl vm start    <uuid>
+//   kvmctl vm stop     <uuid>
+//   kvmctl vm restart  <uuid>
+//   kvmctl vm forcestop <uuid>
+//   kvmctl vm migrate  <uuid> --to <host_id> [--mode live|offline]
+//   kvmctl snapshot list   <uuid>
+//   kvmctl snapshot create <uuid> --name <name>
+//   kvmctl version
+//
+// Output is human-readable by default; pass --json for machine output.
+package main
+
+import (
+	"bytes"
+	"crypto/tls"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+const cliVersion = "v5.5.0"
+
+type Config struct {
+	Server string `json:"server"`
+	Token  string `json:"token"`
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		usage()
+		os.Exit(1)
+	}
+	cmd := os.Args[1]
+	args := os.Args[2:]
+	switch cmd {
+	case "login":
+		os.Exit(cmdLogin(args))
+	case "version", "--version", "-v":
+		fmt.Println("kvmctl", cliVersion)
+	case "hosts":
+		os.Exit(cmdHosts(args))
+	case "vms":
+		os.Exit(cmdVMs(args))
+	case "vm":
+		os.Exit(cmdVM(args))
+	case "snapshot":
+		os.Exit(cmdSnapshot(args))
+	case "help", "-h", "--help":
+		usage()
+	default:
+		fmt.Fprintln(os.Stderr, "unknown command:", cmd)
+		usage()
+		os.Exit(1)
+	}
+}
+
+func usage() {
+	fmt.Fprint(os.Stderr, `kvmctl — kvm-center CLI
+
+  kvmctl login --server <url> --token <token>
+  kvmctl hosts                  [--json]
+  kvmctl vms [--host <id>]      [--json]
+  kvmctl vm start|stop|restart|forcestop <uuid>
+  kvmctl vm migrate <uuid> --to <host_id> [--mode live|offline]
+  kvmctl snapshot list   <uuid>
+  kvmctl snapshot create <uuid> --name <name>
+  kvmctl version
+`)
+}
+
+// ── Commands ──────────────────────────────────────────────────────
+
+func cmdLogin(args []string) int {
+	fs := flag.NewFlagSet("login", flag.ExitOnError)
+	server := fs.String("server", "", "https://kvm-center URL")
+	token := fs.String("token", "", "API token (kvmc_…)")
+	_ = fs.Parse(args)
+	if *server == "" || *token == "" {
+		fmt.Fprintln(os.Stderr, "--server and --token required")
+		return 1
+	}
+	cfg := Config{Server: strings.TrimRight(*server, "/"), Token: *token}
+	// Verify by hitting /api/auth/me.
+	if _, err := apiCall(cfg, "GET", "/api/auth/me", nil); err != nil {
+		fmt.Fprintln(os.Stderr, "login failed:", err)
+		return 1
+	}
+	if err := saveConfig(cfg); err != nil {
+		fmt.Fprintln(os.Stderr, "save config:", err)
+		return 1
+	}
+	fmt.Println("logged in to", cfg.Server)
+	return 0
+}
+
+func cmdHosts(args []string) int {
+	fs := flag.NewFlagSet("hosts", flag.ExitOnError)
+	asJSON := fs.Bool("json", false, "emit JSON")
+	_ = fs.Parse(args)
+	cfg, err := loadConfig()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	body, err := apiCall(cfg, "GET", "/api/hosts", nil)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if *asJSON {
+		os.Stdout.Write(body)
+		return 0
+	}
+	var hosts []struct {
+		ID       string  `json:"id"`
+		IP       string  `json:"ip"`
+		Status   string  `json:"status"`
+		CPUUsage float64 `json:"cpu_usage"`
+		MemUsage float64 `json:"mem_usage"`
+		VMCount  int     `json:"vm_count"`
+		Maintenance bool `json:"maintenance_mode"`
+	}
+	if err := json.Unmarshal(body, &hosts); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Printf("%-20s %-15s %-10s %5s %5s %5s\n", "ID", "IP", "STATUS", "CPU%", "MEM%", "VMS")
+	for _, h := range hosts {
+		status := h.Status
+		if h.Maintenance {
+			status += "/maint"
+		}
+		fmt.Printf("%-20s %-15s %-10s %5.0f %5.0f %5d\n", h.ID, h.IP, status, h.CPUUsage, h.MemUsage, h.VMCount)
+	}
+	return 0
+}
+
+func cmdVMs(args []string) int {
+	fs := flag.NewFlagSet("vms", flag.ExitOnError)
+	host := fs.String("host", "", "filter by host id")
+	asJSON := fs.Bool("json", false, "emit JSON")
+	_ = fs.Parse(args)
+	cfg, err := loadConfig()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	path := "/api/vms"
+	if *host != "" {
+		path += "?host=" + *host
+	}
+	body, err := apiCall(cfg, "GET", path, nil)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if *asJSON {
+		os.Stdout.Write(body)
+		return 0
+	}
+	var vms []struct {
+		UUID   string `json:"uuid"`
+		Name   string `json:"name"`
+		HostID string `json:"host_id"`
+		State  string `json:"state"`
+		CPU    int    `json:"cpu_count"`
+		MemMB  uint64 `json:"mem_total_mb"`
+	}
+	if err := json.Unmarshal(body, &vms); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Printf("%-36s %-25s %-15s %-10s %4s %7s\n", "UUID", "NAME", "HOST", "STATE", "CPU", "MEMMB")
+	for _, v := range vms {
+		fmt.Printf("%-36s %-25s %-15s %-10s %4d %7d\n", v.UUID, v.Name, v.HostID, v.State, v.CPU, v.MemMB)
+	}
+	return 0
+}
+
+func cmdVM(args []string) int {
+	if len(args) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: kvmctl vm <action> <uuid> [...]")
+		return 1
+	}
+	action, uuid, rest := args[0], args[1], args[2:]
+	cfg, err := loadConfig()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	host, name, err := resolveVM(cfg, uuid)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	body := map[string]any{"host_id": host, "vm_uuid": uuid, "vm_name": name}
+	switch action {
+	case "start":
+		body["action"] = "START"
+	case "stop":
+		body["action"] = "STOP"
+	case "restart":
+		body["action"] = "RESTART"
+	case "forcestop":
+		body["action"] = "FORCESTOP"
+	case "migrate":
+		fs := flag.NewFlagSet("migrate", flag.ExitOnError)
+		to := fs.String("to", "", "destination host id")
+		mode := fs.String("mode", "live", "live|offline")
+		_ = fs.Parse(rest)
+		if *to == "" {
+			fmt.Fprintln(os.Stderr, "--to required")
+			return 1
+		}
+		destIP, err := lookupHostIP(cfg, *to)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		if *mode == "offline" {
+			body["action"] = "OFFLINE_MIGRATE"
+		} else {
+			body["action"] = "MIGRATE"
+		}
+		body["params"] = map[string]string{"destination": destIP}
+	default:
+		fmt.Fprintln(os.Stderr, "unknown vm action:", action)
+		return 1
+	}
+	resp, err := apiCall(cfg, "POST", "/api/command", body)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	os.Stdout.Write(resp)
+	fmt.Println()
+	return 0
+}
+
+func cmdSnapshot(args []string) int {
+	if len(args) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: kvmctl snapshot list|create <uuid> [...]")
+		return 1
+	}
+	action, uuid, rest := args[0], args[1], args[2:]
+	cfg, err := loadConfig()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	host, name, err := resolveVM(cfg, uuid)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	switch action {
+	case "list":
+		body, err := apiCall(cfg, "GET", "/api/vms/snapshots?host="+host+"&vm="+name, nil)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		os.Stdout.Write(body)
+		fmt.Println()
+		return 0
+	case "create":
+		fs := flag.NewFlagSet("create", flag.ExitOnError)
+		snapName := fs.String("name", "", "snapshot name")
+		_ = fs.Parse(rest)
+		if *snapName == "" {
+			*snapName = "kvmctl-" + time.Now().UTC().Format("20060102-150405")
+		}
+		body := map[string]any{
+			"host_id": host, "vm_uuid": uuid, "vm_name": name,
+			"action": "SNAPSHOT", "params": map[string]string{"name": *snapName},
+		}
+		resp, err := apiCall(cfg, "POST", "/api/command", body)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		os.Stdout.Write(resp)
+		fmt.Println()
+		return 0
+	}
+	fmt.Fprintln(os.Stderr, "unknown snapshot action:", action)
+	return 1
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+func resolveVM(cfg Config, uuid string) (host, name string, err error) {
+	body, err := apiCall(cfg, "GET", "/api/vms", nil)
+	if err != nil {
+		return "", "", err
+	}
+	var vms []struct {
+		UUID   string `json:"uuid"`
+		Name   string `json:"name"`
+		HostID string `json:"host_id"`
+	}
+	if err := json.Unmarshal(body, &vms); err != nil {
+		return "", "", err
+	}
+	for _, v := range vms {
+		if strings.EqualFold(v.UUID, uuid) {
+			return v.HostID, v.Name, nil
+		}
+	}
+	return "", "", fmt.Errorf("vm %s not found", uuid)
+}
+
+func lookupHostIP(cfg Config, id string) (string, error) {
+	body, err := apiCall(cfg, "GET", "/api/hosts", nil)
+	if err != nil {
+		return "", err
+	}
+	var hosts []struct{ ID, IP string }
+	if err := json.Unmarshal(body, &hosts); err != nil {
+		return "", err
+	}
+	for _, h := range hosts {
+		if h.ID == id {
+			return h.IP, nil
+		}
+	}
+	return "", fmt.Errorf("host %s not found", id)
+}
+
+func apiCall(cfg Config, method, path string, body any) ([]byte, error) {
+	if cfg.Server == "" || cfg.Token == "" {
+		return nil, fmt.Errorf("not logged in (run: kvmctl login --server <url> --token <token>)")
+	}
+	var rdr io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		rdr = bytes.NewReader(b)
+	}
+	req, err := http.NewRequest(method, cfg.Server+path, rdr)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "kvmctl/"+cliVersion)
+	client := &http.Client{
+		Timeout: 60 * time.Second,
+		// Self-signed certs are the homelab default; trust on first use.
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	out, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("%s %s → %d: %s", method, path, resp.StatusCode, strings.TrimSpace(string(out)))
+	}
+	return out, nil
+}
+
+func configPath() string {
+	base := os.Getenv("XDG_CONFIG_HOME")
+	if base == "" {
+		home, _ := os.UserHomeDir()
+		base = filepath.Join(home, ".config")
+	}
+	return filepath.Join(base, "kvm-center", "config.json")
+}
+
+func loadConfig() (Config, error) {
+	var c Config
+	b, err := os.ReadFile(configPath())
+	if err != nil {
+		return c, fmt.Errorf("not logged in: %w", err)
+	}
+	if err := json.Unmarshal(b, &c); err != nil {
+		return c, err
+	}
+	return c, nil
+}
+
+func saveConfig(c Config) error {
+	p := configPath()
+	if err := os.MkdirAll(filepath.Dir(p), 0700); err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(c, "", "  ")
+	return os.WriteFile(p, b, 0600)
+}

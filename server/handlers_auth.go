@@ -15,6 +15,15 @@ const sessionCookieName = "kvm_session"
 type ctxKey string
 
 const userCtxKey ctxKey = "user"
+const tokenIDCtxKey ctxKey = "api-token-id"
+
+// tokenIDFromRequest returns the API token ID a request authenticated
+// with, or "" if it came from a session cookie. Used by audit() so the
+// log shows whether a CLI/CI token or a browser session did the work.
+func tokenIDFromRequest(r *http.Request) string {
+	v, _ := r.Context().Value(tokenIDCtxKey).(string)
+	return v
+}
 
 // ── Public auth endpoints ──────────────────────────────────────────
 
@@ -620,6 +629,21 @@ func authMiddleware(store *Store, next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
+		}
+		// Bearer token (v5.5): scriptable clients (kvmctl, CI) send
+		// "Authorization: Bearer kvmc_<id>.<secret>". Resolved against
+		// the API-token store; on success the token's owner user is
+		// attached to the request context just like a session login.
+		if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+			tok := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
+			if u, tokenID := store.LookupAPITokenWithID(tok); u != nil {
+				ctx := context.WithValue(r.Context(), userCtxKey, u)
+				ctx = context.WithValue(ctx, tokenIDCtxKey, tokenID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+			writeError(w, http.StatusUnauthorized, "invalid or expired token")
+			return
 		}
 		// Everything else requires a valid session.
 		c, err := r.Cookie(sessionCookieName)

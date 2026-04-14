@@ -9,6 +9,7 @@ import { TLSTab } from './settings/TLSTab';
 import { DatabaseTab } from './settings/DatabaseTab';
 import { AuditTab } from './settings/AuditTab';
 import { NotificationsTab } from './settings/NotificationsTab';
+import { TokensTab } from './settings/TokensTab';
 
 const TABS = [
   { to: 'general', label: 'General' },
@@ -20,6 +21,7 @@ const TABS = [
   { to: 'database', label: 'Database' },
   { to: 'audit', label: 'Audit Log' },
   { to: 'notifications', label: 'Notifications' },
+  { to: 'tokens', label: 'API Tokens' },
 ] as const;
 
 export function Settings() {
@@ -56,6 +58,7 @@ export function Settings() {
         <Route path="database" element={<DatabaseTab />} />
         <Route path="audit" element={<AuditTab />} />
         <Route path="notifications" element={<NotificationsTab />} />
+        <Route path="tokens" element={<TokensTab />} />
       </Routes>
     </>
   );
