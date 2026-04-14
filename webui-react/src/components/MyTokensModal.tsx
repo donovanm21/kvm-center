@@ -137,11 +137,13 @@ export function MyTokensModal({ open, onClose }: { open: boolean; onClose: () =>
               <tr><td colSpan={5} style={{ color: 'var(--text-muted)', fontSize: 12 }}>No personal tokens yet.</td></tr>
             )}
             {list.data.map((t) => {
-              const expired = t.expires_at ? new Date(t.expires_at) < new Date() : false;
+              // time.Time zero serialises as "0001-01-01T00:00:00Z" — treat as no expiry, not expired.
+              const hasExpiry = t.expires_at && new Date(t.expires_at).getFullYear() > 1000;
+              const expired = hasExpiry && new Date(t.expires_at!) < new Date();
               return (
                 <tr key={t.id}>
                   <td style={{ fontWeight: 500 }}>{t.name}</td>
-                  <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.expires_at ? fmt(t.expires_at) : 'never'}</td>
+                  <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{hasExpiry ? fmt(t.expires_at!) : 'never'}</td>
                   <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.last_used_at ? fmt(t.last_used_at) : 'never'}</td>
                   <td>
                     {t.revoked
