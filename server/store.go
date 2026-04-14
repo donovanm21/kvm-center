@@ -25,6 +25,11 @@ type persistData struct {
 	Sessions   map[string]*models.Session          `json:"sessions,omitempty"`
 	IDPs       map[string]*models.IdentityProvider `json:"idps,omitempty"`
 	Features   *models.Features                    `json:"features,omitempty"`
+	// ConsoleSecret is the HMAC-SHA256 key the server uses to mint
+	// per-session VM console tokens (see console_token.go). Generated
+	// on first use; persisted so agents that cached it don't need a
+	// re-fetch after a server restart.
+	ConsoleSecret string `json:"console_secret,omitempty"`
 }
 
 // guestEntry is one cached report from a kvm-tools daemon running in a guest.
@@ -54,6 +59,9 @@ type Store struct {
 	// update on their next telemetry POST. The next /api/guest-telemetry
 	// reply for that UUID returns an update_url and the entry clears.
 	kvmToolsUpdateQueue map[string]bool
+	// consoleSecret is loaded from the JSON store and re-persisted on
+	// first access; see GetOrCreateConsoleSecret in console_token.go.
+	consoleSecret string
 	features   models.Features
 	dataFile   string
 
@@ -558,8 +566,9 @@ func (s *Store) Save() {
 		Groups:     s.groups,
 		Roles:      s.roles,
 		Sessions:   s.sessions,
-		IDPs:       s.idps,
-		Features:   &s.features,
+		IDPs:          s.idps,
+		Features:      &s.features,
+		ConsoleSecret: s.consoleSecret,
 	}
 	s.mu.RUnlock()
 
@@ -625,6 +634,9 @@ func (s *Store) load() {
 	}
 	if d.Features != nil {
 		s.features = *d.Features
+	}
+	if d.ConsoleSecret != "" {
+		s.consoleSecret = d.ConsoleSecret
 	}
 	log.Printf("store: loaded %d hosts, %d users, %d groups, %d roles from %s",
 		len(s.hosts), len(s.users), len(s.groups), len(s.roles), s.dataFile)
