@@ -38,6 +38,7 @@ type persistData struct {
 	AuditShipping    *models.AuditShipping    `json:"audit_shipping,omitempty"`
 	SnapshotPolicies map[string]*models.SnapshotPolicy `json:"snapshot_policies,omitempty"`
 	Notifications    *models.NotificationConfig        `json:"notifications,omitempty"`
+	Metrics          *models.MetricsConfig             `json:"metrics,omitempty"`
 	APITokens        map[string]*models.APIToken       `json:"api_tokens,omitempty"`
 	HypervisorCerts  map[string]*models.HypervisorCert `json:"hypervisor_certs,omitempty"`
 	// ConsoleSecret is the HMAC-SHA256 key the server uses to mint
@@ -100,6 +101,9 @@ type Store struct {
 	// from main; AddNotification non-blockingly sends into notifyQueue.
 	notifications *models.NotificationConfig
 	notifyQueue   chan *models.NotificationEvent
+	// metrics (v5.13): InfluxDB v2 sink config + sample queue.
+	metrics      *models.MetricsConfig
+	metricsQueue chan metricSample
 	// vmStatePrev tracks the last-seen state of each VM so the
 	// notification trigger code can detect transitions
 	// (e.g. running→crashed) instead of firing on every telemetry tick.
@@ -299,6 +303,28 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 	// Wake up every live SSE subscriber so the inventory view reflects
 	// the agent report immediately instead of on the next client poll.
 	s.hub.Publish(EventInventory, map[string]any{"host_id": p.HostID})
+
+	// Emit metrics (v5.13). Fan out a snapshot of host + VM samples
+	// to the InfluxDB queue; no-op when metrics config is absent or
+	// disabled. Outside the lock for non-allocation reasons — queueSample
+	// only touches a channel.
+	var hostCopy models.Host
+	var vmsCopy []*models.VM
+	if host != nil {
+		hostCopy = *host
+	}
+	vmsCopy = append(vmsCopy, vms...)
+	prefix := ""
+	if s.metrics != nil {
+		prefix = s.metrics.MeasurementPrefix
+	}
+
+	// Metrics side effects — fan out outside the lock. Tight loop
+	// so the per-VM emit stays bounded on a large fleet.
+	go func() {
+		s.EmitHostMetrics(&hostCopy, prefix)
+		s.EmitVMMetrics(vmsCopy, prefix)
+	}()
 
 	// Notification side effects — fan out outside the lock.
 	go func() {
@@ -800,6 +826,7 @@ func computeDirty(d *persistData) map[string]bool {
 		"api_tokens":        d.APITokens,
 		"snapshot_policies": d.SnapshotPolicies,
 		"hypervisor_certs":  d.HypervisorCerts,
+		"metrics":           d.Metrics,
 	}
 	for name, v := range fields {
 		h := hashJSON(v)
@@ -845,6 +872,7 @@ func (s *Store) Save() {
 		AuditShipping:    s.auditShipping,
 		SnapshotPolicies: s.snapshotPolicies,
 		Notifications:    s.notifications,
+		Metrics:          s.metrics,
 		APITokens:        s.apiTokens,
 		HypervisorCerts:  s.hypervisorCerts,
 		ConsoleSecret:    s.consoleSecret,
@@ -934,6 +962,9 @@ func (s *Store) load() {
 	}
 	if d.Notifications != nil {
 		s.notifications = d.Notifications
+	}
+	if d.Metrics != nil {
+		s.metrics = d.Metrics
 	}
 	if d.APITokens != nil {
 		// Backfill kind on pre-v5.6 tokens. They were all minted from the

@@ -73,6 +73,8 @@ const ACTIONS: { value: string; label: string }[] = [
   { value: 'migration.grant.issue', label: 'migration.grant.issue' },
   { value: 'migration.grant.accept', label: 'migration.grant.accept' },
   { value: 'migration.grant.reject', label: 'migration.grant.reject' },
+  { value: 'metrics.update', label: 'metrics.update' },
+  { value: 'metrics.test', label: 'metrics.test' },
 ];
 
 const DEFAULT_LIMIT = 100;
