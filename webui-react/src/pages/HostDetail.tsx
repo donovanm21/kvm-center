@@ -228,6 +228,15 @@ function SummaryTab({ host }: { host: Host }) {
               maintenance
             </span>
           )}
+          {host.mtls_ready && (
+            <span
+              className="tone-pill accent"
+              style={{ padding: '4px 12px', borderRadius: 12 }}
+              title="Hypervisor has an active cluster CA certificate — migrations use qemu+tls://"
+            >
+              mTLS
+            </span>
+          )}
           <div style={{ flex: 1 }} />
           <MaintenanceToggle host={host} />
         </div>

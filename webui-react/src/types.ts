@@ -41,6 +41,7 @@ export interface Host {
   maintenance_entered_at?: string;
   maintenance_by?: string;
   maintenance_reason?: string;
+  mtls_ready?: boolean;
 }
 
 export interface VMDisk {
@@ -80,6 +81,7 @@ export interface MaintenanceMeta {
   maintenance_entered_at?: string;
   maintenance_by?: string;
   maintenance_reason?: string;
+  mtls_ready?: boolean;
 }
 export interface GuestInterface {
   name: string;

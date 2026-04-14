@@ -57,6 +57,12 @@ type Host struct {
 	MaintenanceEnteredAt time.Time `json:"maintenance_entered_at,omitempty"`
 	MaintenanceBy        string    `json:"maintenance_by,omitempty"`   // actor user ID
 	MaintenanceReason    string    `json:"maintenance_reason,omitempty"`
+
+	// MTLSReady (v5.10.1) is true when this host has an active
+	// hypervisor cert issued by the cluster CA — a precondition for
+	// qemu+tls:// migrations. Derived at read time from the
+	// HypervisorCert store; operators can't set it manually.
+	MTLSReady bool `json:"mtls_ready,omitempty"`
 }
 
 // SnapshotPolicy (v5.3) describes a recurring snapshot job: what to

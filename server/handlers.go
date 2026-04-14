@@ -230,6 +230,24 @@ func handleCommand(store *Store) http.HandlerFunc {
 			return
 		}
 
+		// v5.10.1: prefer qemu+tls:// when both source and destination
+		// have an active hypervisor cert. Falls back to legacy qemu+ssh
+		// when either side isn't enrolled yet — so a mixed fleet during
+		// the v5.10 roll-out keeps working.
+		if action == "MIGRATE" {
+			destHostID := resolveHostByIP(store, req.Params["destination"])
+			if req.Params == nil {
+				req.Params = map[string]string{}
+			}
+			if _, already := req.Params["migration_transport"]; !already {
+				if destHostID != "" && store.HostMTLSReady(req.HostID) && store.HostMTLSReady(destHostID) {
+					req.Params["migration_transport"] = "tls"
+					log.Printf("migration: %s → %s using qemu+tls:// (both hosts mTLS-ready)", req.HostID, destHostID)
+				} else {
+					req.Params["migration_transport"] = "ssh"
+				}
+			}
+		}
 		agentCmd := models.CommandRequest{
 			Action: action,
 			VMName: req.VMName,
