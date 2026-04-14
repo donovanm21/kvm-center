@@ -230,10 +230,13 @@ function SummaryTab({ host }: { host: Host }) {
           )}
           {host.mtls_ready && (
             <span
-              className="tone-pill accent"
-              style={{ padding: '4px 12px', borderRadius: 12 }}
+              className="tone-pill ok"
+              style={{ padding: '4px 10px', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11 }}
               title="Hypervisor has an active cluster CA certificate — migrations use qemu+tls://"
             >
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                <path d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-.5V4.5A3.5 3.5 0 0 0 8 1zm2.5 6h-5V4.5a2.5 2.5 0 1 1 5 0V7z"/>
+              </svg>
               mTLS
             </span>
           )}
