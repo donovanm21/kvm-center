@@ -796,6 +796,45 @@ func handleCancelMigration(store *Store) http.HandlerFunc {
 	}
 }
 
+// GET /api/vms/screenshot?host=<id>&vm=<name> — proxy the agent's
+// screenshot PNG. Exists because the browser renders the kvm-center UI
+// over HTTPS (:8190) since v5.0 and can't load a plain-HTTP <img src>
+// pointing directly at the agent's :8081 endpoint (mixed-content
+// block). Routing the bytes through the server keeps everything on the
+// TLS origin while the hypervisor agent stays plain-HTTP on the LAN.
+func handleVMScreenshot(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		hostID := r.URL.Query().Get("host")
+		vmName := r.URL.Query().Get("vm")
+		if hostID == "" || vmName == "" {
+			writeError(w, http.StatusBadRequest, "host and vm query params required")
+			return
+		}
+		agentAddr := store.GetHostAgentAddr(hostID)
+		if agentAddr == "" {
+			writeError(w, http.StatusNotFound, "host not found")
+			return
+		}
+		upstream := fmt.Sprintf("http://%s/screenshot/%s", agentAddr, url.PathEscape(vmName))
+		client := &http.Client{Timeout: 15 * time.Second}
+		resp, err := client.Get(upstream)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "agent unreachable")
+			return
+		}
+		defer resp.Body.Close()
+		// Passthrough content type + cache hints so the browser treats
+		// this identically to the direct-from-agent PNG it used to get.
+		for _, h := range []string{"Content-Type", "Content-Length", "Cache-Control", "ETag", "Last-Modified"} {
+			if v := resp.Header.Get(h); v != "" {
+				w.Header().Set(h, v)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, resp.Body)
+	}
+}
+
 // GET /api/migrate-status?host=<id> — proxy the agent's migration progress.
 func handleMigrateStatus(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

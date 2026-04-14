@@ -183,13 +183,20 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
   const features = useFeatures();
   const canConsole = hasPerm('vm.console') && !features.data?.disable_console;
   const running = vm.state === 'running';
+  // Route the screenshot through the server proxy so an HTTPS SPA can
+  // render it without a mixed-content block — the agent stays plain
+  // HTTP on the LAN. The cache-bust on the querystring makes the
+  // browser re-fetch on every VMDetail render.
   const thumbURL =
     running && host?.ip && canConsole
-      ? `http://${host.ip}:${host.agent_port || 8081}/screenshot/${encodeURIComponent(vm.name)}?_t=${Date.now()}`
+      ? `/api/vms/screenshot?host=${encodeURIComponent(vm.host_id)}&vm=${encodeURIComponent(vm.name)}&_t=${Date.now()}`
       : null;
 
   const openConsole = () => {
     if (!host?.ip || !canConsole) return;
+    // Console is a full HTTP page (WebSocket VNC); it has to open
+    // cross-origin in a new tab. The browser will show a mixed-content
+    // notice in its address bar, but the popup itself works.
     const url = `http://${host.ip}:${host.agent_port || 8081}/console/${encodeURIComponent(vm.name)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
