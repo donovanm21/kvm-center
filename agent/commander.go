@@ -22,6 +22,10 @@ func StartCommandServer(addr string) {
 	mux.HandleFunc("/screenshot/", handleVMScreenshot)
 	mux.HandleFunc("/snapshots/", handleSnapshotList)
 	mux.HandleFunc("/migrate-status", handleMigrateStatus)
+	// v5.11: destination-side endpoint that validates + caches an
+	// incoming migration grant right before libvirtd handshakes with
+	// the source over qemu+tls.
+	mux.HandleFunc("/prepare-grant", handlePrepareGrant)
 	mux.HandleFunc("/cancel-migrate", handleCancelMigrate)
 	mux.HandleFunc("/storage-browse", handleStorageBrowse)
 	mux.HandleFunc("/storage-upload", handleStorageUpload)
@@ -113,6 +117,16 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		if dest == "" {
 			respond(w, false, "MIGRATE requires params.destination")
 			return
+		}
+		// v5.11: forward the server-minted migration grant to the
+		// destination agent so the dest validates + records it before
+		// libvirtd's TLS handshake starts. Only applies to mTLS
+		// migrations; legacy ssh path ignores the param.
+		if grant := req.Params["grant"]; grant != "" && req.Params["migration_transport"] == "tls" {
+			if err := forwardGrantToDest(dest, grant); err != nil {
+				respond(w, false, "destination rejected migration grant: "+err.Error())
+				return
+			}
 		}
 		uri := migrationURI(dest, req.Params["migration_transport"])
 		// --undefinesource removes the source domain definition once the

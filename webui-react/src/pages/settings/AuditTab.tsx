@@ -67,6 +67,12 @@ const ACTIONS: { value: string; label: string }[] = [
   { value: 'notifications.test', label: 'notifications.test' },
   { value: 'token.create', label: 'token.create' },
   { value: 'token.revoke', label: 'token.revoke' },
+  { value: 'ca.enroll', label: 'ca.enroll' },
+  { value: 'ca.sign', label: 'ca.sign' },
+  { value: 'ca.revoke', label: 'ca.revoke' },
+  { value: 'migration.grant.issue', label: 'migration.grant.issue' },
+  { value: 'migration.grant.accept', label: 'migration.grant.accept' },
+  { value: 'migration.grant.reject', label: 'migration.grant.reject' },
 ];
 
 const DEFAULT_LIMIT = 100;
