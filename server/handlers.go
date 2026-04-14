@@ -56,7 +56,14 @@ func handleTelemetry(store *Store) http.HandlerFunc {
 		log.Printf("telemetry: %s  host=%s  vms=%d  cpu=%.1f%%  mem=%.1f%%",
 			payload.IP, payload.HostID, len(payload.VMs), payload.CPUUsage, payload.MemUsage)
 
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		// Gossip the shared console-token secret so agents can verify
+		// signatures minted by /api/vms/console-token. Ships on every
+		// reply so a rotating secret (future feature) propagates
+		// automatically within one telemetry tick.
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":         "ok",
+			"console_secret": store.GetOrCreateConsoleSecret(),
+		})
 	}
 }
 

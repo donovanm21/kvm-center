@@ -110,6 +110,7 @@ func main() {
 	mux.HandleFunc("/api/vms/snapshots", handleVMSnapshots(store))
 	mux.HandleFunc("/api/vms/screenshot", handleVMScreenshot(store))
 	mux.Handle("/api/vms/notes", requirePerm(store, "vm.edit", http.HandlerFunc(handleVMNotes(store))))
+	mux.Handle("/api/vms/console-token", requirePerm(store, "vm.console", http.HandlerFunc(handleConsoleToken(store))))
 	mux.HandleFunc("/api/storage", handleGetStorage(store))
 	mux.Handle("/api/storage/browse", requirePerm(store, "storage.view", http.HandlerFunc(handleStorageBrowse(store))))
 	mux.Handle("/api/storage/upload", requirePerm(store, "storage.upload", http.HandlerFunc(handleStorageUpload(store))))

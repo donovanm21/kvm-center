@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -45,6 +46,15 @@ func main() {
 	// Pick the outbound HTTP client based on the server URL scheme;
 	// logs the "TLS skip-verify" warning when we flip to https.
 	initHTTPClient(*serverURL)
+
+	// Rehydrate the console-token secret from disk so a restart doesn't
+	// reject console tokens until the next telemetry tick. Host id set
+	// here (matches what CollectTelemetry reports) scopes the token
+	// signature to this agent.
+	LoadCachedConsoleSecret()
+	// Must match whatever collector.go's hostname() reports as HostID —
+	// the server signs tokens against that exact string.
+	SetHostIDForToken(hostname())
 
 	// Collect and send telemetry immediately, then on interval.
 	sendTelemetry(*serverURL, *cmdPort)
@@ -113,6 +123,13 @@ func sendTelemetry(serverURL string, agentPort int) {
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("telemetry: server returned %d", resp.StatusCode)
+		return
+	}
+	// Server ships the console-token secret on every reply so a key
+	// rotation propagates within one telemetry tick. Safe to ignore
+	// decode errors — we just keep the cached secret unchanged.
+	if body, err := io.ReadAll(resp.Body); err == nil {
+		ParseTelemetryReply(body)
 	}
 }
 
