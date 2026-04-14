@@ -13,7 +13,7 @@ import { VMDetail } from './pages/VMDetail';
 import { Hosts } from './pages/Hosts';
 import { HostDetail } from './pages/HostDetail';
 import { Storage } from './pages/Storage';
-import { SnapshotsOverview } from './pages/SnapshotsOverview';
+import { Snapshots } from './pages/Snapshots';
 import { KVMTools } from './pages/KVMTools';
 import { Migrations } from './pages/Migrations';
 import { Deployment } from './pages/Deployment';
@@ -61,8 +61,7 @@ function Shell() {
         <Route path="/hosts/:id" element={<HostDetail />} />
         <Route path="/hosts/:id/:tab" element={<HostDetail />} />
         <Route path="/storage" element={<Storage />} />
-        <Route path="/snapshots" element={<SnapshotsOverview />} />
-        <Route path="/snapshots/:uuid" element={<SnapshotsOverview />} />
+        <Route path="/snapshots/*" element={<Snapshots />} />
         <Route path="/migrations" element={<Migrations />} />
         <Route path="/kvm-tools" element={<KVMTools />} />
         <Route path="/deployment" element={<Deployment />} />

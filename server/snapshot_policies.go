@@ -227,11 +227,15 @@ func (s *Store) agentListSnapshots(ctx context.Context, host *models.Host, vm *m
 		return nil, err
 	}
 	defer resp.Body.Close()
-	var snaps []models.Snapshot
-	if err := json.NewDecoder(resp.Body).Decode(&snaps); err != nil {
+	// Agent ships {"snapshots":[...]} (see agent/snapshots.go), not a
+	// bare array — same wrapper the v4 SPA already unwraps.
+	var wrapper struct {
+		Snapshots []models.Snapshot `json:"snapshots"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&wrapper); err != nil {
 		return nil, err
 	}
-	return snaps, nil
+	return wrapper.Snapshots, nil
 }
 
 // ── Store CRUD helpers ──────────────────────────────────────────────
