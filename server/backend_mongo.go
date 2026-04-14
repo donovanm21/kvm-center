@@ -55,6 +55,7 @@ const (
 	mcoAuditEvents     = "audit_events"
 	mcoSnapshotPolicies = "snapshot_policies"
 	mcoNotifications    = "notifications" // singleton _id:"singleton"
+	mcoMetrics          = "metrics"       // singleton _id:"singleton"
 	mcoAPITokens        = "api_tokens"    // keyed by token ID
 	mcoHypervisorCerts  = "hypervisor_certs" // keyed by host ID
 )
@@ -360,6 +361,15 @@ func (b *MongoBackend) Load(ctx context.Context) (*persistData, error) {
 		return nil, err
 	}
 
+	// Metrics (v5.13) singleton.
+	var metrics models.MetricsConfig
+	err = db.Collection(mcoMetrics).FindOne(ctx, bson.D{{Key: "_id", Value: "singleton"}}).Decode(&metrics)
+	if err == nil {
+		pd.Metrics = &metrics
+	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
+	}
+
 	return pd, nil
 }
 
@@ -550,6 +560,21 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 		}{t.ID, t}
 	})); err != nil {
 		return err
+	}
+
+	// Metrics singleton
+	if d.Metrics != nil && isDirty(d, "metrics") {
+		if _, err := db.Collection(mcoMetrics).ReplaceOne(
+			ctx,
+			bson.D{{Key: "_id", Value: "singleton"}},
+			struct {
+				ID string `bson:"_id"`
+				*models.MetricsConfig `bson:",inline"`
+			}{"singleton", d.Metrics},
+			options.Replace().SetUpsert(true),
+		); err != nil {
+			return err
+		}
 	}
 
 	// Notifications singleton
