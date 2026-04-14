@@ -182,6 +182,9 @@ func main() {
 	mux.HandleFunc("/api/events",    handleSSEEvents(hub))
 	mux.HandleFunc("/api/telemetry", handleTelemetry(store))
 	mux.HandleFunc("/api/hosts", handleGetHosts(store))
+	// v5.11.7: proxy storage-pool discovery from agents. Any
+	// authenticated user (session or API token) can read.
+	mux.HandleFunc("/api/hosts/pools", handleHostPools(store))
 	// Maintenance routes share the /api/hosts/ prefix; dispatch by suffix.
 	mux.HandleFunc("/api/hosts/", func(w http.ResponseWriter, r *http.Request) {
 		switch {
