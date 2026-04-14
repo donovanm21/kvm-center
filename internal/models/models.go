@@ -132,6 +132,12 @@ type NotificationChannel struct {
 	// Webhook-only.
 	WebhookURL    string `json:"webhook_url,omitempty"`
 	WebhookSecret string `json:"webhook_secret,omitempty"` // optional HMAC-SHA256 signature header
+	// WebhookFormat picks the payload shape:
+	//   ""        → auto-detect by URL host (default; matches v5.4.0)
+	//   "discord" → rich embed with color + fields
+	//   "slack"   → attachments envelope with color + fields
+	//   "generic" → raw event JSON, useful for n8n / Zapier / custom listeners
+	WebhookFormat string `json:"webhook_format,omitempty"`
 
 	// Email-only. SMTP creds; if SMTPHost blank use the server's default
 	// (set once on the global config).
