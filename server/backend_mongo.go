@@ -449,7 +449,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 		return err
 	}
 
-	if err := replaceMap(ctx, db, mcoUsers, mapToDocs(d.Users, func(u *models.User) any {
+	if err := replaceMapIfDirty(ctx, db, mcoUsers, "users", d, mapToDocs(d.Users, func(u *models.User) any {
 		return struct {
 			ID string `bson:"_id"`
 			*models.User `bson:",inline"`
@@ -457,7 +457,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	})); err != nil {
 		return err
 	}
-	if err := replaceMap(ctx, db, mcoGroups, mapToDocs(d.Groups, func(g *models.Group) any {
+	if err := replaceMapIfDirty(ctx, db, mcoGroups, "groups", d, mapToDocs(d.Groups, func(g *models.Group) any {
 		return struct {
 			ID string `bson:"_id"`
 			*models.Group `bson:",inline"`
@@ -465,7 +465,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	})); err != nil {
 		return err
 	}
-	if err := replaceMap(ctx, db, mcoRoles, mapToDocs(d.Roles, func(r *models.Role) any {
+	if err := replaceMapIfDirty(ctx, db, mcoRoles, "roles", d, mapToDocs(d.Roles, func(r *models.Role) any {
 		return struct {
 			ID string `bson:"_id"`
 			*models.Role `bson:",inline"`
@@ -473,7 +473,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	})); err != nil {
 		return err
 	}
-	if err := replaceMap(ctx, db, mcoIDPs, mapToDocs(d.IDPs, func(i *models.IdentityProvider) any {
+	if err := replaceMapIfDirty(ctx, db, mcoIDPs, "idps", d, mapToDocs(d.IDPs, func(i *models.IdentityProvider) any {
 		return struct {
 			ID string `bson:"_id"`
 			*models.IdentityProvider `bson:",inline"`
@@ -483,19 +483,21 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	}
 
 	// Sessions — keyed by token; TTL index auto-expires.
-	var sessDocs []any
-	for tok, s := range d.Sessions {
-		sessDocs = append(sessDocs, struct {
-			ID string `bson:"_id"`
-			*models.Session `bson:",inline"`
-		}{tok, s})
-	}
-	if err := replaceMap(ctx, db, mcoSessions, sessDocs); err != nil {
-		return err
+	if isDirty(d, "sessions") {
+		var sessDocs []any
+		for tok, s := range d.Sessions {
+			sessDocs = append(sessDocs, struct {
+				ID string `bson:"_id"`
+				*models.Session `bson:",inline"`
+			}{tok, s})
+		}
+		if err := replaceMap(ctx, db, mcoSessions, sessDocs); err != nil {
+			return err
+		}
 	}
 
 	// Features singleton upsert
-	if d.Features != nil {
+	if d.Features != nil && isDirty(d, "features") {
 		if _, err := db.Collection(mcoFeatures).ReplaceOne(
 			ctx,
 			bson.D{{Key: "_id", Value: "singleton"}},
@@ -518,8 +520,9 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	); err != nil {
 		return err
 	}
+	}
 
-	// Audit events — replace-all like every other collection.
+	// Audit events — always write (hot collection).
 	var auditDocs []any
 	for _, ev := range d.Audit {
 		auditDocs = append(auditDocs, struct {
@@ -532,7 +535,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	}
 
 	// API tokens
-	if err := replaceMap(ctx, db, mcoAPITokens, mapToDocs(d.APITokens, func(t *models.APIToken) any {
+	if err := replaceMapIfDirty(ctx, db, mcoAPITokens, "api_tokens", d, mapToDocs(d.APITokens, func(t *models.APIToken) any {
 		return struct {
 			ID string `bson:"_id"`
 			*models.APIToken `bson:",inline"`
@@ -542,7 +545,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	}
 
 	// Notifications singleton
-	if d.Notifications != nil {
+	if d.Notifications != nil && isDirty(d, "notifications") {
 		if _, err := db.Collection(mcoNotifications).ReplaceOne(
 			ctx,
 			bson.D{{Key: "_id", Value: "singleton"}},
@@ -557,7 +560,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	}
 
 	// Snapshot policies
-	if err := replaceMap(ctx, db, mcoSnapshotPolicies, mapToDocs(d.SnapshotPolicies, func(p *models.SnapshotPolicy) any {
+	if err := replaceMapIfDirty(ctx, db, mcoSnapshotPolicies, "snapshot_policies", d, mapToDocs(d.SnapshotPolicies, func(p *models.SnapshotPolicy) any {
 		return struct {
 			ID string `bson:"_id"`
 			*models.SnapshotPolicy `bson:",inline"`
@@ -567,6 +570,28 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	}
 
 	return nil
+}
+
+// isDirty returns true when the persistData carries a dirty flag for
+// the named collection. First-boot migration paths pass Dirty=nil, in
+// which case we conservatively treat everything as dirty to keep the
+// initial Mongo load complete.
+func isDirty(d *persistData, name string) bool {
+	if d == nil || d.Dirty == nil {
+		return true
+	}
+	return d.Dirty[name]
+}
+
+// replaceMapIfDirty skips the drop-and-insert cycle when the named
+// collection isn't marked dirty. First save after startup has no
+// dirty set (nil) — falls through to a full write so the collection
+// is in sync before we start trusting the hint.
+func replaceMapIfDirty(ctx context.Context, db *mongo.Database, collection, dirtyKey string, d *persistData, docs []any) error {
+	if !isDirty(d, dirtyKey) {
+		return nil
+	}
+	return replaceMap(ctx, db, collection, docs)
 }
 
 // replaceMap empties a collection then bulk-inserts the provided
