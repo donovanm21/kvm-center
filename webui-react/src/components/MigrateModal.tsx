@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
 import { apiGet } from '@/api/client';
+import type { StoragePool } from '@/types';
 
 import { Modal } from './Modal';
 import { MigrationProgressCard } from './MigrationCenter';
@@ -65,9 +66,22 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
     navigate('/migrations');
   };
 
-  // Reset transient state every time the modal is reopened.
+  // Reset ALL transient state when the modal closes so an operator
+  // who cancels mid-configure doesn't reopen with last attempt's
+  // transport pin / rename / advanced options still applied.
   useEffect(() => {
-    if (!open) setSubmittedAt(null);
+    if (!open) {
+      setSubmittedAt(null);
+      setMode('offline');
+      setTargetID('');
+      setCopyStorage(true);
+      setKeepRaw(false);
+      setTransport('');
+      setTargetPool('');
+      setNewVMName('');
+      setRegenerateMAC(false);
+      setAdvancedOpen(false);
+    }
   }, [open]);
 
   // Find the live record for the just-started migration: most recent
@@ -83,13 +97,14 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
   const sourceHost = hosts.find((h) => h.id === vm.host_id);
   const target = hosts.find((h) => h.id === effectiveTarget);
 
-  // Pull the destination's pool list only when the advanced section
-  // is open. Auto-selects "default" when the list loads so the
-  // operator doesn't have to click when the fleet is uniform.
+  // Pool list comes from the telemetry-backed /api/storage endpoint
+  // so what the operator sees here is exactly what the Storage page
+  // shows — one source of truth, no extra agent round-trip. Telemetry
+  // refreshes every 30 s, so staleness is bounded by that tick.
   const poolsQuery = useQuery({
     queryKey: ['host-pools', effectiveTarget],
-    queryFn: () => apiGet<{ name: string; path: string; type: string; state: string; capacity_gb: number; available_gb: number }[]>(
-      '/api/hosts/pools?host=' + encodeURIComponent(effectiveTarget || ''),
+    queryFn: () => apiGet<StoragePool[]>(
+      '/api/storage?host=' + encodeURIComponent(effectiveTarget || ''),
     ),
     enabled: advancedOpen && mode === 'offline' && !!effectiveTarget,
     staleTime: 15_000,
@@ -100,7 +115,7 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
     // the agent's server-side fallback so what the operator sees is
     // what the agent would have picked anyway.
     const preferred = poolsQuery.data.find((p) => p.name === 'default')
-      ?? poolsQuery.data.find((p) => p.state === 'running')
+      ?? poolsQuery.data.find((p) => p.state === 'running' || p.state === 'active')
       ?? poolsQuery.data[0];
     if (preferred) setTargetPool(preferred.name);
   }, [poolsQuery.data, targetPool]);
@@ -382,7 +397,7 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
                   >
                     {poolsQuery.data.map((p) => (
                       <option key={p.name} value={p.name}>
-                        {p.name} — {p.type}, {p.available_gb.toFixed(1)} GB free / {p.capacity_gb.toFixed(1)} GB ({p.path})
+                        {p.name} — {p.pool_type || 'dir'}, {p.available_gb.toFixed(1)} GB free / {p.capacity_gb.toFixed(1)} GB ({p.path || 'no path'})
                       </option>
                     ))}
                   </select>

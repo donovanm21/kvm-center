@@ -657,37 +657,6 @@ func handlePostMigration(store *Store) http.HandlerFunc {
 }
 
 // GET /api/storage/browse?host=<id>&path=<dir> — proxy file listing from agent.
-// GET /api/hosts/pools?host=<id> — proxies libvirt's pool list from
-// the agent. Powers the "Target pool" picker in the migrate modal.
-func handleHostPools(store *Store) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "GET only")
-			return
-		}
-		hostID := r.URL.Query().Get("host")
-		if hostID == "" {
-			writeError(w, http.StatusBadRequest, "host required")
-			return
-		}
-		agentAddr := store.GetHostAgentAddr(hostID)
-		if agentAddr == "" {
-			writeError(w, http.StatusNotFound, "host not found or no agent address")
-			return
-		}
-		resp, err := (&http.Client{Timeout: 10 * time.Second}).Get("http://" + agentAddr + "/pools")
-		if err != nil {
-			writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
-			return
-		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(resp.StatusCode)
-		w.Write(body)
-	}
-}
-
 func handleStorageBrowse(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		hostID := r.URL.Query().Get("host")
