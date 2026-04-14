@@ -70,18 +70,70 @@ func main() {
 	}
 }
 
-func usage() {
-	fmt.Fprint(os.Stderr, `kvmctl — kvm-center CLI
+// ANSI helpers. Colors are enabled when stderr is a terminal AND
+// NO_COLOR isn't set; otherwise everything falls back to plain text so
+// pipes/scripts stay clean.
+var (
+	colorEnabled = func() bool {
+		if os.Getenv("NO_COLOR") != "" {
+			return false
+		}
+		fi, err := os.Stderr.Stat()
+		return err == nil && (fi.Mode()&os.ModeCharDevice) != 0
+	}()
+	cReset  = ansi("\x1b[0m")
+	cBold   = ansi("\x1b[1m")
+	cDim    = ansi("\x1b[2m")
+	cAccent = ansi("\x1b[38;5;208m") // orange — matches kvm-center brand
+	cCmd    = ansi("\x1b[36m")       // cyan for command names
+	cArg    = ansi("\x1b[33m")       // yellow for args
+)
 
-  kvmctl login --server <url> --token <token>
-  kvmctl hosts                  [--json]
-  kvmctl vms [--host <id>]      [--json]
-  kvmctl vm start|stop|restart|forcestop <uuid>
-  kvmctl vm migrate <uuid> --to <host_id> [--mode live|offline]
-  kvmctl snapshot list   <uuid>
-  kvmctl snapshot create <uuid> --name <name>
-  kvmctl version
-`)
+func ansi(s string) string {
+	if colorEnabled {
+		return s
+	}
+	return ""
+}
+
+func usage() {
+	w := os.Stderr
+	fmt.Fprintf(w, "\n  %skvmctl%s %s— kvm-center CLI%s  %s%s%s\n", cBold+cAccent, cReset, cBold, cReset, cDim, cliVersion, cReset)
+	fmt.Fprintf(w, "  %sScriptable access to the kvm-center API.%s\n\n", cDim, cReset)
+
+	section := func(title string) { fmt.Fprintf(w, "  %s%s%s\n", cBold, title, cReset) }
+	row := func(cmd, desc string) {
+		fmt.Fprintf(w, "    %s%-42s%s  %s%s%s\n", cCmd, cmd, cReset, cDim, desc, cReset)
+	}
+
+	section("AUTH")
+	row("login --server <url> --token <token>", "save server + token to ~/.config/kvm-center")
+
+	section("\n  INVENTORY")
+	row("hosts [--json]", "list hypervisors with status, CPU%, mem%, VM count")
+	row("vms   [--host <id>] [--json]", "list VMs, optionally scoped to one host")
+
+	section("\n  VM LIFECYCLE")
+	row("vm start     <uuid>", "power on")
+	row("vm stop      <uuid>", "graceful shutdown")
+	row("vm restart   <uuid>", "reboot")
+	row("vm forcestop <uuid>", "power off (destroy domain)")
+	row("vm migrate   <uuid> --to <host> [--mode live|offline]", "move to another host")
+
+	section("\n  SNAPSHOTS")
+	row("snapshot list   <uuid>", "list snapshots for a VM")
+	row("snapshot create <uuid> [--name <name>]", "create; name auto-generated when omitted")
+
+	section("\n  MISC")
+	row("version", "print kvmctl version")
+	row("help", "show this help")
+
+	fmt.Fprintf(w, "\n  %sFlags:%s %s--json%s emits raw JSON · %sNO_COLOR=1%s disables colors\n", cBold, cReset, cArg, cReset, cArg, cReset)
+	fmt.Fprintf(w, "\n  %sExamples%s\n", cBold, cReset)
+	fmt.Fprintf(w, "    %skvmctl login%s --server %shttps://kvm.example.com:8190%s --token %skvmc_…%s\n", cCmd, cReset, cArg, cReset, cArg, cReset)
+	fmt.Fprintf(w, "    %skvmctl hosts%s\n", cCmd, cReset)
+	fmt.Fprintf(w, "    %skvmctl vm migrate%s %s<uuid>%s --to %shvnode02%s --mode %slive%s\n", cCmd, cReset, cArg, cReset, cArg, cReset, cArg, cReset)
+	fmt.Fprintf(w, "    %skvmctl snapshot create%s %s<uuid>%s --name %spre-patch%s\n\n", cCmd, cReset, cArg, cReset, cArg, cReset)
 }
 
 // ── Commands ──────────────────────────────────────────────────────
