@@ -37,7 +37,19 @@ const serverConsoleHTML = `<!DOCTYPE html>
   <div class="err" id="err"></div>
 </div>
 <script type="module">
-  import RFB from 'https://cdn.jsdelivr.net/npm/@novnc/novnc@1.4.0/lib/rfb.js';
+  // Dynamic import + try/catch so a CDN hiccup surfaces as a readable
+  // overlay error instead of a silent blank screen. core/rfb.js is the
+  // working module entry point for noVNC v1.4 — lib/rfb.js is a ghost
+  // path I chased by mistake in the first cut of this handler.
+  let RFB;
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/@novnc/novnc@1.4.0/core/rfb.js');
+    RFB = mod.default;
+  } catch (err) {
+    document.getElementById('status-text').textContent = 'noVNC load failed';
+    document.getElementById('err').textContent = String(err);
+    throw err;
+  }
 
   const VMNAME = {{.VMName}};
   const HOST = {{.HostID}};
