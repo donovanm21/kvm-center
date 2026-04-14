@@ -75,9 +75,11 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
     if (!target) return [];
     const memOk = (target.mem_free_mb || 0) >= (vm.mem_total_mb || 0);
     const memDetail = `${(target.mem_free_mb / 1024).toFixed(1)} GB free, VM needs ${(vm.mem_total_mb / 1024).toFixed(1)} GB`;
+    const maintOk = !target.maintenance_mode;
     if (mode === 'offline') {
       return [
         { ok: target.status === 'online', label: 'Target host is online', detail: target.status },
+        { ok: maintOk, label: 'Target host is NOT in maintenance', detail: maintOk ? 'available' : 'refusing placements (drain mode)' },
         { ok: memOk, label: 'Sufficient free memory', detail: memDetail },
         { ok: true, label: 'CPU compatibility', detail: 'Not required for offline migration' },
         { ok: true, label: 'PCI passthrough', detail: 'OK — VM will be shut down during migration' },
@@ -87,6 +89,7 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
     // Live
     return [
       { ok: target.status === 'online', label: 'Target host is online', detail: target.status },
+      { ok: maintOk, label: 'Target host is NOT in maintenance', detail: maintOk ? 'available' : 'refusing placements (drain mode)' },
       { ok: memOk, label: 'Sufficient free memory', detail: memDetail },
       {
         ok: (sourceHost?.cpu_model || '') === (target.cpu_model || '') || vm.cpu_mode !== 'host-passthrough',

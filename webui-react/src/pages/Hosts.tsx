@@ -99,7 +99,10 @@ function HostRow({ host, vmStats }: { host: Host; vmStats?: { total: number; run
         </Link>
       </td>
       <td style={{ color: 'var(--text-muted)', fontFamily: "'SF Mono', monospace", fontSize: 11 }}>{host.ip}</td>
-      <td><span className={`state-pill ${host.status === 'online' ? 'running' : 'stopped'}`}>{host.status}</span></td>
+      <td>
+        <span className={`state-pill ${host.status === 'online' ? 'running' : 'stopped'}`}>{host.status}</span>
+        {host.maintenance_mode && <span className="tone-pill warn" style={{ marginLeft: 6 }} title={host.maintenance_reason || 'Maintenance mode'}>maintenance</span>}
+      </td>
       <td>{vmStats ? `${vmStats.running} / ${vmStats.total}` : host.vm_count}</td>
       <td style={{ color: cpuTone }}>
         {host.cpu_usage.toFixed(1)}%<span style={{ color: 'var(--text-faded)', marginLeft: 4 }}>of {host.cpu_count}</span>

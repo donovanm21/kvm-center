@@ -52,6 +52,7 @@ const (
 	mcoIDPs        = "idps"
 	mcoFeatures    = "features" // single doc with _id:"singleton"
 	mcoServerMeta  = "server_meta" // _id:"singleton" — console_secret etc.
+	mcoAuditEvents = "audit_events"
 )
 
 func NewMongoBackend(uri, dbName string) *MongoBackend {
@@ -157,6 +158,9 @@ func (b *MongoBackend) ensureIndexes(ctx context.Context) error {
 		{mcoVMs, bson.D{{Key: "host_id", Value: 1}}, nil},
 		{mcoUsers, bson.D{{Key: "username", Value: 1}}, options.Index().SetUnique(true).SetSparse(true)},
 		{mcoMigrations, bson.D{{Key: "started_at", Value: -1}}, nil},
+		{mcoAuditEvents, bson.D{{Key: "at", Value: -1}}, nil},
+		{mcoAuditEvents, bson.D{{Key: "actor_id", Value: 1}}, nil},
+		{mcoAuditEvents, bson.D{{Key: "action", Value: 1}}, nil},
 		{mcoSessions, bson.D{{Key: "expires_at", Value: 1}}, options.Index().SetExpireAfterSeconds(0)},
 		// guest_data: drop docs older than 5 minutes to mirror the
 		// guestToolsFreshness window the UI already uses.
@@ -311,6 +315,17 @@ func (b *MongoBackend) Load(ctx context.Context) (*persistData, error) {
 	if err == nil {
 		pd.ConsoleSecret = meta.ConsoleSecret
 	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
+	}
+
+	// Audit events — loaded in chronological order so the ring-buffer
+	// trim in Store behaves identically to the JSON backend path.
+	auditOpts := options.Find().SetSort(bson.D{{Key: "at", Value: 1}})
+	cur, err = db.Collection(mcoAuditEvents).Find(ctx, bson.D{}, auditOpts)
+	if err != nil {
+		return nil, err
+	}
+	if err := cur.All(ctx, &pd.Audit); err != nil {
 		return nil, err
 	}
 
@@ -477,6 +492,18 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 		bson.M{"_id": "singleton", "console_secret": d.ConsoleSecret},
 		options.Replace().SetUpsert(true),
 	); err != nil {
+		return err
+	}
+
+	// Audit events — replace-all like every other collection.
+	var auditDocs []any
+	for _, ev := range d.Audit {
+		auditDocs = append(auditDocs, struct {
+			ID string `bson:"_id"`
+			*models.AuditEvent `bson:",inline"`
+		}{ev.ID, ev})
+	}
+	if err := replaceMap(ctx, db, mcoAuditEvents, auditDocs); err != nil {
 		return err
 	}
 

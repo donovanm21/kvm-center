@@ -37,6 +37,10 @@ export interface Host {
   numa_nodes?: number;
   host_pci_devices?: HostPCIDevice[];
   gpus?: string[];
+  maintenance_mode?: boolean;
+  maintenance_entered_at?: string;
+  maintenance_by?: string;
+  maintenance_reason?: string;
 }
 
 export interface VMDisk {
@@ -70,6 +74,13 @@ export interface GuestFS {
 }
 
 export type GuestInterfaceKind = 'primary' | 'docker' | 'container' | 'vpn' | 'bridge' | 'other';
+
+export interface MaintenanceMeta {
+  maintenance_mode?: boolean;
+  maintenance_entered_at?: string;
+  maintenance_by?: string;
+  maintenance_reason?: string;
+}
 export interface GuestInterface {
   name: string;
   mac?: string;

@@ -1,10 +1,77 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, NavLink, useMatch, useParams } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { apiPost } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useFeatures, useHosts, useStorage, useVMs } from '@/hooks/useInventory';
+import { useToast } from '@/hooks/useToast';
 import { useVMCommand } from '@/hooks/useVMCommand';
 import type { Host, HostPCIDevice, StoragePool, VM } from '@/types';
+
+/**
+ * MaintenanceToggle flips a host between operational and "draining"
+ * state. Server refuses new-VM placements and migrations-in while the
+ * flag is on; migrations OFF the host remain allowed. Recorded in
+ * the audit log as host.maintenance.{enter,exit}.
+ */
+function MaintenanceToggle({ host }: { host: Host }) {
+  const { hasPerm } = useAuth();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [reason, setReason] = useState('');
+  const [asking, setAsking] = useState(false);
+  const canManage = hasPerm('host.manage');
+  const on = !!host.maintenance_mode;
+
+  const toggle = useMutation({
+    mutationFn: () => apiPost(
+      `/api/hosts/${encodeURIComponent(host.id)}/maintenance/${on ? 'exit' : 'enter'}`,
+      on ? undefined : { reason },
+    ),
+    onSuccess: () => {
+      toast('success', on ? 'Host back in service' : 'Host entered maintenance mode');
+      qc.invalidateQueries({ queryKey: ['hosts'] });
+      setAsking(false);
+      setReason('');
+    },
+    onError: (e) => toast('error', `Failed: ${e instanceof Error ? e.message : String(e)}`),
+  });
+
+  if (asking && !on) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <input
+          type="text"
+          placeholder="Reason (e.g. kernel patch)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          style={{
+            height: 28, padding: '0 8px', fontSize: 12,
+            background: 'var(--bg-input)', border: '1px solid var(--border)',
+            borderRadius: 4, color: 'var(--text-body)', fontFamily: 'inherit', width: 220,
+          }}
+        />
+        <button type="button" className="btn-primary-sm" onClick={() => toggle.mutate()} disabled={toggle.isPending}>
+          {toggle.isPending ? 'Entering…' : 'Enter maintenance'}
+        </button>
+        <button type="button" className="btn-secondary-sm" onClick={() => { setAsking(false); setReason(''); }}>Cancel</button>
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className={on ? 'btn-primary-sm' : 'btn-secondary-sm'}
+      disabled={!canManage || toggle.isPending}
+      title={!canManage ? 'Requires host.manage' : on ? 'Exit maintenance — allow new VMs + migration targets again' : 'Enter maintenance — refuse new placements on this host'}
+      onClick={() => on ? toggle.mutate() : setAsking(true)}
+    >
+      {on ? 'Exit maintenance' : 'Enter maintenance'}
+    </button>
+  );
+}
 
 export function HostDetail() {
   const { id } = useParams<{ id: string }>();
@@ -106,6 +173,17 @@ function SummaryTab({ host }: { host: Host }) {
           >
             {host.status}
           </span>
+          {host.maintenance_mode && (
+            <span
+              className="tone-pill warn"
+              style={{ padding: '4px 12px', borderRadius: 12 }}
+              title={host.maintenance_reason || 'Host is in maintenance mode'}
+            >
+              maintenance
+            </span>
+          )}
+          <div style={{ flex: 1 }} />
+          <MaintenanceToggle host={host} />
         </div>
         <div
           style={{
