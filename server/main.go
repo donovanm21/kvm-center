@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"embed"
 	"flag"
 	"io/fs"
@@ -31,10 +32,22 @@ var versionRaw string
 var Version = strings.TrimSpace(versionRaw)
 
 func main() {
-	addr := flag.String("addr", envOrDefault("KVM_CENTER_ADDR", ":8090"), "listen address")
+	addr := flag.String("addr", envOrDefault("KVM_CENTER_ADDR", ":8090"), "HTTP listen address (plain HTTP, used when TLS is off or as the HTTPS-redirect port)")
+	tlsAddr := flag.String("tls-addr", envOrDefault("KVM_CENTER_TLS_ADDR", ":8443"), "HTTPS listen address (used when -cert/-key are set or auto-generated)")
+	tlsCert := flag.String("cert", envOrDefault("KVM_CENTER_TLS_CERT", ""), "PEM-encoded TLS certificate (if blank, a self-signed cert is auto-generated)")
+	tlsKey := flag.String("key", envOrDefault("KVM_CENTER_TLS_KEY", ""), "PEM-encoded private key for -cert (must be set if -cert is set, and vice-versa)")
+	tlsDir := flag.String("tls-dir", envOrDefault("KVM_CENTER_TLS_DIR", "/var/lib/kvm-center/tls"), "directory for the auto-generated self-signed cert when -cert/-key are blank")
+	disableTLS := flag.Bool("no-tls", envOrDefault("KVM_CENTER_NO_TLS", "") == "1", "run plain HTTP only (skip cert bootstrap)")
 	dataFile := flag.String("data", envOrDefault("KVM_CENTER_DATA", "/var/lib/kvm-center/data.json"), "JSON persistence file")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	// --cert and --key must be supplied together; either flag alone is a
+	// config error worth surfacing up front rather than serving HTTP by
+	// accident.
+	if (*tlsCert != "") != (*tlsKey != "") {
+		log.Fatalf("server: %v", errTLSPathsIncomplete)
+	}
 
 	if *showVersion {
 		log.Printf("kvm-center-server %s", Version)
@@ -50,6 +63,31 @@ func main() {
 	store := NewStore(*dataFile)
 	hub := NewSSEHub()
 	store.hub = hub // state-changing store methods publish via this handle
+
+	// TLS bootstrap: operator-supplied cert takes priority; otherwise
+	// generate a self-signed pair into -tls-dir so HTTPS works out of
+	// the box on a fresh install. -no-tls skips the whole dance for
+	// plain-HTTP dev / tests.
+	certPath, keyPath := *tlsCert, *tlsKey
+	var reloader *CertReloader
+	if !*disableTLS {
+		if certPath == "" && keyPath == "" {
+			certPath = *tlsDir + "/server.crt"
+			keyPath = *tlsDir + "/server.key"
+			if err := EnsureSelfSigned(certPath, keyPath); err != nil {
+				log.Fatalf("server: tls bootstrap: %v", err)
+			}
+			log.Printf("tls: using auto-generated self-signed cert at %s", certPath)
+		} else {
+			log.Printf("tls: using operator-supplied cert at %s", certPath)
+		}
+		reloader = NewCertReloader(certPath, keyPath)
+		// Prime the cache + surface any load error at startup so we
+		// don't defer discovery to the first client handshake.
+		if _, err := reloader.GetCertificate(nil); err != nil {
+			log.Fatalf("server: tls cert load: %v", err)
+		}
+	}
 
 	// Background: mark offline hosts and persist every 30 seconds.
 	go func() {
@@ -85,6 +123,15 @@ func main() {
 	mux.HandleFunc("/api/migrate-status", handleMigrateStatus(store))
 	mux.HandleFunc("/api/kvm-tools/version", handleKVMToolsVersion)
 	mux.Handle("/api/kvm-tools/update", requirePerm(store, "vm.edit", http.HandlerFunc(handleKVMToolsUpdate(store))))
+
+	// TLS management — status is readable by any signed-in user so the
+	// UI can show the expiry badge; mutations require tls.manage.
+	if reloader != nil {
+		mux.HandleFunc("/api/tls/status", handleTLSStatus(reloader, certPath, keyPath))
+		mux.HandleFunc("/api/tls/cert.pem", handleTLSCertDownload(certPath))
+		mux.Handle("/api/tls/upload", requirePerm(store, "tls.manage", handleTLSUpload(certPath, keyPath)))
+		mux.Handle("/api/tls/regenerate", requirePerm(store, "tls.manage", handleTLSRegenerate(certPath, keyPath)))
+	}
 	mux.HandleFunc("/health", handleHealth)
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -162,9 +209,53 @@ func main() {
 
 	handler := corsMiddleware(loggingMiddleware(authMiddleware(store, mux)))
 
-	log.Printf("kvm-center server listening on %s", *addr)
-	if err := http.ListenAndServe(*addr, handler); err != nil {
-		log.Fatalf("server: %v", err)
+	if reloader == nil {
+		log.Printf("kvm-center server listening on %s (plain HTTP, TLS disabled)", *addr)
+		if err := http.ListenAndServe(*addr, handler); err != nil {
+			log.Fatalf("server: %v", err)
+		}
+		return
+	}
+
+	// HTTPS on tlsAddr serves the full handler for browser users. Plain
+	// HTTP on addr keeps serving /api/ unchanged so hypervisor agents
+	// (which don't carry our self-signed CA) can keep posting telemetry
+	// without TLS changes on their side; anything that smells like a
+	// browser landing page (non-/api/ GET) is 308'd to the HTTPS URL.
+	tlsServer := &http.Server{
+		Addr:    *tlsAddr,
+		Handler: handler,
+		TLSConfig: &tls.Config{
+			GetCertificate: reloader.GetCertificate,
+			MinVersion:     tls.VersionTLS12,
+		},
+	}
+	go func() {
+		plain := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// /api/*, /health: pass through on plain HTTP for agents +
+			// any other machine client that doesn't want to wrangle our
+			// TLS material. Everything else is a browser and should be
+			// on HTTPS — issue a 308 so POST bodies survive.
+			p := r.URL.Path
+			if strings.HasPrefix(p, "/api/") || p == "/health" {
+				handler.ServeHTTP(w, r)
+				return
+			}
+			host := r.Host
+			if i := strings.Index(host, ":"); i > 0 {
+				host = host[:i]
+			}
+			target := "https://" + host + *tlsAddr + r.URL.RequestURI()
+			http.Redirect(w, r, target, http.StatusPermanentRedirect)
+		})
+		log.Printf("kvm-center server plain-HTTP (agent + redirect) on %s", *addr)
+		if err := http.ListenAndServe(*addr, plain); err != nil {
+			log.Fatalf("server: http: %v", err)
+		}
+	}()
+	log.Printf("kvm-center server listening on %s (TLS)", *tlsAddr)
+	if err := tlsServer.ListenAndServeTLS("", ""); err != nil {
+		log.Fatalf("server: tls: %v", err)
 	}
 }
 

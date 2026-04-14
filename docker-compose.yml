@@ -13,12 +13,18 @@ services:
     container_name: kvm-center-server
     restart: unless-stopped
     ports:
-      - "8090:8090"   # Agents on the LAN post telemetry here.
+      - "8090:8090"   # Plain HTTP → 308-redirects to HTTPS.
+      - "8443:8443"   # HTTPS (primary endpoint for UI + agent telemetry).
     environment:
       - KVM_CENTER_ADDR=:8090
+      - KVM_CENTER_TLS_ADDR=:8443
+      - KVM_CENTER_TLS_DIR=/var/lib/kvm-center/tls
       - KVM_CENTER_DATA=/var/lib/kvm-center/data.json
     volumes:
       - kvm-center-data:/var/lib/kvm-center
+      # Dedicated volume for the cert/key so TLS material survives image
+      # rebuilds and is easy to back up separately from the JSON store.
+      - kvm-center-tls:/var/lib/kvm-center/tls
     networks:
       - kvm-net
     logging:
@@ -75,4 +81,6 @@ networks:
 
 volumes:
   kvm-center-data:
+    driver: local
+  kvm-center-tls:
     driver: local

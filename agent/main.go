@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -40,6 +42,10 @@ func main() {
 	log.Printf("kvm-center agent  server=%s  interval=%s  cmdPort=%d",
 		*serverURL, *interval, *cmdPort)
 
+	// Pick the outbound HTTP client based on the server URL scheme;
+	// logs the "TLS skip-verify" warning when we flip to https.
+	initHTTPClient(*serverURL)
+
 	// Collect and send telemetry immediately, then on interval.
 	sendTelemetry(*serverURL, *cmdPort)
 
@@ -60,6 +66,34 @@ func main() {
 	}
 }
 
+// httpClient is the shared client used for all outbound posts to the
+// kvm-center control plane. When the server URL is https:// we set
+// InsecureSkipVerify so agents can reach the server's auto-generated
+// self-signed cert without per-agent CA provisioning — necessary for
+// homelab convenience but logged at startup (and on every send) as
+// INSECURE so the operator can upgrade to a trusted cert deliberately.
+var httpClient = &http.Client{}
+var tlsInsecureWarningShown bool
+
+func initHTTPClient(serverURL string) {
+	if !strings.HasPrefix(serverURL, "https://") {
+		httpClient = &http.Client{Timeout: 10 * time.Second}
+		return
+	}
+	httpClient = &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // homelab trust model: see comment above
+		},
+	}
+	if !tlsInsecureWarningShown {
+		log.Printf("⚠ kvm-center-agent: TLS verification DISABLED for %s — trusting any certificate. "+
+			"Acceptable for a homelab where the server uses the auto-generated self-signed cert; "+
+			"install a trusted cert via Settings → TLS and swap the URL when you're ready.", serverURL)
+		tlsInsecureWarningShown = true
+	}
+}
+
 func sendTelemetry(serverURL string, agentPort int) {
 	payload := CollectTelemetry(agentPort)
 
@@ -70,7 +104,7 @@ func sendTelemetry(serverURL string, agentPort int) {
 	}
 
 	url := serverURL + "/api/telemetry"
-	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
+	resp, err := httpClient.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
 		log.Printf("telemetry: send failed: %v", err)
 		return
