@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { apiGet } from '@/api/client';
+import { apiGet, apiPost } from '@/api/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/useToast';
 
 interface AuditEvent {
   id: string;
@@ -68,6 +70,168 @@ const LIMIT_OPTIONS = [50, 100, 250, 500];
  * DEFAULT_LIMIT entries; operator can bump the page size or page
  * through older events via offset controls.
  */
+interface AuditShippingCfg {
+  enabled: boolean;
+  type?: 'syslog' | 'http';
+  endpoint?: string;
+  bearer_token?: string;
+  basic_auth?: string;
+  syslog_facility?: number;
+  syslog_app_name?: string;
+  batch_size?: number;
+  flush_seconds?: number;
+  last_ship_at?: string;
+  last_ship_error?: string;
+  last_ship_count?: number;
+}
+
+/**
+ * ShippingPanel sits above the audit event list. Configures where the
+ * server-side shipper sends new events. Secrets (bearer / basic) are
+ * never returned by the API — the form shows "(configured)" as a
+ * placeholder and blanking either field leaves the stored value
+ * unchanged. Explicit "Test" button fires a single synthetic event
+ * at the endpoint so operators can sanity-check wiring.
+ */
+function ShippingPanel() {
+  const { hasPerm } = useAuth();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const canManage = hasPerm('user.manage');
+
+  const cfg = useQuery({
+    queryKey: ['audit-shipping'],
+    queryFn: () => apiGet<AuditShippingCfg>('/api/settings/audit-shipping'),
+    staleTime: 30_000,
+  });
+
+  const [form, setForm] = useState<AuditShippingCfg | null>(null);
+  useEffect(() => { if (cfg.data) setForm(cfg.data); }, [cfg.data]);
+
+  const save = useMutation({
+    mutationFn: (f: AuditShippingCfg) =>
+      fetch('/api/settings/audit-shipping', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(f),
+      }).then(async (r) => {
+        if (!r.ok) throw new Error(await r.text());
+        return r.json();
+      }),
+    onSuccess: () => {
+      toast('success', 'Shipping config saved');
+      qc.invalidateQueries({ queryKey: ['audit-shipping'] });
+    },
+    onError: (e) => toast('error', `Save failed: ${e instanceof Error ? e.message : String(e)}`),
+  });
+
+  const test = useMutation({
+    mutationFn: () => apiPost('/api/settings/audit-shipping/test'),
+    onSuccess: () => toast('success', 'Test event shipped — check your aggregator'),
+    onError: (e) => toast('error', `Test failed: ${e instanceof Error ? e.message : String(e)}`),
+  });
+
+  if (!form) return null;
+
+  const update = (patch: Partial<AuditShippingCfg>) => setForm({ ...form, ...patch });
+
+  return (
+    <div className="panel" style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <h2 style={{ margin: 0 }}>External log shipping</h2>
+        {form.enabled && form.last_ship_at && !form.last_ship_error && (
+          <span className="tone-pill ok" title={`Last ship: ${new Date(form.last_ship_at).toLocaleString()} (${form.last_ship_count ?? 0} events)`}>healthy</span>
+        )}
+        {form.enabled && form.last_ship_error && (
+          <span className="tone-pill danger" title={form.last_ship_error}>failing</span>
+        )}
+        {!form.enabled && <span className="tone-pill muted">disabled</span>}
+      </div>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px 0' }}>
+        Stream every audit event to an external SIEM / log aggregator (syslog over UDP/TCP,
+        or HTTP POST as JSON). Events batch up to the configured size or flush interval,
+        whichever comes first. A stuck aggregator never blocks the audit-write path.
+      </p>
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <input type="checkbox" checked={!!form.enabled} onChange={(e) => update({ enabled: e.target.checked })} />
+        <span style={{ fontSize: 12 }}>Enable shipping</span>
+      </label>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+        <FormField label="Transport">
+          <select value={form.type ?? ''} onChange={(e) => update({ type: e.target.value as 'syslog' | 'http' })} style={input} disabled={!form.enabled}>
+            <option value="">—</option>
+            <option value="http">HTTP POST (JSON)</option>
+            <option value="syslog">Syslog (RFC 5424)</option>
+          </select>
+        </FormField>
+        <FormField label="Endpoint">
+          <input type="text" value={form.endpoint ?? ''} onChange={(e) => update({ endpoint: e.target.value })} style={input} disabled={!form.enabled}
+            placeholder={form.type === 'syslog' ? 'udp://log.example.com:514' : 'https://logs.example.com/ingest'} />
+        </FormField>
+        {form.type === 'http' && (
+          <>
+            <FormField label="Bearer token (optional)">
+              <input type="text" value={form.bearer_token ?? ''} onChange={(e) => update({ bearer_token: e.target.value })} style={input} disabled={!form.enabled}
+                placeholder="(leave blank to keep existing)" />
+            </FormField>
+            <FormField label="Basic auth (user:pass, optional)">
+              <input type="text" value={form.basic_auth ?? ''} onChange={(e) => update({ basic_auth: e.target.value })} style={input} disabled={!form.enabled}
+                placeholder="(leave blank to keep existing)" />
+            </FormField>
+          </>
+        )}
+        {form.type === 'syslog' && (
+          <>
+            <FormField label="Syslog facility (0-23)">
+              <input type="number" min={0} max={23} value={form.syslog_facility ?? 1} onChange={(e) => update({ syslog_facility: parseInt(e.target.value, 10) || 1 })} style={input} disabled={!form.enabled} />
+            </FormField>
+            <FormField label="Syslog app name">
+              <input type="text" value={form.syslog_app_name ?? 'kvm-center'} onChange={(e) => update({ syslog_app_name: e.target.value })} style={input} disabled={!form.enabled} />
+            </FormField>
+          </>
+        )}
+        <FormField label="Batch size (events)">
+          <input type="number" min={1} max={1000} value={form.batch_size ?? 50} onChange={(e) => update({ batch_size: parseInt(e.target.value, 10) || 50 })} style={input} disabled={!form.enabled} />
+        </FormField>
+        <FormField label="Flush interval (seconds)">
+          <input type="number" min={1} max={3600} value={form.flush_seconds ?? 10} onChange={(e) => update({ flush_seconds: parseInt(e.target.value, 10) || 10 })} style={input} disabled={!form.enabled} />
+        </FormField>
+      </div>
+
+      <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+        <button type="button" className="btn-primary-sm" disabled={!canManage || save.isPending} onClick={() => save.mutate(form)} title={!canManage ? 'Requires user.manage' : ''}>
+          {save.isPending ? 'Saving…' : 'Save configuration'}
+        </button>
+        <button type="button" className="btn-secondary-sm" disabled={!canManage || !form.enabled || test.isPending} onClick={() => test.mutate()}>
+          {test.isPending ? 'Testing…' : 'Send test event'}
+        </button>
+        {form.last_ship_at && (
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-faded)' }}>
+            Last flush: {new Date(form.last_ship_at).toLocaleString()} · {form.last_ship_count ?? 0} events
+          </span>
+        )}
+      </div>
+      {form.last_ship_error && (
+        <div className="tone-panel danger" style={{ marginTop: 10, padding: '8px 12px', fontSize: 12 }}>
+          Last error: {form.last_ship_error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontSize: 11, color: 'var(--text-faded)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
 export function AuditTab() {
   const [action, setAction] = useState('');
   const [actor, setActor] = useState('');
@@ -113,6 +277,7 @@ export function AuditTab() {
 
   return (
     <>
+      <ShippingPanel />
       {/* Filter toolbar */}
       <div className="panel" style={{ marginBottom: 14 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 10 }}>
