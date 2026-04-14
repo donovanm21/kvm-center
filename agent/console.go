@@ -21,16 +21,30 @@ const wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 var consoleTmpl = template.Must(template.New("console").Parse(consoleHTML))
 
 // handleConsolePage serves the noVNC console HTML for a specific VM.
+// Requires a valid server-minted HMAC token — see console_auth.go.
+// The rendered HTML forwards the same token+exp+nonce on the WebSocket
+// URL so handleConsoleWS re-verifies at upgrade time.
 func handleConsolePage(w http.ResponseWriter, r *http.Request) {
 	vmName := strings.TrimPrefix(r.URL.Path, "/console/")
 	if vmName == "" {
 		http.Error(w, "vm name required", http.StatusBadRequest)
 		return
 	}
+	if err := verifyConsoleToken(r, vmName); err != nil {
+		log.Printf("console: denied page request for %s: %v", vmName, err)
+		http.Error(w, "unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	q := r.URL.Query()
 	data := map[string]any{
 		"VMName":   vmName,
 		"VMNameJS": template.JS(fmt.Sprintf("%q", vmName)),
+		// Forward the token bits to the noVNC template so the WS URL
+		// it constructs carries the same auth material.
+		"Token": q.Get("token"),
+		"Exp":   q.Get("exp"),
+		"Nonce": q.Get("nonce"),
 	}
 	_ = consoleTmpl.Execute(w, data)
 }
@@ -40,6 +54,11 @@ func handleConsoleWS(w http.ResponseWriter, r *http.Request) {
 	vmName := strings.TrimPrefix(r.URL.Path, "/ws/")
 	if vmName == "" {
 		http.Error(w, "vm name required", http.StatusBadRequest)
+		return
+	}
+	if err := verifyConsoleToken(r, vmName); err != nil {
+		log.Printf("console: denied ws for %s: %v", vmName, err)
+		http.Error(w, "unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -522,13 +541,16 @@ try {
 }
 
 const VMNAME = {{.VMNameJS}};
+// Forward the server-minted auth material from the /console/ URL onto
+// the WS URL so the agent re-verifies the token at upgrade time.
+const AUTH_QS = 'token={{.Token}}&exp={{.Exp}}&nonce={{.Nonce}}';
 let rfb = null;
 let attempts = 0;
 const MAX_ATTEMPTS = 5;
 
 function wsURL() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return proto + '//' + location.host + '/ws/' + encodeURIComponent(VMNAME);
+  return proto + '//' + location.host + '/ws/' + encodeURIComponent(VMNAME) + '?' + AUTH_QS;
 }
 
 function connect() {
