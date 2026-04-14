@@ -154,6 +154,7 @@ export function Migrations() {
                 <th>Source</th>
                 <th>Destination</th>
                 <th>Mode</th>
+                <th>Transport</th>
                 <th>Status</th>
                 <th>Started</th>
                 <th>Duration</th>
@@ -167,6 +168,7 @@ export function Migrations() {
                   <td style={{ color: 'var(--text-muted)' }}>{m.source_host}</td>
                   <td style={{ color: 'var(--text-muted)' }}>{m.dest_host}</td>
                   <td><ModePill mode={m.mode} /></td>
+                  <td><TransportPill transport={m.transport} /></td>
                   <td><StatusPill status={m.status} /></td>
                   <td style={{ color: 'var(--text-faded)', fontSize: 11 }}>{fmtTime(m.started_at)}</td>
                   <td style={{ color: 'var(--text-faded)', fontSize: 11 }}>{fmtDuration(m.elapsed_sec)}</td>
@@ -292,6 +294,28 @@ function StatusPill({ status }: { status: string }) {
     status === 'failed'   ? 'danger' :
     'muted';
   return <span className={`tone-pill ${tone}`}>{status}</span>;
+}
+
+const pillStyle: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 4,
+  padding: '2px 8px', borderRadius: 10, fontSize: 10,
+};
+
+function TransportPill({ transport }: { transport?: string }) {
+  if (transport === 'tls') {
+    return (
+      <span className="tone-pill ok" style={pillStyle} title="qemu+tls:// over the cluster CA (v5.10.1+)">
+        <svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+          <path d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-.5V4.5A3.5 3.5 0 0 0 8 1zm2.5 6h-5V4.5a2.5 2.5 0 1 1 5 0V7z"/>
+        </svg>
+        mTLS
+      </span>
+    );
+  }
+  if (transport === 'ssh') {
+    return <span className="tone-pill" style={pillStyle} title="qemu+ssh:// via the shared kvm-migrator keypair (legacy)">SSH</span>;
+  }
+  return <span style={{ fontSize: 10, color: 'var(--text-faded)' }}>—</span>;
 }
 
 function ModePill({ mode }: { mode: string }) {

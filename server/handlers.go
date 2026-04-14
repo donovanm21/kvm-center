@@ -301,12 +301,20 @@ func handleCommand(store *Store) http.HandlerFunc {
 					return
 				}
 			}
+			// Offline migrations always use SSH+scp; live migrations use
+			// whatever handleCommand decided upstream (tls when both
+			// hosts are enrolled, else ssh).
+			transport := "ssh"
+			if action == "MIGRATE" && req.Params["migration_transport"] == "tls" {
+				transport = "tls"
+			}
 			migRec = &models.MigrationRecord{
 				ID:         fmt.Sprintf("%s-%d", req.VMName, time.Now().UnixNano()),
 				VMName:     req.VMName,
 				SourceHost: req.HostID,
 				DestHost:   destHost,
 				Mode:       mode,
+				Transport:  transport,
 				Status:     "running",
 				StartedAt:  time.Now().Unix(),
 				Phase:      "starting",
