@@ -31,7 +31,8 @@ type persistData struct {
 	Sessions   map[string]*models.Session          `json:"sessions,omitempty"`
 	IDPs       map[string]*models.IdentityProvider `json:"idps,omitempty"`
 	Features   *models.Features                    `json:"features,omitempty"`
-	Audit      []*models.AuditEvent                `json:"audit,omitempty"`
+	Audit         []*models.AuditEvent   `json:"audit,omitempty"`
+	AuditShipping *models.AuditShipping  `json:"audit_shipping,omitempty"`
 	// ConsoleSecret is the HMAC-SHA256 key the server uses to mint
 	// per-session VM console tokens (see console_token.go). Generated
 	// on first use; persisted so agents that cached it don't need a
@@ -72,6 +73,13 @@ type Store struct {
 	// audit is the in-memory event ring buffer; capped at
 	// auditRetentionMax (see audit.go).
 	audit []*models.AuditEvent
+	// auditShipping is the config for the external log aggregator
+	// worker (see audit_shipping.go). Nil means shipping is disabled.
+	auditShipping *models.AuditShipping
+	// auditShipQueue is the channel the worker reads from; AddAuditEvent
+	// non-blockingly sends into it so a slow aggregator can't back up
+	// the UI write path.
+	auditShipQueue chan *models.AuditEvent
 	features      models.Features
 	dataFile      string
 	// backend is the pluggable persistence layer (JSON file or Mongo).
@@ -597,6 +605,7 @@ func (s *Store) Save() {
 		IDPs:          s.idps,
 		Features:      &s.features,
 		Audit:         s.audit,
+		AuditShipping: s.auditShipping,
 		ConsoleSecret: s.consoleSecret,
 	}
 	s.mu.RUnlock()
@@ -674,6 +683,9 @@ func (s *Store) load() {
 	}
 	if d.Audit != nil {
 		s.audit = d.Audit
+	}
+	if d.AuditShipping != nil {
+		s.auditShipping = d.AuditShipping
 	}
 	log.Printf("store: loaded %d hosts, %d users, %d groups, %d roles from %s",
 		len(s.hosts), len(s.users), len(s.groups), len(s.roles), s.dataFile)

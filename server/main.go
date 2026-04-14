@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"embed"
 	"flag"
@@ -70,6 +71,11 @@ func main() {
 	backend := bootstrapBackend(*mongoURL, *mongoDB, *dataFile)
 	log.Printf("backend: using %s", backend.Name())
 	store := NewStoreWithBackend(backend, *dataFile)
+
+	// Kick off the audit-log shipper worker. Safe to call even when
+	// no shipping config exists yet — worker no-ops until the operator
+	// saves a config via Settings → Audit Log → Shipping.
+	store.startAuditShipper(context.Background())
 	hub := NewSSEHub()
 	store.hub = hub // state-changing store methods publish via this handle
 
@@ -126,6 +132,8 @@ func main() {
 		}
 	})
 	mux.Handle("/api/audit", requirePerm(store, "audit.view", http.HandlerFunc(handleAuditList(store))))
+	mux.Handle("/api/settings/audit-shipping",       requirePerm(store, "user.manage", http.HandlerFunc(auditShippingRouter(store))))
+	mux.Handle("/api/settings/audit-shipping/test",  requirePerm(store, "user.manage", http.HandlerFunc(handleAuditShippingTest(store))))
 	mux.HandleFunc("/api/vms", handleGetVMs(store))
 	mux.HandleFunc("/api/vms/snapshots", handleVMSnapshots(store))
 	mux.HandleFunc("/api/vms/screenshot", handleVMScreenshot(store))
