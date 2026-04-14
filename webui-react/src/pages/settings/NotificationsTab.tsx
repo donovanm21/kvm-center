@@ -117,8 +117,9 @@ export function NotificationsTab() {
                 checked={!!form.event_types[t]}
                 onChange={(e) => update({ event_types: { ...form.event_types, [t]: e.target.checked } })}
               />
-              <span style={{ fontWeight: 500 }}>{EVENT_LABELS[t] || t}</span>
-              <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-faded)' }}>{t}</span>
+              <span style={{ fontWeight: 500 }}>
+                {EVENT_LABELS[t] || t} <span style={{ color: 'var(--text-faded)', fontWeight: 400, fontSize: 11 }}>({t})</span>
+              </span>
             </label>
           ))}
         </div>
