@@ -114,7 +114,7 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			respond(w, false, "MIGRATE requires params.destination")
 			return
 		}
-		uri := fmt.Sprintf("qemu+ssh://kvm-migrator@%s/system?keyfile=/var/lib/kvm-migrator/.ssh/id_ed25519&no_verify=1", dest)
+		uri := migrationURI(dest, req.Params["migration_transport"])
 		args := []string{"migrate", "--live", "--persistent", "--verbose"}
 		if req.Params["copy_storage"] == "true" {
 			args = append(args, "--copy-storage-all")
@@ -173,6 +173,9 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		keepRaw := req.Params["keep_raw"] == "true"
+		// Offline migration uses SSH+scp transport regardless of PKI
+		// state — it doesn't ride qemu+<scheme>://. mTLS plumbing
+		// applies to live migrations only in v5.10.1.
 		log.Printf("command: offline-migrate vm=%s → %s keep_raw=%v (async)", vmTarget, dest, keepRaw)
 		startOfflineMigrate(vmTarget, dest, keepRaw)
 		respond(w, true, "offline migration started — poll /migrate-status for progress")
@@ -190,6 +193,26 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("command ok: %s vm=%s: %s", req.Action, vmTarget, msg)
 	respond(w, true, msg)
+}
+
+// migrationURI builds the libvirt URI for a live migration. Transport
+// selector (v5.10.1):
+//
+//   "tls" — qemu+tls://<dest>/system. Requires libvirtd on both ends
+//           to have been configured with the cluster CA + a cert (see
+//           install-agent.sh --enroll-token). This is the default once
+//           both hypervisors are enrolled.
+//   ""/"ssh" — legacy qemu+ssh:// via the shared kvm-migrator keypair.
+//           Retained as a fallback for mixed fleets during v5.10.x
+//           rollout. Will be removed in v5.11.
+func migrationURI(dest, transport string) string {
+	if transport == "tls" {
+		// verify=1 (default) — libvirtd enforces chain validation against
+		// /etc/pki/CA/cacert.pem on both sides. tls_port=16514 is libvirt's
+		// default TLS listener port.
+		return fmt.Sprintf("qemu+tls://%s/system", dest)
+	}
+	return fmt.Sprintf("qemu+ssh://kvm-migrator@%s/system?keyfile=/var/lib/kvm-migrator/.ssh/id_ed25519&no_verify=1", dest)
 }
 
 // collectVMDiskPaths scrapes the domain XML for the disk source paths so
