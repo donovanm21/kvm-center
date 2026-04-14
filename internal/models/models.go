@@ -507,6 +507,34 @@ type Role struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+// MigrationGrant (v5.11) is a short-lived, single-use authorization
+// token the control plane issues for one specific migration. Source
+// agent forwards the envelope to the destination; destination
+// validates the signature offline against the server's Ed25519 public
+// key before letting libvirt accept the migration.
+//
+// The envelope ships as a JSON object carried in a single
+// base64-encoded string so it fits cleanly in command params. See
+// server/grants.go for signing; agent/grants.go for validation.
+type MigrationGrant struct {
+	ID         string `json:"id"`         // uuid-like
+	Source     string `json:"src"`        // source host ID
+	Dest       string `json:"dst"`        // destination host ID
+	VMUUID     string `json:"vm_uuid"`    // bound VM
+	VMName     string `json:"vm_name,omitempty"`
+	IssuedAt   int64  `json:"iat"`        // unix seconds
+	ExpiresAt  int64  `json:"exp"`        // unix seconds — typically 5 min
+	Mode       string `json:"mode"`       // "live" | "offline"
+}
+
+// SignedGrant is the envelope ready for transport. Payload is the
+// JSON encoding of MigrationGrant; Signature is the Ed25519 signature
+// over Payload using the server's grant-signing key.
+type SignedGrant struct {
+	Payload   []byte `json:"payload"`     // canonical JSON bytes of MigrationGrant
+	Signature []byte `json:"signature"`   // Ed25519 signature over Payload
+}
+
 // HypervisorCert (v5.10) records one leaf certificate issued by the
 // cluster CA to a hypervisor agent. The server tracks issuance and
 // revocation so operators can audit the PKI surface from

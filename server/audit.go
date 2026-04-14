@@ -55,6 +55,14 @@ const (
 	AuditVMSnapDelete  = "vm.snapshot.delete"
 	AuditMigrationStart = "migration.start"
 	AuditMigrationCancel = "migration.cancel"
+	// Grant lifecycle (v5.11). Three outcomes worth recording:
+	//   .issue     — server minted a grant for a migration
+	//   .accept    — destination agent validated the grant
+	//   .reject    — destination refused (bad sig / expired / binding
+	//                mismatch / replay)
+	AuditMigrationGrantIssue  = "migration.grant.issue"
+	AuditMigrationGrantAccept = "migration.grant.accept"
+	AuditMigrationGrantReject = "migration.grant.reject"
 	AuditConsoleOpen   = "vm.console"
 	AuditHostMaintEnter = "host.maintenance.enter"
 	AuditHostMaintExit  = "host.maintenance.exit"

@@ -243,6 +243,17 @@ func handleCABundle(ca *ClusterCA) http.HandlerFunc {
 	}
 }
 
+// handleGrantPubKey serves the Ed25519 public half used to verify
+// migration grants. Returns hex so agents can cache it as a string
+// and round-trip through config without binary handling.
+func handleGrantPubKey(signer *GrantSigner) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{
+			"pubkey_hex": signer.PublicKeyHex(),
+		})
+	}
+}
+
 func handleCAHypervisors(store *Store, ca *ClusterCA) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
