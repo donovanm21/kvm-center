@@ -116,12 +116,14 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 				}
 				setSessionCookie(w, sess)
 				go store.Save()
+				auditAs(store, r, ldapUser.ID, ldapUser.Username, AuditLogin, "session", map[string]string{"via": "ldap"}, true, "")
 				writeJSON(w, http.StatusOK, map[string]any{
 					"user":        sanitizeUser(ldapUser),
 					"permissions": permListFromMap(effectivePermissions(store, ldapUser)),
 				})
 				return
 			}
+			auditAs(store, r, "", req.Username, AuditLogin, "session", map[string]string{"via": "local"}, false, "invalid credentials")
 			writeError(w, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
@@ -135,6 +137,7 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 				return
 			}
 			if !verifyTOTP(u.TOTPSecret, req.TOTPCode) {
+				auditAs(store, r, u.ID, u.Username, AuditLogin, "session", map[string]string{"via": "local"}, false, "invalid TOTP")
 				writeError(w, http.StatusUnauthorized, "invalid authentication code")
 				return
 			}
@@ -146,6 +149,7 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 		}
 		setSessionCookie(w, sess)
 		go store.Save()
+		auditAs(store, r, u.ID, u.Username, AuditLogin, "session", map[string]string{"via": "local"}, true, "")
 		writeJSON(w, http.StatusOK, map[string]any{
 			"user":        sanitizeUser(u),
 			"permissions": permListFromMap(effectivePermissions(store, u)),
@@ -156,8 +160,14 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 // POST /api/auth/logout — clear session cookie and delete server-side record.
 func handleAuthLogout(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Capture the actor before we nuke the session, so the audit row
+		// names the person who logged out rather than "anonymous".
+		u := userFromRequest(r)
 		if c, err := r.Cookie(sessionCookieName); err == nil {
 			store.DeleteSession(c.Value)
+		}
+		if u != nil {
+			auditAs(store, r, u.ID, u.Username, AuditLogout, "session", nil, true, "")
 		}
 		http.SetCookie(w, &http.Cookie{
 			Name: sessionCookieName, Value: "", Path: "/", MaxAge: -1,
@@ -333,9 +343,11 @@ func handleUsersCreate(store *Store) http.HandlerFunc {
 			Enabled: req.Enabled, RoleIDs: req.RoleIDs, GroupIDs: req.GroupIDs,
 		}
 		if err := store.CreateUser(u); err != nil {
+			audit(store, r, AuditUserCreate, "user/"+req.Username, nil, false, err.Error())
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		audit(store, r, AuditUserCreate, "user/"+u.ID, map[string]string{"username": u.Username}, true, "")
 		writeJSON(w, http.StatusOK, sanitizeUser(u))
 	}
 }
@@ -350,9 +362,11 @@ func handleUserUpdate(store *Store) http.HandlerFunc {
 				return
 			}
 			if err := store.DeleteUser(id); err != nil {
+				audit(store, r, AuditUserDelete, "user/"+id, nil, false, err.Error())
 				writeError(w, http.StatusNotFound, err.Error())
 				return
 			}
+			audit(store, r, AuditUserDelete, "user/"+id, nil, true, "")
 			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 			return
 		}
@@ -408,9 +422,21 @@ func handleUserUpdate(store *Store) http.HandlerFunc {
 			return nil
 		})
 		if err != nil {
+			audit(store, r, AuditUserUpdate, "user/"+id, nil, false, err.Error())
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		detail := map[string]string{}
+		if req.Enabled != nil {
+			detail["enabled"] = boolToStr(*req.Enabled)
+		}
+		if req.RoleIDs != nil {
+			detail["roles"] = strings.Join(*req.RoleIDs, ",")
+		}
+		if req.Password != nil && *req.Password != "" {
+			detail["password"] = "changed"
+		}
+		audit(store, r, AuditUserUpdate, "user/"+id, detail, true, "")
 		writeJSON(w, http.StatusOK, sanitizeUser(store.GetUserByID(id)))
 	}
 }
@@ -433,9 +459,11 @@ func handleGroupsCreate(store *Store) http.HandlerFunc {
 			return
 		}
 		if err := store.CreateGroup(&g); err != nil {
+			audit(store, r, AuditGroupCreate, "group/"+g.Name, nil, false, err.Error())
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		audit(store, r, AuditGroupCreate, "group/"+g.ID, map[string]string{"name": g.Name}, true, "")
 		writeJSON(w, http.StatusOK, g)
 	}
 }
@@ -445,9 +473,11 @@ func handleGroupUpdate(store *Store) http.HandlerFunc {
 		id := strings.TrimPrefix(r.URL.Path, "/api/groups/")
 		if r.Method == http.MethodDelete {
 			if err := store.DeleteGroup(id); err != nil {
+				audit(store, r, AuditGroupDelete, "group/"+id, nil, false, err.Error())
 				writeError(w, http.StatusNotFound, err.Error())
 				return
 			}
+			audit(store, r, AuditGroupDelete, "group/"+id, nil, true, "")
 			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 			return
 		}
@@ -473,9 +503,11 @@ func handleGroupUpdate(store *Store) http.HandlerFunc {
 			return nil
 		})
 		if err != nil {
+			audit(store, r, AuditGroupUpdate, "group/"+id, nil, false, err.Error())
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		audit(store, r, AuditGroupUpdate, "group/"+id, nil, true, "")
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
@@ -501,9 +533,11 @@ func handleRolesCreate(store *Store) http.HandlerFunc {
 			return
 		}
 		if err := store.CreateRole(&role); err != nil {
+			audit(store, r, AuditRoleCreate, "role/"+role.Name, nil, false, err.Error())
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		audit(store, r, AuditRoleCreate, "role/"+role.ID, map[string]string{"name": role.Name, "permissions": strings.Join(role.Permissions, ",")}, true, "")
 		writeJSON(w, http.StatusOK, role)
 	}
 }
@@ -513,9 +547,11 @@ func handleRoleUpdate(store *Store) http.HandlerFunc {
 		id := strings.TrimPrefix(r.URL.Path, "/api/roles/")
 		if r.Method == http.MethodDelete {
 			if err := store.DeleteRole(id); err != nil {
+				audit(store, r, AuditRoleDelete, "role/"+id, nil, false, err.Error())
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
+			audit(store, r, AuditRoleDelete, "role/"+id, nil, true, "")
 			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 			return
 		}
@@ -541,9 +577,15 @@ func handleRoleUpdate(store *Store) http.HandlerFunc {
 			return nil
 		})
 		if err != nil {
+			audit(store, r, AuditRoleUpdate, "role/"+id, nil, false, err.Error())
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		detail := map[string]string{}
+		if req.Permissions != nil {
+			detail["permissions"] = strings.Join(*req.Permissions, ",")
+		}
+		audit(store, r, AuditRoleUpdate, "role/"+id, detail, true, "")
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }

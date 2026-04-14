@@ -30,6 +30,15 @@ func handleFeaturesUpdate(store *Store) http.Handler {
 			return
 		}
 		store.SetFeatures(f)
+		audit(store, r, AuditFeatures, "features", map[string]string{
+			"disable_vm_create":      boolToStr(f.DisableVMCreate),
+			"disable_vm_delete":      boolToStr(f.DisableVMDelete),
+			"disable_snapshots":      boolToStr(f.DisableSnapshots),
+			"disable_console":        boolToStr(f.DisableConsole),
+			"disable_migrations":     boolToStr(f.DisableMigrations),
+			"disable_storage_upload": boolToStr(f.DisableStorageUpload),
+			"disable_storage_delete": boolToStr(f.DisableStorageDelete),
+		}, true, "")
 		writeJSON(w, http.StatusOK, f)
 	})
 }
