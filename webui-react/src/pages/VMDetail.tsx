@@ -192,22 +192,16 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
       ? `/api/vms/screenshot?host=${encodeURIComponent(vm.host_id)}&vm=${encodeURIComponent(vm.name)}&_t=${Date.now()}`
       : null;
 
-  const openConsole = async () => {
-    if (!host?.ip || !canConsole) return;
-    // v5.0.2+: server mints a short-lived HMAC-signed URL with the
-    // embedded token. Agent refuses /console/ and /ws/ without it, so
-    // only authenticated SPA users carrying vm.console can open a
-    // console (which is what you'd expect from an access-controlled
-    // product). Opening a stale URL a second time 401s.
-    try {
-      const resp = await apiPost<{ url: string }>(
-        `/api/vms/console-token?host=${encodeURIComponent(vm.host_id)}&vm=${encodeURIComponent(vm.name)}`,
-      );
-      window.open(resp.url, '_blank', 'noopener,noreferrer');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      alert(`Could not open console: ${msg}`);
-    }
+  const openConsole = () => {
+    if (!canConsole) return;
+    // v5.0.4+: server-proxied console. Opens a same-origin URL so the
+    // browser's session cookie is sent automatically; the server
+    // re-validates vm.console on every hit. If the operator shares this
+    // URL in chat/Slack/email, the recipient's browser — lacking the
+    // cookie — hits a 401 immediately. No HMAC material is exposed to
+    // the client, and agents never see direct browser traffic.
+    const url = `/api/console/${encodeURIComponent(vm.host_id)}/${encodeURIComponent(vm.name)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const cpuPct = Math.min(vm.cpu_usage || 0, 100);

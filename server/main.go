@@ -111,6 +111,12 @@ func main() {
 	mux.HandleFunc("/api/vms/screenshot", handleVMScreenshot(store))
 	mux.Handle("/api/vms/notes", requirePerm(store, "vm.edit", http.HandlerFunc(handleVMNotes(store))))
 	mux.Handle("/api/vms/console-token", requirePerm(store, "vm.console", http.HandlerFunc(handleConsoleToken(store))))
+	// Server-proxied console (v5.0.4+): noVNC HTML and the VNC WebSocket
+	// both ride through the server's HTTPS origin so every hit is
+	// re-validated against the operator's session cookie. Sharing the
+	// URL with someone who doesn't carry that cookie does nothing.
+	mux.Handle("/api/console/",    requirePerm(store, "vm.console", http.HandlerFunc(handleConsolePage(store))))
+	mux.Handle("/api/console-ws/", requirePerm(store, "vm.console", http.HandlerFunc(handleConsoleWSProxy(store))))
 	mux.HandleFunc("/api/storage", handleGetStorage(store))
 	mux.Handle("/api/storage/browse", requirePerm(store, "storage.view", http.HandlerFunc(handleStorageBrowse(store))))
 	mux.Handle("/api/storage/upload", requirePerm(store, "storage.upload", http.HandlerFunc(handleStorageUpload(store))))
