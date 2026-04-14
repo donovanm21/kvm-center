@@ -3,6 +3,136 @@
 All notable changes to kvm-center, organised by release tag. Dates
 reflect when the tag was pushed to origin.
 
+## v5.7.0 (2026-04-14)
+- **Per-channel notification routing** — each channel can override the
+  global event subscription; "Event routing" accordion inside the
+  channel card. Falls back to the global set when the channel's map
+  is empty.
+- **Per-collection Mongo writes** — `Save()` FNV-hashes each cold
+  collection (users, roles, groups, idps, sessions, features,
+  notifications, audit_shipping, api_tokens, snapshot_policies,
+  server_meta) and only drop-and-reinserts the ones that changed.
+  Hot collections (hosts/vms/storage/migrations/audit) still write
+  every tick. First save after startup writes everything for baseline.
+- Remove stray 💾 emoji from dashboard hypervisor summary.
+
+## v5.6.1 (2026-04-14)
+- **Fix** — token list showed no-expiry tokens as EXPIRED because
+  `time.Time{}` serialises as `0001-01-01T00:00:00Z` (encoding/json's
+  `omitempty` doesn't recognise zero-time as empty). Treat year<1000
+  as "no expiry" in both token views; admin create modal adds an
+  explicit "no expiry — service account" hint.
+
+## v5.6.0 (2026-04-14)
+- **User vs system API tokens.** Split the single tier into:
+  - `kind:"user"` — any signed-in user mints for themselves from the
+    user-menu → "My API tokens" modal. 7/30/90/365-day presets with
+    30-day default. Managed at `/api/tokens/me`.
+  - `kind:"system"` — admin-only, created from Settings → API Tokens,
+    default no expiry, for service accounts / remote admins.
+    Managed at `/api/tokens` (user.manage gated).
+  Both inherit owner permissions. Pre-v5.6 tokens backfill to
+  `kind:"system"` on load.
+- Settings → API Tokens grows Kind + Owner columns.
+
+## v5.5.4 (2026-04-14)
+- `kvmctl whoami` — prints user + server + roles + permissions.
+- `kvmctl config` — shows config path + server + masked token
+  (`--show-token` to reveal).
+- `kvmctl logout` — removes `~/.config/kvm-center/config.json`.
+
+## v5.5.3 (2026-04-14)
+- **Audit log scroll** — panel scrolls internally instead of bleeding
+  past the viewport.
+- **Via column** — colored pill distinguishes **CLI** (API token,
+  shows token ID) from **WebUI** (browser session) from **System**
+  (background tasks). The `via` field is stripped from the Detail
+  column so it isn't duplicated.
+
+## v5.5.2 (2026-04-14)
+- **One-shot kvmctl installer** — `install-kvmctl.sh` + `.ps1` on the
+  build portal. Auto-detects OS + arch, fetches the matching binary,
+  installs to `/usr/local/bin` (falls back to `~/.local/bin` when
+  unprivileged) or `%LOCALAPPDATA%\Programs\kvm-center` on Windows,
+  PATH update, macOS quarantine strip. `--install-dir`, `--bin-name`,
+  `--force`, `--portal` flags.
+
+## v5.5.1 (2026-04-14)
+- **Nicer `kvmctl` help** — sectioned (AUTH / INVENTORY / VM LIFECYCLE
+  / SNAPSHOTS / MISC), color-coded commands + args, usage examples.
+  Colors auto-disable when stderr isn't a terminal or `NO_COLOR=1`.
+
+## v5.5.0 (2026-04-14)
+- **API tokens + `kvmctl` CLI.** Long-lived bearer credentials for
+  scripted use of kvm-center.
+  - Wire format: `Authorization: Bearer kvmc_<id>.<secret>`.
+  - Secret hashed with SHA-256; shown to the operator exactly once at
+    creation. Tokens inherit owner permissions (no per-token scoping
+    in v5.5).
+  - Audit: every action via a token gets `detail.via=token:<id>` so
+    the log distinguishes CLI/CI from browser. Lifecycle
+    (create/revoke) audited too.
+  - UI: Settings → API Tokens — list + create modal with copy-to-
+    clipboard for the secret + revoke.
+  - CLI: `cmd/kvmctl` with `hosts`, `vms`, `vm
+    start|stop|restart|forcestop|migrate`, `snapshot list|create`.
+    Cross-built for linux/macos/windows amd64+arm64 and served from
+    the build portal.
+- **Audit page size** — clearer hint when the result fits in one
+  page so the dropdown doesn't look like a no-op.
+
+## v5.4.7 (2026-04-14)
+- Event subscription labels show the event key inline, e.g.
+  `VM crashed (vm.crashed)`.
+
+## v5.4.6 (2026-04-14)
+- Enter Maintenance dialog promoted to a Modal.
+
+## v5.4.5 (2026-04-14)
+- **Drain VMs on maintenance (UI).** Maintenance dialog adds an opt-in
+  "Drain VMs" checkbox + Live/Offline radio. Migrations run
+  sequentially in the background; progress surfaces in Migrations.
+
+## v5.4.4 (2026-04-14)
+- **Rich Discord/Slack webhook embeds** — color-coded by severity,
+  fielded layout, footer with version, deep link to the resource when
+  `KVM_CENTER_PUBLIC_URL` is set.
+- Channel config gains a "Payload format" dropdown (Auto-detect,
+  Discord, Slack, Generic JSON) to override the URL-host heuristic.
+
+## v5.4.3 (2026-04-14)
+- **Fix migration notification.** `migration.complete` never fired
+  because `handleCommand` mutated the same `*MigrationRecord` in
+  place before calling `AddMigration`, so the prev-status comparison
+  always saw the new value. Replaced with a per-ID fired-once set.
+- **Server side of host drain on maintenance** — POST
+  `/api/hosts/<id>/maintenance/enter` now accepts `{drain, mode}`;
+  sequential migrations off the host via existing plumbing.
+
+## v5.4.2 (2026-04-14)
+- **Discord/Slack webhook payload shape** — auto-detect Discord /
+  Slack hosts and ship the chat-message envelope they want (Discord
+  rejected raw event JSON with 400). Everything else keeps structured
+  event JSON for generic receivers.
+
+## v5.4.1 (2026-04-14)
+- **Deployment portal probe via server proxy** — the HTTPS SPA's
+  direct fetch to plain-HTTP `:8097` was blocked as mixed content,
+  surfacing as "PORTAL UNREACHABLE" even when up. Probe goes through
+  `/api/portal/health` so the server (plain HTTP capable) does the
+  dial.
+
+## v5.4.0 (2026-04-14)
+- **Notifications.** Operator-configurable channels + event
+  subscriptions.
+  - Triggers: VM crashed/recovered, host offline/recovered, migration
+    complete/failed, TLS cert expiring (<30d), snapshot policy failed.
+  - Channels: webhook (optional HMAC-SHA256 signature header) + email
+    via `net/smtp` (global SMTP defaults, per-channel overrides).
+  - UI: Settings → Notifications — event-type checkboxes, per-channel
+    enable/test/remove, last-send observability with redacted secrets.
+  - Every config change + test send audited.
+
 ## v5.0.5 (2026-04-13)
 - **Server console fix** — dynamic `import()` + correct noVNC module
   path (`core/rfb.js`, not `lib/rfb.js`). Previous version hung on
