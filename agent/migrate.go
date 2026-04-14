@@ -121,7 +121,7 @@ func handleCancelMigrate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func startOfflineMigrate(vmName, dest string, keepRaw bool) {
+func startOfflineMigrate(vmName, dest string, keepRaw bool, transport string) {
 	migStatusMu.Lock()
 	if migStatus.Active {
 		migStatusMu.Unlock()
@@ -141,7 +141,16 @@ func startOfflineMigrate(vmName, dest string, keepRaw bool) {
 	migStatusMu.Unlock()
 
 	go func() {
-		err := offlineMigrate(ctx, vmName, dest, keepRaw)
+		var err error
+		// v5.11.6: mTLS path uses virsh vol-upload over qemu+tls://
+		// instead of scp. Falls back to ssh path when transport is
+		// anything else or when keep_raw=true (raw conversion on
+		// target still needs remote shell; revisit in v5.11.7).
+		if transport == "tls" && !keepRaw {
+			err = offlineMigrateMTLS(ctx, vmName, dest)
+		} else {
+			err = offlineMigrate(ctx, vmName, dest, keepRaw)
+		}
 		migStatusMu.Lock()
 		switch {
 		case err == nil:
