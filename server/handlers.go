@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -442,6 +443,7 @@ func handleVMNotes(store *Store) http.HandlerFunc {
 			return
 		}
 		store.SetVMNotes(req.UUID, req.Notes)
+		audit(store, r, AuditVMNotes, "vm/"+req.UUID, map[string]string{"chars": strconv.Itoa(len(req.Notes))}, true, "")
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
@@ -529,6 +531,7 @@ func handleKVMToolsUpdate(store *Store) http.HandlerFunc {
 			return
 		}
 		store.QueueKVMToolsUpdate(req.UUIDs)
+		audit(store, r, AuditKVMToolsQueue, "kvm-tools", map[string]string{"uuids": strings.Join(req.UUIDs, ",")}, true, "")
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status": "queued",
 			"count":  len(req.UUIDs),
@@ -819,6 +822,7 @@ func handleCancelMigration(store *Store) http.HandlerFunc {
 		rec.Detail = "Operator requested cancel — rolling back…"
 		store.AddMigration(rec)
 
+		audit(store, r, AuditMigrationCancel, "migration/"+id, map[string]string{"vm": rec.VMName, "phase": rec.Phase}, true, "")
 		url := fmt.Sprintf("http://%s/cancel-migrate?vm=%s", agentAddr, rec.VMName)
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Post(url, "application/json", nil)

@@ -194,6 +194,22 @@ func auditSystem(store *Store, action, resource string, detail map[string]string
 	})
 }
 
+// auditAs is like audit() but takes an explicit actor — used by the
+// login path, where there's no session yet and userFromRequest(r)
+// would return nil.
+func auditAs(store *Store, r *http.Request, actorID, actorName, action, resource string, detail map[string]string, success bool, errMsg string) {
+	store.AddAuditEvent(&models.AuditEvent{
+		ActorID:   actorID,
+		ActorName: actorName,
+		ActorIP:   clientIP(r),
+		Action:    action,
+		Resource:  resource,
+		Detail:    detail,
+		Success:   success,
+		Error:     errMsg,
+	})
+}
+
 func newAuditID() string {
 	var b [12]byte
 	_, _ = rand.Read(b[:])

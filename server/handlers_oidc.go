@@ -274,10 +274,12 @@ func handleIDPsCreate(store *Store) http.Handler {
 			return
 		}
 		if err := store.CreateIDP(&p); err != nil {
+			audit(store, r, AuditIDPCreate, "idp/"+p.Name, map[string]string{"kind": p.Kind}, false, err.Error())
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		go store.Save()
+		audit(store, r, AuditIDPCreate, "idp/"+p.ID, map[string]string{"name": p.Name, "kind": p.Kind}, true, "")
 		writeJSON(w, http.StatusOK, sanitizeIDP(&p))
 	})
 }
@@ -292,10 +294,12 @@ func handleIDPUpdate(store *Store) http.Handler {
 		switch r.Method {
 		case http.MethodDelete:
 			if err := store.DeleteIDP(id); err != nil {
+				audit(store, r, AuditIDPDelete, "idp/"+id, nil, false, err.Error())
 				writeError(w, http.StatusNotFound, err.Error())
 				return
 			}
 			go store.Save()
+			audit(store, r, AuditIDPDelete, "idp/"+id, nil, true, "")
 			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		case http.MethodPost, http.MethodPut, http.MethodPatch:
 			var req struct {
@@ -357,10 +361,12 @@ func handleIDPUpdate(store *Store) http.Handler {
 				return nil
 			})
 			if err != nil {
+				audit(store, r, AuditIDPUpdate, "idp/"+id, nil, false, err.Error())
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
 			go store.Save()
+			audit(store, r, AuditIDPUpdate, "idp/"+id, nil, true, "")
 			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
