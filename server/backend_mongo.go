@@ -55,6 +55,7 @@ const (
 	mcoAuditEvents     = "audit_events"
 	mcoSnapshotPolicies = "snapshot_policies"
 	mcoNotifications    = "notifications" // singleton _id:"singleton"
+	mcoAPITokens        = "api_tokens"    // keyed by token ID
 )
 
 func NewMongoBackend(uri, dbName string) *MongoBackend {
@@ -337,6 +338,12 @@ func (b *MongoBackend) Load(ctx context.Context) (*persistData, error) {
 		return nil, err
 	}
 
+	// API tokens (v5.5) keyed map.
+	pd.APITokens = map[string]*models.APIToken{}
+	if err := loadMapByID[models.APIToken](ctx, db, mcoAPITokens, pd.APITokens, func(t *models.APIToken) string { return t.ID }); err != nil {
+		return nil, err
+	}
+
 	// Notifications (v5.4) singleton.
 	var notif models.NotificationConfig
 	err = db.Collection(mcoNotifications).FindOne(ctx, bson.D{{Key: "_id", Value: "singleton"}}).Decode(&notif)
@@ -521,6 +528,16 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 		}{ev.ID, ev})
 	}
 	if err := replaceMap(ctx, db, mcoAuditEvents, auditDocs); err != nil {
+		return err
+	}
+
+	// API tokens
+	if err := replaceMap(ctx, db, mcoAPITokens, mapToDocs(d.APITokens, func(t *models.APIToken) any {
+		return struct {
+			ID string `bson:"_id"`
+			*models.APIToken `bson:",inline"`
+		}{t.ID, t}
+	})); err != nil {
 		return err
 	}
 

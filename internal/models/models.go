@@ -493,6 +493,27 @@ type Role struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+// APIToken (v5.5) is a long-lived bearer credential for scripted use
+// of the kvm-center API. The full token is shown to the operator
+// exactly once at creation; the server only persists a SHA-256 hash
+// of the secret. Tokens inherit the owner user's permissions —
+// per-token scoping is intentionally out of scope for v5.5 to keep
+// the model small.
+//
+// Token wire format: "kvmc_<id>.<secret>"
+//   <id>     — 8 hex chars, public, used to look up the row
+//   <secret> — 48 hex chars, high-entropy random, never persisted
+type APIToken struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	OwnerID    string    `json:"owner_id"`
+	Hash       string    `json:"hash,omitempty"` // never returned via API
+	CreatedAt  time.Time `json:"created_at"`
+	ExpiresAt  time.Time `json:"expires_at,omitempty"`
+	LastUsedAt time.Time `json:"last_used_at,omitempty"`
+	Revoked    bool      `json:"revoked"`
+}
+
 // Session is an authenticated cookie-backed session.
 type Session struct {
 	Token     string    `json:"token"`
