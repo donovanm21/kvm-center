@@ -119,10 +119,27 @@ EOF_ENV
     HOSTS=""
     if [[ -n "${KVM_HVNODE_IPS:-}" ]]; then
       HOSTS="$KVM_HVNODE_IPS"
-    elif command -v jq >/dev/null 2>&1 && command -v docker >/dev/null 2>&1 && \
+    elif command -v docker >/dev/null 2>&1; then
+      # v5.3+: prefer Mongo (primary backend since v5.1). mongosh runs
+      # inside the mongo container and picks up the root creds from
+      # /opt/kvm-center/.env. Falls back to data.json for rollback cases
+      # where Mongo is temporarily disabled.
+      if docker inspect kvm-center-mongo >/dev/null 2>&1 && [[ -f /opt/kvm-center/.env ]]; then
+        mongo_pw=$(grep '^KVM_MONGO_PASSWORD=' /opt/kvm-center/.env | cut -d= -f2-)
+        mongo_user=$(grep '^KVM_MONGO_USER=' /opt/kvm-center/.env | cut -d= -f2-)
+        mongo_user=${mongo_user:-kvmcenter}
+        if [[ -n "$mongo_pw" ]]; then
+          HOSTS=$(docker exec kvm-center-mongo mongosh --quiet -u "$mongo_user" -p "$mongo_pw" \
+            --authenticationDatabase admin kvm-center \
+            --eval 'db.hosts.find({}, {ip: 1, _id: 0}).toArray().map(h => h.ip).join(" ")' \
+            2>/dev/null || true)
+        fi
+      fi
+      if [[ -z "$HOSTS" ]] && command -v jq >/dev/null 2>&1 && \
          docker inspect kvm-center-server >/dev/null 2>&1; then
-      HOSTS=$(docker exec kvm-center-server cat /var/lib/kvm-center/data.json 2>/dev/null \
-              | jq -r '.hosts[].ip' 2>/dev/null || true)
+        HOSTS=$(docker exec kvm-center-server cat /var/lib/kvm-center/data.json 2>/dev/null \
+                | jq -r '.hosts[].ip' 2>/dev/null || true)
+      fi
     fi
     if [[ -z "$HOSTS" ]] && command -v jq >/dev/null 2>&1; then
       SERVER_API="${KVM_CENTER_API:-http://localhost:8090}"

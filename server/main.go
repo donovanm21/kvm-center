@@ -76,6 +76,7 @@ func main() {
 	// no shipping config exists yet — worker no-ops until the operator
 	// saves a config via Settings → Audit Log → Shipping.
 	store.startAuditShipper(context.Background())
+	store.startSnapshotScheduler(context.Background())
 	hub := NewSSEHub()
 	store.hub = hub // state-changing store methods publish via this handle
 
@@ -132,6 +133,8 @@ func main() {
 		}
 	})
 	mux.Handle("/api/audit", requirePerm(store, "audit.view", http.HandlerFunc(handleAuditList(store))))
+	mux.Handle("/api/snapshot-policies",  requirePerm(store, "vm.snapshot", http.HandlerFunc(handleSnapshotPolicies(store))))
+	mux.Handle("/api/snapshot-policies/", requirePerm(store, "vm.snapshot", http.HandlerFunc(handleSnapshotPolicy(store))))
 	mux.Handle("/api/settings/audit-shipping",       requirePerm(store, "user.manage", http.HandlerFunc(auditShippingRouter(store))))
 	mux.Handle("/api/settings/audit-shipping/test",  requirePerm(store, "user.manage", http.HandlerFunc(handleAuditShippingTest(store))))
 	mux.HandleFunc("/api/vms", handleGetVMs(store))

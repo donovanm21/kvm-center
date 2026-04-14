@@ -52,7 +52,8 @@ const (
 	mcoIDPs        = "idps"
 	mcoFeatures    = "features" // single doc with _id:"singleton"
 	mcoServerMeta  = "server_meta" // _id:"singleton" — console_secret etc.
-	mcoAuditEvents = "audit_events"
+	mcoAuditEvents     = "audit_events"
+	mcoSnapshotPolicies = "snapshot_policies"
 )
 
 func NewMongoBackend(uri, dbName string) *MongoBackend {
@@ -329,6 +330,12 @@ func (b *MongoBackend) Load(ctx context.Context) (*persistData, error) {
 		return nil, err
 	}
 
+	// Snapshot policies (v5.3) — keyed map, same pattern as users.
+	pd.SnapshotPolicies = map[string]*models.SnapshotPolicy{}
+	if err := loadMapByID[models.SnapshotPolicy](ctx, db, mcoSnapshotPolicies, pd.SnapshotPolicies, func(p *models.SnapshotPolicy) string { return p.ID }); err != nil {
+		return nil, err
+	}
+
 	return pd, nil
 }
 
@@ -504,6 +511,16 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 		}{ev.ID, ev})
 	}
 	if err := replaceMap(ctx, db, mcoAuditEvents, auditDocs); err != nil {
+		return err
+	}
+
+	// Snapshot policies
+	if err := replaceMap(ctx, db, mcoSnapshotPolicies, mapToDocs(d.SnapshotPolicies, func(p *models.SnapshotPolicy) any {
+		return struct {
+			ID string `bson:"_id"`
+			*models.SnapshotPolicy `bson:",inline"`
+		}{p.ID, p}
+	})); err != nil {
 		return err
 	}
 
