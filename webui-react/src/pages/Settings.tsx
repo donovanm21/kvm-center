@@ -5,6 +5,7 @@ import { UsersTab } from './settings/UsersTab';
 import { GroupsTab } from './settings/GroupsTab';
 import { RolesTab } from './settings/RolesTab';
 import { ProvidersTab } from './settings/ProvidersTab';
+import { TLSTab } from './settings/TLSTab';
 
 const TABS = [
   { to: 'general', label: 'General' },
@@ -12,6 +13,7 @@ const TABS = [
   { to: 'groups', label: 'Groups' },
   { to: 'roles', label: 'Roles' },
   { to: 'providers', label: 'Identity Providers' },
+  { to: 'tls', label: 'TLS' },
 ] as const;
 
 export function Settings() {
@@ -44,6 +46,7 @@ export function Settings() {
         <Route path="groups" element={<GroupsTab />} />
         <Route path="roles" element={<RolesTab />} />
         <Route path="providers" element={<ProvidersTab />} />
+        <Route path="tls" element={<TLSTab />} />
       </Routes>
     </>
   );
