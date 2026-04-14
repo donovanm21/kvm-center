@@ -32,6 +32,8 @@ var versionRaw string
 var Version = strings.TrimSpace(versionRaw)
 
 func main() {
+	mongoURL := flag.String("mongo-url", envOrDefault("KVM_CENTER_MONGO_URL", ""), "MongoDB URI — if set, data is persisted in Mongo instead of the JSON file. Leave blank for the JSON backend.")
+	mongoDB := flag.String("mongo-db", envOrDefault("KVM_CENTER_MONGO_DB", "kvm-center"), "MongoDB database name (used when -mongo-url is set)")
 	addr := flag.String("addr", envOrDefault("KVM_CENTER_ADDR", ":8090"), "HTTP listen address (plain HTTP, used when TLS is off or as the HTTPS-redirect port)")
 	tlsAddr := flag.String("tls-addr", envOrDefault("KVM_CENTER_TLS_ADDR", ":8443"), "HTTPS listen address (used when -cert/-key are set or auto-generated)")
 	tlsCert := flag.String("cert", envOrDefault("KVM_CENTER_TLS_CERT", ""), "PEM-encoded TLS certificate (if blank, a self-signed cert is auto-generated)")
@@ -60,7 +62,14 @@ func main() {
 		log.Fatalf("server: cannot create data dir: %v", err)
 	}
 
-	store := NewStore(*dataFile)
+	// Pick the persistence backend. Mongo wins when a URL is provided;
+	// otherwise we stay on the original JSON file so an existing v5.0
+	// install boots unchanged. First-boot migration from JSON → Mongo
+	// happens transparently if a data.json is found alongside an empty
+	// Mongo — see bootstrapBackend for the detailed dance.
+	backend := bootstrapBackend(*mongoURL, *mongoDB, *dataFile)
+	log.Printf("backend: using %s", backend.Name())
+	store := NewStoreWithBackend(backend, *dataFile)
 	hub := NewSSEHub()
 	store.hub = hub // state-changing store methods publish via this handle
 
@@ -170,6 +179,11 @@ func main() {
 	// needs it to grey out disabled buttons); writes require user.manage.
 	mux.HandleFunc("/api/settings",       handleFeaturesGet(store))
 	mux.Handle("/api/settings/update",    requirePerm(store, "user.manage", handleFeaturesUpdate(store)))
+	// Database backend status + migration (v5.1+). Gated on user.manage;
+	// considered a platform-ops operation alongside TLS management.
+	mux.Handle("/api/settings/database",         requirePerm(store, "user.manage", handleDatabaseStatus(store)))
+	mux.Handle("/api/settings/database/test",    requirePerm(store, "user.manage", handleDatabaseTest()))
+	mux.Handle("/api/settings/database/migrate", requirePerm(store, "user.manage", handleDatabaseMigrate(store)))
 	// Admin-only user/group/role CRUD (require user.manage permission).
 	mux.Handle("/api/users",       requirePerm(store, "user.manage", handleUsersList(store)))
 	mux.Handle("/api/users/new",   requirePerm(store, "user.manage", handleUsersCreate(store)))

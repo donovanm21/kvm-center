@@ -1,15 +1,21 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"log"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"kvm-center/internal/models"
 )
+
+// contextWithTimeout centralises the backend I/O deadline so every
+// call site uses the same budget. Backend implementations should
+// honour it via ctx.Done().
+func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), d)
+}
 
 // persistData is the on-disk JSON structure.
 type persistData struct {
@@ -62,8 +68,12 @@ type Store struct {
 	// consoleSecret is loaded from the JSON store and re-persisted on
 	// first access; see GetOrCreateConsoleSecret in console_token.go.
 	consoleSecret string
-	features   models.Features
-	dataFile   string
+	features      models.Features
+	dataFile      string
+	// backend is the pluggable persistence layer (JSON file or Mongo).
+	// Wired post-construction by NewStoreWithBackend; NewStore still
+	// works for tests and falls back to JSONBackend on dataFile.
+	backend Backend
 
 	// hub is the SSE fan-out. Optional — nil is a no-op via SSEHub.Publish,
 	// which keeps the store usable in tests and by "go run" without the
@@ -87,7 +97,19 @@ func (s *Store) SetFeatures(f models.Features) {
 	s.hub.Publish(EventSettings, nil)
 }
 
+// NewStore builds a Store backed by the JSON file at dataFile. The
+// legacy entrypoint — kept for tests and the "no --mongo-url passed"
+// branch of main.go. Use NewStoreWithBackend when the operator has
+// configured an alternative persistence layer.
 func NewStore(dataFile string) *Store {
+	return NewStoreWithBackend(NewJSONBackend(dataFile), dataFile)
+}
+
+// NewStoreWithBackend builds a Store against an arbitrary Backend.
+// dataFile is retained purely for UI display and the "migrate from
+// JSON to Mongo" first-boot path (so a MongoBackend'd store still
+// knows where the legacy file lives).
+func NewStoreWithBackend(backend Backend, dataFile string) *Store {
 	s := &Store{
 		hosts:     make(map[string]*models.Host),
 		vms:       make(map[string][]*models.VM),
@@ -101,6 +123,7 @@ func NewStore(dataFile string) *Store {
 		idps:                make(map[string]*models.IdentityProvider),
 		kvmToolsUpdateQueue: make(map[string]bool),
 		dataFile:            dataFile,
+		backend:             backend,
 	}
 	s.load()
 	s.ensureBuiltInRoles()
@@ -552,7 +575,8 @@ func (s *Store) MarkOfflineHosts() {
 	}
 }
 
-// Save persists the current store state to the data file.
+// Save persists the current store state through the configured
+// backend (JSON file or Mongo).
 func (s *Store) Save() {
 	s.mu.RLock()
 	d := persistData{
@@ -572,25 +596,30 @@ func (s *Store) Save() {
 	}
 	s.mu.RUnlock()
 
-	data, err := json.MarshalIndent(d, "", "  ")
-	if err != nil {
-		log.Printf("store: marshal error: %v", err)
+	if s.backend == nil {
+		log.Printf("store: no backend configured, skipping save")
 		return
 	}
-	if err := os.WriteFile(s.dataFile, data, 0644); err != nil {
-		log.Printf("store: write error: %v", err)
+	ctx, cancel := contextWithTimeout(15 * time.Second)
+	defer cancel()
+	if err := s.backend.Save(ctx, &d); err != nil {
+		log.Printf("store: backend save error (%s): %v", s.backend.Name(), err)
 	}
 }
 
 func (s *Store) load() {
-	data, err := os.ReadFile(s.dataFile)
-	if err != nil {
-		return // fresh start
-	}
-	var d persistData
-	if err := json.Unmarshal(data, &d); err != nil {
-		log.Printf("store: load error: %v", err)
+	if s.backend == nil {
 		return
+	}
+	ctx, cancel := contextWithTimeout(15 * time.Second)
+	defer cancel()
+	d, err := s.backend.Load(ctx)
+	if err != nil {
+		log.Printf("store: backend load error (%s): %v", s.backend.Name(), err)
+		return
+	}
+	if d == nil {
+		return // fresh start
 	}
 	if d.Hosts != nil {
 		s.hosts = d.Hosts
