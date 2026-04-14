@@ -338,34 +338,39 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
 
       <Field label="Target host">
         <div style={{ display: 'grid', gap: 6 }}>
-          {onlinePeers.length > 4 && (
-            <input
-              type="search"
-              placeholder="Filter hosts…"
-              value={targetFilter}
-              onChange={(e) => setTargetFilter(e.target.value)}
-              style={{
-                padding: '6px 10px', fontSize: 13,
-                background: 'var(--bg-input)', border: '1px solid var(--border)',
-                borderRadius: 4, color: 'var(--text-body)', fontFamily: 'inherit',
-              }}
-            />
-          )}
+          <input
+            type="search"
+            placeholder={`Filter ${onlinePeers.length} online host${onlinePeers.length === 1 ? '' : 's'}…`}
+            value={targetFilter}
+            onChange={(e) => setTargetFilter(e.target.value)}
+            style={{
+              padding: '6px 10px', fontSize: 13,
+              background: 'var(--bg-input)', border: '1px solid var(--border)',
+              borderRadius: 4, color: 'var(--text-body)', fontFamily: 'inherit',
+            }}
+          />
           <select
             value={effectiveTarget ?? ''}
             onChange={(e) => setTargetID(e.target.value)}
             style={selectStyle}
-            size={Math.min(Math.max(filteredPeers.length, 1), 6)}
           >
             {filteredPeers.length === 0 && (
               <option value="" disabled>No hosts match "{targetFilter}"</option>
             )}
-            {filteredPeers.map((h) => (
+            {/* Cap the native popup at 5 rows — browsers render the
+                dropdown with one scroll region beyond that. Keeps the
+                list compact while the filter narrows the set. */}
+            {filteredPeers.slice(0, 5).map((h) => (
               <option key={h.id} value={h.id}>
                 {h.id} ({h.ip}) — {(h.mem_free_mb / 1024).toFixed(1)} GB free
                 {h.mtls_ready ? ' · mTLS' : ''}
               </option>
             ))}
+            {filteredPeers.length > 5 && (
+              <option value="" disabled>
+                …{filteredPeers.length - 5} more — narrow the filter
+              </option>
+            )}
           </select>
           <div style={{ fontSize: 11, color: 'var(--text-faded)' }}>
             {filteredPeers.length} of {onlinePeers.length} online peer{onlinePeers.length === 1 ? '' : 's'}
