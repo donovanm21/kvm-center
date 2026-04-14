@@ -331,6 +331,7 @@ body.light-mode .topbar-mig-badge { background: #FFF4EC; color: #C04512; border-
   border-radius: 4px; border: 1px solid transparent;
   font-size: 12px; font-weight: 500; font-family: inherit;
   cursor: pointer;
+  white-space: nowrap;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .btn-primary-sm {

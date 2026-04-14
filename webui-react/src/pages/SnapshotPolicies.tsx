@@ -36,7 +36,7 @@ const PRESETS: { label: string; minutes: number }[] = [
  * never touched because retention only looks at names matching the
  * policy-<id>- prefix the server embeds.
  */
-export function SnapshotPoliciesTab() {
+export function SnapshotPolicies() {
   const { hasPerm } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -83,14 +83,12 @@ export function SnapshotPoliciesTab() {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Snapshot policies</h2>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-            Schedule recurring snapshots per VM with retention. The server fires policies every minute;
-            intervals under 60 m are fine for testing but are rarely useful in production.
-          </p>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 12 }}>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, maxWidth: 720 }}>
+          Schedule recurring snapshots per VM with retention. The server's scheduler ticks once a
+          minute and fires every enabled policy whose interval has elapsed; manual snapshots are
+          never touched by retention pruning.
+        </p>
         <button
           type="button"
           className="btn-primary-sm"
@@ -133,7 +131,7 @@ export function SnapshotPoliciesTab() {
                       <>
                         <div style={{ fontSize: 11, color: 'var(--text-faded)' }}>{new Date(p.last_run_at).toLocaleString()}</div>
                         {p.last_run_error ? (
-                          <div style={{ fontSize: 10, color: '#F85149', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.last_run_error}>{p.last_run_error}</div>
+                          <div className="tone-pill danger" style={{ marginTop: 4, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', padding: '2px 8px' }} title={p.last_run_error}>{p.last_run_error}</div>
                         ) : (
                           <div style={{ fontSize: 10, color: 'var(--text-faded)' }}>{p.last_run_count ?? 0} snapshot{p.last_run_count === 1 ? '' : 's'}</div>
                         )}
@@ -236,7 +234,16 @@ function PolicyEditor({
         <Field label="Schedule">
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {PRESETS.map((p) => (
-              <button key={p.minutes} type="button" className="btn-secondary-sm" style={{ height: 28 }} onClick={() => update({ every_minutes: p.minutes })}>{p.label}</button>
+              <button
+                key={p.minutes}
+                type="button"
+                className="btn-secondary-sm"
+                aria-pressed={form.every_minutes === p.minutes}
+                onClick={() => update({ every_minutes: p.minutes })}
+                style={form.every_minutes === p.minutes
+                  ? { borderColor: 'var(--accent)', color: 'var(--accent)' }
+                  : undefined}
+              >{p.label}</button>
             ))}
           </div>
           <div style={{ marginTop: 8 }}>
