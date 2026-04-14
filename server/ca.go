@@ -12,8 +12,10 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -162,8 +164,10 @@ func (c *ClusterCA) Cert() *x509.Certificate {
 // a leaf certificate bound to hostID (CN), and returns the leaf in
 // PEM form. The CSR's subject CN is overridden with hostID so a
 // caller can't choose their own identity — the enrollment token
-// determines who they are.
-func (c *ClusterCA) SignHypervisorCSR(csrPEM []byte, hostID string, dnsNames []string) (certPEM []byte, serialHex, fingerprint string, notBefore, notAfter time.Time, err error) {
+// determines who they are. dnsNames and ipAddrs are added to the
+// SAN list so peers can connect by either hostname or IP and still
+// pass libvirt's hostname-check TLS verification.
+func (c *ClusterCA) SignHypervisorCSR(csrPEM []byte, hostID string, dnsNames, ipAddrs []string) (certPEM []byte, serialHex, fingerprint string, notBefore, notAfter time.Time, err error) {
 	block, _ := pem.Decode(csrPEM)
 	if block == nil {
 		err = errors.New("csr not PEM")
@@ -198,6 +202,11 @@ func (c *ClusterCA) SignHypervisorCSR(csrPEM []byte, hostID string, dnsNames []s
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 		BasicConstraintsValid: true,
 		DNSNames:              append([]string{hostID}, dnsNames...),
+	}
+	for _, raw := range ipAddrs {
+		if ip := net.ParseIP(strings.TrimSpace(raw)); ip != nil {
+			tmpl.IPAddresses = append(tmpl.IPAddresses, ip)
+		}
 	}
 	c.mu.RLock()
 	der, cerr := x509.CreateCertificate(rand.Reader, tmpl, c.cert, csr.PublicKey, c.key)
