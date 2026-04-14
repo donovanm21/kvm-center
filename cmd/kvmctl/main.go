@@ -61,6 +61,12 @@ func main() {
 		os.Exit(cmdVM(args))
 	case "snapshot":
 		os.Exit(cmdSnapshot(args))
+	case "whoami":
+		os.Exit(cmdWhoami(args))
+	case "config":
+		os.Exit(cmdConfig(args))
+	case "logout":
+		os.Exit(cmdLogout(args))
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -125,6 +131,9 @@ func usage() {
 	row("snapshot create <uuid> [--name <name>]", "create; name auto-generated when omitted")
 
 	section("\n  MISC")
+	row("whoami", "show the user this token authenticates as")
+	row("config", "show saved config path + server (token is masked)")
+	row("logout", "remove the saved config")
 	row("version", "print kvmctl version")
 	row("help", "show this help")
 
@@ -353,6 +362,100 @@ func cmdSnapshot(args []string) int {
 	}
 	fmt.Fprintln(os.Stderr, "unknown snapshot action:", action)
 	return 1
+}
+
+func cmdWhoami(args []string) int {
+	fs := flag.NewFlagSet("whoami", flag.ExitOnError)
+	asJSON := fs.Bool("json", false, "emit JSON")
+	_ = fs.Parse(args)
+	cfg, err := loadConfig()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	body, err := apiCall(cfg, "GET", "/api/auth/me", nil)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if *asJSON {
+		os.Stdout.Write(body)
+		return 0
+	}
+	var me struct {
+		User struct {
+			ID       string   `json:"id"`
+			Username string   `json:"username"`
+			Email    string   `json:"email"`
+			RoleIDs  []string `json:"role_ids"`
+		} `json:"user"`
+		Permissions []string `json:"permissions"`
+	}
+	if err := json.Unmarshal(body, &me); err != nil {
+		os.Stdout.Write(body)
+		return 0
+	}
+	fmt.Printf("user:        %s (%s)\n", me.User.Username, me.User.ID)
+	if me.User.Email != "" {
+		fmt.Printf("email:       %s\n", me.User.Email)
+	}
+	fmt.Printf("server:      %s\n", cfg.Server)
+	if len(me.User.RoleIDs) > 0 {
+		fmt.Printf("roles:       %s\n", strings.Join(me.User.RoleIDs, ", "))
+	}
+	if len(me.Permissions) > 0 {
+		fmt.Printf("permissions: %s\n", strings.Join(me.Permissions, ", "))
+	}
+	return 0
+}
+
+func cmdConfig(args []string) int {
+	fs := flag.NewFlagSet("config", flag.ExitOnError)
+	showToken := fs.Bool("show-token", false, "print the full token (dangerous)")
+	_ = fs.Parse(args)
+	path := configPath()
+	cfg, err := loadConfig()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	tokDisplay := maskToken(cfg.Token)
+	if *showToken {
+		tokDisplay = cfg.Token
+	}
+	fmt.Printf("path:   %s\n", path)
+	fmt.Printf("server: %s\n", cfg.Server)
+	fmt.Printf("token:  %s\n", tokDisplay)
+	return 0
+}
+
+func cmdLogout(_ []string) int {
+	p := configPath()
+	if _, err := os.Stat(p); os.IsNotExist(err) {
+		fmt.Println("already logged out")
+		return 0
+	}
+	if err := os.Remove(p); err != nil {
+		fmt.Fprintln(os.Stderr, "remove config:", err)
+		return 1
+	}
+	fmt.Println("logged out — removed", p)
+	return 0
+}
+
+func maskToken(t string) string {
+	if t == "" {
+		return "(none)"
+	}
+	// kvmc_<8-id>.<48-secret> — show the public ID + a few chars of the secret.
+	if len(t) < 16 {
+		return "****"
+	}
+	dot := strings.IndexByte(t, '.')
+	if dot <= 0 {
+		return t[:6] + "…"
+	}
+	return t[:dot+1] + "****" + t[len(t)-4:]
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
