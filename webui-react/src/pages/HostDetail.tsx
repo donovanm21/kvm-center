@@ -3,6 +3,7 @@ import { Link, NavLink, useMatch, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { apiPost } from '@/api/client';
+import { Modal } from '@/components/Modal';
 import { useAuth } from '@/hooks/useAuth';
 import { useFeatures, useHosts, useStorage, useVMs } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
@@ -48,58 +49,73 @@ function MaintenanceToggle({ host }: { host: Host }) {
     onError: (e) => toast('error', `Failed: ${e instanceof Error ? e.message : String(e)}`),
   });
 
-  if (asking && !on) {
-    return (
-      <div style={{ display: 'inline-flex', flexDirection: 'column', gap: 6, padding: 8, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface-2)' }}>
-        <input
-          type="text"
-          placeholder="Reason (e.g. kernel patch)"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          style={{
-            height: 28, padding: '0 8px', fontSize: 12,
-            background: 'var(--bg-input)', border: '1px solid var(--border)',
-            borderRadius: 4, color: 'var(--text-body)', fontFamily: 'inherit', width: 280,
-          }}
-        />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-body)' }}>
-          <input type="checkbox" checked={drain} onChange={(e) => setDrain(e.target.checked)} />
-          Drain VMs to other hosts
-        </label>
-        {drain && (
-          <div style={{ display: 'flex', gap: 12, fontSize: 12, color: 'var(--text-body)', paddingLeft: 18 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <input type="radio" name="drain-mode" checked={mode === 'live'} onChange={() => setMode('live')} />
-              Live (running VMs)
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <input type="radio" name="drain-mode" checked={mode === 'offline'} onChange={() => setMode('offline')} />
-              Offline (any state)
-            </label>
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button type="button" className="btn-primary-sm" onClick={() => toggle.mutate()} disabled={toggle.isPending}>
-            {toggle.isPending ? 'Entering…' : drain ? 'Enter & drain' : 'Enter maintenance'}
-          </button>
-          <button type="button" className="btn-secondary-sm" onClick={() => { setAsking(false); setReason(''); setDrain(false); }}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const close = () => { setAsking(false); setReason(''); setDrain(false); setMode('live'); };
 
   return (
-    <button
-      type="button"
-      className={on ? 'btn-primary-sm' : 'btn-secondary-sm'}
-      disabled={!canManage || toggle.isPending}
-      title={!canManage ? 'Requires host.manage' : on ? 'Exit maintenance — allow new VMs + migration targets again' : 'Enter maintenance — refuse new placements on this host'}
-      onClick={() => on ? toggle.mutate() : setAsking(true)}
-    >
-      {on ? 'Exit maintenance' : 'Enter maintenance'}
-    </button>
+    <>
+      <button
+        type="button"
+        className={on ? 'btn-primary-sm' : 'btn-secondary-sm'}
+        disabled={!canManage || toggle.isPending}
+        title={!canManage ? 'Requires host.manage' : on ? 'Exit maintenance — allow new VMs + migration targets again' : 'Enter maintenance — refuse new placements on this host'}
+        onClick={() => on ? toggle.mutate() : setAsking(true)}
+      >
+        {on ? 'Exit maintenance' : 'Enter maintenance'}
+      </button>
+
+      <Modal
+        open={asking && !on}
+        onClose={close}
+        title={`Enter maintenance — ${host.id}`}
+        footer={
+          <>
+            <button type="button" className="btn-secondary-sm" onClick={close}>Cancel</button>
+            <button type="button" className="btn-primary-sm" onClick={() => toggle.mutate()} disabled={toggle.isPending}>
+              {toggle.isPending ? 'Entering…' : drain ? 'Enter & drain' : 'Enter maintenance'}
+            </button>
+          </>
+        }
+      >
+        <div style={{ display: 'grid', gap: 12 }}>
+          <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--text-muted)' }}>
+            Reason
+            <input
+              type="text"
+              autoFocus
+              placeholder="e.g. kernel patch, hardware swap"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              style={{
+                height: 30, padding: '0 10px', fontSize: 13,
+                background: 'var(--bg-input)', border: '1px solid var(--border)',
+                borderRadius: 4, color: 'var(--text-body)', fontFamily: 'inherit',
+              }}
+            />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-body)' }}>
+            <input type="checkbox" checked={drain} onChange={(e) => setDrain(e.target.checked)} />
+            Drain VMs to other hosts
+          </label>
+          {drain && (
+            <div style={{ display: 'flex', gap: 16, fontSize: 13, color: 'var(--text-body)', paddingLeft: 24 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="radio" name="drain-mode" checked={mode === 'live'} onChange={() => setMode('live')} />
+                Live (running VMs only)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="radio" name="drain-mode" checked={mode === 'offline'} onChange={() => setMode('offline')} />
+                Offline (any state)
+              </label>
+            </div>
+          )}
+          {drain && (
+            <div className="tone-pill" style={{ fontSize: 11, alignSelf: 'flex-start' }}>
+              Migrations run sequentially in the background — watch progress in Migrations.
+            </div>
+          )}
+        </div>
+      </Modal>
+    </>
   );
 }
 
