@@ -13,11 +13,14 @@ services:
     container_name: kvm-center-server
     restart: unless-stopped
     ports:
-      - "8090:8090"   # Plain HTTP → 308-redirects to HTTPS.
-      - "8443:8443"   # HTTPS (primary endpoint for UI + agent telemetry).
+      - "8090:8090"   # Plain HTTP — agents post here; browser paths 308 to HTTPS.
+      - "8190:8190"   # HTTPS (primary endpoint for UI + agent telemetry).
+      # 8443 is already taken on the docker host (UniFi controller), so we
+      # expose 8190 externally. Agents that trusted :8443 before should
+      # switch to :8190; kvm-tools install docs now ship the new URL.
     environment:
       - KVM_CENTER_ADDR=:8090
-      - KVM_CENTER_TLS_ADDR=:8443
+      - KVM_CENTER_TLS_ADDR=:8190
       - KVM_CENTER_TLS_DIR=/var/lib/kvm-center/tls
       - KVM_CENTER_DATA=/var/lib/kvm-center/data.json
     volumes:
