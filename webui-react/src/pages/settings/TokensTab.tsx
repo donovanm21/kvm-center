@@ -9,6 +9,7 @@ interface APIToken {
   id: string;
   name: string;
   owner_id: string;
+  kind: 'user' | 'system';
   created_at: string;
   expires_at?: string;
   last_used_at?: string;
@@ -55,12 +56,14 @@ export function TokensTab() {
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-          Bearer credentials for scripted use of the kvm-center API. Tokens inherit your account's permissions.
+          <strong>System tokens</strong> — for service accounts and remote admins.
+          Fleet-wide view; inherits the creator's admin permissions.
+          Users generate personal tokens from the user menu (top-right).
         </p>
         <button type="button" className="btn-primary-sm" onClick={() => { setSecret(null); setCreateOpen(true); }}>
-          + Create token
+          + Create system token
         </button>
       </div>
 
@@ -72,6 +75,8 @@ export function TokensTab() {
           <thead>
             <tr>
               <th>Name</th>
+              <th>Kind</th>
+              <th>Owner</th>
               <th>ID</th>
               <th>Created</th>
               <th>Expires</th>
@@ -82,11 +87,17 @@ export function TokensTab() {
           </thead>
           <tbody>
             {list.data.length === 0 && (
-              <tr><td colSpan={7} style={{ color: 'var(--text-muted)', fontSize: 12 }}>No tokens yet.</td></tr>
+              <tr><td colSpan={9} style={{ color: 'var(--text-muted)', fontSize: 12 }}>No tokens yet.</td></tr>
             )}
             {list.data.map((t) => (
               <tr key={t.id}>
                 <td style={{ fontWeight: 500 }}>{t.name}</td>
+                <td>
+                  <span className={`tone-pill ${t.kind === 'system' ? 'accent' : ''}`} style={{ fontSize: 10 }}>
+                    {t.kind === 'system' ? 'system' : 'user'}
+                  </span>
+                </td>
+                <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.owner_id}</td>
                 <td style={{ fontFamily: "'SF Mono', monospace", fontSize: 11 }}>{t.id}</td>
                 <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtDate(t.created_at)}</td>
                 <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.expires_at ? fmtDate(t.expires_at) : '—'}</td>
