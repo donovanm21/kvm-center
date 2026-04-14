@@ -8,6 +8,7 @@ import { ProvidersTab } from './settings/ProvidersTab';
 import { TLSTab } from './settings/TLSTab';
 import { DatabaseTab } from './settings/DatabaseTab';
 import { AuditTab } from './settings/AuditTab';
+import { NotificationsTab } from './settings/NotificationsTab';
 
 const TABS = [
   { to: 'general', label: 'General' },
@@ -18,6 +19,7 @@ const TABS = [
   { to: 'tls', label: 'TLS' },
   { to: 'database', label: 'Database' },
   { to: 'audit', label: 'Audit Log' },
+  { to: 'notifications', label: 'Notifications' },
 ] as const;
 
 export function Settings() {
@@ -53,6 +55,7 @@ export function Settings() {
         <Route path="tls" element={<TLSTab />} />
         <Route path="database" element={<DatabaseTab />} />
         <Route path="audit" element={<AuditTab />} />
+        <Route path="notifications" element={<NotificationsTab />} />
       </Routes>
     </>
   );
