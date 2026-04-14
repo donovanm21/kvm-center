@@ -178,16 +178,25 @@ func handleCASign(store *Store, ca *ClusterCA) http.HandlerFunc {
 		// peers can connect by IP without the hostname check failing.
 		// The Host record is authoritative — anything the enrolling
 		// agent claims via req.IPAddresses is appended in addition.
+		// Hosts are sometimes keyed by FQDN and sometimes by short
+		// form depending on how the agent first telemetered; try both.
 		ipAddrs := append([]string{}, req.IPAddresses...)
-		if h := store.GetHost(hostID); h != nil && h.IP != "" {
-			ipAddrs = append(ipAddrs, h.IP)
+		dom := strings.TrimPrefix(strings.TrimSpace(os.Getenv("KVM_CENTER_CLUSTER_DOMAIN")), ".")
+		lookups := []string{hostID}
+		if dom != "" {
+			lookups = append(lookups, hostID+"."+dom)
+		}
+		for _, id := range lookups {
+			if h := store.GetHost(id); h != nil && h.IP != "" {
+				ipAddrs = append(ipAddrs, h.IP)
+				break
+			}
 		}
 		// Also drop the FQDN for this host if the operator configured a
-		// cluster DNS domain via KVM_CENTER_CLUSTER_DOMAIN (e.g.
-		// "example.lan" → cert SAN includes "<hostID>.example.lan").
+		// cluster DNS domain so peers connecting by hostname succeed.
 		dnsNames := append([]string{}, req.DNSNames...)
-		if dom := strings.TrimSpace(os.Getenv("KVM_CENTER_CLUSTER_DOMAIN")); dom != "" {
-			dnsNames = append(dnsNames, hostID+"."+strings.TrimPrefix(dom, "."))
+		if dom != "" {
+			dnsNames = append(dnsNames, hostID+"."+dom)
 		}
 		certPEM, serial, fp, notBefore, notAfter, serr := ca.SignHypervisorCSR([]byte(req.CSR), hostID, dnsNames, ipAddrs)
 		if serr != nil {
