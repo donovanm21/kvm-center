@@ -512,14 +512,15 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	}
 
 	// Server metadata singleton
-	if _, err := db.Collection(mcoServerMeta).ReplaceOne(
-		ctx,
-		bson.D{{Key: "_id", Value: "singleton"}},
-		bson.M{"_id": "singleton", "console_secret": d.ConsoleSecret},
-		options.Replace().SetUpsert(true),
-	); err != nil {
-		return err
-	}
+	if isDirty(d, "server_meta") {
+		if _, err := db.Collection(mcoServerMeta).ReplaceOne(
+			ctx,
+			bson.D{{Key: "_id", Value: "singleton"}},
+			bson.M{"_id": "singleton", "console_secret": d.ConsoleSecret},
+			options.Replace().SetUpsert(true),
+		); err != nil {
+			return err
+		}
 	}
 
 	// Audit events — always write (hot collection).
