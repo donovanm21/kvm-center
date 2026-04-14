@@ -114,7 +114,18 @@ func main() {
 	mux.HandleFunc("/api/events",    handleSSEEvents(hub))
 	mux.HandleFunc("/api/telemetry", handleTelemetry(store))
 	mux.HandleFunc("/api/hosts", handleGetHosts(store))
-	mux.HandleFunc("/api/hosts/", handleGetHost(store))
+	// Maintenance routes share the /api/hosts/ prefix; dispatch by suffix.
+	mux.HandleFunc("/api/hosts/", func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/maintenance/enter"):
+			requirePerm(store, "host.manage", http.HandlerFunc(handleMaintenanceEnter(store))).ServeHTTP(w, r)
+		case strings.HasSuffix(r.URL.Path, "/maintenance/exit"):
+			requirePerm(store, "host.manage", http.HandlerFunc(handleMaintenanceExit(store))).ServeHTTP(w, r)
+		default:
+			handleGetHost(store).ServeHTTP(w, r)
+		}
+	})
+	mux.Handle("/api/audit", requirePerm(store, "audit.view", http.HandlerFunc(handleAuditList(store))))
 	mux.HandleFunc("/api/vms", handleGetVMs(store))
 	mux.HandleFunc("/api/vms/snapshots", handleVMSnapshots(store))
 	mux.HandleFunc("/api/vms/screenshot", handleVMScreenshot(store))
@@ -146,8 +157,8 @@ func main() {
 	if reloader != nil {
 		mux.HandleFunc("/api/tls/status", handleTLSStatus(reloader, certPath, keyPath))
 		mux.HandleFunc("/api/tls/cert.pem", handleTLSCertDownload(certPath))
-		mux.Handle("/api/tls/upload", requirePerm(store, "tls.manage", handleTLSUpload(certPath, keyPath)))
-		mux.Handle("/api/tls/regenerate", requirePerm(store, "tls.manage", handleTLSRegenerate(certPath, keyPath)))
+		mux.Handle("/api/tls/upload", requirePerm(store, "tls.manage", auditTLSHandler(store, AuditTLSUpload, handleTLSUpload(certPath, keyPath))))
+		mux.Handle("/api/tls/regenerate", requirePerm(store, "tls.manage", auditTLSHandler(store, AuditTLSRegenerate, handleTLSRegenerate(certPath, keyPath))))
 	}
 	mux.HandleFunc("/health", handleHealth)
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {

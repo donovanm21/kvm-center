@@ -47,6 +47,33 @@ type Host struct {
 	NUMANodes      int             `json:"numa_nodes,omitempty"`
 	PCIDevices     []HostPCIDevice `json:"host_pci_devices,omitempty"`
 	GPUs           []string        `json:"gpus,omitempty"`
+
+	// Maintenance mode (v5.2). When true, the server refuses new-VM
+	// placements and migration targets that land on this host, while
+	// still allowing migrations OFF the host (the whole point — drain
+	// before patching). Operators flip the flag via POST
+	// /api/hosts/{id}/maintenance/enter|exit.
+	MaintenanceMode      bool      `json:"maintenance_mode,omitempty"`
+	MaintenanceEnteredAt time.Time `json:"maintenance_entered_at,omitempty"`
+	MaintenanceBy        string    `json:"maintenance_by,omitempty"`   // actor user ID
+	MaintenanceReason    string    `json:"maintenance_reason,omitempty"`
+}
+
+// AuditEvent (v5.2) records a single mutating operation. Every handler
+// that changes persisted state calls audit(...) — see server/audit.go
+// — to produce one of these. Surfaced read-only in Settings → Audit
+// Log; operators filter by actor / action / time range / outcome.
+type AuditEvent struct {
+	ID        string            `json:"id"`
+	At        time.Time         `json:"at"`
+	ActorID   string            `json:"actor_id,omitempty"`   // user ID; empty for unauthenticated (e.g. pre-session)
+	ActorName string            `json:"actor_name,omitempty"` // denormalised for UI without a join
+	ActorIP   string            `json:"actor_ip,omitempty"`
+	Action    string            `json:"action"`   // "vm.start", "role.update", "tls.upload", etc.
+	Resource  string            `json:"resource,omitempty"` // "vm/<uuid>", "host/<id>", "role/<id>", free-form
+	Detail    map[string]string `json:"detail,omitempty"`   // context (from→to values, counts, etc.)
+	Success   bool              `json:"success"`
+	Error     string            `json:"error,omitempty"`
 }
 
 // HostPCIDevice is one PCI device on the hypervisor (from lspci -nn).
@@ -388,6 +415,7 @@ const (
 	PermStorageDelete = "storage.delete"
 	PermUserManage    = "user.manage" // create/update/disable users, groups, roles
 	PermTLSManage     = "tls.manage"  // upload / regenerate / download server TLS cert
+	PermAuditView     = "audit.view"  // read the audit log
 )
 
 // AllPermissions is the full list used for UI dropdowns and role editing.
@@ -397,7 +425,7 @@ var AllPermissions = []string{
 	PermVMMigrate, PermVMSnapshot, PermVMConsole, PermVMEdit,
 	PermHostView, PermHostManage,
 	PermStorageView, PermStorageUpload, PermStorageDelete,
-	PermUserManage, PermTLSManage,
+	PermUserManage, PermTLSManage, PermAuditView,
 }
 
 // MigrationRecord is one completed or failed migration, persisted in the server store.

@@ -7,6 +7,7 @@ import { RolesTab } from './settings/RolesTab';
 import { ProvidersTab } from './settings/ProvidersTab';
 import { TLSTab } from './settings/TLSTab';
 import { DatabaseTab } from './settings/DatabaseTab';
+import { AuditTab } from './settings/AuditTab';
 
 const TABS = [
   { to: 'general', label: 'General' },
@@ -16,6 +17,7 @@ const TABS = [
   { to: 'providers', label: 'Identity Providers' },
   { to: 'tls', label: 'TLS' },
   { to: 'database', label: 'Database' },
+  { to: 'audit', label: 'Audit Log' },
 ] as const;
 
 export function Settings() {
@@ -50,6 +52,7 @@ export function Settings() {
         <Route path="providers" element={<ProvidersTab />} />
         <Route path="tls" element={<TLSTab />} />
         <Route path="database" element={<DatabaseTab />} />
+        <Route path="audit" element={<AuditTab />} />
       </Routes>
     </>
   );

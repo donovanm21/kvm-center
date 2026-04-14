@@ -107,6 +107,7 @@ func handleConsoleToken(store *Store) http.HandlerFunc {
 			port = 8081
 		}
 		token, exp, nonce := store.SignConsoleToken(hostID, vmName)
+		audit(store, r, AuditConsoleOpen, "vm/"+vmName, map[string]string{"host_id": hostID}, true, "")
 
 		consoleURL := fmt.Sprintf("http://%s:%d/console/%s?token=%s&exp=%d&nonce=%s",
 			h.IP, port, url.PathEscape(vmName),

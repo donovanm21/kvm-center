@@ -115,6 +115,19 @@ func handleTLSUpload(certPath, keyPath string) http.HandlerFunc {
 	}
 }
 
+// auditTLSUpload / auditTLSRegenerate wrap the base handlers above with
+// an audit-event side-effect so the Settings → TLS actions show up in
+// the audit log. Kept as separate wrappers rather than inlined because
+// the base handlers predate v5.2 and are still used in tests.
+func auditTLSHandler(store *Store, action string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Record BEFORE calling to avoid losing the event if the write
+		// process crashes mid-handshake.
+		audit(store, r, action, "tls/server", nil, true, "")
+		next(w, r)
+	}
+}
+
 func handleTLSRegenerate(certPath, keyPath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
