@@ -43,7 +43,15 @@ func offlineMigrateMTLS(ctx context.Context, vmName, dest string, opts MTLSOptio
 	uri := fmt.Sprintf("qemu+tls://%s/system", dest)
 	pool := opts.TargetPool
 	if pool == "" {
-		pool = defaultMTLSPool
+		// Operator didn't choose via the advanced modal. Prefer
+		// "default", otherwise pick the first active pool reported
+		// by libvirt. Keeps the happy path working on installs that
+		// ship a non-default pool name (Rocky 9 typically has one
+		// called "images").
+		pool = pickDestinationPool(ctx, uri)
+		if pool == "" {
+			return errors.New("no active storage pools on destination — create one or pick explicitly in the Advanced modal")
+		}
 	}
 	finalVMName := opts.NewVMName
 	if finalVMName == "" {
@@ -351,6 +359,32 @@ func randomLocalMAC() string {
 	var b [3]byte
 	_, _ = randRead(b[:])
 	return fmt.Sprintf("52:54:00:%02x:%02x:%02x", b[0], b[1], b[2])
+}
+
+// pickDestinationPool asks the destination libvirtd for its active
+// storage pools and returns the best one for receiving a new volume.
+// Preference: "default" > first active pool. Empty string when
+// nothing matches (caller turns that into a surfaced error).
+func pickDestinationPool(ctx context.Context, uri string) string {
+	out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "pool-list", "--name", "--state-running").Output()
+	if err != nil {
+		return ""
+	}
+	var candidates []string
+	for _, line := range strings.Split(string(out), "\n") {
+		n := strings.TrimSpace(line)
+		if n == "" {
+			continue
+		}
+		if n == "default" {
+			return n
+		}
+		candidates = append(candidates, n)
+	}
+	if len(candidates) > 0 {
+		return candidates[0]
+	}
+	return ""
 }
 
 // sourceVirtualSize returns the virtual size in bytes for a qcow2 or
