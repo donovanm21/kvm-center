@@ -55,7 +55,9 @@ RUN mkdir -p /dist && \
     cp /src/scripts/update-agent.sh /dist/ && \
     cp /src/kvm-tools/install.sh /dist/install-kvm-tools.sh && \
     cp /src/kvm-tools/install.ps1 /dist/install-kvm-tools.ps1 && \
-    chmod +x /dist/install-agent.sh /dist/update-agent.sh /dist/install-kvm-tools.sh && \
+    cp /src/scripts/install-kvmctl.sh /dist/install-kvmctl.sh && \
+    cp /src/scripts/install-kvmctl.ps1 /dist/install-kvmctl.ps1 && \
+    chmod +x /dist/install-agent.sh /dist/update-agent.sh /dist/install-kvm-tools.sh /dist/install-kvmctl.sh && \
     (cp /src/migration-keys/kvm-migrator-key /dist/kvm-migrator-key 2>/dev/null || true) && \
     (cp /src/migration-keys/kvm-migrator-key.pub /dist/kvm-migrator-key.pub 2>/dev/null || true) && \
     cd /out && tar czf /dist/kvm-center-server.tar.gz kvm-center-server && \
@@ -336,12 +338,23 @@ Set-Location \$tmp
         <a href="/kvmctl-darwin-amd64"      class="download-link secondary">macOS Intel</a>
         <a href="/kvmctl-darwin-arm64"      class="download-link secondary">macOS Apple Silicon</a>
         <a href="/kvmctl-windows-amd64.exe" class="download-link secondary">Windows x86_64 (.exe)</a>
+        <a href="/install-kvmctl.sh"        class="download-link secondary">install-kvmctl.sh</a>
+        <a href="/install-kvmctl.ps1"       class="download-link secondary">install-kvmctl.ps1</a>
 
         <div class="subsection">
-            <h4>Quick Install (Linux / macOS)</h4>
-            <pre>curl -fsSL http://YOUR_HOST_IP:8097/kvmctl-linux-amd64 -o /usr/local/bin/kvmctl
-chmod +x /usr/local/bin/kvmctl
-kvmctl login --server https://SERVER:8190 --token kvmc_…</pre>
+            <h4>One-shot Install (Linux / macOS)</h4>
+            <p>Auto-detects OS + arch, installs to <code>/usr/local/bin</code> (or <code>~/.local/bin</code> if not writable).</p>
+            <pre>curl -fsSL http://YOUR_HOST_IP:8097/install-kvmctl.sh | bash -s -- --portal http://YOUR_HOST_IP:8097
+
+# or pick a different install dir
+curl -fsSL http://YOUR_HOST_IP:8097/install-kvmctl.sh -o /tmp/i.sh
+bash /tmp/i.sh --portal http://YOUR_HOST_IP:8097 --install-dir ~/bin</pre>
+        </div>
+
+        <div class="subsection">
+            <h4>One-shot Install (Windows PowerShell)</h4>
+            <pre>iwr http://YOUR_HOST_IP:8097/install-kvmctl.ps1 -UseBasicParsing -OutFile \$env:TEMP\\i.ps1
+&amp; \$env:TEMP\\i.ps1 -Portal http://YOUR_HOST_IP:8097</pre>
         </div>
     </div>
 
