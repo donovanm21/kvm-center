@@ -81,7 +81,7 @@ export function SnapshotsOverview() {
 function TreeRow({ vm, active }: { vm: VM; active: boolean }) {
   return (
     <Link
-      to={`/snapshots/${encodeURIComponent(vm.uuid)}`}
+      to={`/snapshots/vm/${encodeURIComponent(vm.uuid)}`}
       style={{
         display: 'flex',
         alignItems: 'center',
