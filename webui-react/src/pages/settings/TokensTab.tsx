@@ -89,7 +89,10 @@ export function TokensTab() {
             {list.data.length === 0 && (
               <tr><td colSpan={9} style={{ color: 'var(--text-muted)', fontSize: 12 }}>No tokens yet.</td></tr>
             )}
-            {list.data.map((t) => (
+            {list.data.map((t) => {
+              const hasExpiry = t.expires_at && new Date(t.expires_at).getFullYear() > 1000;
+              const expired = hasExpiry && new Date(t.expires_at!) < new Date();
+              return (
               <tr key={t.id}>
                 <td style={{ fontWeight: 500 }}>{t.name}</td>
                 <td>
@@ -100,12 +103,12 @@ export function TokensTab() {
                 <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.owner_id}</td>
                 <td style={{ fontFamily: "'SF Mono', monospace", fontSize: 11 }}>{t.id}</td>
                 <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtDate(t.created_at)}</td>
-                <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.expires_at ? fmtDate(t.expires_at) : '—'}</td>
+                <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{hasExpiry ? fmtDate(t.expires_at!) : 'never'}</td>
                 <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.last_used_at ? fmtDate(t.last_used_at) : 'never'}</td>
                 <td>
                   {t.revoked
                     ? <span className="tone-pill danger">revoked</span>
-                    : t.expires_at && new Date(t.expires_at) < new Date()
+                    : expired
                       ? <span className="tone-pill warn">expired</span>
                       : <span className="tone-pill ok">active</span>}
                 </td>
@@ -120,7 +123,8 @@ export function TokensTab() {
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -160,7 +164,7 @@ export function TokensTab() {
               />
             </label>
             <label style={fieldLabel}>
-              Expires (optional)
+              Expires (leave blank for no expiry — service account tokens)
               <input
                 type="datetime-local"
                 value={expires}
@@ -168,6 +172,11 @@ export function TokensTab() {
                 style={inputStyle}
               />
             </label>
+            {!expires && (
+              <div className="tone-pill warn" style={{ alignSelf: 'flex-start', fontSize: 10 }}>
+                No expiry — token is valid until manually revoked
+              </div>
+            )}
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 10 }}>
