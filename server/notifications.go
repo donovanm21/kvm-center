@@ -132,11 +132,21 @@ func (s *Store) dispatchNotification(ev *models.NotificationEvent) {
 	if cfg == nil || len(cfg.Channels) == 0 {
 		return
 	}
-	if cfg.EventTypes == nil || !cfg.EventTypes[ev.Type] {
-		return // operator hasn't subscribed to this event type
-	}
 	for _, ch := range cfg.Channels {
 		if !ch.Enabled {
+			continue
+		}
+		// Per-channel subscription (v5.7) wins over the global set. If
+		// the channel defines any event types, only those route here;
+		// otherwise fall back to the global EventTypes map so existing
+		// deployments keep broadcasting.
+		var types map[string]bool
+		if len(ch.EventTypes) > 0 {
+			types = ch.EventTypes
+		} else {
+			types = cfg.EventTypes
+		}
+		if !types[ev.Type] {
 			continue
 		}
 		err := sendNotification(cfg, ch, ev)
