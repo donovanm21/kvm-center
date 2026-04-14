@@ -649,9 +649,29 @@ func (s *Store) GetHosts() []*models.Host {
 		if time.Since(h.LastSeen) > 2*time.Minute {
 			cp.Status = models.HostOffline
 		}
+		cp.MTLSReady = s.hypervisorHasActiveCert(h.ID)
 		out = append(out, &cp)
 	}
 	return out
+}
+
+// hypervisorHasActiveCert — caller holds s.mu (read lock ok).
+func (s *Store) hypervisorHasActiveCert(hostID string) bool {
+	c, ok := s.hypervisorCerts[hostID]
+	if !ok {
+		return false
+	}
+	if !c.RevokedAt.IsZero() {
+		return false
+	}
+	return time.Now().Before(c.NotAfter)
+}
+
+// HostMTLSReady is the exported variant used by migration routing.
+func (s *Store) HostMTLSReady(hostID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.hypervisorHasActiveCert(hostID)
 }
 
 // GetHost returns a single host by ID, or nil if not found.
@@ -666,6 +686,7 @@ func (s *Store) GetHost(id string) *models.Host {
 	if time.Since(h.LastSeen) > 2*time.Minute {
 		cp.Status = models.HostOffline
 	}
+	cp.MTLSReady = s.hypervisorHasActiveCert(h.ID)
 	return &cp
 }
 

@@ -231,6 +231,49 @@ print("  Issued cert valid until", d.get("not_after","?"))
 '
   chmod 644 "$CERT_PATH" "$CA_PATH"
   echo "  PKI bundle ready: $CERT_PATH, $KEY_PATH, $CA_PATH"
+
+  # ── libvirt qemu+tls:// configuration (v5.10.1) ───────────────────────
+  # Install the issued bundle to the paths libvirtd reads so migrations
+  # can run over qemu+tls:// with mutual cert auth. Both sides need
+  # matching CAs — every hypervisor enrolls against the same kvm-center
+  # CA so their client/server certs chain to the same root.
+  if command -v virsh >/dev/null 2>&1; then
+    echo "  Installing cert bundle for libvirt…"
+    install -d -m 755 /etc/pki/CA /etc/pki/libvirt /etc/pki/libvirt/private
+    install -m 644 "$CA_PATH" /etc/pki/CA/cacert.pem
+    # libvirtd uses the SAME file for server + client auth in mutual-TLS
+    # mode — the cert is valid for both roles (extKeyUsage includes both).
+    install -m 644 "$CERT_PATH" /etc/pki/libvirt/servercert.pem
+    install -m 644 "$CERT_PATH" /etc/pki/libvirt/clientcert.pem
+    install -m 600 "$KEY_PATH"  /etc/pki/libvirt/private/serverkey.pem
+    install -m 600 "$KEY_PATH"  /etc/pki/libvirt/private/clientkey.pem
+
+    # Enable listen_tls in libvirtd.conf. Idempotent — grep-and-replace.
+    LVCONF=/etc/libvirt/libvirtd.conf
+    if [[ -f "$LVCONF" ]]; then
+      # Turn TLS listener on; turn insecure TCP listener off.
+      for pair in 'listen_tls=1' 'listen_tcp=0' 'tls_no_verify_certificate=0'; do
+        key="${pair%%=*}"
+        if grep -qE "^${key}\s*=" "$LVCONF"; then
+          sed -i "s|^${key}\s*=.*|${pair}|" "$LVCONF"
+        else
+          echo "$pair" >> "$LVCONF"
+        fi
+      done
+      # RHEL-family needs libvirtd started with --listen; systemd drop-in
+      # wraps the existing unit without editing the vendor file.
+      install -d -m 755 /etc/systemd/system/libvirtd.service.d
+      cat > /etc/systemd/system/libvirtd.service.d/10-kvm-center-listen.conf <<'UNIT'
+[Service]
+Environment=LIBVIRTD_ARGS="--listen"
+UNIT
+      systemctl daemon-reload
+      systemctl restart libvirtd || echo "  WARNING: libvirtd restart failed — review manually"
+      echo "  libvirtd configured for qemu+tls:// migrations (listen_tls=1, listen_tcp=0)"
+    else
+      echo "  WARNING: $LVCONF not found — skip TLS listener configuration"
+    fi
+  fi
 fi
 
 # ── Enable and start ───────────────────────────────────────────────────────────
