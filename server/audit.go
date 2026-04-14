@@ -163,6 +163,16 @@ func (f AuditFilter) matches(ev *models.AuditEvent) bool {
 // request, record their IP, stamp the event.
 func audit(store *Store, r *http.Request, action, resource string, detail map[string]string, success bool, errMsg string) {
 	u := userFromRequest(r)
+	// Tag the auth method so the audit log distinguishes browser
+	// sessions from CLI/CI bearer tokens. We mutate a copy of detail
+	// to avoid bleeding into a caller-shared map.
+	if tokenID := tokenIDFromRequest(r); tokenID != "" {
+		dd := map[string]string{"via": "token:" + tokenID}
+		for k, v := range detail {
+			dd[k] = v
+		}
+		detail = dd
+	}
 	ev := &models.AuditEvent{
 		Action:   action,
 		Resource: resource,

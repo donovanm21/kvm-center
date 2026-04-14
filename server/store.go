@@ -36,6 +36,7 @@ type persistData struct {
 	AuditShipping    *models.AuditShipping    `json:"audit_shipping,omitempty"`
 	SnapshotPolicies map[string]*models.SnapshotPolicy `json:"snapshot_policies,omitempty"`
 	Notifications    *models.NotificationConfig        `json:"notifications,omitempty"`
+	APITokens        map[string]*models.APIToken       `json:"api_tokens,omitempty"`
 	// ConsoleSecret is the HMAC-SHA256 key the server uses to mint
 	// per-session VM console tokens (see console_token.go). Generated
 	// on first use; persisted so agents that cached it don't need a
@@ -101,6 +102,8 @@ type Store struct {
 	// ID so we never fan out the same "complete"/"failed" twice when
 	// the record is mutated in place by handleCommand → finalize.
 	migrationNotified map[string]bool
+	// apiTokens (v5.5) keyed by token ID (the public 8-char prefix).
+	apiTokens map[string]*models.APIToken
 	features      models.Features
 	dataFile      string
 	// backend is the pluggable persistence layer (JSON file or Mongo).
@@ -158,6 +161,7 @@ func NewStoreWithBackend(backend Backend, dataFile string) *Store {
 		snapshotPolicies:    make(map[string]*models.SnapshotPolicy),
 		vmStatePrev:         make(map[string]models.VMState),
 		hostOnlinePrev:      make(map[string]bool),
+		apiTokens:           make(map[string]*models.APIToken),
 		dataFile:            dataFile,
 		backend:             backend,
 	}
@@ -744,6 +748,7 @@ func (s *Store) Save() {
 		AuditShipping:    s.auditShipping,
 		SnapshotPolicies: s.snapshotPolicies,
 		Notifications:    s.notifications,
+		APITokens:        s.apiTokens,
 		ConsoleSecret:    s.consoleSecret,
 	}
 	s.mu.RUnlock()
@@ -830,6 +835,9 @@ func (s *Store) load() {
 	}
 	if d.Notifications != nil {
 		s.notifications = d.Notifications
+	}
+	if d.APITokens != nil {
+		s.apiTokens = d.APITokens
 	}
 	log.Printf("store: loaded %d hosts, %d users, %d groups, %d roles from %s",
 		len(s.hosts), len(s.users), len(s.groups), len(s.roles), s.dataFile)

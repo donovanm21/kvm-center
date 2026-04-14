@@ -32,6 +32,13 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
 RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
     go build -ldflags="-s -w" -o /out/kvm-tools-windows-amd64.exe ./kvm-tools
 
+# kvmctl CLI (v5.5+) — cross-built for Linux, macOS, Windows.
+RUN CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o /out/kvmctl-linux-amd64       ./cmd/kvmctl
+RUN CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o /out/kvmctl-linux-arm64       ./cmd/kvmctl
+RUN CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o /out/kvmctl-darwin-amd64      ./cmd/kvmctl
+RUN CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o /out/kvmctl-darwin-arm64      ./cmd/kvmctl
+RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o /out/kvmctl-windows-amd64.exe ./cmd/kvmctl
+
 # Bundle artifacts
 RUN mkdir -p /dist && \
     cp /out/kvm-center-agent-amd64 /dist/ && \
@@ -39,6 +46,11 @@ RUN mkdir -p /dist && \
     cp /out/kvm-tools-linux-amd64 /dist/ && \
     cp /out/kvm-tools-linux-arm64 /dist/ && \
     cp /out/kvm-tools-windows-amd64.exe /dist/ && \
+    cp /out/kvmctl-linux-amd64 /dist/ && \
+    cp /out/kvmctl-linux-arm64 /dist/ && \
+    cp /out/kvmctl-darwin-amd64 /dist/ && \
+    cp /out/kvmctl-darwin-arm64 /dist/ && \
+    cp /out/kvmctl-windows-amd64.exe /dist/ && \
     cp /src/scripts/install-agent.sh /dist/ && \
     cp /src/scripts/update-agent.sh /dist/ && \
     cp /src/kvm-tools/install.sh /dist/install-kvm-tools.sh && \
@@ -308,6 +320,28 @@ Invoke-WebRequest "\$portal/kvm-tools-windows-amd64.exe" -OutFile "\$tmp\\kvm-to
 Invoke-WebRequest "\$portal/install-kvm-tools.ps1"       -OutFile "\$tmp\\install-kvm-tools.ps1" -UseBasicParsing
 Set-Location \$tmp
 .\\install-kvm-tools.ps1 -Server \$server</pre>
+        </div>
+    </div>
+
+    <!-- kvmctl CLI -->
+    <div class="package">
+        <h2>kvmctl CLI</h2>
+        <p>Command-line client for scripting against the kvm-center API.
+        Authenticate once with an API token (Settings &rarr; API Tokens),
+        then run <code>kvmctl hosts</code>, <code>kvmctl vms</code>,
+        <code>kvmctl vm migrate</code>, etc.</p>
+
+        <a href="/kvmctl-linux-amd64"       class="download-link">Linux x86_64</a>
+        <a href="/kvmctl-linux-arm64"       class="download-link secondary">Linux ARM64</a>
+        <a href="/kvmctl-darwin-amd64"      class="download-link secondary">macOS Intel</a>
+        <a href="/kvmctl-darwin-arm64"      class="download-link secondary">macOS Apple Silicon</a>
+        <a href="/kvmctl-windows-amd64.exe" class="download-link secondary">Windows x86_64 (.exe)</a>
+
+        <div class="subsection">
+            <h4>Quick Install (Linux / macOS)</h4>
+            <pre>curl -fsSL http://YOUR_HOST_IP:8097/kvmctl-linux-amd64 -o /usr/local/bin/kvmctl
+chmod +x /usr/local/bin/kvmctl
+kvmctl login --server https://SERVER:8190 --token kvmc_…</pre>
         </div>
     </div>
 

@@ -180,6 +180,8 @@ func main() {
 	mux.Handle("/api/settings/audit-shipping/test",  requirePerm(store, "user.manage", http.HandlerFunc(handleAuditShippingTest(store))))
 	mux.Handle("/api/settings/notifications",      requirePerm(store, "user.manage", http.HandlerFunc(handleNotifications(store))))
 	mux.Handle("/api/settings/notifications/test", requirePerm(store, "user.manage", http.HandlerFunc(handleNotificationTest(store))))
+	mux.Handle("/api/tokens",  requirePerm(store, "user.manage", http.HandlerFunc(handleAPITokens(store))))
+	mux.Handle("/api/tokens/", requirePerm(store, "user.manage", http.HandlerFunc(handleAPIToken(store))))
 	mux.HandleFunc("/api/vms", handleGetVMs(store))
 	mux.HandleFunc("/api/vms/snapshots", handleVMSnapshots(store))
 	mux.HandleFunc("/api/vms/screenshot", handleVMScreenshot(store))

@@ -9,13 +9,16 @@ DIST_DIR      = dist
 
 all: build
 
-build: build-server build-agent
+build: build-server build-agent build-cli
 
 build-server:
 	go build -ldflags="-s -w" -o $(BINARY_SERVER) ./server
 
 build-agent:
 	go build -ldflags="-s -w" -o $(BINARY_AGENT) ./agent
+
+build-cli:
+	go build -ldflags="-s -w" -o kvmctl ./cmd/kvmctl
 
 # ── Cross-compiled distribution binaries ──────────────────────────────────────
 
