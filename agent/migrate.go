@@ -362,6 +362,14 @@ func offlineMigrate(ctx context.Context, vmName, dest string, keepRaw bool) erro
 			rollback("cancelled before disk transfer")
 			return err
 		}
+		// Unlink any pre-existing disk at the target. Once a VM boots,
+		// libvirt tightens the disk file to qemu:qemu 0600, which
+		// scp-running-as-kvm-migrator can't overwrite. kvm-migrator IS
+		// in the qemu group and the images dir is group-writable, so
+		// it can unlink (though not directly rewrite). This turns a
+		// second migration of the same VM from a hard failure into a
+		// clean overwrite.
+		_, _ = sshMigrator(dest, "rm -f "+shellQuote(remoteScpDest), "")
 		start = time.Now()
 		out, err = exec.CommandContext(ctx,
 			"scp", "-i", migratorKey, "-o", "StrictHostKeyChecking=no",
@@ -509,6 +517,14 @@ func offlineMigrate(ctx context.Context, vmName, dest string, keepRaw bool) erro
 	}
 
 	return nil
+}
+
+// shellQuote wraps s in single quotes with any embedded quote
+// escaped. Used when composing remote shell commands built from
+// server-supplied paths so an operator-controlled disk name can't
+// break out of the argument.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func sshMigrator(host, cmd, stdin string) (string, error) {
