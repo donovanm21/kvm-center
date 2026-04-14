@@ -29,6 +29,10 @@ func StartCommandServer(addr string) {
 	// v5.11.1: consulted by /etc/libvirt/hooks/qemu to enforce that a
 	// migration the dest is about to accept was actually authorised.
 	mux.HandleFunc("/grant-active", handleGrantActive)
+	// v5.11.7: pool discovery for the migrate modal's advanced
+	// offline options. Read-only — no auth beyond the localhost
+	// listener.
+	mux.HandleFunc("/pools", handlePools)
 	mux.HandleFunc("/cancel-migrate", handleCancelMigrate)
 	mux.HandleFunc("/storage-browse", handleStorageBrowse)
 	mux.HandleFunc("/storage-upload", handleStorageUpload)
@@ -206,8 +210,14 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		log.Printf("command: offline-migrate vm=%s → %s keep_raw=%v transport=%s (async)", vmTarget, dest, keepRaw, req.Params["migration_transport"])
-		startOfflineMigrate(vmTarget, dest, keepRaw, req.Params["migration_transport"])
+		opts := MTLSOptions{
+			TargetPool:    req.Params["target_pool"],
+			NewVMName:     req.Params["new_vm_name"],
+			RegenerateMAC: req.Params["regenerate_mac"] == "true",
+		}
+		log.Printf("command: offline-migrate vm=%s → %s keep_raw=%v transport=%s pool=%q rename=%q regen_mac=%v (async)",
+			vmTarget, dest, keepRaw, req.Params["migration_transport"], opts.TargetPool, opts.NewVMName, opts.RegenerateMAC)
+		startOfflineMigrate(vmTarget, dest, keepRaw, req.Params["migration_transport"], opts)
 		respond(w, true, "offline migration started — poll /migrate-status for progress")
 		return
 	default:

@@ -121,7 +121,16 @@ func handleCancelMigrate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func startOfflineMigrate(vmName, dest string, keepRaw bool, transport string) {
+// MTLSOptions carries v5.11.7 advanced-modal selections through to
+// offlineMigrateMTLS. Zero value = previous behaviour (default pool,
+// keep VM name, keep original MACs).
+type MTLSOptions struct {
+	TargetPool     string // destination storage pool; empty = "default"
+	NewVMName      string // empty = keep source VM name
+	RegenerateMAC  bool   // rewrite every <mac/> in domain XML to a fresh random local MAC
+}
+
+func startOfflineMigrate(vmName, dest string, keepRaw bool, transport string, mtlsOptions MTLSOptions) {
 	migStatusMu.Lock()
 	if migStatus.Active {
 		migStatusMu.Unlock()
@@ -147,7 +156,7 @@ func startOfflineMigrate(vmName, dest string, keepRaw bool, transport string) {
 		// anything else or when keep_raw=true (raw conversion on
 		// target still needs remote shell; revisit in v5.11.7).
 		if transport == "tls" && !keepRaw {
-			err = offlineMigrateMTLS(ctx, vmName, dest)
+			err = offlineMigrateMTLS(ctx, vmName, dest, mtlsOptions)
 		} else {
 			err = offlineMigrate(ctx, vmName, dest, keepRaw)
 		}
