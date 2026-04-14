@@ -9,8 +9,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
+
+	"kvm-center/internal/models"
 )
 
 //go:embed static
@@ -77,6 +80,7 @@ func main() {
 	// saves a config via Settings → Audit Log → Shipping.
 	store.startAuditShipper(context.Background())
 	store.startSnapshotScheduler(context.Background())
+	store.startNotificationDispatcher(context.Background())
 	hub := NewSSEHub()
 	store.hub = hub // state-changing store methods publish via this handle
 
@@ -103,6 +107,43 @@ func main() {
 		if _, err := reloader.GetCertificate(nil); err != nil {
 			log.Fatalf("server: tls cert load: %v", err)
 		}
+	}
+
+	// Background: TLS expiry watcher. Fires one notification per
+	// transition into the <30d window so operators don't get spammed
+	// every tick. Skipped when TLS is disabled.
+	if reloader != nil {
+		go func() {
+			t := time.NewTicker(6 * time.Hour)
+			defer t.Stop()
+			alreadyWarned := false
+			check := func() {
+				c, err := reloader.CurrentCert()
+				if err != nil {
+					return
+				}
+				days := int(time.Until(c.NotAfter).Hours() / 24)
+				if days < 30 {
+					if !alreadyWarned {
+						store.fireNotification(&models.NotificationEvent{
+							Type:     NotifyTLSExpiring,
+							Title:    "TLS certificate expiring soon",
+							Message:  "Server cert expires in " + strconv.Itoa(days) + " days (" + c.NotAfter.UTC().Format("2006-01-02") + ").",
+							Resource: "tls",
+							Severity: "warning",
+							Detail:   map[string]string{"days": strconv.Itoa(days), "subject": c.Subject.String()},
+						})
+						alreadyWarned = true
+					}
+				} else {
+					alreadyWarned = false
+				}
+			}
+			check()
+			for range t.C {
+				check()
+			}
+		}()
 	}
 
 	// Background: mark offline hosts and persist every 30 seconds.
@@ -137,6 +178,8 @@ func main() {
 	mux.Handle("/api/snapshot-policies/", requirePerm(store, "vm.snapshot", http.HandlerFunc(handleSnapshotPolicy(store))))
 	mux.Handle("/api/settings/audit-shipping",       requirePerm(store, "user.manage", http.HandlerFunc(auditShippingRouter(store))))
 	mux.Handle("/api/settings/audit-shipping/test",  requirePerm(store, "user.manage", http.HandlerFunc(handleAuditShippingTest(store))))
+	mux.Handle("/api/settings/notifications",      requirePerm(store, "user.manage", http.HandlerFunc(handleNotifications(store))))
+	mux.Handle("/api/settings/notifications/test", requirePerm(store, "user.manage", http.HandlerFunc(handleNotificationTest(store))))
 	mux.HandleFunc("/api/vms", handleGetVMs(store))
 	mux.HandleFunc("/api/vms/snapshots", handleVMSnapshots(store))
 	mux.HandleFunc("/api/vms/screenshot", handleVMScreenshot(store))
