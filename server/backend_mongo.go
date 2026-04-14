@@ -151,7 +151,9 @@ func (b *MongoBackend) ensureIndexes(ctx context.Context) error {
 		options *options.IndexOptions
 	}
 	ensure := []idx{
-		{mcoVMs, bson.D{{Key: "uuid", Value: 1}}, options.Index().SetUnique(true)},
+		// Unique + sparse so legacy rows without a UUID (rare but
+		// present in some pre-v4 exports) don't collide on null keys.
+		{mcoVMs, bson.D{{Key: "uuid", Value: 1}}, options.Index().SetUnique(true).SetSparse(true)},
 		{mcoVMs, bson.D{{Key: "host_id", Value: 1}}, nil},
 		{mcoUsers, bson.D{{Key: "username", Value: 1}}, options.Index().SetUnique(true).SetSparse(true)},
 		{mcoMigrations, bson.D{{Key: "started_at", Value: -1}}, nil},
@@ -337,14 +339,19 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 		return err
 	}
 
-	// VMs — flatten nested map
+	// VMs — flatten nested map. Fall back to host|name for the _id when
+	// the UUID field is empty (pre-v4 data) so docs don't collide.
 	var vmDocs []any
-	for _, vms := range d.VMs {
+	for hostID, vms := range d.VMs {
 		for _, v := range vms {
+			id := strings.ToLower(v.UUID)
+			if id == "" {
+				id = hostID + "|" + v.Name
+			}
 			vmDocs = append(vmDocs, struct {
 				ID string `bson:"_id"`
 				*models.VM
-			}{strings.ToLower(v.UUID), v})
+			}{id, v})
 		}
 	}
 	if err := replaceMap(ctx, db, mcoVMs, vmDocs); err != nil {
