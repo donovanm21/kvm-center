@@ -3,6 +3,162 @@
 All notable changes to kvm-center, organised by release tag. Dates
 reflect when the tag was pushed to origin.
 
+## v5.11.13 (2026-04-14)
+- **MAC regeneration regex fix** — libvirt dumpxml emits
+  `<mac address='…'/>` with single quotes; the hard-coded double-
+  quote matcher silently no-op'd. Regex now accepts either style and
+  the log line reports the actual replacement count.
+
+## v5.11.12 (2026-04-14)
+- Target host picker: native `<select>` capped at 5 rows with a
+  persistent filter field above. A disabled "N more — narrow the
+  filter" row appears when the filter still matches more than 5.
+
+## v5.11.11 (2026-04-14)
+- Target hosts sorted alphabetically so telemetry ticks don't
+  reshuffle the list mid-click. Filter surfaces with >4 peers and
+  scans on host ID, IP, CPU model.
+
+## v5.11.10 (2026-04-14)
+- MigrateModal pool picker reads the telemetry-backed `/api/storage`
+  endpoint — same source of truth as the Storage page. Drops the
+  redundant `/api/hosts/pools` server proxy and the matching agent
+  `/pools` handler.
+- Modal now fully resets on close (mode, target host, transport pin,
+  advanced-open, pool, rename, MAC-regen, filter).
+
+## v5.11.9 (2026-04-14)
+- **Fix** — offline migrations failed on hosts without a "default"
+  storage pool. Agent now picks the destination pool (prefer
+  `default`, else first running pool); UI auto-select mirrors the
+  same heuristic so the preview matches what the agent would pick.
+
+## v5.11.8 (2026-04-14)
+- Advanced migration section reads as a proper bordered header with
+  an accent +/– icon box, subtitle, and a "customised" pill when any
+  non-default option is toggled.
+
+## v5.11.7 (2026-04-14)
+- **Advanced offline-migration options.** Collapsible "Advanced"
+  section in the migrate modal (offline only): target storage pool
+  picker, VM rename, regenerate MACs checkbox. Agent's
+  offlineMigrateMTLS honours `target_pool`, `new_vm_name`,
+  `regenerate_mac` params — UUID preserved on rename so per-VM state
+  follows the migration; new MACs use the 52:54:00 OUI.
+- Agent `/pools` enumerates active + inactive libvirt pools with
+  `{name, path, type, state, capacity_gb, available_gb, autostart}`;
+  proxied via `/api/hosts/pools` (dropped in v5.11.10 once the
+  telemetry path took over).
+
+## v5.11.6 (2026-04-14)
+- **Offline migration over qemu+tls vol-upload.** Replaces scp on
+  the offline path when both hosts are mTLS-enrolled. Disk bytes
+  flow through libvirtd's vol-upload stream on the same qemu+tls
+  connection used for live migration — no scp, no kvm-migrator
+  keypair in the hot path. Falls back to the legacy ssh path when
+  `transport != "tls"` or `keep_raw=true`. Hard-codes "default" pool
+  (advanced modal in v5.11.7 lets operators pick).
+
+## v5.11.5 (2026-04-14)
+- **Fix** — migration record's Transport column reflected the live-
+  only routing and hard-coded `"ssh"` for OFFLINE_MIGRATE, so
+  authorised offline runs falsely read as SSH. Honour the actual
+  server-selected / operator-pinned transport.
+
+## v5.11.4 (2026-04-14)
+- **Grants on offline + transport toggle.** Offline migrations now
+  get a signed grant minted, forwarded to the destination, and
+  recorded in the audit log with `mode=offline`. Migrate modal adds
+  a Transport toggle (Auto / mTLS / SSH); mTLS disabled when either
+  host isn't enrolled. Target-host dropdown flags mTLS-ready peers
+  inline.
+
+## v5.11.2 (2026-04-14)
+- **Fix** — offline migration failed overwriting a running VM's
+  disk. Existing file is qemu:qemu 0600 after first boot so scp-
+  as-kvm-migrator can't open it for write. Pre-transfer `rm -f` via
+  ssh (kvm-migrator can unlink in the group-writable images dir).
+
+## v5.11.1 (2026-04-14)
+- **Durable grant replay + libvirt qemu hook enforcement.**
+  Consumed grant IDs appended to
+  `/var/lib/kvm-center/consumed-grants.log` so replay rejection
+  survives agent restart. `/etc/libvirt/hooks/qemu` dials
+  `/grant-active` on destination migration prepare and exits non-
+  zero when no authorised grant is cached — refuses out-of-band
+  `virsh migrate` invocations. Agent unreachable fails open so
+  migrations aren't gated on agent liveness.
+
+## v5.11.0 (2026-04-14)
+- **Signed migration grants.** Ed25519 signer auto-generated at
+  `/var/lib/kvm-center/ca/grant.ed25519.key`. Every mTLS MIGRATE
+  mints a signed grant bound to `{src, dst, vm, 5-min TTL}`; source
+  agent forwards the envelope to the destination's `/prepare-grant`
+  before libvirtd's handshake; destination validates signature
+  offline against the cached pub key and records single-use in an
+  in-memory set. `/api/migrations/grant-pubkey` serves the public
+  half so fresh agents can cache it. Audit: `migration.grant.issue
+  / .accept / .reject`.
+
+## v5.10.8 (2026-04-14)
+- **install-agent.sh one-shots mTLS setup.** Socket-activated
+  `libvirtd-tls.socket` instead of the `--listen` drop-in (which
+  breaks on RHEL/Rocky 9+), disables `libvirtd-tcp.socket`, opens
+  firewalld for `16514/tcp` + `49152-49215/tcp`, atomic binary
+  install so re-running against a live host doesn't die on "Text
+  file busy".
+
+## v5.10.6 (2026-04-14)
+- mTLS pill: green "ok" tone + small lock icon.
+
+## v5.10.5 (2026-04-14)
+- **Fix** — mTLS badge never rendered because `time.Time{}` round-
+  tripped through Mongo comes back as `time.Unix(-62135596800, 0)`
+  with non-zero wall/ext, so `IsZero()` returned false on every
+  un-revoked cert. Compare year>1 instead (same approach as token
+  expiry).
+- Cert issuance + revocation switched to synchronous `Save()` so a
+  server restart between response and flush can't lose a cert.
+- Migration detail column: human-readable summaries for common
+  failures (`no route to host`, `TLS auth failed`, `timed out`);
+  "completed" instead of `Migration: [X.XX %]…` spam.
+
+## v5.10.4 (2026-04-14)
+- **Fix** — live migration left a ghost domain on source. Added
+  `--undefinesource` to `virsh migrate` so the source definition is
+  removed on completion.
+
+## v5.10.3 (2026-04-14)
+- **Fix** — CA host lookup tries both short ID and FQDN. Hosts are
+  sometimes keyed by FQDN (`hvnode01.example.lan`) and sometimes by
+  short form depending on how the agent first telemetered; cert IP
+  SAN was never populated when the operator typed the short form.
+
+## v5.10.2 (2026-04-14)
+- **Fix** — hypervisor certs include IP + FQDN SANs. libvirt
+  rejected qemu+tls dials by IP because the cert CN (host ID)
+  didn't match. Server pulls the IP from the Host record; SAN list
+  grows `<host_id>.<KVM_CENTER_CLUSTER_DOMAIN>` too.
+
+## v5.10.1 (2026-04-14)
+- **qemu+tls:// migration channel.** `install-agent.sh --enroll-
+  token` installs the issued cert into `/etc/pki/libvirt/{private/,}`
+  and `/etc/pki/CA/cacert.pem`, flips `listen_tls=1 / listen_tcp=0`.
+  Server auto-selects `migration_transport="tls"` when both source +
+  dest are mTLS-ready; agent builds `qemu+tls://<dest>/system`.
+  Falls back to the legacy `qemu+ssh://` keypair when either side
+  isn't enrolled. HostDetail surfaces an "mTLS" pill.
+
+## v5.10.0 (2026-04-14)
+- **Cluster CA + hypervisor identity PKI.** ECDSA P-256 cluster CA
+  auto-generated at `/var/lib/kvm-center/ca/` on first boot; 10-year
+  root. Admins mint one-time enrollment tokens (10-min TTL) for a
+  host ID; agent runs `install-agent.sh --enroll-token` to exchange
+  a CSR for a 1-year leaf cert (CN = host ID overridden server-side
+  so agents can't pick their own identity). Settings → TLS →
+  Hypervisor PKI shows issued certs with revocation controls. Audit:
+  `ca.enroll / ca.sign / ca.revoke`.
+
 ## v5.7.0 (2026-04-14)
 - **Per-channel notification routing** — each channel can override the
   global event subscription; "Event routing" accordion inside the
