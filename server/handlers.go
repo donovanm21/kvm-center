@@ -935,6 +935,23 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// handlePortalHealth probes the build portal on plain HTTP from the
+// server side, sidestepping mixed-content blocks when the SPA is
+// served over HTTPS. Used by Deployment → "Portal online/unreachable".
+func handlePortalHealth(w http.ResponseWriter, r *http.Request) {
+	host := r.Host
+	if i := strings.Index(host, ":"); i > 0 {
+		host = host[:i]
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://" + host + ":8097/")
+	ok := err == nil && resp != nil && resp.StatusCode < 500
+	if resp != nil {
+		resp.Body.Close()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": ok})
+}
+
 // clientIP extracts the real client IP, honouring X-Forwarded-For.
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
