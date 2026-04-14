@@ -16,6 +16,14 @@ import (
 	"time"
 )
 
+// Token replay semantics: a valid token may be reused for the length
+// of its 5-minute TTL. This is necessary because a single "Launch
+// Console" click produces at least two requests with the same token:
+// one GET /console/<vm> for the noVNC HTML and one WebSocket upgrade
+// to /ws/<vm>. noVNC reconnects also reuse the token. One-time-use
+// would make the UI loop "Reconnecting…" forever on every session.
+// The expiry is the guard we rely on.
+
 // Console-token verification (v5.0.2). Before this release both
 // /console/<vm> and /ws/<vm> were unauthenticated — anyone on the LAN
 // could pull up a VM's VNC. We now require a short-lived HMAC token
@@ -28,13 +36,10 @@ import (
 // refreshes it from every telemetry reply so rotations propagate.
 
 const secretCacheFile = "/var/lib/kvm-center-agent/console-secret"
-const nonceTTL = 10 * time.Minute
 
 var (
 	consoleSecret  string
 	consoleSecMu   sync.RWMutex
-	nonceSeen      = map[string]time.Time{}
-	nonceMu        sync.Mutex
 	hostIDForToken string
 )
 
@@ -112,23 +117,6 @@ func verifyConsoleToken(r *http.Request, vmName string) error {
 	want := base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 	if subtle.ConstantTimeCompare([]byte(want), []byte(token)) != 1 {
 		return fmt.Errorf("token signature mismatch")
-	}
-	// Replay guard: once a nonce is consumed refuse it for 10 minutes.
-	// Cheap per-agent set; bounded because tokens themselves only live
-	// 5 minutes and cleanupNonces runs opportunistically.
-	nonceMu.Lock()
-	defer nonceMu.Unlock()
-	if _, seen := nonceSeen[nonce]; seen {
-		return fmt.Errorf("token already used (replay)")
-	}
-	nonceSeen[nonce] = time.Now()
-	if len(nonceSeen) > 256 {
-		cutoff := time.Now().Add(-nonceTTL)
-		for k, t := range nonceSeen {
-			if t.Before(cutoff) {
-				delete(nonceSeen, k)
-			}
-		}
 	}
 	return nil
 }
