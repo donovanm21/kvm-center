@@ -87,6 +87,17 @@ func main() {
 	}
 	log.Printf("ca: cluster CA loaded from %s (NotAfter=%s)", *caDir, clusterCA.Cert().NotAfter.Format(time.RFC3339))
 
+	// Grant signer (v5.11). Ed25519 key used to sign per-migration
+	// authorization tokens. Stored next to the cluster CA so a single
+	// volume backs everything the control plane needs to survive a
+	// restart.
+	grantSigner, err := EnsureGrantSigner(*caDir)
+	if err != nil {
+		log.Fatalf("server: grant signer: %v", err)
+	}
+	serverGrantSigner = grantSigner
+	log.Printf("grants: Ed25519 signer ready (pub=%s…)", grantSigner.PublicKeyHex()[:16])
+
 	store.startAuditShipper(context.Background())
 	store.startSnapshotScheduler(context.Background())
 	store.startNotificationDispatcher(context.Background())
@@ -204,6 +215,9 @@ func main() {
 	mux.Handle("/api/ca/enroll", requirePerm(store, "tls.manage", http.HandlerFunc(handleCAEnroll(store))))
 	mux.HandleFunc("/api/ca/sign", handleCASign(store, clusterCA))
 	mux.HandleFunc("/api/ca/bundle", handleCABundle(clusterCA))
+	// Grant pub-key (v5.11). Public trust material, so served without
+	// auth so fresh agents can fetch during first contact.
+	mux.HandleFunc("/api/migrations/grant-pubkey", handleGrantPubKey(grantSigner))
 	mux.Handle("/api/ca/hypervisors",  requirePerm(store, "tls.manage", http.HandlerFunc(handleCAHypervisors(store, clusterCA))))
 	mux.Handle("/api/ca/hypervisors/", requirePerm(store, "tls.manage", http.HandlerFunc(handleCARevoke(store))))
 	mux.HandleFunc("/api/vms", handleGetVMs(store))

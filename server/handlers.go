@@ -247,6 +247,23 @@ func handleCommand(store *Store) http.HandlerFunc {
 					req.Params["migration_transport"] = "ssh"
 				}
 			}
+			// v5.11: mint a signed grant for mTLS migrations. The source
+			// agent forwards it to the destination before virsh migrate;
+			// destination validates signature + src/dst binding + TTL.
+			if req.Params["migration_transport"] == "tls" && serverGrantSigner != nil && destHostID != "" {
+				envelope, grant, gerr := serverGrantSigner.Issue(req.HostID, destHostID, req.VMUUID, req.VMName, "live")
+				if gerr != nil {
+					log.Printf("grants: issue failed for %s→%s vm=%s: %v", req.HostID, destHostID, req.VMName, gerr)
+				} else {
+					req.Params["grant"] = envelope
+					auditSystem(store, AuditMigrationGrantIssue, "vm/"+req.VMUUID, map[string]string{
+						"grant_id": grant.ID,
+						"src":      grant.Source,
+						"dst":      grant.Dest,
+						"ttl":      fmt.Sprintf("%ds", grant.ExpiresAt-grant.IssuedAt),
+					}, true, "")
+				}
+			}
 		}
 		agentCmd := models.CommandRequest{
 			Action: action,

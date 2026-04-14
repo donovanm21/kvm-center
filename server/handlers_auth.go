@@ -619,6 +619,9 @@ var publicAPIPrefixes = []string{
 	// public cert (trust anchor, safe to expose).
 	"/api/ca/sign",
 	"/api/ca/bundle",
+	// Migration grant public key is trust material, safe to expose so
+	// agents can cache it before they hold a session.
+	"/api/migrations/grant-pubkey",
 }
 
 func authMiddleware(store *Store, next http.Handler) http.Handler {
