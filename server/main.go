@@ -180,8 +180,14 @@ func main() {
 	mux.Handle("/api/settings/audit-shipping/test",  requirePerm(store, "user.manage", http.HandlerFunc(handleAuditShippingTest(store))))
 	mux.Handle("/api/settings/notifications",      requirePerm(store, "user.manage", http.HandlerFunc(handleNotifications(store))))
 	mux.Handle("/api/settings/notifications/test", requirePerm(store, "user.manage", http.HandlerFunc(handleNotificationTest(store))))
+	// Admin-scoped system tokens (user.manage).
 	mux.Handle("/api/tokens",  requirePerm(store, "user.manage", http.HandlerFunc(handleAPITokens(store))))
-	mux.Handle("/api/tokens/", requirePerm(store, "user.manage", http.HandlerFunc(handleAPIToken(store))))
+	// Self-service user tokens (any signed-in user). More-specific path
+	// must be registered before /api/tokens/ so http.ServeMux picks the
+	// right handler.
+	mux.Handle("/api/tokens/me",  http.HandlerFunc(handleMyAPITokens(store)))
+	mux.Handle("/api/tokens/me/", http.HandlerFunc(handleMyAPIToken(store)))
+	mux.Handle("/api/tokens/",    requirePerm(store, "user.manage", http.HandlerFunc(handleAPIToken(store))))
 	mux.HandleFunc("/api/vms", handleGetVMs(store))
 	mux.HandleFunc("/api/vms/snapshots", handleVMSnapshots(store))
 	mux.HandleFunc("/api/vms/screenshot", handleVMScreenshot(store))

@@ -39,11 +39,25 @@ const (
 
 // ── Store helpers ──────────────────────────────────────────────────
 
+// ListAPITokens returns every token in the store (admin view).
 func (s *Store) ListAPITokens() []*models.APIToken {
+	return s.listTokensFiltered(func(*models.APIToken) bool { return true })
+}
+
+// ListAPITokensForUser returns only tokens owned by the given user —
+// used by the self-service /api/tokens/me endpoint.
+func (s *Store) ListAPITokensForUser(userID string) []*models.APIToken {
+	return s.listTokensFiltered(func(t *models.APIToken) bool { return t.OwnerID == userID })
+}
+
+func (s *Store) listTokensFiltered(keep func(*models.APIToken) bool) []*models.APIToken {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]*models.APIToken, 0, len(s.apiTokens))
 	for _, t := range s.apiTokens {
+		if !keep(t) {
+			continue
+		}
 		cp := *t
 		cp.Hash = "" // never leak the hash
 		out = append(out, &cp)
@@ -52,14 +66,29 @@ func (s *Store) ListAPITokens() []*models.APIToken {
 	return out
 }
 
+// GetAPIToken returns a single token by ID (for ownership checks).
+func (s *Store) GetAPIToken(id string) *models.APIToken {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if t, ok := s.apiTokens[id]; ok {
+		cp := *t
+		cp.Hash = ""
+		return &cp
+	}
+	return nil
+}
+
 // CreateAPIToken mints a new token, stores the hash, returns the
 // plaintext to the caller exactly once.
-func (s *Store) CreateAPIToken(name, ownerID string, expiresAt time.Time) (full string, t *models.APIToken, err error) {
+func (s *Store) CreateAPIToken(name, ownerID, kind string, expiresAt time.Time) (full string, t *models.APIToken, err error) {
 	if name == "" {
 		return "", nil, errors.New("name required")
 	}
 	if ownerID == "" {
 		return "", nil, errors.New("owner required")
+	}
+	if kind != "user" && kind != "system" {
+		return "", nil, errors.New("kind must be \"user\" or \"system\"")
 	}
 	id, err := randHex(tokenIDChars / 2)
 	if err != nil {
@@ -76,6 +105,7 @@ func (s *Store) CreateAPIToken(name, ownerID string, expiresAt time.Time) (full 
 		ID:        id,
 		Name:      name,
 		OwnerID:   ownerID,
+		Kind:      kind,
 		Hash:      hex.EncodeToString(sum[:]),
 		CreatedAt: time.Now().UTC(),
 		ExpiresAt: expiresAt,
@@ -168,17 +198,33 @@ func randHex(n int) (string, error) {
 
 // ── HTTP handlers ──────────────────────────────────────────────────
 
-// handleAPITokens — GET list, POST create.
+type tokenCreateReq struct {
+	Name      string `json:"name"`
+	ExpiresAt string `json:"expires_at,omitempty"` // RFC3339
+}
+
+func parseExpiry(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}, errors.New("expires_at must be RFC3339")
+	}
+	return t, nil
+}
+
+// handleAPITokens — admin-scoped endpoint for SYSTEM tokens.
+// GET returns every system token in the store (admin view);
+// POST mints a new system token owned by the caller.
 func handleAPITokens(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
+			// Include both kinds so the admin can see all tokens in the fleet.
 			writeJSON(w, http.StatusOK, store.ListAPITokens())
 		case http.MethodPost:
-			var req struct {
-				Name      string `json:"name"`
-				ExpiresAt string `json:"expires_at,omitempty"` // RFC3339, optional
-			}
+			var req tokenCreateReq
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 				return
@@ -188,35 +234,28 @@ func handleAPITokens(store *Store) http.HandlerFunc {
 				writeError(w, http.StatusUnauthorized, "not authenticated")
 				return
 			}
-			var exp time.Time
-			if req.ExpiresAt != "" {
-				t, err := time.Parse(time.RFC3339, req.ExpiresAt)
-				if err != nil {
-					writeError(w, http.StatusBadRequest, "expires_at must be RFC3339")
-					return
-				}
-				exp = t
-			}
-			full, t, err := store.CreateAPIToken(req.Name, u.ID, exp)
+			exp, err := parseExpiry(req.ExpiresAt)
 			if err != nil {
-				audit(store, r, AuditTokenCreate, "token/"+req.Name, nil, false, err.Error())
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			audit(store, r, AuditTokenCreate, "token/"+t.ID, map[string]string{"name": t.Name}, true, "")
+			full, t, err := store.CreateAPIToken(req.Name, u.ID, "system", exp)
+			if err != nil {
+				audit(store, r, AuditTokenCreate, "token/"+req.Name, map[string]string{"kind": "system"}, false, err.Error())
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			audit(store, r, AuditTokenCreate, "token/"+t.ID, map[string]string{"name": t.Name, "kind": "system"}, true, "")
 			cp := *t
 			cp.Hash = ""
-			writeJSON(w, http.StatusOK, map[string]any{
-				"token":  full, // shown to the operator exactly once
-				"record": cp,
-			})
+			writeJSON(w, http.StatusOK, map[string]any{"token": full, "record": cp})
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "GET / POST only")
 		}
 	}
 }
 
-// handleAPIToken — DELETE /api/tokens/<id> revokes one token.
+// handleAPIToken — DELETE /api/tokens/<id> (admin; can revoke any token).
 func handleAPIToken(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/api/tokens/")
@@ -234,6 +273,84 @@ func handleAPIToken(store *Store) http.HandlerFunc {
 			return
 		}
 		audit(store, r, AuditTokenRevoke, "token/"+id, nil, true, "")
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
+}
+
+// handleMyAPITokens — self-service endpoint. Any signed-in user can
+// list/create their own USER tokens (default 30-day expiry when
+// expires_at is blank).
+func handleMyAPITokens(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u := userFromRequest(r)
+		if u == nil {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, http.StatusOK, store.ListAPITokensForUser(u.ID))
+		case http.MethodPost:
+			var req tokenCreateReq
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+				return
+			}
+			exp, err := parseExpiry(req.ExpiresAt)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			// Default: 30 days from now when operator didn't pick a date.
+			// Prevents forever-tokens from accumulating on user accounts.
+			if exp.IsZero() {
+				exp = time.Now().Add(30 * 24 * time.Hour).UTC()
+			}
+			full, t, err := store.CreateAPIToken(req.Name, u.ID, "user", exp)
+			if err != nil {
+				audit(store, r, AuditTokenCreate, "token/"+req.Name, map[string]string{"kind": "user"}, false, err.Error())
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			audit(store, r, AuditTokenCreate, "token/"+t.ID, map[string]string{"name": t.Name, "kind": "user"}, true, "")
+			cp := *t
+			cp.Hash = ""
+			writeJSON(w, http.StatusOK, map[string]any{"token": full, "record": cp})
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "GET / POST only")
+		}
+	}
+}
+
+// handleMyAPIToken — DELETE /api/tokens/me/<id>. Users can only revoke
+// their own tokens; any attempt against another user's token 404s.
+func handleMyAPIToken(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u := userFromRequest(r)
+		if u == nil {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		id := strings.TrimPrefix(r.URL.Path, "/api/tokens/me/")
+		if id == "" {
+			writeError(w, http.StatusBadRequest, "token id required")
+			return
+		}
+		if r.Method != http.MethodDelete {
+			writeError(w, http.StatusMethodNotAllowed, "DELETE only")
+			return
+		}
+		existing := store.GetAPIToken(id)
+		if existing == nil || existing.OwnerID != u.ID {
+			writeError(w, http.StatusNotFound, "token not found")
+			return
+		}
+		if err := store.RevokeAPIToken(id); err != nil {
+			audit(store, r, AuditTokenRevoke, "token/"+id, nil, false, err.Error())
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		audit(store, r, AuditTokenRevoke, "token/"+id, map[string]string{"kind": "user"}, true, "")
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
