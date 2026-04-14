@@ -619,6 +619,7 @@ type MigrationRecord struct {
 	SourceHost  string `json:"source_host"`
 	DestHost    string `json:"dest_host"`
 	Mode        string `json:"mode"`        // "offline" | "live"
+	Transport   string `json:"transport,omitempty"` // "tls" | "ssh" (v5.10.7)
 	Status      string `json:"status"`      // "running" | "complete" | "failed"
 	StartedAt   int64  `json:"started_at"`  // unix seconds
 	CompletedAt int64  `json:"completed_at,omitempty"`

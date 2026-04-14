@@ -156,6 +156,7 @@ export interface MigrationRecord {
   source_host: string;
   dest_host: string;
   mode: string;
+  transport?: 'tls' | 'ssh' | string;
   status: 'running' | 'complete' | 'failed' | string;
   started_at: number;
   completed_at?: number;
