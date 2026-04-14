@@ -329,11 +329,14 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 		return err
 	}
 
-	// Hosts
+	// Hosts. Every embed below uses bson:",inline" so the entity's
+	// fields land at the document root rather than nested under the
+	// Go struct's field name — otherwise the default decoder can't
+	// hydrate the Host back from a "host" sub-object.
 	if err := replaceMap(ctx, db, mcoHosts, mapToDocs(d.Hosts, func(h *models.Host) any {
 		return struct {
 			ID string `bson:"_id"`
-			*models.Host
+			*models.Host `bson:",inline"`
 		}{h.ID, h}
 	})); err != nil {
 		return err
@@ -350,7 +353,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 			}
 			vmDocs = append(vmDocs, struct {
 				ID string `bson:"_id"`
-				*models.VM
+				*models.VM `bson:",inline"`
 			}{id, v})
 		}
 	}
@@ -364,7 +367,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 		for _, p := range pools {
 			poolDocs = append(poolDocs, struct {
 				ID string `bson:"_id"`
-				*models.StoragePool
+				*models.StoragePool `bson:",inline"`
 			}{hostID + "|" + p.Name, p})
 		}
 	}
@@ -400,7 +403,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	for _, m := range d.Migrations {
 		migDocs = append(migDocs, struct {
 			ID string `bson:"_id"`
-			*models.MigrationRecord
+			*models.MigrationRecord `bson:",inline"`
 		}{m.ID, m})
 	}
 	if err := replaceMap(ctx, db, mcoMigrations, migDocs); err != nil {
@@ -410,7 +413,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	if err := replaceMap(ctx, db, mcoUsers, mapToDocs(d.Users, func(u *models.User) any {
 		return struct {
 			ID string `bson:"_id"`
-			*models.User
+			*models.User `bson:",inline"`
 		}{u.ID, u}
 	})); err != nil {
 		return err
@@ -418,7 +421,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	if err := replaceMap(ctx, db, mcoGroups, mapToDocs(d.Groups, func(g *models.Group) any {
 		return struct {
 			ID string `bson:"_id"`
-			*models.Group
+			*models.Group `bson:",inline"`
 		}{g.ID, g}
 	})); err != nil {
 		return err
@@ -426,7 +429,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	if err := replaceMap(ctx, db, mcoRoles, mapToDocs(d.Roles, func(r *models.Role) any {
 		return struct {
 			ID string `bson:"_id"`
-			*models.Role
+			*models.Role `bson:",inline"`
 		}{r.ID, r}
 	})); err != nil {
 		return err
@@ -434,7 +437,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	if err := replaceMap(ctx, db, mcoIDPs, mapToDocs(d.IDPs, func(i *models.IdentityProvider) any {
 		return struct {
 			ID string `bson:"_id"`
-			*models.IdentityProvider
+			*models.IdentityProvider `bson:",inline"`
 		}{i.ID, i}
 	})); err != nil {
 		return err
@@ -445,7 +448,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	for tok, s := range d.Sessions {
 		sessDocs = append(sessDocs, struct {
 			ID string `bson:"_id"`
-			*models.Session
+			*models.Session `bson:",inline"`
 		}{tok, s})
 	}
 	if err := replaceMap(ctx, db, mcoSessions, sessDocs); err != nil {
@@ -459,7 +462,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 			bson.D{{Key: "_id", Value: "singleton"}},
 			struct {
 				ID string `bson:"_id"`
-				*models.Features
+				*models.Features `bson:",inline"`
 			}{"singleton", d.Features},
 			options.Replace().SetUpsert(true),
 		); err != nil {
