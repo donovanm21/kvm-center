@@ -501,6 +501,29 @@ type Role struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+// HypervisorCert (v5.10) records one leaf certificate issued by the
+// cluster CA to a hypervisor agent. The server tracks issuance and
+// revocation so operators can audit the PKI surface from
+// Settings → TLS → Hypervisor PKI.
+//
+// The private key never leaves the hypervisor — only the CSR's public
+// material reaches the server. RevokedAt being non-zero means the
+// cert is on the revocation list; new migrations that carry this
+// certificate's subject CN will be refused (v5.10.1+).
+type HypervisorCert struct {
+	HostID      string    `json:"host_id"`
+	SerialHex   string    `json:"serial_hex"`
+	Fingerprint string    `json:"fingerprint"` // SHA-256 of DER, colon-hex
+	Subject     string    `json:"subject,omitempty"`
+	NotBefore   time.Time `json:"not_before"`
+	NotAfter    time.Time `json:"not_after"`
+	IssuedAt    time.Time `json:"issued_at"`
+	IssuedBy    string    `json:"issued_by,omitempty"` // user ID that triggered enrollment
+	RevokedAt   time.Time `json:"revoked_at,omitempty"`
+	RevokedBy   string    `json:"revoked_by,omitempty"`
+	RevokeReason string   `json:"revoke_reason,omitempty"`
+}
+
 // APIToken (v5.5) is a long-lived bearer credential for scripted use
 // of the kvm-center API. The full token is shown to the operator
 // exactly once at creation; the server only persists a SHA-256 hash

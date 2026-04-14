@@ -39,6 +39,7 @@ type persistData struct {
 	SnapshotPolicies map[string]*models.SnapshotPolicy `json:"snapshot_policies,omitempty"`
 	Notifications    *models.NotificationConfig        `json:"notifications,omitempty"`
 	APITokens        map[string]*models.APIToken       `json:"api_tokens,omitempty"`
+	HypervisorCerts  map[string]*models.HypervisorCert `json:"hypervisor_certs,omitempty"`
 	// ConsoleSecret is the HMAC-SHA256 key the server uses to mint
 	// per-session VM console tokens (see console_token.go). Generated
 	// on first use; persisted so agents that cached it don't need a
@@ -112,6 +113,13 @@ type Store struct {
 	migrationNotified map[string]bool
 	// apiTokens (v5.5) keyed by token ID (the public 8-char prefix).
 	apiTokens map[string]*models.APIToken
+	// hypervisorCerts (v5.10) keyed by host ID. Latest issued leaf per
+	// hypervisor wins — rotation overwrites (the old cert becomes a
+	// revocation record tracked inside HypervisorCert's RevokedAt).
+	hypervisorCerts map[string]*models.HypervisorCert
+	// caEnrollTokens (v5.10) keyed by one-time token; in-memory only
+	// with short TTL. Consumed by the first successful CSR sign.
+	caEnrollTokens map[string]*caEnrollEntry
 	features      models.Features
 	dataFile      string
 	// backend is the pluggable persistence layer (JSON file or Mongo).
@@ -170,6 +178,8 @@ func NewStoreWithBackend(backend Backend, dataFile string) *Store {
 		vmStatePrev:         make(map[string]models.VMState),
 		hostOnlinePrev:      make(map[string]bool),
 		apiTokens:           make(map[string]*models.APIToken),
+		hypervisorCerts:     make(map[string]*models.HypervisorCert),
+		caEnrollTokens:      make(map[string]*caEnrollEntry),
 		dataFile:            dataFile,
 		backend:             backend,
 	}
@@ -763,6 +773,7 @@ func computeDirty(d *persistData) map[string]bool {
 		"audit_shipping":    d.AuditShipping,
 		"api_tokens":        d.APITokens,
 		"snapshot_policies": d.SnapshotPolicies,
+		"hypervisor_certs":  d.HypervisorCerts,
 	}
 	for name, v := range fields {
 		h := hashJSON(v)
@@ -809,6 +820,7 @@ func (s *Store) Save() {
 		SnapshotPolicies: s.snapshotPolicies,
 		Notifications:    s.notifications,
 		APITokens:        s.apiTokens,
+		HypervisorCerts:  s.hypervisorCerts,
 		ConsoleSecret:    s.consoleSecret,
 	}
 	s.mu.RUnlock()
@@ -906,6 +918,9 @@ func (s *Store) load() {
 			}
 		}
 		s.apiTokens = d.APITokens
+	}
+	if d.HypervisorCerts != nil {
+		s.hypervisorCerts = d.HypervisorCerts
 	}
 	log.Printf("store: loaded %d hosts, %d users, %d groups, %d roles from %s",
 		len(s.hosts), len(s.users), len(s.groups), len(s.roles), s.dataFile)

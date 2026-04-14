@@ -183,7 +183,163 @@ export function TLSTab() {
           {regenerate.isPending ? 'Regenerating…' : 'Regenerate self-signed'}
         </button>
       </div>
+
+      <HypervisorPKI canManage={canManage} />
     </>
+  );
+}
+
+interface HypervisorCert {
+  host_id: string;
+  serial_hex: string;
+  fingerprint: string;
+  subject?: string;
+  not_before: string;
+  not_after: string;
+  issued_at: string;
+  revoked_at?: string;
+  revoke_reason?: string;
+}
+interface PKIList {
+  certs: HypervisorCert[];
+  ca: { subject: string; not_before: string; not_after: string };
+}
+
+function HypervisorPKI({ canManage }: { canManage: boolean }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [hostID, setHostID] = useState('');
+  const [enrollToken, setEnrollToken] = useState<string | null>(null);
+
+  const list = useQuery({
+    queryKey: ['ca-hypervisors'],
+    queryFn: () => apiGet<PKIList>('/api/ca/hypervisors'),
+  });
+
+  const enroll = useMutation({
+    mutationFn: () => apiPost<{ enroll_token: string; expires_in: number }>('/api/ca/enroll', { host_id: hostID.trim() }),
+    onSuccess: (r) => {
+      setEnrollToken(r.enroll_token);
+      toast('success', `Enrollment token issued — valid for ${Math.round(r.expires_in / 60)} min`);
+      qc.invalidateQueries({ queryKey: ['ca-hypervisors'] });
+    },
+    onError: (e) => toast('error', `Enroll failed: ${e instanceof Error ? e.message : String(e)}`),
+  });
+
+  const revoke = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiPost('/api/ca/hypervisors/' + encodeURIComponent(id) + '/revoke', { reason }),
+    onSuccess: () => {
+      toast('success', 'Certificate revoked');
+      qc.invalidateQueries({ queryKey: ['ca-hypervisors'] });
+    },
+    onError: (e) => toast('error', `Revoke failed: ${e instanceof Error ? e.message : String(e)}`),
+  });
+
+  return (
+    <div className="panel">
+      <h2 style={{ margin: 0, marginBottom: 4 }}>Hypervisor PKI</h2>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px 0' }}>
+        Issue and revoke hypervisor identity certificates. Used by the upcoming mTLS migration channel and signed migration grants.
+        Enrollment tokens are one-time and valid for 10 minutes — redeem them from the agent host with{' '}
+        <code>install-agent.sh --enroll-token &lt;token&gt; --server https://kvm-center</code>.
+      </p>
+
+      {list.data?.ca && (
+        <div style={{ fontSize: 11, color: 'var(--text-faded)', marginBottom: 12 }}>
+          Cluster CA: <code>{list.data.ca.subject}</code> · expires {new Date(list.data.ca.not_after).toLocaleDateString()}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        <input
+          type="text"
+          placeholder="Host ID (e.g. hvnode04)"
+          value={hostID}
+          onChange={(e) => setHostID(e.target.value)}
+          disabled={!canManage}
+          style={{
+            flex: 1, height: 32, padding: '0 10px', fontSize: 13,
+            background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 4,
+            color: 'var(--text-body)', fontFamily: 'inherit',
+          }}
+        />
+        <button
+          type="button"
+          className="btn-primary-sm"
+          disabled={!canManage || !hostID.trim() || enroll.isPending}
+          onClick={() => { setEnrollToken(null); enroll.mutate(); }}
+        >
+          {enroll.isPending ? 'Issuing…' : 'Issue enrollment token'}
+        </button>
+      </div>
+
+      {enrollToken && (
+        <div style={{ marginBottom: 14, display: 'grid', gap: 8 }}>
+          <div className="tone-pill warn" style={{ alignSelf: 'flex-start' }}>
+            Copy this now — it won't be shown again. 10-minute TTL.
+          </div>
+          <code style={{
+            userSelect: 'all', wordBreak: 'break-all', padding: 10,
+            background: 'var(--bg-input)', border: '1px solid var(--border)',
+            borderRadius: 4, fontSize: 12, color: 'var(--text-strong)',
+          }}>{enrollToken}</code>
+          <button
+            type="button"
+            className="btn-secondary-sm"
+            style={{ alignSelf: 'flex-start' }}
+            onClick={() => { navigator.clipboard.writeText(enrollToken); toast('success', 'Token copied'); }}
+          >
+            Copy
+          </button>
+        </div>
+      )}
+
+      {list.isLoading && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</div>}
+      {list.data && (
+        <table className="data-table">
+          <thead>
+            <tr><th>Host</th><th>Serial</th><th>Issued</th><th>Expires</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody>
+            {list.data.certs.length === 0 && (
+              <tr><td colSpan={6} style={{ color: 'var(--text-muted)', fontSize: 12 }}>No hypervisor certs issued yet.</td></tr>
+            )}
+            {list.data.certs.map((c) => {
+              const revoked = !!c.revoked_at && new Date(c.revoked_at).getFullYear() > 1000;
+              return (
+                <tr key={c.host_id}>
+                  <td style={{ fontWeight: 500 }}>{c.host_id}</td>
+                  <td style={{ fontFamily: "'SF Mono', monospace", fontSize: 11 }}>{c.serial_hex.slice(0, 12)}…</td>
+                  <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(c.issued_at).toLocaleString()}</td>
+                  <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(c.not_after).toLocaleDateString()}</td>
+                  <td>
+                    {revoked
+                      ? <span className="tone-pill danger">revoked</span>
+                      : new Date(c.not_after) < new Date()
+                        ? <span className="tone-pill warn">expired</span>
+                        : <span className="tone-pill ok">active</span>}
+                  </td>
+                  <td>
+                    {!revoked && canManage && (
+                      <button
+                        className="btn-danger-sm"
+                        onClick={() => {
+                          const reason = prompt(`Revoke cert for ${c.host_id}? Enter a reason:`);
+                          if (reason !== null) revoke.mutate({ id: c.host_id, reason });
+                        }}
+                      >
+                        Revoke
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
 
