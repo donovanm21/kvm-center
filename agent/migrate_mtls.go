@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -249,8 +250,9 @@ func offlineMigrateMTLS(ctx context.Context, vmName, dest string, opts MTLSOptio
 		logStep(fmt.Sprintf("renaming %s → %s on target", vmName, finalVMName))
 	}
 	if opts.RegenerateMAC {
-		xmlMut = regenerateAllMACs(xmlMut)
-		logStep("regenerated MAC addresses for all interfaces")
+		newXML, n := regenerateAllMACsCount(xmlMut)
+		xmlMut = newXML
+		logStep(fmt.Sprintf("regenerated %d MAC address(es)", n))
 	}
 
 	// ── 8. Define VM on target ────────────────────────────────
@@ -324,31 +326,32 @@ func replaceDomainName(xmlStr, newName string) string {
 	return xmlStr[:start+len("<name>")] + newName + xmlStr[start+end:]
 }
 
-// regenerateAllMACs rewrites every `<mac address="..."/>` in the
-// domain XML with a fresh locally-administered unicast MAC. Simple
-// string-level rewrite keeps the rest of the XML untouched — libvirt
-// will re-parse and apply on define.
+// regenerateAllMACs rewrites every <mac address="..."/> in the
+// domain XML with a fresh locally-administered unicast MAC. libvirt
+// emits single-quoted attributes from dumpxml but accepts either
+// style on define — handle both here so we don't no-op on single-
+// quote input (the common case for `virsh dumpxml`).
+var macRegex = regexp.MustCompile(`(<mac\s+address\s*=\s*["'])([0-9A-Fa-f:]+)(["']\s*/>)`)
+
 func regenerateAllMACs(xmlStr string) string {
-	var out strings.Builder
-	out.Grow(len(xmlStr))
-	remaining := xmlStr
-	for {
-		idx := strings.Index(remaining, `<mac address="`)
-		if idx < 0 {
-			out.WriteString(remaining)
-			break
+	out, _ := regenerateAllMACsCount(xmlStr)
+	return out
+}
+
+// regenerateAllMACsCount returns the rewritten XML along with the
+// number of <mac/> elements replaced so the caller can log accurate
+// counts (zero = probably a regex miss worth flagging).
+func regenerateAllMACsCount(xmlStr string) (string, int) {
+	n := 0
+	out := macRegex.ReplaceAllStringFunc(xmlStr, func(m string) string {
+		sub := macRegex.FindStringSubmatch(m)
+		if len(sub) < 4 {
+			return m
 		}
-		out.WriteString(remaining[:idx+len(`<mac address="`)])
-		end := strings.Index(remaining[idx:], `"/>`)
-		if end < 0 {
-			out.WriteString(remaining[idx+len(`<mac address="`):])
-			break
-		}
-		out.WriteString(randomLocalMAC())
-		out.WriteString(`"/>`)
-		remaining = remaining[idx+end+len(`"/>`):]
-	}
-	return out.String()
+		n++
+		return sub[1] + randomLocalMAC() + sub[3]
+	})
+	return out, n
 }
 
 // randomLocalMAC returns a 52:54:00-prefixed MAC — libvirt's
