@@ -11,6 +11,7 @@ interface Channel {
   enabled: boolean;
   webhook_url?: string;
   webhook_secret?: string;
+  webhook_format?: '' | 'discord' | 'slack' | 'generic';
   email_to?: string;
   email_from?: string;
   last_send_at?: string;
@@ -172,6 +173,18 @@ export function NotificationsTab() {
                       placeholder="https://hooks.example.com/…"
                       style={inputStyle}
                     />
+                  </Field>
+                  <Field label="Payload format">
+                    <select
+                      value={ch.webhook_format || ''}
+                      onChange={(e) => updateChannel(idx, { webhook_format: e.target.value as Channel['webhook_format'] })}
+                      style={inputStyle}
+                    >
+                      <option value="">Auto-detect (by URL)</option>
+                      <option value="discord">Discord (rich embed)</option>
+                      <option value="slack">Slack (attachment)</option>
+                      <option value="generic">Generic JSON (n8n / Zapier / custom)</option>
+                    </select>
                   </Field>
                   <Field label="HMAC secret (optional)">
                     <input

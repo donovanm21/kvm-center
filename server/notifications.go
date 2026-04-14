@@ -165,7 +165,7 @@ func sendWebhook(ch *models.NotificationChannel, ev *models.NotificationEvent) e
 	if ch.WebhookURL == "" {
 		return errors.New("webhook url required")
 	}
-	body, err := webhookPayload(ch.WebhookURL, ev)
+	body, err := webhookPayload(ch.WebhookURL, ch.WebhookFormat, ev)
 	if err != nil {
 		return err
 	}
@@ -193,37 +193,132 @@ func sendWebhook(ch *models.NotificationChannel, ev *models.NotificationEvent) e
 }
 
 // webhookPayload picks a body shape compatible with the destination.
-// Discord and Slack want a chat-message envelope; everything else
-// gets the raw event JSON so generic receivers (n8n, Zapier, custom
-// HTTP listeners) keep all the structured fields.
-func webhookPayload(rawURL string, ev *models.NotificationEvent) ([]byte, error) {
-	host := ""
-	if u, err := url.Parse(rawURL); err == nil {
-		host = strings.ToLower(u.Host)
-	}
-	icon := severityIcon(ev.Severity)
-	text := icon + " **" + ev.Title + "**\n" + ev.Message
-	if ev.Resource != "" {
-		text += "\n_" + ev.Resource + "_"
-	}
-	switch {
-	case strings.HasSuffix(host, "discord.com") || strings.HasSuffix(host, "discordapp.com"):
-		// Discord caps content at 2000 chars and rejects empty bodies.
-		if len(text) > 1900 {
-			text = text[:1900] + "…"
+// `format` overrides the URL-host autodetect; pass "" to keep the
+// pre-v5.4.4 behaviour. "generic" always sends the raw event JSON so
+// custom receivers (n8n, Zapier, your own HTTP listener) get every
+// structured field.
+func webhookPayload(rawURL, format string, ev *models.NotificationEvent) ([]byte, error) {
+	if format == "" {
+		host := ""
+		if u, err := url.Parse(rawURL); err == nil {
+			host = strings.ToLower(u.Host)
 		}
-		return json.Marshal(map[string]any{
-			"username": "kvm-center",
-			"content":  text,
-		})
-	case strings.HasSuffix(host, "slack.com"):
-		return json.Marshal(map[string]any{
-			"text":     text,
-			"username": "kvm-center",
-		})
+		switch {
+		case strings.HasSuffix(host, "discord.com"), strings.HasSuffix(host, "discordapp.com"):
+			format = "discord"
+		case strings.HasSuffix(host, "slack.com"):
+			format = "slack"
+		default:
+			format = "generic"
+		}
+	}
+	switch format {
+	case "discord":
+		return discordPayload(ev)
+	case "slack":
+		return slackPayload(ev)
 	default:
 		return json.Marshal(ev)
 	}
+}
+
+// discordPayload ships a Discord embed — color-coded by severity,
+// with the resource as a clickable title link back to kvm-center.
+func discordPayload(ev *models.NotificationEvent) ([]byte, error) {
+	color := severityColorInt(ev.Severity)
+	fields := []map[string]any{
+		{"name": "Severity", "value": strings.ToUpper(ev.Severity), "inline": true},
+		{"name": "Type", "value": "`" + ev.Type + "`", "inline": true},
+	}
+	if ev.Resource != "" {
+		fields = append(fields, map[string]any{"name": "Resource", "value": "`" + ev.Resource + "`", "inline": false})
+	}
+	for k, v := range ev.Detail {
+		if k == "" || v == "" {
+			continue
+		}
+		fields = append(fields, map[string]any{"name": k, "value": v, "inline": true})
+	}
+	embed := map[string]any{
+		"title":       ev.Title,
+		"description": ev.Message,
+		"color":       color,
+		"timestamp":   ev.At.UTC().Format(time.RFC3339),
+		"fields":      fields,
+		"footer":      map[string]any{"text": "kvm-center " + Version},
+	}
+	if link := resourceLink(ev.Resource); link != "" {
+		embed["url"] = link
+	}
+	return json.Marshal(map[string]any{
+		"username": "kvm-center",
+		"embeds":   []any{embed},
+	})
+}
+
+// slackPayload ships an attachments envelope — same idea: color-coded
+// sidebar, fields for severity/type/resource, footer with version.
+func slackPayload(ev *models.NotificationEvent) ([]byte, error) {
+	fields := []map[string]any{
+		{"title": "Severity", "value": strings.ToUpper(ev.Severity), "short": true},
+		{"title": "Type", "value": "`" + ev.Type + "`", "short": true},
+	}
+	if ev.Resource != "" {
+		fields = append(fields, map[string]any{"title": "Resource", "value": "`" + ev.Resource + "`", "short": false})
+	}
+	for k, v := range ev.Detail {
+		if k == "" || v == "" {
+			continue
+		}
+		fields = append(fields, map[string]any{"title": k, "value": v, "short": true})
+	}
+	att := map[string]any{
+		"fallback":    severityIcon(ev.Severity) + " " + ev.Title + " — " + ev.Message,
+		"color":       severityColorHex(ev.Severity),
+		"title":       ev.Title,
+		"text":        ev.Message,
+		"fields":      fields,
+		"footer":      "kvm-center " + Version,
+		"ts":          ev.At.UTC().Unix(),
+		"mrkdwn_in":   []string{"text", "fields"},
+	}
+	if link := resourceLink(ev.Resource); link != "" {
+		att["title_link"] = link
+	}
+	return json.Marshal(map[string]any{
+		"username":    "kvm-center",
+		"attachments": []any{att},
+	})
+}
+
+// resourceLink synthesises a link back into the SPA for the resource
+// the event refers to. Best-effort — only the resource shapes the UI
+// actually has routes for (vm, host, migration) get a link.
+func resourceLink(resource string) string {
+	if resource == "" {
+		return ""
+	}
+	base := strings.TrimRight(notificationLinkBase(), "/")
+	if base == "" {
+		return ""
+	}
+	switch {
+	case strings.HasPrefix(resource, "vm/"):
+		return base + "/vms/" + strings.TrimPrefix(resource, "vm/")
+	case strings.HasPrefix(resource, "host/"):
+		return base + "/hosts/" + strings.TrimPrefix(resource, "host/")
+	case strings.HasPrefix(resource, "migration/"):
+		return base + "/migrations"
+	}
+	return ""
+}
+
+// notificationLinkBase is the public URL the SPA is reachable at. Set
+// from the env so deep links in webhook embeds resolve. Leave blank to
+// disable links entirely (we won't guess at the operator's reverse
+// proxy posture).
+func notificationLinkBase() string {
+	return strings.TrimSpace(envOrDefault("KVM_CENTER_PUBLIC_URL", ""))
 }
 
 func severityIcon(sev string) string {
@@ -234,6 +329,28 @@ func severityIcon(sev string) string {
 		return "🟡"
 	default:
 		return "🟢"
+	}
+}
+
+func severityColorInt(sev string) int {
+	switch sev {
+	case "critical":
+		return 0xE74C3C
+	case "warning":
+		return 0xF1C40F
+	default:
+		return 0x2ECC71
+	}
+}
+
+func severityColorHex(sev string) string {
+	switch sev {
+	case "critical":
+		return "#E74C3C"
+	case "warning":
+		return "#F1C40F"
+	default:
+		return "good"
 	}
 }
 
