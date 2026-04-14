@@ -1,0 +1,37 @@
+name: test
+
+# Gitea Actions workflow (v5.12.0). Runs on every push; matches the
+# `make check` target operators run locally. Keeps the runner lean
+# — no Docker, no network access beyond the module proxy.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      # Fast gates first — gofmt + vet catch 90% of trivially bad
+      # commits in seconds.
+      - name: gofmt
+        run: |
+          changed=$(gofmt -l .)
+          if [ -n "$changed" ]; then
+            echo "files need gofmt:"; echo "$changed"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...

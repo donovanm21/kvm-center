@@ -11,6 +11,12 @@ COPY . .
 RUN cp /src/server/VERSION /src/kvm-tools/VERSION
 RUN go mod tidy
 
+# v5.12: fail the build if any unit test breaks. Keeps the deploy
+# pipeline honest — agents never pick up a binary whose test suite
+# we knowingly broke. Runs before the cross-compilation steps so
+# the feedback loop is as fast as possible.
+RUN go test ./...
+
 # Build server (linux/amd64 - runs in container)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -ldflags="-s -w" -o /out/kvm-center-server ./server
