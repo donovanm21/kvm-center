@@ -172,7 +172,7 @@ export function Migrations() {
                   <td style={{ color: 'var(--text-faded)', fontSize: 11 }}>{fmtDuration(m.elapsed_sec)}</td>
                   <td
                     style={{
-                      color: m.status === 'failed' ? '#F85149' : 'var(--text-muted)',
+                      color: 'var(--text-muted)',
                       fontSize: 11,
                       maxWidth: 360,
                       overflow: 'hidden',
@@ -181,7 +181,9 @@ export function Migrations() {
                     }}
                     title={m.error || m.detail || ''}
                   >
-                    {m.error || m.detail || '—'}
+                    {m.status === 'failed' && m.error
+                      ? <span className="tone-pill danger" style={{ fontSize: 10 }}>{summariseMigrationError(m.error)}</span>
+                      : cleanMigrationDetail(m.detail) || '—'}
                   </td>
                 </tr>
               ))}
@@ -277,7 +279,7 @@ function ActiveCard({ m }: { m: MigrationRecord }) {
         <div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', background: 'var(--accent)', transition: 'width 0.5s' }} />
       </div>
       <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-faded)' }}>
-        {m.detail || ''} · Started {fmtTime(m.started_at)}
+        {cleanMigrationDetail(m.detail)} · Started {fmtTime(m.started_at)}
       </div>
     </div>
   );
@@ -314,6 +316,33 @@ function SectionHeader({ label, style }: { label: string; style?: React.CSSPrope
       {label}
     </div>
   );
+}
+
+// summariseMigrationError maps a raw virsh / libvirt error string to a
+// short phrase that fits the Detail column. Full text is still
+// available via the cell's title attribute. Patterns match the errors
+// we've actually seen in the field; unknown errors fall back to the
+// first ~60 chars of the original.
+function summariseMigrationError(err: string): string {
+  const e = err.toLowerCase();
+  if (e.includes('no route to host')) return 'no route to host (firewall?)';
+  if (e.includes('connection refused')) return 'connection refused';
+  if (e.includes('connection timed out')) return 'timed out';
+  if (e.includes('authentication failed') || e.includes('certificate')) return 'TLS / cert auth failed';
+  if (e.includes('unable to connect to server')) return 'cannot reach peer libvirtd';
+  if (e.includes('already exists')) return 'target domain already exists';
+  if (e.includes('cancelled by operator')) return 'cancelled';
+  // Strip the "error: " prefix virsh prepends + collapse whitespace.
+  const clean = err.replace(/^error:\s*/i, '').replace(/\s+/g, ' ').trim();
+  return clean.length > 60 ? clean.slice(0, 57) + '…' : clean;
+}
+
+// cleanMigrationDetail trims the Migration: [XX.XX %] progress spam
+// virsh emits on success into a single short status phrase.
+function cleanMigrationDetail(detail?: string): string {
+  if (!detail) return '';
+  if (detail.startsWith('Migration: [')) return 'completed';
+  return detail;
 }
 
 function fmtTime(ts?: number): string {
