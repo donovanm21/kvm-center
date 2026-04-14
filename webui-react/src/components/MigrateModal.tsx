@@ -88,16 +88,21 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
   // operator doesn't have to click when the fleet is uniform.
   const poolsQuery = useQuery({
     queryKey: ['host-pools', effectiveTarget],
-    queryFn: () => apiGet<{ name: string; path: string; type: string; capacity_gb: number; available_gb: number }[]>(
+    queryFn: () => apiGet<{ name: string; path: string; type: string; state: string; capacity_gb: number; available_gb: number }[]>(
       '/api/hosts/pools?host=' + encodeURIComponent(effectiveTarget || ''),
     ),
     enabled: advancedOpen && mode === 'offline' && !!effectiveTarget,
     staleTime: 15_000,
   });
   useEffect(() => {
-    if (!targetPool && poolsQuery.data?.some((p) => p.name === 'default')) {
-      setTargetPool('default');
-    }
+    if (targetPool || !poolsQuery.data || poolsQuery.data.length === 0) return;
+    // Prefer "default" when present, else first active pool. Mirrors
+    // the agent's server-side fallback so what the operator sees is
+    // what the agent would have picked anyway.
+    const preferred = poolsQuery.data.find((p) => p.name === 'default')
+      ?? poolsQuery.data.find((p) => p.state === 'running')
+      ?? poolsQuery.data[0];
+    if (preferred) setTargetPool(preferred.name);
   }, [poolsQuery.data, targetPool]);
 
   const checks: Check[] = useMemo(() => {
