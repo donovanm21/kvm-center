@@ -18,7 +18,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-          cache: true
+
+      # go.sum is generated on-demand in Dockerfile.build via `go mod
+      # tidy` and isn't committed, so the CI job has to materialise
+      # it before vet/test can resolve modules.
+      - name: go mod tidy
+        run: go mod tidy
 
       # Fast gates first — gofmt + vet catch 90% of trivially bad
       # commits in seconds.
