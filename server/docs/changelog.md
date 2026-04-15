@@ -10,6 +10,15 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.2
+- **Docs refresh.** README quick start now leads with
+  `--interactive`; `getting-started.md` explains the first-boot
+  wizard steps + the keep/reconfig/fresh/cancel menu on re-runs;
+  `api.md` drops the retired `/api/portal/health` entry and adds
+  the new `/api/setup/state` + `/api/setup/complete` endpoints;
+  `troubleshooting.md` replaces the old "build portal unreachable"
+  row with guidance for the consolidated `/downloads/*` path.
+
 ## v5.20.1
 - **Installer detects existing state.** `bootstrap.sh --interactive`
   now checks for a prior `.env`, the `kvm-center-mongo` volume, and a

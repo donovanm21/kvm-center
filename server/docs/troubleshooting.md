@@ -23,7 +23,7 @@ order: 80
 |---------|-----|
 | `enrollment token invalid or expired` | Tokens are one-time and live 10 min in memory. Mint a fresh one. |
 | Hypervisor doesn't show the mTLS pill | Cert exists but `hypervisor_certs.<hostid>` Host ID doesn't match. Check that you enrolled with the FQDN that matches the `_id` in `db.hosts`. |
-| Build portal unreachable from Deployment page | HTTPS SPA + HTTP portal ⇒ mixed-content block. Probe is server-proxied since v5.4.1; upgrade if older. |
+| Binary download fails from a hypervisor | Since v5.16 the server itself serves binaries at `http://<server>:8090/downloads/*` over plaintext (exempt from the HTTPS redirect) so agents can bootstrap before they trust the CA. Make sure 8090/tcp is reachable from the hypervisor's management VLAN. |
 
 ## Auth
 

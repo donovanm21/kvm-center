@@ -137,8 +137,19 @@ Filter + paginate. Newest first.
 - `GET /api/docs/tree` — list all pages (slug, title, section, order)
 - `GET /api/docs/page/<slug>` — rendered HTML + TOC
 
+## First-boot setup wizard (v5.20+)
+
+- `GET /api/setup/state` — **public**. Returns `{complete, completed_at,
+  has_any_host}`. The SPA reads this before login so it can redirect
+  an admin into the wizard on a fresh install. No secrets in the
+  response.
+- `POST /api/setup/complete` — admin (`user.manage`). Marks the
+  wizard finished so the SPA stops redirecting. Backfilled to
+  `complete=true` at boot on any upgrade path that already has an
+  admin user, so existing installs never see the wizard.
+
 ## Versioning + health
 
-- `GET /api/version` — `{"version": "v5.14.0"}`. Public.
+- `GET /api/version` — `{"version": "vX.Y.Z"}`. Public.
 - `GET /health` — `{"status": "ok"}`. Public.
 - `GET /downloads/*` — agent / kvm-tools / kvmctl binaries + install scripts (unauthenticated; enrollment token is the real gate on cluster access).
