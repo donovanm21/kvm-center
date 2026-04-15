@@ -386,38 +386,17 @@ body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
 /* Scrollable wrapper for long tables. Vertical overflow opens a scroll
    region; the thead sticks so column labels stay visible while reading
    down. Pair with the panel wrapper to keep the border treatment. */
+/* Match the Audit tab pattern: native scrollbar, sticky dark header,
+   no custom ::-webkit-scrollbar treatment. */
 .data-table-scroll {
   overflow: auto;
   max-height: 60vh;
-  /* Firefox */
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
 }
 .data-table-scroll .data-table thead th {
   position: sticky;
   top: 0;
   background: var(--bg-input);
   z-index: 1;
-}
-/* WebKit scrollbars — slim, dark, accent on hover. Matches the panel
-   palette so the bar reads as part of the surface rather than the OS. */
-.data-table-scroll::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-.data-table-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.data-table-scroll::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border: 2px solid var(--surface);   /* visually thins the thumb */
-  border-radius: 6px;
-}
-.data-table-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-dim, var(--accent));
-}
-.data-table-scroll::-webkit-scrollbar-corner {
-  background: transparent;
 }
 
 /* Pagination footer sits below the scroll region, reuses the same
@@ -433,45 +412,30 @@ body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
   color: var(--text-muted);
 }
 .data-pagination .spacer { flex: 1; }
+/* Matches the Audit tab's `input` style (height 32 / 0 10 padding /
+   bg-input / 1px border / 4px radius). Native dropdown caret, no
+   custom chevron — kept deliberately simple for consistency. */
 .data-pagination select {
-  height: 26px;
-  /* Leave room on the right for the custom chevron. */
-  padding: 0 26px 0 10px;
+  height: 32px;
+  padding: 0 10px;
   background: var(--bg-input);
   color: var(--text-body);
   border: 1px solid var(--border);
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 12px;
+  font-family: inherit;
   cursor: pointer;
-  /* Strip the native widget styling on every platform so our chevron
-     renders cleanly and the widget reads as part of the dark theme. */
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4 L5 7 L8 4' fill='none' stroke='%238B949E' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  background-size: 10px 10px;
-  transition: border-color 0.15s, color 0.15s;
-}
-.data-pagination select:hover {
-  color: var(--text-strong);
-  border-color: var(--border-strong, var(--accent-dim, var(--accent)));
-}
-.data-pagination select:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(227, 87, 30, 0.35);
 }
 .data-pagination button {
-  height: 26px;
-  min-width: 28px;
-  padding: 0 8px;
-  background: var(--surface-2);
+  height: 32px;
+  min-width: 32px;
+  padding: 0 10px;
+  background: var(--bg-input);
   color: var(--text-body);
   border: 1px solid var(--border);
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 12px;
+  font-family: inherit;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
