@@ -10,6 +10,12 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.17.2
+- **VMs list Guest-tools column.** Replaced the plain text with the
+  same tone-pill style as the Tools update centre: `current · vX.Y`,
+  `outdated · vX.Y`, `missing`, or `no tools`, with the long-form
+  explanation in the tooltip. Same pill on the Host detail VMs tab.
+
 ## v5.17.1
 - **Host detail de-duped.** The VM list that used to render on both
   Summary and the VMs tab now lives only on the VMs tab, which

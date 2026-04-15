@@ -4,9 +4,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { apiPost } from '@/api/client';
 import { HostMetricsGraphs } from '@/components/HostMetricsGraphs';
+import { KVMToolsPill } from '@/components/KVMToolsPill';
 import { Modal } from '@/components/Modal';
 import { useAuth } from '@/hooks/useAuth';
-import { useFeatures, useHosts, useStorage, useVMs } from '@/hooks/useInventory';
+import { useFeatures, useHosts, useKVMToolsLatest, useStorage, useVMs } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
 import { useVMCommand } from '@/hooks/useVMCommand';
 import type { Host, HostPCIDevice, StoragePool, VM } from '@/types';
@@ -303,7 +304,7 @@ function SummaryTab({ host }: { host: Host }) {
   );
 }
 
-function HostVMRow({ vm, host }: { vm: VM; host: Host }) {
+function HostVMRow({ vm, host, latestKVMTools }: { vm: VM; host: Host; latestKVMTools: string }) {
   const { hasPerm } = useAuth();
   const features = useFeatures();
   const cmd = useVMCommand();
@@ -351,8 +352,8 @@ function HostVMRow({ vm, host }: { vm: VM; host: Host }) {
           <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 36 }}>{cpuPct.toFixed(1)}%</span>
         </div>
       </td>
-      <td style={{ color: vm.guest_agent ? '#3FB950' : 'var(--text-faded)', fontSize: 11 }}>
-        {vm.guest_agent ? (vm.guest_source ?? 'present') : '—'}
+      <td>
+        <KVMToolsPill vm={vm} latest={latestKVMTools} showVersion />
       </td>
       <td>
         <div style={{ display: 'flex', gap: 4 }}>
@@ -473,6 +474,7 @@ const sectionHeader: React.CSSProperties = {
 /* ── VMs on this host ────────────────────────────────────── */
 function VMsTab({ host }: { host: Host }) {
   const vms = useVMs();
+  const latest = useKVMToolsLatest();
   const list = useMemo(
     () => (vms.data ?? []).filter((v: VM) => v.host_id === host.id),
     [vms.data, host.id],
@@ -497,7 +499,7 @@ function VMsTab({ host }: { host: Host }) {
         </thead>
         <tbody>
           {list.map((v) => (
-            <HostVMRow key={v.uuid} vm={v} host={host} />
+            <HostVMRow key={v.uuid} vm={v} host={host} latestKVMTools={latest.data?.version ?? ''} />
           ))}
         </tbody>
       </table>
