@@ -7,4 +7,5 @@ node_modules/
 server/staticv4/dist/
 .claude/
 .env
+.env.bak.*
 *.migrated

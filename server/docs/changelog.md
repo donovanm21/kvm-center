@@ -10,6 +10,25 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.0
+- **Interactive installer.** `scripts/bootstrap.sh --interactive`
+  is a bash+whiptail wizard that prompts for Mongo user / password
+  (auto-generates a 40-char secret when left blank), cluster DNS
+  domain, and offers to kick off `--deploy` at the end. Falls back
+  to plain `read` prompts if whiptail isn't installed. `.env` is
+  written with `0600`, gitignored (plus `.env.bak.*`), and the
+  captured password variable is unset from the shell so it can't
+  leak into `env` / `ps` output.
+- **First-boot web wizard.** After the admin account is created,
+  the SPA routes to `/setup` and walks the operator through four
+  optional steps: welcome, first hypervisor enrollment (mints the
+  one-time token + shows the install one-liner), notifications,
+  and metrics. Every step has a "Skip the rest" escape hatch so
+  the stack is always fully functional even if nothing after the
+  admin account is configured. A one-time `SetupComplete` flag
+  lives on the Features document and is back-filled to `true` on
+  upgrade paths so existing installs don't see the wizard.
+
 ## v5.19.0
 - **Legacy v3 HTML UI retired.** The React SPA has been the default
   at `/` since v4.0.0; the legacy HTML has now been removed

@@ -632,6 +632,14 @@ type Features struct {
 	DisableMigrations    bool `json:"disable_migrations"`
 	DisableStorageUpload bool `json:"disable_storage_upload"`
 	DisableStorageDelete bool `json:"disable_storage_delete"`
+
+	// SetupComplete gates the first-boot /setup wizard (v5.20). When
+	// false the SPA redirects admins into the wizard so they can
+	// optionally configure notifications, metrics, and enrol the first
+	// hypervisor. Back-filled to true on upgrades that already have an
+	// admin user so existing installs don't see the wizard.
+	SetupComplete   bool      `json:"setup_complete"`
+	SetupCompletedAt time.Time `json:"setup_completed_at,omitempty"`
 }
 
 // Permission constants. PermAdmin is a wildcard granting everything.
