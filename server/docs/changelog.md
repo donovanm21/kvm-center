@@ -10,6 +10,20 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.12
+- **Tests** — added coverage for two modules shipped without tests:
+  - `server/setup.go` (first-boot wizard) — state handler before
+    and after flip, idempotent complete, non-POST 405, backfill
+    skips fresh installs + marks complete when an admin exists.
+    Also locked in the v5.20.3 regression fix that preserves
+    `SetupComplete` through `/api/settings/update` payloads that
+    omit it.
+  - `server/host_metrics.go` (v5.17 in-UI sparklines) — ring
+    wrap + chronological order, weighted storage-percentage
+    across multiple pools, nil-host tolerance, handler envelope,
+    405 on non-GET, and the empty-samples path for an unknown
+    host ID. Full suite still green.
+
 ## v5.20.11
 - **Fix** — final gitleaks holdout was a historical commit of
   `authentication.md` where an example bearer token used the
