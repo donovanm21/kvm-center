@@ -61,14 +61,6 @@ export function UserMenu() {
           >
             <KeyIcon /> My API tokens
           </div>
-          <a
-            role="menuitem"
-            href="/legacy/"
-            style={{ ...itemStyle, textDecoration: 'none' }}
-            onClick={() => setOpen(false)}
-          >
-            <LegacyIcon /> Open legacy UI
-          </a>
           <div
             role="menuitem"
             style={{ ...itemStyle, color: '#F85149' }}
@@ -99,14 +91,6 @@ function KeyIcon() {
     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
       <path d="M0 8a4 4 0 0 1 7.465-2H14a.5.5 0 0 1 .354.146l1.5 1.5a.5.5 0 0 1 0 .708l-1.5 1.5a.5.5 0 0 1-.708 0L13 9.207l-.646.647a.5.5 0 0 1-.708 0L11 9.207l-.646.647a.5.5 0 0 1-.708 0L9 9.207l-.646.647a.5.5 0 0 1-.354.146H7.465A4 4 0 0 1 0 8zm4-3a3 3 0 1 0 2.712 4.284A.5.5 0 0 1 7.163 9h.63l.853-.854a.5.5 0 0 1 .708 0l.646.647.646-.647a.5.5 0 0 1 .708 0l.646.647.646-.647a.5.5 0 0 1 .708 0l.646.647.793-.793-1-1h-6.63a.5.5 0 0 1-.451-.285A3 3 0 0 0 4 5z"/>
       <path d="M4 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/>
-    </svg>
-  );
-}
-function LegacyIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-      <path d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z" />
-      <path d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0z" />
     </svg>
   );
 }

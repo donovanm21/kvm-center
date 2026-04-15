@@ -20,7 +20,7 @@ VLAN.
   but shouldn't be the only thing between the internet and `root`
   on your fleet.
 - **Don't** port-forward 8190 directly to the internet.
-- **Don't** expose 8081 (agent), 16514 (libvirt), 8090/8096
+- **Don't** expose 8081 (agent), 16514 (libvirt), 8090
   (internal services), or MongoDB (27017) to anything but the
   management VLAN. None of those should ever route off-LAN.
 
