@@ -162,7 +162,7 @@ function HypervisorStep({ onNext }: { onNext: () => void }) {
         type="text"
         value={hostID}
         onChange={(e) => setHostID(e.target.value)}
-        placeholder="e.g. hv01.example.lan"
+        placeholder="e.g. hv01.cluster.local"
         style={input}
       />
       <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>

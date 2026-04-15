@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # /etc/libvirt/hooks/qemu
 #
 # kvm-center migration-grant enforcement hook (v5.11.1+).

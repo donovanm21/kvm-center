@@ -60,7 +60,7 @@ server {
     error_page 401 = /_oauth2/sign_in;
 
     location / {
-        proxy_pass         https://REDACTED-HOST:8190;
+        proxy_pass         https://kvm-center.internal:8190;
         proxy_ssl_verify   off;       # self-signed backend
         proxy_set_header   Host              $host;
         proxy_set_header   X-Forwarded-For   $remote_addr;

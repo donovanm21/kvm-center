@@ -55,7 +55,10 @@ services:
       # Optional cluster DNS domain — hypervisor certs get a SAN at
       # <host_id>.<KVM_CENTER_CLUSTER_DOMAIN> so peers can connect by
       # FQDN without hostname-check failures.
-      - KVM_CENTER_CLUSTER_DOMAIN=${KVM_CENTER_CLUSTER_DOMAIN:-example.lan}
+      - KVM_CENTER_CLUSTER_DOMAIN=${KVM_CENTER_CLUSTER_DOMAIN:-cluster.local}
+      # Public URL seeds Features.PublicURL on first boot. Once an admin
+      # saves a value in Settings → General, the env is ignored.
+      - KVM_CENTER_PUBLIC_URL=${KVM_CENTER_PUBLIC_URL:-}
       - KVM_CENTER_DATA=/var/lib/kvm-center/data.json
       # v5.1+: point the server at the compose-local Mongo. First boot
       # migrates the legacy JSON store into the Mongo database and

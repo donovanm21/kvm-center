@@ -217,8 +217,15 @@ VM / hypervisor data on your hypervisors is NOT touched. Proceed?"; then
       echo "Generated a 40-char Mongo password (stored in .env mode 0600)."
     fi
 
-    prompt "Cluster" "Cluster DNS domain (used as a hypervisor cert SAN)" "example.lan" || { echo aborted; exit 1; }
+    prompt "Cluster" "Cluster DNS domain (used as a hypervisor cert SAN)" "cluster.local" || { echo aborted; exit 1; }
     CLUSTER_DOMAIN="$REPLY"
+
+    # Public URL threads into every install snippet on the Deployment
+    # page and webhook deep links. Blank is safe — the SPA falls back
+    # to window.location. Admins can set/change this later in Settings.
+    HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    prompt "Public URL" "Canonical URL clients use to reach this server (blank to skip)" "${HOST_IP:+https://${HOST_IP}:8190}" || { echo aborted; exit 1; }
+    PUBLIC_URL="$REPLY"
 
     umask 077
     {
@@ -227,6 +234,7 @@ VM / hypervisor data on your hypervisors is NOT touched. Proceed?"; then
       echo "KVM_MONGO_USER=${MONGO_USER}"
       echo "KVM_MONGO_PASSWORD=${MONGO_PW}"
       echo "KVM_CENTER_CLUSTER_DOMAIN=${CLUSTER_DOMAIN}"
+      [[ -n "$PUBLIC_URL" ]] && echo "KVM_CENTER_PUBLIC_URL=${PUBLIC_URL}"
     } > .env
     chmod 0600 .env
     # Clear the captured password from the shell env so it doesn't
@@ -290,7 +298,7 @@ EOF_ENV
     #   2. data.json inside the kvm-center-server container (no auth needed)
     #   3. /api/hosts (requires the server to allow unauth read; usually fails)
     # SSH auth: passwordless preferred, or sshpass + KVM_HVNODE_SSH_PASS.
-    BUILD_URL="${KVM_CENTER_BUILD_URL:-http://REDACTED-HOST:8090/downloads}"
+    BUILD_URL="${KVM_CENTER_BUILD_URL:-http://localhost:8090/downloads}"
     SSH_USER="${KVM_HVNODE_SSH_USER:-root}"
     if ! command -v curl >/dev/null 2>&1; then
       echo "ERROR: --update-agents needs curl" >&2

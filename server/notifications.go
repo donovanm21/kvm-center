@@ -308,7 +308,7 @@ func resourceLink(resource string) string {
 	if resource == "" {
 		return ""
 	}
-	base := strings.TrimRight(notificationLinkBase(), "/")
+	base := strings.TrimRight(notificationLinkBase(notifyStore), "/")
 	if base == "" {
 		return ""
 	}
@@ -323,11 +323,21 @@ func resourceLink(resource string) string {
 	return ""
 }
 
-// notificationLinkBase is the public URL the SPA is reachable at. Set
-// from the env so deep links in webhook embeds resolve. Leave blank to
-// disable links entirely (we won't guess at the operator's reverse
-// proxy posture).
-func notificationLinkBase() string {
+// notifyStore holds a reference to the persistence layer so
+// notificationLinkBase can pull Features.PublicURL at render time.
+// Set once at server boot in main.go.
+var notifyStore *Store
+
+// notificationLinkBase is the public URL the SPA is reachable at.
+// Prefers Features.PublicURL (operator-configured, editable from
+// Settings); falls back to KVM_CENTER_PUBLIC_URL env for bootstrap
+// parity. Empty disables deep links entirely.
+func notificationLinkBase(store *Store) string {
+	if store != nil {
+		if u := strings.TrimSpace(store.GetFeatures().PublicURL); u != "" {
+			return u
+		}
+	}
 	return strings.TrimSpace(envOrDefault("KVM_CENTER_PUBLIC_URL", ""))
 }
 

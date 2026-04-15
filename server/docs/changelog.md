@@ -10,6 +10,21 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.23.0
+- **Public URL setting** — Settings → General now has a "Public URL"
+  field. Set it once to the canonical address clients use to reach the
+  server (e.g. `https://kvm.example.com`) and it threads into every
+  install snippet on the Deployment page plus notification webhook
+  deep links. `bootstrap.sh --interactive` prompts for it on fresh
+  installs and writes `KVM_CENTER_PUBLIC_URL` to `.env` as a seed.
+  Leave blank to keep the prior behaviour (snippets built from
+  whatever URL you happen to be browsing on, no webhook deep links).
+- **Portability scrub** — removed environment-specific defaults from
+  shipped scripts and binaries. Agents and kvm-tools default to
+  `http://localhost:8090` when no `--server` flag is supplied; the
+  cluster DNS domain default is now `cluster.local`; docs and help
+  text use `kvm-center.example.com` placeholders.
+
 ## v5.20.14
 - **CI parity sync** — verified and documented that every security
   fix landed since v5.20.5 applies equally to GitHub Actions:
