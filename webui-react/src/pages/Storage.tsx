@@ -1,14 +1,12 @@
 import { useMemo, useState } from 'react';
 
 import { FileBrowserModal } from '@/components/FileBrowserModal';
-import { Pagination } from '@/components/Pagination';
+import { PaginationBar, usePagination } from '@/components/Pagination';
 import { SortableTH, useSort } from '@/components/SortableTH';
 import { useHosts, useStorage } from '@/hooks/useInventory';
 import type { StoragePool } from '@/types';
 
 type PoolSortKey = 'name' | 'host_id' | 'pool_type' | 'state' | 'capacity_gb' | 'allocation_gb' | 'available_gb' | 'path';
-
-const POOLS_PER_PAGE = 15;
 
 interface BrowseTarget {
   hostID: string;
@@ -20,7 +18,6 @@ export function Storage() {
   const hosts = useHosts();
   const [query, setQuery] = useState('');
   const [browse, setBrowse] = useState<BrowseTarget | null>(null);
-  const [page, setPage] = useState(1);
 
   const { sort, onToggle, compare } = useSort<PoolSortKey>('name');
 
@@ -35,9 +32,7 @@ export function Storage() {
     return [...base].sort((a, b) => compare(a[sort.key], b[sort.key]));
   }, [storage.data, query, sort, compare]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / POOLS_PER_PAGE));
-  const clampedPage = Math.min(page, totalPages);
-  const paged = filtered.slice((clampedPage - 1) * POOLS_PER_PAGE, clampedPage * POOLS_PER_PAGE);
+  const pg = usePagination(filtered);
 
   return (
     <>
@@ -46,7 +41,7 @@ export function Storage() {
           type="search"
           placeholder="Search storage pools…"
           value={query}
-          onChange={(e) => { setQuery(e.target.value); setPage(1); }}
+          onChange={(e) => setQuery(e.target.value)}
           style={searchStyle}
         />
       </div>
@@ -58,6 +53,8 @@ export function Storage() {
           <EmptyCell text={query ? 'No pools match your search.' : 'No storage pools reported yet.'} />
         )}
         {filtered.length > 0 && (
+          <>
+          <div className="data-table-scroll">
           <table className="data-table">
             <thead>
               <tr>
@@ -74,7 +71,7 @@ export function Storage() {
               </tr>
             </thead>
             <tbody>
-              {paged.map((p) => (
+              {pg.items.map((p) => (
                 <PoolRow
                   key={`${p.host_id}:${p.name}`}
                   pool={p}
@@ -83,18 +80,11 @@ export function Storage() {
               ))}
             </tbody>
           </table>
+          </div>
+          <PaginationBar pagination={pg} noun="pools" />
+          </>
         )}
       </div>
-      {totalPages > 1 && (
-        <Pagination
-          page={clampedPage}
-          totalPages={totalPages}
-          totalItems={filtered.length}
-          perPage={POOLS_PER_PAGE}
-          onChange={setPage}
-          noun="pools"
-        />
-      )}
 
       {browse && (
         <FileBrowserModal
