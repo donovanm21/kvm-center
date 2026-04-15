@@ -28,32 +28,32 @@ const auditRetentionMax = 10000
 // so the UI's filter dropdown has a canonical list and renames are
 // grep-safe.
 const (
-	AuditLogin         = "user.login"
-	AuditLogout        = "user.logout"
-	AuditUserCreate    = "user.create"
-	AuditUserUpdate    = "user.update"
-	AuditUserDelete    = "user.delete"
-	AuditGroupCreate   = "group.create"
-	AuditGroupUpdate   = "group.update"
-	AuditGroupDelete   = "group.delete"
-	AuditRoleCreate    = "role.create"
-	AuditRoleUpdate    = "role.update"
-	AuditRoleDelete    = "role.delete"
-	AuditIDPCreate     = "idp.create"
-	AuditIDPUpdate     = "idp.update"
-	AuditIDPDelete     = "idp.delete"
-	AuditFeatures      = "features.update"
-	AuditTLSUpload     = "tls.upload"
-	AuditTLSRegenerate = "tls.regenerate"
-	AuditDBMigrate     = "db.migrate"
-	AuditVMNotes       = "vm.notes"
-	AuditVMCreate      = "vm.create"
-	AuditVMDelete      = "vm.delete"
-	AuditVMAction      = "vm.action" // START/STOP/RESTART/FORCESTOP; detail carries the verb
-	AuditVMSnapshot    = "vm.snapshot"
-	AuditVMRevert      = "vm.snapshot.revert"
-	AuditVMSnapDelete  = "vm.snapshot.delete"
-	AuditMigrationStart = "migration.start"
+	AuditLogin           = "user.login"
+	AuditLogout          = "user.logout"
+	AuditUserCreate      = "user.create"
+	AuditUserUpdate      = "user.update"
+	AuditUserDelete      = "user.delete"
+	AuditGroupCreate     = "group.create"
+	AuditGroupUpdate     = "group.update"
+	AuditGroupDelete     = "group.delete"
+	AuditRoleCreate      = "role.create"
+	AuditRoleUpdate      = "role.update"
+	AuditRoleDelete      = "role.delete"
+	AuditIDPCreate       = "idp.create"
+	AuditIDPUpdate       = "idp.update"
+	AuditIDPDelete       = "idp.delete"
+	AuditFeatures        = "features.update"
+	AuditTLSUpload       = "tls.upload"
+	AuditTLSRegenerate   = "tls.regenerate"
+	AuditDBMigrate       = "db.migrate"
+	AuditVMNotes         = "vm.notes"
+	AuditVMCreate        = "vm.create"
+	AuditVMDelete        = "vm.delete"
+	AuditVMAction        = "vm.action" // START/STOP/RESTART/FORCESTOP; detail carries the verb
+	AuditVMSnapshot      = "vm.snapshot"
+	AuditVMRevert        = "vm.snapshot.revert"
+	AuditVMSnapDelete    = "vm.snapshot.delete"
+	AuditMigrationStart  = "migration.start"
 	AuditMigrationCancel = "migration.cancel"
 	// Grant lifecycle (v5.11). Three outcomes worth recording:
 	//   .issue     — server minted a grant for a migration
@@ -63,11 +63,11 @@ const (
 	AuditMigrationGrantIssue  = "migration.grant.issue"
 	AuditMigrationGrantAccept = "migration.grant.accept"
 	AuditMigrationGrantReject = "migration.grant.reject"
-	AuditConsoleOpen   = "vm.console"
-	AuditHostMaintEnter = "host.maintenance.enter"
-	AuditHostMaintExit  = "host.maintenance.exit"
-	AuditKVMToolsQueue  = "kvm-tools.queue-update"
-	AuditAuditShipping  = "audit.shipping.update"
+	AuditConsoleOpen          = "vm.console"
+	AuditHostMaintEnter       = "host.maintenance.enter"
+	AuditHostMaintExit        = "host.maintenance.exit"
+	AuditKVMToolsQueue        = "kvm-tools.queue-update"
+	AuditAuditShipping        = "audit.shipping.update"
 )
 
 // AddAuditEvent appends a new event, trims if we're over retention.
@@ -134,14 +134,14 @@ func (s *Store) GetAuditEvents(filter AuditFilter) ([]*models.AuditEvent, int) {
 
 // AuditFilter is matched case-insensitively where sensible.
 type AuditFilter struct {
-	ActorID string
-	Action  string
+	ActorID  string
+	Action   string
 	Resource string
-	Since   time.Time
-	Until   time.Time
-	Success *bool // nil = both
-	Offset  int
-	Limit   int
+	Since    time.Time
+	Until    time.Time
+	Success  *bool // nil = both
+	Offset   int
+	Limit    int
 }
 
 func (f AuditFilter) matches(ev *models.AuditEvent) bool {

@@ -17,14 +17,14 @@ import (
 // federated-provisioning path can find or create the local account.
 //
 // Flow:
-//   1. Dial (ldap:// or ldaps://) with a 10s timeout.
-//   2. If a service BindDN is set, bind with that and search for the user's
-//      DN using UserFilter.
-//   3. Otherwise (single-step mode) construct the DN from BindDN template
-//      or fall back to "username@domain"-style binds are out of scope —
-//      the filter mode covers AD and OpenLDAP equivalently.
-//   4. Bind as the discovered user DN with the submitted password.
-//   5. Return attributes needed by federatedLogin.
+//  1. Dial (ldap:// or ldaps://) with a 10s timeout.
+//  2. If a service BindDN is set, bind with that and search for the user's
+//     DN using UserFilter.
+//  3. Otherwise (single-step mode) construct the DN from BindDN template
+//     or fall back to "username@domain"-style binds are out of scope —
+//     the filter mode covers AD and OpenLDAP equivalently.
+//  4. Bind as the discovered user DN with the submitted password.
+//  5. Return attributes needed by federatedLogin.
 func ldapAuthenticate(p *models.IdentityProvider, username, password string) (subject, email, uname string, err error) {
 	if p.LDAP == nil {
 		err = errors.New("provider has no LDAP config")

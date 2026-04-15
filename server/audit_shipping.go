@@ -208,7 +208,9 @@ func shipHTTP(cfg *models.AuditShipping, events []*models.AuditEvent) error {
 }
 
 // shipSyslog sends one RFC 5424 message per event. Endpoint format:
-//   "udp://host:port"  | "tcp://host:port"  | "host:port" (defaults UDP)
+//
+//	"udp://host:port"  | "tcp://host:port"  | "host:port" (defaults UDP)
+//
 // Structured data carries the event fields so downstream parsers
 // (syslog-ng, rsyslog, Graylog) can index them without regex.
 func shipSyslog(cfg *models.AuditShipping, events []*models.AuditEvent) error {

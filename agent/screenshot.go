@@ -121,7 +121,9 @@ func captureVMScreenshot(vmName string) ([]byte, error) {
 }
 
 // ppmToPNG converts a binary P6 PPM to PNG. P6 layout is:
-//   "P6\n<width> <height>\n<maxval>\n<raw RGB bytes>"
+//
+//	"P6\n<width> <height>\n<maxval>\n<raw RGB bytes>"
+//
 // with any amount of whitespace (including comments starting with #)
 // between the header tokens.
 func ppmToPNG(data []byte) ([]byte, error) {
@@ -210,4 +212,3 @@ func readToken(r *bytes.Reader) (string, error) {
 		sb.WriteByte(b)
 	}
 }
-

@@ -16,11 +16,11 @@ import (
 	"kvm-center/internal/models"
 )
 
-
 // staticV4 embeds the built React SPA (webui-react/dist) produced by the
 // "vite build" step in the Docker image. In local dev the directory may
 // be empty — the /v4/ mux check below handles that gracefully so "go run
 // ./server" still works without a Node build pass.
+//
 //go:embed all:staticv4
 var staticV4Files embed.FS
 
@@ -189,7 +189,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// API routes.
-	mux.HandleFunc("/api/events",    handleSSEEvents(hub))
+	mux.HandleFunc("/api/events", handleSSEEvents(hub))
 	mux.HandleFunc("/api/telemetry", handleTelemetry(store))
 	mux.HandleFunc("/api/hosts", handleGetHosts(store))
 	// Maintenance routes share the /api/hosts/ prefix; dispatch by suffix.
@@ -206,13 +206,13 @@ func main() {
 		}
 	})
 	mux.Handle("/api/audit", requirePerm(store, "audit.view", http.HandlerFunc(handleAuditList(store))))
-	mux.Handle("/api/snapshot-policies",  requirePerm(store, "vm.snapshot", http.HandlerFunc(handleSnapshotPolicies(store))))
+	mux.Handle("/api/snapshot-policies", requirePerm(store, "vm.snapshot", http.HandlerFunc(handleSnapshotPolicies(store))))
 	mux.Handle("/api/snapshot-policies/", requirePerm(store, "vm.snapshot", http.HandlerFunc(handleSnapshotPolicy(store))))
-	mux.Handle("/api/settings/audit-shipping",       requirePerm(store, "user.manage", http.HandlerFunc(auditShippingRouter(store))))
-	mux.Handle("/api/settings/audit-shipping/test",  requirePerm(store, "user.manage", http.HandlerFunc(handleAuditShippingTest(store))))
-	mux.Handle("/api/settings/notifications",      requirePerm(store, "user.manage", http.HandlerFunc(handleNotifications(store))))
+	mux.Handle("/api/settings/audit-shipping", requirePerm(store, "user.manage", http.HandlerFunc(auditShippingRouter(store))))
+	mux.Handle("/api/settings/audit-shipping/test", requirePerm(store, "user.manage", http.HandlerFunc(handleAuditShippingTest(store))))
+	mux.Handle("/api/settings/notifications", requirePerm(store, "user.manage", http.HandlerFunc(handleNotifications(store))))
 	mux.Handle("/api/settings/notifications/test", requirePerm(store, "user.manage", http.HandlerFunc(handleNotificationTest(store))))
-	mux.Handle("/api/settings/metrics",      requirePerm(store, "user.manage", http.HandlerFunc(handleMetricsSettings(store))))
+	mux.Handle("/api/settings/metrics", requirePerm(store, "user.manage", http.HandlerFunc(handleMetricsSettings(store))))
 	mux.Handle("/api/settings/metrics/test", requirePerm(store, "user.manage", http.HandlerFunc(handleMetricsTest(store))))
 	// Docs (v5.14). Public — reference material, not operational state.
 	mux.HandleFunc("/api/docs/tree", handleDocsTree)
@@ -223,13 +223,13 @@ func main() {
 		w.Write(grafanaDashboard)
 	})
 	// Admin-scoped system tokens (user.manage).
-	mux.Handle("/api/tokens",  requirePerm(store, "user.manage", http.HandlerFunc(handleAPITokens(store))))
+	mux.Handle("/api/tokens", requirePerm(store, "user.manage", http.HandlerFunc(handleAPITokens(store))))
 	// Self-service user tokens (any signed-in user). More-specific path
 	// must be registered before /api/tokens/ so http.ServeMux picks the
 	// right handler.
-	mux.Handle("/api/tokens/me",  http.HandlerFunc(handleMyAPITokens(store)))
+	mux.Handle("/api/tokens/me", http.HandlerFunc(handleMyAPITokens(store)))
 	mux.Handle("/api/tokens/me/", http.HandlerFunc(handleMyAPIToken(store)))
-	mux.Handle("/api/tokens/",    requirePerm(store, "user.manage", http.HandlerFunc(handleAPIToken(store))))
+	mux.Handle("/api/tokens/", requirePerm(store, "user.manage", http.HandlerFunc(handleAPIToken(store))))
 
 	// Hypervisor PKI (v5.10.0). Admin-gated except /sign (which is
 	// protected by the one-time enrollment token) and /bundle (public
@@ -240,7 +240,7 @@ func main() {
 	// Grant pub-key (v5.11). Public trust material, so served without
 	// auth so fresh agents can fetch during first contact.
 	mux.HandleFunc("/api/migrations/grant-pubkey", handleGrantPubKey(grantSigner))
-	mux.Handle("/api/ca/hypervisors",  requirePerm(store, "tls.manage", http.HandlerFunc(handleCAHypervisors(store, clusterCA))))
+	mux.Handle("/api/ca/hypervisors", requirePerm(store, "tls.manage", http.HandlerFunc(handleCAHypervisors(store, clusterCA))))
 	mux.Handle("/api/ca/hypervisors/", requirePerm(store, "tls.manage", http.HandlerFunc(handleCARevoke(store))))
 	mux.HandleFunc("/api/vms", handleGetVMs(store))
 	mux.HandleFunc("/api/vms/snapshots", handleVMSnapshots(store))
@@ -251,14 +251,14 @@ func main() {
 	// both ride through the server's HTTPS origin so every hit is
 	// re-validated against the operator's session cookie. Sharing the
 	// URL with someone who doesn't carry that cookie does nothing.
-	mux.Handle("/api/console/",    requirePerm(store, "vm.console", http.HandlerFunc(handleConsolePage(store))))
+	mux.Handle("/api/console/", requirePerm(store, "vm.console", http.HandlerFunc(handleConsolePage(store))))
 	mux.Handle("/api/console-ws/", requirePerm(store, "vm.console", http.HandlerFunc(handleConsoleWSProxy(store))))
 	mux.HandleFunc("/api/storage", handleGetStorage(store))
 	mux.Handle("/api/storage/browse", requirePerm(store, "storage.view", http.HandlerFunc(handleStorageBrowse(store))))
 	mux.Handle("/api/storage/upload", requirePerm(store, "storage.upload", http.HandlerFunc(handleStorageUpload(store))))
-	mux.Handle("/api/storage/file",   requirePerm(store, "storage.delete", http.HandlerFunc(handleStorageDelete(store))))
+	mux.Handle("/api/storage/file", requirePerm(store, "storage.delete", http.HandlerFunc(handleStorageDelete(store))))
 	mux.Handle("/api/vm-create-info", requirePerm(store, "vm.create", http.HandlerFunc(handleVMCreateInfo(store))))
-	mux.Handle("/api/vm-create",      requirePerm(store, "vm.create", http.HandlerFunc(handleVMCreate(store))))
+	mux.Handle("/api/vm-create", requirePerm(store, "vm.create", http.HandlerFunc(handleVMCreate(store))))
 	mux.HandleFunc("/api/command", handleCommand(store))
 	mux.HandleFunc("/api/guest-telemetry", handleGuestTelemetry(store))
 	mux.HandleFunc("/api/migrations", handleGetMigrations(store))
@@ -297,29 +297,29 @@ func main() {
 	})
 
 	// ── Auth + RBAC ────────────────────────────────────────────
-	mux.HandleFunc("/api/auth/status",   handleAuthStatus(store))
+	mux.HandleFunc("/api/auth/status", handleAuthStatus(store))
 	mux.HandleFunc("/api/auth/register", handleAuthRegister(store))
-	mux.HandleFunc("/api/auth/login",    handleAuthLogin(store))
-	mux.HandleFunc("/api/auth/logout",   handleAuthLogout(store))
-	mux.HandleFunc("/api/auth/me",       handleAuthMe(store))
-	mux.HandleFunc("/api/auth/2fa/setup",   handleTOTPSetup(store))
-	mux.HandleFunc("/api/auth/2fa/enable",  handleTOTPEnable(store))
+	mux.HandleFunc("/api/auth/login", handleAuthLogin(store))
+	mux.HandleFunc("/api/auth/logout", handleAuthLogout(store))
+	mux.HandleFunc("/api/auth/me", handleAuthMe(store))
+	mux.HandleFunc("/api/auth/2fa/setup", handleTOTPSetup(store))
+	mux.HandleFunc("/api/auth/2fa/enable", handleTOTPEnable(store))
 	mux.HandleFunc("/api/auth/2fa/disable", handleTOTPDisable(store))
 	// Federated sign-in (public): list providers + OAuth2/OIDC start+callback.
-	mux.HandleFunc("/api/auth/providers",      handleListProviders(store))
-	mux.HandleFunc("/api/auth/oidc/start",     handleOIDCStart(store))
-	mux.HandleFunc("/api/auth/oidc/callback",  handleOIDCCallback(store))
-	mux.HandleFunc("/api/auth/saml/start",     handleSAMLStart(store))
-	mux.HandleFunc("/api/auth/saml/acs",       handleSAMLACS(store))
-	mux.HandleFunc("/api/auth/saml/metadata",  handleSAMLMetadata(store))
+	mux.HandleFunc("/api/auth/providers", handleListProviders(store))
+	mux.HandleFunc("/api/auth/oidc/start", handleOIDCStart(store))
+	mux.HandleFunc("/api/auth/oidc/callback", handleOIDCCallback(store))
+	mux.HandleFunc("/api/auth/saml/start", handleSAMLStart(store))
+	mux.HandleFunc("/api/auth/saml/acs", handleSAMLACS(store))
+	mux.HandleFunc("/api/auth/saml/metadata", handleSAMLMetadata(store))
 	// Admin IdP CRUD (requires user.manage).
-	mux.Handle("/api/idps",     requirePerm(store, "user.manage", handleIDPsList(store)))
+	mux.Handle("/api/idps", requirePerm(store, "user.manage", handleIDPsList(store)))
 	mux.Handle("/api/idps/new", requirePerm(store, "user.manage", handleIDPsCreate(store)))
-	mux.Handle("/api/idps/",    requirePerm(store, "user.manage", handleIDPUpdate(store)))
+	mux.Handle("/api/idps/", requirePerm(store, "user.manage", handleIDPUpdate(store)))
 	// Global feature flags. GET is readable by any signed-in user (the UI
 	// needs it to grey out disabled buttons); writes require user.manage.
-	mux.HandleFunc("/api/settings",       handleFeaturesGet(store))
-	mux.Handle("/api/settings/update",    requirePerm(store, "user.manage", handleFeaturesUpdate(store)))
+	mux.HandleFunc("/api/settings", handleFeaturesGet(store))
+	mux.Handle("/api/settings/update", requirePerm(store, "user.manage", handleFeaturesUpdate(store)))
 
 	// First-boot setup wizard (v5.20). /state is public because the SPA
 	// needs to read it before the user signs in; /complete requires
@@ -329,19 +329,19 @@ func main() {
 	mux.Handle("/api/setup/complete", requirePerm(store, "user.manage", http.HandlerFunc(handleSetupComplete(store))))
 	// Database backend status + migration (v5.1+). Gated on user.manage;
 	// considered a platform-ops operation alongside TLS management.
-	mux.Handle("/api/settings/database",         requirePerm(store, "user.manage", handleDatabaseStatus(store)))
-	mux.Handle("/api/settings/database/test",    requirePerm(store, "user.manage", handleDatabaseTest()))
+	mux.Handle("/api/settings/database", requirePerm(store, "user.manage", handleDatabaseStatus(store)))
+	mux.Handle("/api/settings/database/test", requirePerm(store, "user.manage", handleDatabaseTest()))
 	mux.Handle("/api/settings/database/migrate", requirePerm(store, "user.manage", handleDatabaseMigrate(store)))
 	// Admin-only user/group/role CRUD (require user.manage permission).
-	mux.Handle("/api/users",       requirePerm(store, "user.manage", handleUsersList(store)))
-	mux.Handle("/api/users/new",   requirePerm(store, "user.manage", handleUsersCreate(store)))
-	mux.Handle("/api/users/",      requirePerm(store, "user.manage", handleUserUpdate(store)))
-	mux.Handle("/api/groups",      requirePerm(store, "user.manage", handleGroupsList(store)))
-	mux.Handle("/api/groups/new",  requirePerm(store, "user.manage", handleGroupsCreate(store)))
-	mux.Handle("/api/groups/",     requirePerm(store, "user.manage", handleGroupUpdate(store)))
-	mux.Handle("/api/roles",       requirePerm(store, "user.manage", handleRolesList(store)))
-	mux.Handle("/api/roles/new",   requirePerm(store, "user.manage", handleRolesCreate(store)))
-	mux.Handle("/api/roles/",      requirePerm(store, "user.manage", handleRoleUpdate(store)))
+	mux.Handle("/api/users", requirePerm(store, "user.manage", handleUsersList(store)))
+	mux.Handle("/api/users/new", requirePerm(store, "user.manage", handleUsersCreate(store)))
+	mux.Handle("/api/users/", requirePerm(store, "user.manage", handleUserUpdate(store)))
+	mux.Handle("/api/groups", requirePerm(store, "user.manage", handleGroupsList(store)))
+	mux.Handle("/api/groups/new", requirePerm(store, "user.manage", handleGroupsCreate(store)))
+	mux.Handle("/api/groups/", requirePerm(store, "user.manage", handleGroupUpdate(store)))
+	mux.Handle("/api/roles", requirePerm(store, "user.manage", handleRolesList(store)))
+	mux.Handle("/api/roles/new", requirePerm(store, "user.manage", handleRolesCreate(store)))
+	mux.Handle("/api/roles/", requirePerm(store, "user.manage", handleRoleUpdate(store)))
 
 	// Purge expired sessions every 10 minutes.
 	go func() {

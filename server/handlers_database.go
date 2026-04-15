@@ -68,10 +68,10 @@ func handleDatabaseMigrate(store *Store) http.HandlerFunc {
 			return
 		}
 		var body struct {
-			To     string `json:"to"`     // "json" | "mongo"
-			URL    string `json:"url"`    // required when to=mongo
+			To     string `json:"to"`  // "json" | "mongo"
+			URL    string `json:"url"` // required when to=mongo
 			DBName string `json:"db"`
-			Path   string `json:"path"`   // required when to=json
+			Path   string `json:"path"` // required when to=json
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())

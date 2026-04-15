@@ -28,7 +28,9 @@ const snapshotNamePrefix = "policy-"
 
 // snapshotName returns the name the scheduler uses for policy-
 // generated snapshots. Format:
-//   policy-<policyID>-<YYYYMMDD-HHMMSS>
+//
+//	policy-<policyID>-<YYYYMMDD-HHMMSS>
+//
 // The prefix is the discrimination signal for retention cleanup — a
 // manual snapshot won't share it and therefore won't be touched.
 func snapshotName(policyID string, at time.Time) string {
@@ -414,11 +416,11 @@ func handleSnapshotPolicy(store *Store) http.HandlerFunc {
 				return
 			}
 			var req struct {
-				Name          *string  `json:"name,omitempty"`
-				Enabled       *bool    `json:"enabled,omitempty"`
+				Name          *string   `json:"name,omitempty"`
+				Enabled       *bool     `json:"enabled,omitempty"`
 				VMUUIDs       *[]string `json:"vm_uuids,omitempty"`
-				EveryMinutes  *int     `json:"every_minutes,omitempty"`
-				RetentionKeep *int     `json:"retention_keep,omitempty"`
+				EveryMinutes  *int      `json:"every_minutes,omitempty"`
+				RetentionKeep *int      `json:"retention_keep,omitempty"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())

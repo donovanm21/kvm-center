@@ -67,12 +67,12 @@ type GuestTelemetryPayload struct {
 }
 
 // TelemetryReply is the server's response to a telemetry POST.
-// - UpdateURL triggers a self-update (download + rename(2) + exit,
-//   systemd's Restart=always brings it back on the new binary).
-// - CanonicalUUID is set when the server detected that our DMI UUID
-//   collides with a different VM (classic cloned-VM footgun). The
-//   daemon caches it to /var/lib/kvm-tools/uuid and uses that from
-//   then on, surviving reboots.
+//   - UpdateURL triggers a self-update (download + rename(2) + exit,
+//     systemd's Restart=always brings it back on the new binary).
+//   - CanonicalUUID is set when the server detected that our DMI UUID
+//     collides with a different VM (classic cloned-VM footgun). The
+//     daemon caches it to /var/lib/kvm-tools/uuid and uses that from
+//     then on, surviving reboots.
 type TelemetryReply struct {
 	Status        string `json:"status"`
 	UpdateURL     string `json:"update_url,omitempty"`
@@ -281,14 +281,14 @@ func collect(uuid string) GuestTelemetryPayload {
 		ips = append(ips, i.Addrs...)
 	}
 	return GuestTelemetryPayload{
-		VMUUID:     uuid,
-		Hostname:   h,
-		OS:         readOSPretty(),
-		Kernel:     readKernel(),
-		Uptime:     readUptime(),
-		CPUCount:   runtime.NumCPU(),
-		MemTotalMB: memTotal,
-		MemUsedMB:  memUsed,
+		VMUUID:          uuid,
+		Hostname:        h,
+		OS:              readOSPretty(),
+		Kernel:          readKernel(),
+		Uptime:          readUptime(),
+		CPUCount:        runtime.NumCPU(),
+		MemTotalMB:      memTotal,
+		MemUsedMB:       memUsed,
 		IPs:             ips,
 		Interfaces:      ifaces,
 		FS:              readFilesystems(),

@@ -141,10 +141,10 @@ func handleHostMetrics(store *Store) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"host_id":       id,
-			"window_cap":    hostMetricCap,
-			"interval_sec":  30,
-			"samples":       samples,
+			"host_id":      id,
+			"window_cap":   hostMetricCap,
+			"interval_sec": 30,
+			"samples":      samples,
 		})
 	}
 }
