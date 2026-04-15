@@ -10,6 +10,13 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.4
+- **Deployment page.** Direct Downloads table split into tabs —
+  KVM Tools, Hypervisor Agent, kvmctl CLI — so each component's
+  artefacts sit under their own heading instead of one long
+  15-row list. Added `update-agent.sh` to the Hypervisor Agent
+  tab for completeness.
+
 ## v5.20.3
 - **Fix** — `POST /api/settings/update` no longer clobbers the
   `SetupComplete` flag when the payload omits it. Only the Disable*
