@@ -78,7 +78,7 @@ code after the password succeeds.
 ### curl with a token
 
 ```sh
-TOKEN=kvmc_d82c944f.7b77973d668913cc7eb97749dfcfd2f1f5a7ac7ba780e63a
+TOKEN=kvmc_xxxxxxxx.yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
 curl -H "Authorization: Bearer $TOKEN" https://kvm.example.com:8190/api/hosts
 ```
 

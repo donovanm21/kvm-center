@@ -14,7 +14,7 @@ RUN npm run build
 # scripts. The runtime image copies this into /app/dist so the server
 # can serve them over /downloads/*. Consolidates what used to be the
 # standalone kvm-center-build container on port 8097 (v5.16).
-FROM golang:1.22-alpine AS artifacts
+FROM golang:1.25-alpine AS artifacts
 
 WORKDIR /src
 COPY . .
@@ -47,13 +47,11 @@ RUN mkdir -p /dist && \
     cp /src/scripts/libvirt-hooks-qemu.sh /dist/libvirt-hooks-qemu.sh && \
     chmod +x /dist/install-agent.sh /dist/update-agent.sh /dist/install-kvm-tools.sh \
              /dist/install-kvmctl.sh /dist/libvirt-hooks-qemu.sh && \
-    (cp /src/migration-keys/kvm-migrator-key     /dist/ 2>/dev/null || true) && \
-    (cp /src/migration-keys/kvm-migrator-key.pub /dist/ 2>/dev/null || true) && \
     ln -sf kvm-tools-linux-amd64 /dist/kvm-tools-amd64 && \
     ln -sf kvm-tools-linux-arm64 /dist/kvm-tools-arm64
 
 # ── Stage 1c: Build the Go server ─────────────────────────────────────────────
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /src
 COPY go.mod go.su[m] ./
