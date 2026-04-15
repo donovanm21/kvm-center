@@ -10,6 +10,14 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.18.3
+- **Dark scrollbars + dark dropdowns — everywhere.** Native OS chrome
+  on `<select>` and default scrollbars were bleeding through on the
+  Audit, Deployment, and pagination surfaces. Applied the strip +
+  repaint at `globals.css` so every select gets the dark input box
+  with a custom chevron, and every scrollbar (WebKit + Firefox) gets
+  a slim dark thumb with an accent hover. No more shiny OS widgets.
+
 ## v5.18.2
 - **Pagination styling matches the Audit tab.** Dropped the custom
   scrollbar treatment and the custom chevron on the rows-per-page
