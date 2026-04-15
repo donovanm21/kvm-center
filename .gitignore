@@ -1,5 +1,13 @@
 kvm-center-server
 kvm-center-agent
+kvm-center-agent-*
+kvm-tools-*
+kvmctl-*
+install-kvm-tools.sh
+install-agent.sh
+install-kvmctl.*
+update-agent.sh
+libvirt-hooks-qemu.sh
 dist/
 data.json
 *.tar.gz

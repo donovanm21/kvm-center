@@ -10,6 +10,20 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.8
+- **Fix** — Gitea Actions runner was cancelling every workflow on
+  this repo because it advertised `docker / linux / amd64` and the
+  workflow asked for `ubuntu-latest`. Re-registered the runner with
+  `ubuntu-latest:docker://catthehacker/ubuntu:act-latest` plus
+  `ubuntu-22.04` / `ubuntu-20.04` siblings so GitHub-style workflows
+  run unmodified.
+- **Chore** — `gofmt -w .` across the tree (28 files) so the
+  lint-test gate stays green; no behaviour changes.
+- `.gitignore` extended to catch build outputs that previously landed
+  at the repo root (`kvm-center-agent-*`, `kvm-tools-*`, `kvmctl-*`,
+  and the various `install-*.sh/.ps1` scripts produced by the
+  artifacts stage when `go build` runs in a volume-mounted repo).
+
 ## v5.20.7
 - **Auto-filed issues on CI security-gate failure.** Both workflows
   now add an `open-issue-on-failure` job that fires when a gate
