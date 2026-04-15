@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # bootstrap.sh — Operational launcher for KVM Center.
-# Manages: server, webui, build-server, deploy, and agent installation.
+# Manages: server, stack, deploy, and agent installation.
 #
-# Usage: ./scripts/bootstrap.sh [--server | --webui | --stack | --build | --deploy | --deploy-agent]
+# Usage: ./scripts/bootstrap.sh [--server | --stack | --deploy | --deploy-agent]
 #
 set -euo pipefail
 
@@ -20,8 +20,7 @@ Modes:
                     domain, etc., writes .env (0600), then runs --deploy
   --server          Run the server locally (go run)
   --agent           Run the agent locally (go run, for testing)
-  --stack           Build and start the full Docker stack (server + webui)
-  --build           Run the Dockerfile.build container (compiles + serves artifacts on :8080)
+  --stack           Build and start the full Docker stack
   --deploy          Pull latest git, rebuild Docker stack, push agent updates
   --update-agents   Push the latest agent binary to every known hypervisor
   --logs            Tail Docker stack logs
@@ -73,14 +72,8 @@ case "$MODE" in
     docker compose build --build-arg GIT_SHA="$GIT_SHA"
     docker compose up -d
     echo ""
-    echo "  Web UI → http://$(hostname -I | awk '{print $1}'):8095"
-    echo "  API    → http://$(hostname -I | awk '{print $1}'):8090"
-    ;;
-
-  --build)
-    echo "Building artifact server (binaries will be served on :8080)..."
-    docker build -f Dockerfile.build -t kvm-center-build:latest .
-    docker run --rm -p 8080:8080 --name kvm-center-build kvm-center-build:latest
+    echo "  Web UI → http://$(hostname -I | awk '{print $1}'):8090"
+    echo "  API    → http://$(hostname -I | awk '{print $1}'):8090/api"
     ;;
 
   --interactive)

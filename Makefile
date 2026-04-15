@@ -47,8 +47,8 @@ docker-build:
 docker-up:
 	docker compose up -d
 	@echo ""
-	@echo "  Web UI  → http://localhost:8096"
-	@echo "  API     → http://localhost:8090"
+	@echo "  Web UI  → http://localhost:8090"
+	@echo "  API     → http://localhost:8090/api"
 	@echo ""
 
 docker-down:
@@ -56,10 +56,6 @@ docker-down:
 
 docker-logs:
 	docker compose logs -f
-
-docker-build-server:
-	docker build -f Dockerfile.build -t kvm-center-build:latest .
-	docker run --rm -p 8080:8080 kvm-center-build:latest
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
