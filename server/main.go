@@ -33,6 +33,13 @@ var staticV4Files embed.FS
 //
 //go:embed VERSION
 var versionRaw string
+
+// grafanaDashboard is the importable dashboard template shipped to
+// operators via /api/grafana/dashboard.json. Embedded so it stays
+// pinned to the release — edits travel with the binary.
+//
+//go:embed grafana-dashboard.json
+var grafanaDashboard []byte
 var Version = strings.TrimSpace(versionRaw)
 
 func main() {
@@ -207,6 +214,11 @@ func main() {
 	mux.Handle("/api/settings/notifications/test", requirePerm(store, "user.manage", http.HandlerFunc(handleNotificationTest(store))))
 	mux.Handle("/api/settings/metrics",      requirePerm(store, "user.manage", http.HandlerFunc(handleMetricsSettings(store))))
 	mux.Handle("/api/settings/metrics/test", requirePerm(store, "user.manage", http.HandlerFunc(handleMetricsTest(store))))
+	mux.HandleFunc("/api/grafana/dashboard.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", `attachment; filename="kvm-center-dashboard.json"`)
+		w.Write(grafanaDashboard)
+	})
 	// Admin-scoped system tokens (user.manage).
 	mux.Handle("/api/tokens",  requirePerm(store, "user.manage", http.HandlerFunc(handleAPITokens(store))))
 	// Self-service user tokens (any signed-in user). More-specific path
