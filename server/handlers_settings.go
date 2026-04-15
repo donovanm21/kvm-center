@@ -54,7 +54,7 @@ func handleFeaturesUpdate(store *Store) http.Handler {
 // featureBlocked returns a 403 with a short explanation and true when
 // the named feature is disabled. Call from the top of an endpoint:
 //
-//   if featureBlocked(w, store, "vm_create", "creating VMs is disabled") { return }
+//	if featureBlocked(w, store, "vm_create", "creating VMs is disabled") { return }
 func featureBlocked(w http.ResponseWriter, store *Store, key, label string) bool {
 	f := store.GetFeatures()
 	var off bool

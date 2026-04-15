@@ -22,25 +22,25 @@ func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
 
 // persistData is the on-disk JSON structure.
 type persistData struct {
-	Hosts      map[string]*models.Host             `json:"hosts"`
-	VMs        map[string][]*models.VM             `json:"vms"`
-	Storage    map[string][]*models.StoragePool    `json:"storage"`
-	VMNotes    map[string]string                   `json:"vm_notes"`
-	GuestData  map[string]*guestEntry              `json:"guest_data"`
-	Migrations []*models.MigrationRecord           `json:"migrations,omitempty"`
-	Users      map[string]*models.User             `json:"users,omitempty"`
-	Groups     map[string]*models.Group            `json:"groups,omitempty"`
-	Roles      map[string]*models.Role             `json:"roles,omitempty"`
-	Sessions   map[string]*models.Session          `json:"sessions,omitempty"`
-	IDPs       map[string]*models.IdentityProvider `json:"idps,omitempty"`
-	Features   *models.Features                    `json:"features,omitempty"`
-	Audit            []*models.AuditEvent     `json:"audit,omitempty"`
-	AuditShipping    *models.AuditShipping    `json:"audit_shipping,omitempty"`
-	SnapshotPolicies map[string]*models.SnapshotPolicy `json:"snapshot_policies,omitempty"`
-	Notifications    *models.NotificationConfig        `json:"notifications,omitempty"`
-	Metrics          *models.MetricsConfig             `json:"metrics,omitempty"`
-	APITokens        map[string]*models.APIToken       `json:"api_tokens,omitempty"`
-	HypervisorCerts  map[string]*models.HypervisorCert `json:"hypervisor_certs,omitempty"`
+	Hosts            map[string]*models.Host             `json:"hosts"`
+	VMs              map[string][]*models.VM             `json:"vms"`
+	Storage          map[string][]*models.StoragePool    `json:"storage"`
+	VMNotes          map[string]string                   `json:"vm_notes"`
+	GuestData        map[string]*guestEntry              `json:"guest_data"`
+	Migrations       []*models.MigrationRecord           `json:"migrations,omitempty"`
+	Users            map[string]*models.User             `json:"users,omitempty"`
+	Groups           map[string]*models.Group            `json:"groups,omitempty"`
+	Roles            map[string]*models.Role             `json:"roles,omitempty"`
+	Sessions         map[string]*models.Session          `json:"sessions,omitempty"`
+	IDPs             map[string]*models.IdentityProvider `json:"idps,omitempty"`
+	Features         *models.Features                    `json:"features,omitempty"`
+	Audit            []*models.AuditEvent                `json:"audit,omitempty"`
+	AuditShipping    *models.AuditShipping               `json:"audit_shipping,omitempty"`
+	SnapshotPolicies map[string]*models.SnapshotPolicy   `json:"snapshot_policies,omitempty"`
+	Notifications    *models.NotificationConfig          `json:"notifications,omitempty"`
+	Metrics          *models.MetricsConfig               `json:"metrics,omitempty"`
+	APITokens        map[string]*models.APIToken         `json:"api_tokens,omitempty"`
+	HypervisorCerts  map[string]*models.HypervisorCert   `json:"hypervisor_certs,omitempty"`
 	// ConsoleSecret is the HMAC-SHA256 key the server uses to mint
 	// per-session VM console tokens (see console_token.go). Generated
 	// on first use; persisted so agents that cached it don't need a
@@ -72,10 +72,10 @@ type Store struct {
 	vmNotes    map[string]string                // keyed by VM UUID (lowercased)
 	guestData  map[string]*guestEntry           // keyed by VM UUID (lowercased)
 	migrations []*models.MigrationRecord
-	users      map[string]*models.User  // keyed by user ID
-	groups     map[string]*models.Group // keyed by group ID
-	roles      map[string]*models.Role  // keyed by role ID
-	sessions   map[string]*models.Session // keyed by session token (memory-only)
+	users      map[string]*models.User             // keyed by user ID
+	groups     map[string]*models.Group            // keyed by group ID
+	roles      map[string]*models.Role             // keyed by role ID
+	sessions   map[string]*models.Session          // keyed by session token (memory-only)
 	idps       map[string]*models.IdentityProvider // keyed by provider ID
 	// kvmToolsUpdateQueue marks VM UUIDs that should be told to self-
 	// update on their next telemetry POST. The next /api/guest-telemetry
@@ -129,8 +129,8 @@ type Store struct {
 	// store; this is glance-at-the-last-hour material, memory-only, and
 	// refills naturally after a restart.
 	hostMetrics map[string]*hostMetricRing
-	features      models.Features
-	dataFile      string
+	features    models.Features
+	dataFile    string
 	// backend is the pluggable persistence layer (JSON file or Mongo).
 	// Wired post-construction by NewStoreWithBackend; NewStore still
 	// works for tests and falls back to JSONBackend on dataFile.
@@ -172,15 +172,15 @@ func NewStore(dataFile string) *Store {
 // knows where the legacy file lives).
 func NewStoreWithBackend(backend Backend, dataFile string) *Store {
 	s := &Store{
-		hosts:     make(map[string]*models.Host),
-		vms:       make(map[string][]*models.VM),
-		storage:   make(map[string][]*models.StoragePool),
-		vmNotes:   make(map[string]string),
-		guestData: make(map[string]*guestEntry),
-		users:     make(map[string]*models.User),
-		groups:    make(map[string]*models.Group),
-		roles:     make(map[string]*models.Role),
-		sessions:  make(map[string]*models.Session),
+		hosts:               make(map[string]*models.Host),
+		vms:                 make(map[string][]*models.VM),
+		storage:             make(map[string][]*models.StoragePool),
+		vmNotes:             make(map[string]string),
+		guestData:           make(map[string]*guestEntry),
+		users:               make(map[string]*models.User),
+		groups:              make(map[string]*models.Group),
+		roles:               make(map[string]*models.Role),
+		sessions:            make(map[string]*models.Session),
 		idps:                make(map[string]*models.IdentityProvider),
 		kvmToolsUpdateQueue: make(map[string]bool),
 		snapshotPolicies:    make(map[string]*models.SnapshotPolicy),
@@ -537,18 +537,19 @@ func clearStaleGuestData(v *models.VM) {
 // a correctly-pinned client.
 //
 // Order of preference:
-//   Pass 0: exact payload UUID match against a libvirt VM → trust the
-//           client. This respects operators who pinned /var/lib/kvm-tools/
-//           uuid via install --uuid and prevents the server from oscillating
-//           a cache file when both UUID and MAC were cloned (e.g. ark-srv01
-//           whose guest NIC MAC was cloned along with the DMI UUID — MAC
-//           match would point to the wrong VM every time).
-//   Pass 1: no UUID match — fall back to MAC match. NIC MACs are
-//           globally unique on a non-cloned libvirt stack, so this
-//           handles "first boot of a freshly cloned guest whose DMI UUID
-//           doesn't happen to match any existing VM".
-//   Pass 2: neither — store against the client's claim and hope the
-//           hvnode agent catches up.
+//
+//	Pass 0: exact payload UUID match against a libvirt VM → trust the
+//	        client. This respects operators who pinned /var/lib/kvm-tools/
+//	        uuid via install --uuid and prevents the server from oscillating
+//	        a cache file when both UUID and MAC were cloned (e.g. ark-srv01
+//	        whose guest NIC MAC was cloned along with the DMI UUID — MAC
+//	        match would point to the wrong VM every time).
+//	Pass 1: no UUID match — fall back to MAC match. NIC MACs are
+//	        globally unique on a non-cloned libvirt stack, so this
+//	        handles "first boot of a freshly cloned guest whose DMI UUID
+//	        doesn't happen to match any existing VM".
+//	Pass 2: neither — store against the client's claim and hope the
+//	        hvnode agent catches up.
 //
 // Called under s.mu; caller must hold the write lock.
 func (s *Store) resolveCanonicalUUID(p *models.GuestTelemetryPayload) string {
@@ -866,18 +867,18 @@ func hashJSON(v any) uint64 {
 func (s *Store) Save() {
 	s.mu.RLock()
 	d := persistData{
-		Hosts:      s.hosts,
-		VMs:        s.vms,
-		Storage:    s.storage,
-		VMNotes:    s.vmNotes,
-		GuestData:  s.guestData,
-		Migrations: s.migrations,
-		Users:      s.users,
-		Groups:     s.groups,
-		Roles:      s.roles,
-		Sessions:   s.sessions,
-		IDPs:          s.idps,
-		Features:      &s.features,
+		Hosts:            s.hosts,
+		VMs:              s.vms,
+		Storage:          s.storage,
+		VMNotes:          s.vmNotes,
+		GuestData:        s.guestData,
+		Migrations:       s.migrations,
+		Users:            s.users,
+		Groups:           s.groups,
+		Roles:            s.roles,
+		Sessions:         s.sessions,
+		IDPs:             s.idps,
+		Features:         &s.features,
 		Audit:            s.audit,
 		AuditShipping:    s.auditShipping,
 		SnapshotPolicies: s.snapshotPolicies,

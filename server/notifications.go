@@ -283,14 +283,14 @@ func slackPayload(ev *models.NotificationEvent) ([]byte, error) {
 		fields = append(fields, map[string]any{"title": k, "value": v, "short": true})
 	}
 	att := map[string]any{
-		"fallback":    severityIcon(ev.Severity) + " " + ev.Title + " — " + ev.Message,
-		"color":       severityColorHex(ev.Severity),
-		"title":       ev.Title,
-		"text":        ev.Message,
-		"fields":      fields,
-		"footer":      "kvm-center " + Version,
-		"ts":          ev.At.UTC().Unix(),
-		"mrkdwn_in":   []string{"text", "fields"},
+		"fallback":  severityIcon(ev.Severity) + " " + ev.Title + " — " + ev.Message,
+		"color":     severityColorHex(ev.Severity),
+		"title":     ev.Title,
+		"text":      ev.Message,
+		"fields":    fields,
+		"footer":    "kvm-center " + Version,
+		"ts":        ev.At.UTC().Unix(),
+		"mrkdwn_in": []string{"text", "fields"},
 	}
 	if link := resourceLink(ev.Resource); link != "" {
 		att["title_link"] = link
@@ -472,8 +472,8 @@ func handleNotifications(store *Store) http.HandlerFunc {
 				}
 			}
 			writeJSON(w, http.StatusOK, map[string]any{
-				"config":     cfg,
-				"all_types":  AllNotifyTypes,
+				"config":    cfg,
+				"all_types": AllNotifyTypes,
 			})
 		case http.MethodPut:
 			var req models.NotificationConfig

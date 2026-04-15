@@ -39,24 +39,24 @@ type MongoBackend struct {
 // Mongo collection names. Declared as constants so grep-finding every
 // persisted entity is one symbol search.
 const (
-	mcoHosts       = "hosts"
-	mcoVMs         = "vms"         // flat per-VM documents keyed by uuid
-	mcoStorage     = "storage"     // flat per-pool docs keyed by host_id+name
-	mcoVMNotes     = "vm_notes"    // keyed by vm_uuid
-	mcoGuestData   = "guest_data"  // keyed by vm_uuid, updated_at TTL
-	mcoMigrations  = "migrations"  // append-only, indexed by started_at desc
-	mcoUsers       = "users"       // username unique
-	mcoGroups      = "groups"
-	mcoRoles       = "roles"
-	mcoSessions    = "sessions" // TTL on expires_at
-	mcoIDPs        = "idps"
-	mcoFeatures    = "features" // single doc with _id:"singleton"
-	mcoServerMeta  = "server_meta" // _id:"singleton" — console_secret etc.
-	mcoAuditEvents     = "audit_events"
+	mcoHosts            = "hosts"
+	mcoVMs              = "vms"        // flat per-VM documents keyed by uuid
+	mcoStorage          = "storage"    // flat per-pool docs keyed by host_id+name
+	mcoVMNotes          = "vm_notes"   // keyed by vm_uuid
+	mcoGuestData        = "guest_data" // keyed by vm_uuid, updated_at TTL
+	mcoMigrations       = "migrations" // append-only, indexed by started_at desc
+	mcoUsers            = "users"      // username unique
+	mcoGroups           = "groups"
+	mcoRoles            = "roles"
+	mcoSessions         = "sessions" // TTL on expires_at
+	mcoIDPs             = "idps"
+	mcoFeatures         = "features"    // single doc with _id:"singleton"
+	mcoServerMeta       = "server_meta" // _id:"singleton" — console_secret etc.
+	mcoAuditEvents      = "audit_events"
 	mcoSnapshotPolicies = "snapshot_policies"
-	mcoNotifications    = "notifications" // singleton _id:"singleton"
-	mcoMetrics          = "metrics"       // singleton _id:"singleton"
-	mcoAPITokens        = "api_tokens"    // keyed by token ID
+	mcoNotifications    = "notifications"    // singleton _id:"singleton"
+	mcoMetrics          = "metrics"          // singleton _id:"singleton"
+	mcoAPITokens        = "api_tokens"       // keyed by token ID
 	mcoHypervisorCerts  = "hypervisor_certs" // keyed by host ID
 )
 
@@ -257,8 +257,8 @@ func (b *MongoBackend) Load(ctx context.Context) (*persistData, error) {
 	}
 	for cur.Next(ctx) {
 		var doc struct {
-			UUID  string                            `bson:"vm_uuid"`
-			Entry guestEntry                        `bson:"entry,inline"`
+			UUID  string     `bson:"vm_uuid"`
+			Entry guestEntry `bson:"entry,inline"`
 		}
 		if err := cur.Decode(&doc); err == nil && doc.UUID != "" {
 			e := doc.Entry
@@ -391,7 +391,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	// hydrate the Host back from a "host" sub-object.
 	if err := replaceMap(ctx, db, mcoHosts, mapToDocs(d.Hosts, func(h *models.Host) any {
 		return struct {
-			ID string `bson:"_id"`
+			ID           string `bson:"_id"`
 			*models.Host `bson:",inline"`
 		}{h.ID, h}
 	})); err != nil {
@@ -408,7 +408,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 				id = hostID + "|" + v.Name
 			}
 			vmDocs = append(vmDocs, struct {
-				ID string `bson:"_id"`
+				ID         string `bson:"_id"`
 				*models.VM `bson:",inline"`
 			}{id, v})
 		}
@@ -422,7 +422,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	for hostID, pools := range d.Storage {
 		for _, p := range pools {
 			poolDocs = append(poolDocs, struct {
-				ID string `bson:"_id"`
+				ID                  string `bson:"_id"`
 				*models.StoragePool `bson:",inline"`
 			}{hostID + "|" + p.Name, p})
 		}
@@ -458,7 +458,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	var migDocs []any
 	for _, m := range d.Migrations {
 		migDocs = append(migDocs, struct {
-			ID string `bson:"_id"`
+			ID                      string `bson:"_id"`
 			*models.MigrationRecord `bson:",inline"`
 		}{m.ID, m})
 	}
@@ -468,7 +468,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 
 	if err := replaceMapIfDirty(ctx, db, mcoUsers, "users", d, mapToDocs(d.Users, func(u *models.User) any {
 		return struct {
-			ID string `bson:"_id"`
+			ID           string `bson:"_id"`
 			*models.User `bson:",inline"`
 		}{u.ID, u}
 	})); err != nil {
@@ -476,7 +476,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	}
 	if err := replaceMapIfDirty(ctx, db, mcoGroups, "groups", d, mapToDocs(d.Groups, func(g *models.Group) any {
 		return struct {
-			ID string `bson:"_id"`
+			ID            string `bson:"_id"`
 			*models.Group `bson:",inline"`
 		}{g.ID, g}
 	})); err != nil {
@@ -484,7 +484,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	}
 	if err := replaceMapIfDirty(ctx, db, mcoRoles, "roles", d, mapToDocs(d.Roles, func(r *models.Role) any {
 		return struct {
-			ID string `bson:"_id"`
+			ID           string `bson:"_id"`
 			*models.Role `bson:",inline"`
 		}{r.ID, r}
 	})); err != nil {
@@ -492,7 +492,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	}
 	if err := replaceMapIfDirty(ctx, db, mcoIDPs, "idps", d, mapToDocs(d.IDPs, func(i *models.IdentityProvider) any {
 		return struct {
-			ID string `bson:"_id"`
+			ID                       string `bson:"_id"`
 			*models.IdentityProvider `bson:",inline"`
 		}{i.ID, i}
 	})); err != nil {
@@ -504,7 +504,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 		var sessDocs []any
 		for tok, s := range d.Sessions {
 			sessDocs = append(sessDocs, struct {
-				ID string `bson:"_id"`
+				ID              string `bson:"_id"`
 				*models.Session `bson:",inline"`
 			}{tok, s})
 		}
@@ -519,7 +519,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 			ctx,
 			bson.D{{Key: "_id", Value: "singleton"}},
 			struct {
-				ID string `bson:"_id"`
+				ID               string `bson:"_id"`
 				*models.Features `bson:",inline"`
 			}{"singleton", d.Features},
 			options.Replace().SetUpsert(true),
@@ -544,7 +544,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	var auditDocs []any
 	for _, ev := range d.Audit {
 		auditDocs = append(auditDocs, struct {
-			ID string `bson:"_id"`
+			ID                 string `bson:"_id"`
 			*models.AuditEvent `bson:",inline"`
 		}{ev.ID, ev})
 	}
@@ -555,7 +555,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	// API tokens
 	if err := replaceMapIfDirty(ctx, db, mcoAPITokens, "api_tokens", d, mapToDocs(d.APITokens, func(t *models.APIToken) any {
 		return struct {
-			ID string `bson:"_id"`
+			ID               string `bson:"_id"`
 			*models.APIToken `bson:",inline"`
 		}{t.ID, t}
 	})); err != nil {
@@ -568,7 +568,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 			ctx,
 			bson.D{{Key: "_id", Value: "singleton"}},
 			struct {
-				ID string `bson:"_id"`
+				ID                    string `bson:"_id"`
 				*models.MetricsConfig `bson:",inline"`
 			}{"singleton", d.Metrics},
 			options.Replace().SetUpsert(true),
@@ -583,7 +583,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 			ctx,
 			bson.D{{Key: "_id", Value: "singleton"}},
 			struct {
-				ID string `bson:"_id"`
+				ID                         string `bson:"_id"`
 				*models.NotificationConfig `bson:",inline"`
 			}{"singleton", d.Notifications},
 			options.Replace().SetUpsert(true),
@@ -595,7 +595,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	// Hypervisor certs
 	if err := replaceMapIfDirty(ctx, db, mcoHypervisorCerts, "hypervisor_certs", d, mapToDocs(d.HypervisorCerts, func(c *models.HypervisorCert) any {
 		return struct {
-			ID string `bson:"_id"`
+			ID                     string `bson:"_id"`
 			*models.HypervisorCert `bson:",inline"`
 		}{c.HostID, c}
 	})); err != nil {
@@ -605,7 +605,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 	// Snapshot policies
 	if err := replaceMapIfDirty(ctx, db, mcoSnapshotPolicies, "snapshot_policies", d, mapToDocs(d.SnapshotPolicies, func(p *models.SnapshotPolicy) any {
 		return struct {
-			ID string `bson:"_id"`
+			ID                     string `bson:"_id"`
 			*models.SnapshotPolicy `bson:",inline"`
 		}{p.ID, p}
 	})); err != nil {

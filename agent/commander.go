@@ -234,13 +234,13 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 // migrationURI builds the libvirt URI for a live migration. Transport
 // selector (v5.10.1):
 //
-//   "tls" — qemu+tls://<dest>/system. Requires libvirtd on both ends
-//           to have been configured with the cluster CA + a cert (see
-//           install-agent.sh --enroll-token). This is the default once
-//           both hypervisors are enrolled.
-//   ""/"ssh" — legacy qemu+ssh:// via the shared kvm-migrator keypair.
-//           Retained as a fallback for mixed fleets during v5.10.x
-//           rollout. Will be removed in v5.11.
+//	"tls" — qemu+tls://<dest>/system. Requires libvirtd on both ends
+//	        to have been configured with the cluster CA + a cert (see
+//	        install-agent.sh --enroll-token). This is the default once
+//	        both hypervisors are enrolled.
+//	""/"ssh" — legacy qemu+ssh:// via the shared kvm-migrator keypair.
+//	        Retained as a fallback for mixed fleets during v5.10.x
+//	        rollout. Will be removed in v5.11.
 func migrationURI(dest, transport string) string {
 	if transport == "tls" {
 		// verify=1 (default) — libvirtd enforces chain validation against

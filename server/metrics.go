@@ -37,7 +37,7 @@ const (
 
 // metricSample is one line-protocol record ready to format.
 type metricSample struct {
-	Measurement string            // e.g. "host"
+	Measurement string // e.g. "host"
 	Tags        map[string]string
 	Fields      map[string]any
 	Timestamp   time.Time
@@ -161,10 +161,10 @@ func (s *Store) EmitVMMetrics(vms []*models.VM, prefix string) {
 				"state":   string(v.State),
 			},
 			Fields: map[string]any{
-				"cpu_usage":     v.CPUUsage,
-				"mem_usage_mb":  int64(v.MemUsageMB),
-				"mem_total_mb":  int64(v.MemTotalMB),
-				"state_code":    vmStateCode(v.State),
+				"cpu_usage":      v.CPUUsage,
+				"mem_usage_mb":   int64(v.MemUsageMB),
+				"mem_total_mb":   int64(v.MemTotalMB),
+				"state_code":     vmStateCode(v.State),
 				"snapshot_count": int64(v.SnapshotCount),
 			},
 			Timestamp: time.Now(),
