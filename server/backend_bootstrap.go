@@ -13,18 +13,18 @@ import (
 //
 // Behaviour matrix:
 //
-//   mongoURL blank → JSONBackend over dataFile (v5.0 behaviour).
+//	mongoURL blank → JSONBackend over dataFile (v5.0 behaviour).
 //
-//   mongoURL set + Mongo reachable + Mongo empty + data.json exists →
-//     one-shot migrate JSON → Mongo, rename data.json to
-//     data.json.migrated so it's kept for rollback but won't double-load.
+//	mongoURL set + Mongo reachable + Mongo empty + data.json exists →
+//	  one-shot migrate JSON → Mongo, rename data.json to
+//	  data.json.migrated so it's kept for rollback but won't double-load.
 //
-//   mongoURL set + Mongo reachable + (Mongo non-empty OR no data.json) →
-//     MongoBackend alone.
+//	mongoURL set + Mongo reachable + (Mongo non-empty OR no data.json) →
+//	  MongoBackend alone.
 //
-//   mongoURL set + Mongo unreachable → fall back to JSONBackend with a
-//     WARN so the operator still gets a working server and can fix the
-//     Mongo config from Settings → Database.
+//	mongoURL set + Mongo unreachable → fall back to JSONBackend with a
+//	  WARN so the operator still gets a working server and can fix the
+//	  Mongo config from Settings → Database.
 func bootstrapBackend(mongoURL, mongoDB, dataFile string) Backend {
 	if mongoURL == "" {
 		return NewJSONBackend(dataFile)

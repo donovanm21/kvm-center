@@ -23,9 +23,9 @@ func handleSetupState(store *Store) http.HandlerFunc {
 		}
 		f := store.GetFeatures()
 		writeJSON(w, http.StatusOK, map[string]any{
-			"complete":      f.SetupComplete,
-			"completed_at":  f.SetupCompletedAt,
-			"has_any_host":  len(store.GetHosts()) > 0,
+			"complete":     f.SetupComplete,
+			"completed_at": f.SetupCompletedAt,
+			"has_any_host": len(store.GetHosts()) > 0,
 		})
 	}
 }

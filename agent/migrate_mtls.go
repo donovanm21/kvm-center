@@ -147,9 +147,15 @@ func offlineMigrateMTLS(ctx context.Context, vmName, dest string, opts MTLSOptio
 	// ── 5. Parse disks ───────────────────────────────────────
 	type domDisk struct {
 		Device string `xml:"device,attr"`
-		Driver struct{ Type string `xml:"type,attr"` } `xml:"driver"`
-		Source struct{ File string `xml:"file,attr"` } `xml:"source"`
-		Target struct{ Dev  string `xml:"dev,attr"` } `xml:"target"`
+		Driver struct {
+			Type string `xml:"type,attr"`
+		} `xml:"driver"`
+		Source struct {
+			File string `xml:"file,attr"`
+		} `xml:"source"`
+		Target struct {
+			Dev string `xml:"dev,attr"`
+		} `xml:"target"`
 	}
 	type domXML struct {
 		XMLName xml.Name  `xml:"domain"`

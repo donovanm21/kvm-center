@@ -20,13 +20,13 @@ var (
 )
 
 type winSnapshot struct {
-	UUID         string  `json:"uuid"`
-	OS           string  `json:"os"`
-	Kernel       string  `json:"kernel"`
-	UptimeSecs   float64 `json:"uptime_secs"`
-	MemTotalKB   uint64  `json:"mem_total_kb"`
-	MemFreeKB    uint64  `json:"mem_free_kb"`
-	FS           []struct {
+	UUID       string  `json:"uuid"`
+	OS         string  `json:"os"`
+	Kernel     string  `json:"kernel"`
+	UptimeSecs float64 `json:"uptime_secs"`
+	MemTotalKB uint64  `json:"mem_total_kb"`
+	MemFreeKB  uint64  `json:"mem_free_kb"`
+	FS         []struct {
 		Mountpoint string `json:"mountpoint"`
 		FSType     string `json:"fstype"`
 		TotalBytes uint64 `json:"total_bytes"`

@@ -206,8 +206,8 @@ func parseMemField(field string) uint64 {
 
 // virshDomainXML holds fields from `virsh dumpxml` for VM hardware parsing.
 type virshDomainXML struct {
-	UUID    string `xml:"uuid"`
-	OS      struct {
+	UUID string `xml:"uuid"`
+	OS   struct {
 		Type struct {
 			Arch    string `xml:"arch,attr"`
 			Machine string `xml:"machine,attr"`

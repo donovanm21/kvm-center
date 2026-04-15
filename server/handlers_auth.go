@@ -234,10 +234,10 @@ func handleTOTPSetup(store *Store) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{
-			"secret":       secret,
-			"otpauth_uri":  otpauthURI(u.Username, secret),
-			"issuer":       totpIssuer,
-			"account":      u.Username,
+			"secret":      secret,
+			"otpauth_uri": otpauthURI(u.Username, secret),
+			"issuer":      totpIssuer,
+			"account":     u.Username,
 		})
 	}
 }
@@ -251,7 +251,9 @@ func handleTOTPEnable(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
 			return
 		}
-		var req struct{ Code string `json:"code"` }
+		var req struct {
+			Code string `json:"code"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid JSON")
 			return
@@ -285,7 +287,9 @@ func handleTOTPDisable(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
 			return
 		}
-		var req struct{ Password string `json:"password"` }
+		var req struct {
+			Password string `json:"password"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid JSON")
 			return

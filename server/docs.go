@@ -48,9 +48,9 @@ type TOC struct {
 }
 
 var (
-	docsOnce    sync.Once
-	docsBySlug  map[string]*DocPage
-	docsOrdered []*DocPage
+	docsOnce     sync.Once
+	docsBySlug   map[string]*DocPage
+	docsOrdered  []*DocPage
 	docsRenderer goldmark.Markdown
 )
 

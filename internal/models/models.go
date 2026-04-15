@@ -55,7 +55,7 @@ type Host struct {
 	// /api/hosts/{id}/maintenance/enter|exit.
 	MaintenanceMode      bool      `json:"maintenance_mode,omitempty"`
 	MaintenanceEnteredAt time.Time `json:"maintenance_entered_at,omitempty"`
-	MaintenanceBy        string    `json:"maintenance_by,omitempty"`   // actor user ID
+	MaintenanceBy        string    `json:"maintenance_by,omitempty"` // actor user ID
 	MaintenanceReason    string    `json:"maintenance_reason,omitempty"`
 
 	// MTLSReady (v5.10.1) is true when this host has an active
@@ -74,16 +74,16 @@ type Host struct {
 // alone because cleanup only touches names that match the policy's
 // snapshot-name prefix.
 type SnapshotPolicy struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Enabled      bool      `json:"enabled"`
-	VMUUIDs      []string  `json:"vm_uuids"`      // the VMs this policy covers
-	EveryMinutes int       `json:"every_minutes"` // e.g. 60 hourly, 1440 daily, 10080 weekly
-	RetentionKeep int      `json:"retention_keep"` // keep last N policy-generated snapshots
-	CreatedAt    time.Time `json:"created_at"`
-	LastRunAt    time.Time `json:"last_run_at,omitempty"`
-	LastRunError string    `json:"last_run_error,omitempty"`
-	LastRunCount int       `json:"last_run_count,omitempty"` // successful snapshots on last tick
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Enabled       bool      `json:"enabled"`
+	VMUUIDs       []string  `json:"vm_uuids"`       // the VMs this policy covers
+	EveryMinutes  int       `json:"every_minutes"`  // e.g. 60 hourly, 1440 daily, 10080 weekly
+	RetentionKeep int       `json:"retention_keep"` // keep last N policy-generated snapshots
+	CreatedAt     time.Time `json:"created_at"`
+	LastRunAt     time.Time `json:"last_run_at,omitempty"`
+	LastRunError  string    `json:"last_run_error,omitempty"`
+	LastRunCount  int       `json:"last_run_count,omitempty"` // successful snapshots on last tick
 }
 
 // AuditShipping (v5.2.1) configures one external sink that receives
@@ -132,7 +132,7 @@ type AuditShipping struct {
 type NotificationChannel struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
-	Kind    string `json:"kind"`              // "webhook" | "email"
+	Kind    string `json:"kind"` // "webhook" | "email"
 	Enabled bool   `json:"enabled"`
 
 	// Webhook-only.
@@ -147,7 +147,7 @@ type NotificationChannel struct {
 
 	// Email-only. SMTP creds; if SMTPHost blank use the server's default
 	// (set once on the global config).
-	EmailTo   string `json:"email_to,omitempty"`   // comma-separated
+	EmailTo   string `json:"email_to,omitempty"` // comma-separated
 	EmailFrom string `json:"email_from,omitempty"`
 
 	// EventTypes (v5.7) is this channel's event subscription. When
@@ -184,13 +184,13 @@ type NotificationConfig struct {
 
 // NotificationEvent is one fired notification handed to the dispatcher.
 type NotificationEvent struct {
-	Type      string            `json:"type"`     // canonical event key, e.g. "vm.crashed"
-	Title     string            `json:"title"`    // short subject line
-	Message   string            `json:"message"`  // body / context
-	Resource  string            `json:"resource,omitempty"`
-	Severity  string            `json:"severity"` // "info" | "warning" | "critical"
-	At        time.Time         `json:"at"`
-	Detail    map[string]string `json:"detail,omitempty"`
+	Type     string            `json:"type"`    // canonical event key, e.g. "vm.crashed"
+	Title    string            `json:"title"`   // short subject line
+	Message  string            `json:"message"` // body / context
+	Resource string            `json:"resource,omitempty"`
+	Severity string            `json:"severity"` // "info" | "warning" | "critical"
+	At       time.Time         `json:"at"`
+	Detail   map[string]string `json:"detail,omitempty"`
 }
 
 // MetricsConfig (v5.13) configures the InfluxDB v2 telemetry sink.
@@ -199,7 +199,7 @@ type NotificationEvent struct {
 // Grafana dashboards without scraping the API.
 type MetricsConfig struct {
 	Enabled bool   `json:"enabled"`
-	URL     string `json:"url,omitempty"`    // e.g. "https://influx.example.com:8086"
+	URL     string `json:"url,omitempty"` // e.g. "https://influx.example.com:8086"
 	Org     string `json:"org,omitempty"`
 	Bucket  string `json:"bucket,omitempty"`
 	Token   string `json:"token,omitempty"`
@@ -228,7 +228,7 @@ type AuditEvent struct {
 	ActorID   string            `json:"actor_id,omitempty"`   // user ID; empty for unauthenticated (e.g. pre-session)
 	ActorName string            `json:"actor_name,omitempty"` // denormalised for UI without a join
 	ActorIP   string            `json:"actor_ip,omitempty"`
-	Action    string            `json:"action"`   // "vm.start", "role.update", "tls.upload", etc.
+	Action    string            `json:"action"`             // "vm.start", "role.update", "tls.upload", etc.
 	Resource  string            `json:"resource,omitempty"` // "vm/<uuid>", "host/<id>", "role/<id>", free-form
 	Detail    map[string]string `json:"detail,omitempty"`   // context (from→to values, counts, etc.)
 	Success   bool              `json:"success"`
@@ -270,31 +270,31 @@ type VM struct {
 	SnapshotCount int         `json:"snapshot_count"`
 
 	// Hardware config from virsh dumpxml + dominfo.
-	DiskType    string           `json:"disk_type,omitempty"`    // "qcow2", "raw"
-	Firmware    string           `json:"firmware,omitempty"`     // "bios", "efi", "efi+secureboot"
-	MachineType string           `json:"machine_type,omitempty"` // "pc-q35-rhel9.6.0"
-	CPUMode     string           `json:"cpu_mode,omitempty"`     // "host-passthrough", "custom"
-	Autostart   bool             `json:"autostart"`
-	HasTPM      bool             `json:"has_tpm"`
-	TPMVersion  string           `json:"tpm_version,omitempty"`
-	VideoModel  string           `json:"video_model,omitempty"`
-	BootDev     string           `json:"boot_dev,omitempty"`
-	AllDisks    []VMDisk         `json:"all_disks,omitempty"`
-	PCIDevices  []VMPCIDevice    `json:"pci_devices,omitempty"`
+	DiskType    string        `json:"disk_type,omitempty"`    // "qcow2", "raw"
+	Firmware    string        `json:"firmware,omitempty"`     // "bios", "efi", "efi+secureboot"
+	MachineType string        `json:"machine_type,omitempty"` // "pc-q35-rhel9.6.0"
+	CPUMode     string        `json:"cpu_mode,omitempty"`     // "host-passthrough", "custom"
+	Autostart   bool          `json:"autostart"`
+	HasTPM      bool          `json:"has_tpm"`
+	TPMVersion  string        `json:"tpm_version,omitempty"`
+	VideoModel  string        `json:"video_model,omitempty"`
+	BootDev     string        `json:"boot_dev,omitempty"`
+	AllDisks    []VMDisk      `json:"all_disks,omitempty"`
+	PCIDevices  []VMPCIDevice `json:"pci_devices,omitempty"`
 
 	// Guest-side fields. Populated by qemu-guest-agent (via hypervisor) or
 	// kvm-tools daemon (via POST /api/guest-telemetry). Empty when no agent.
-	GuestAgent    bool      `json:"guest_agent"`            // true if any guest source responded
-	GuestSource   string    `json:"guest_source,omitempty"` // "qemu-ga" | "kvm-tools"
-	GuestOS       string    `json:"guest_os,omitempty"`
-	GuestHostname string    `json:"guest_hostname,omitempty"`
-	GuestKernel   string    `json:"guest_kernel,omitempty"`
-	GuestUptime   string    `json:"guest_uptime,omitempty"`
-	GuestIPs            []string         `json:"guest_ips,omitempty"`
-	GuestFS             []GuestFS        `json:"guest_fs,omitempty"`
-	GuestInterfaces     []GuestInterface `json:"guest_interfaces,omitempty"`
-	KVMToolsVersion     string           `json:"kvm_tools_version,omitempty"`
-	KVMToolsUpdateQueued bool            `json:"kvm_tools_update_queued,omitempty"`
+	GuestAgent           bool             `json:"guest_agent"`            // true if any guest source responded
+	GuestSource          string           `json:"guest_source,omitempty"` // "qemu-ga" | "kvm-tools"
+	GuestOS              string           `json:"guest_os,omitempty"`
+	GuestHostname        string           `json:"guest_hostname,omitempty"`
+	GuestKernel          string           `json:"guest_kernel,omitempty"`
+	GuestUptime          string           `json:"guest_uptime,omitempty"`
+	GuestIPs             []string         `json:"guest_ips,omitempty"`
+	GuestFS              []GuestFS        `json:"guest_fs,omitempty"`
+	GuestInterfaces      []GuestInterface `json:"guest_interfaces,omitempty"`
+	KVMToolsVersion      string           `json:"kvm_tools_version,omitempty"`
+	KVMToolsUpdateQueued bool             `json:"kvm_tools_update_queued,omitempty"`
 
 	// User-editable, persisted in server store (rehydrated by UUID).
 	Notes string `json:"notes,omitempty"`
@@ -305,7 +305,7 @@ type VM struct {
 // VPN tunnels, and container veth pairs separately from the primary
 // NIC. Loopback is filtered out at collection time.
 type GuestInterface struct {
-	Name  string   `json:"name"`            // eth0, docker0, br-1a2b…, tailscale0
+	Name  string   `json:"name"` // eth0, docker0, br-1a2b…, tailscale0
 	MAC   string   `json:"mac,omitempty"`
 	Addrs []string `json:"addrs,omitempty"` // IPv4 + IPv6 with CIDR
 	// Kind buckets the interface so the UI can colour-code:
@@ -328,10 +328,10 @@ type GuestFS struct {
 
 // VMDisk is one disk attached to a VM (from virsh dumpxml).
 type VMDisk struct {
-	Target     string  `json:"target"`      // "vda", "sda"
-	Device     string  `json:"device"`      // "disk", "cdrom"
-	DiskType   string  `json:"disk_type"`   // "qcow2", "raw"
-	Bus        string  `json:"bus"`         // "virtio", "scsi", "sata"
+	Target     string  `json:"target"`    // "vda", "sda"
+	Device     string  `json:"device"`    // "disk", "cdrom"
+	DiskType   string  `json:"disk_type"` // "qcow2", "raw"
+	Bus        string  `json:"bus"`       // "virtio", "scsi", "sata"
 	Path       string  `json:"path"`
 	CapacityGB float64 `json:"capacity_gb"`
 	AllocGB    float64 `json:"alloc_gb"`
@@ -346,14 +346,14 @@ type VMPCIDevice struct {
 // GuestTelemetryPayload is sent by the kvm-tools daemon running inside a VM
 // directly to POST /api/guest-telemetry on the kvm-center server.
 type GuestTelemetryPayload struct {
-	VMUUID     string    `json:"vm_uuid"`
-	Hostname   string    `json:"hostname"`
-	OS         string    `json:"os"`
-	Kernel     string    `json:"kernel"`
-	Uptime     string    `json:"uptime"`
-	CPUCount   int       `json:"cpu_count"`
-	MemTotalMB uint64    `json:"mem_total_mb"`
-	MemUsedMB  uint64    `json:"mem_used_mb"`
+	VMUUID          string           `json:"vm_uuid"`
+	Hostname        string           `json:"hostname"`
+	OS              string           `json:"os"`
+	Kernel          string           `json:"kernel"`
+	Uptime          string           `json:"uptime"`
+	CPUCount        int              `json:"cpu_count"`
+	MemTotalMB      uint64           `json:"mem_total_mb"`
+	MemUsedMB       uint64           `json:"mem_used_mb"`
 	IPs             []string         `json:"ips"`
 	Interfaces      []GuestInterface `json:"interfaces,omitempty"`
 	FS              []GuestFS        `json:"fs"`
@@ -373,14 +373,14 @@ type Snapshot struct {
 
 // StoragePool represents a libvirt storage pool on a host.
 type StoragePool struct {
-	Name        string  `json:"name"`
-	HostID      string  `json:"host_id"`
-	Path        string  `json:"path"`
-	CapacityGB  float64 `json:"capacity_gb"`
+	Name         string  `json:"name"`
+	HostID       string  `json:"host_id"`
+	Path         string  `json:"path"`
+	CapacityGB   float64 `json:"capacity_gb"`
 	AllocationGB float64 `json:"allocation_gb"`
-	AvailableGB float64 `json:"available_gb"`
-	State       string  `json:"state"`
-	PoolType    string  `json:"pool_type"`
+	AvailableGB  float64 `json:"available_gb"`
+	State        string  `json:"state"`
+	PoolType     string  `json:"pool_type"`
 }
 
 // TelemetryPayload is the JSON body sent by an agent to POST /api/telemetry.
@@ -429,7 +429,7 @@ type User struct {
 	// 20-byte secret; it is populated only after the user completes enrollment
 	// (scans the code + verifies with a live TOTP). TOTPEnabled gates whether
 	// the login flow demands the second factor.
-	TOTPSecret  string `json:"totp_secret,omitempty"`  // omitted from API responses via sanitizeUser
+	TOTPSecret  string `json:"totp_secret,omitempty"` // omitted from API responses via sanitizeUser
 	TOTPEnabled bool   `json:"totp_enabled"`
 
 	// External identities linked to this account (OIDC / OAuth2 / SAML / LDAP).
@@ -450,21 +450,21 @@ type ExternalIdentity struct {
 // hints at the UI preset (Google / GitHub / Microsoft / OIDC) but all
 // federated login flows currently share the OAuth2 + userinfo code path.
 type IdentityProvider struct {
-	ID            string    `json:"id"`
-	Kind          string    `json:"kind"`           // "google" | "github" | "microsoft" | "oidc"
-	Name          string    `json:"name"`           // display label on the login button
-	Enabled       bool      `json:"enabled"`
-	Issuer        string    `json:"issuer,omitempty"` // if set, discovery fills the URLs below
-	AuthURL       string    `json:"auth_url,omitempty"`
-	TokenURL      string    `json:"token_url,omitempty"`
-	UserinfoURL   string    `json:"userinfo_url,omitempty"`
-	ClientID      string    `json:"client_id"`
-	ClientSecret  string    `json:"client_secret,omitempty"` // omitted from API responses
-	Scopes        string    `json:"scopes,omitempty"`        // space-separated, e.g. "openid email profile"
-	DefaultRoleID string    `json:"default_role_id,omitempty"`
-	SubjectClaim  string    `json:"subject_claim,omitempty"`  // default "sub"; GitHub uses "id"
-	EmailClaim    string    `json:"email_claim,omitempty"`    // default "email"
-	UsernameClaim string    `json:"username_claim,omitempty"` // default "preferred_username" then "email"
+	ID            string `json:"id"`
+	Kind          string `json:"kind"` // "google" | "github" | "microsoft" | "oidc"
+	Name          string `json:"name"` // display label on the login button
+	Enabled       bool   `json:"enabled"`
+	Issuer        string `json:"issuer,omitempty"` // if set, discovery fills the URLs below
+	AuthURL       string `json:"auth_url,omitempty"`
+	TokenURL      string `json:"token_url,omitempty"`
+	UserinfoURL   string `json:"userinfo_url,omitempty"`
+	ClientID      string `json:"client_id"`
+	ClientSecret  string `json:"client_secret,omitempty"` // omitted from API responses
+	Scopes        string `json:"scopes,omitempty"`        // space-separated, e.g. "openid email profile"
+	DefaultRoleID string `json:"default_role_id,omitempty"`
+	SubjectClaim  string `json:"subject_claim,omitempty"`  // default "sub"; GitHub uses "id"
+	EmailClaim    string `json:"email_claim,omitempty"`    // default "email"
+	UsernameClaim string `json:"username_claim,omitempty"` // default "preferred_username" then "email"
 
 	// LDAP-specific config, only consulted when Kind == "ldap".
 	LDAP *LDAPConfig `json:"ldap,omitempty"`
@@ -480,15 +480,15 @@ type IdentityProvider struct {
 // under IdentityProvider so LDAP shares the same enable/disable toggle,
 // default-role mapping, and CRUD path as OIDC providers.
 type LDAPConfig struct {
-	URL              string `json:"url"`                // ldap://host:389 or ldaps://host:636
-	BindDN           string `json:"bind_dn,omitempty"`  // service account used for user lookup; blank → bind directly as user
-	BindPassword     string `json:"bind_password,omitempty"` // omitted from API responses
-	UserBaseDN       string `json:"user_base_dn"`       // DN under which users live
-	UserFilter       string `json:"user_filter"`        // e.g. "(sAMAccountName=%s)" — %s is the submitted username
-	UsernameAttr     string `json:"username_attr,omitempty"` // default: sAMAccountName (AD) / uid (OpenLDAP)
-	EmailAttr        string `json:"email_attr,omitempty"`    // default: mail
-	StartTLS         bool   `json:"start_tls,omitempty"`
-	InsecureSkipVerify bool `json:"insecure_skip_verify,omitempty"`
+	URL                string `json:"url"`                     // ldap://host:389 or ldaps://host:636
+	BindDN             string `json:"bind_dn,omitempty"`       // service account used for user lookup; blank → bind directly as user
+	BindPassword       string `json:"bind_password,omitempty"` // omitted from API responses
+	UserBaseDN         string `json:"user_base_dn"`            // DN under which users live
+	UserFilter         string `json:"user_filter"`             // e.g. "(sAMAccountName=%s)" — %s is the submitted username
+	UsernameAttr       string `json:"username_attr,omitempty"` // default: sAMAccountName (AD) / uid (OpenLDAP)
+	EmailAttr          string `json:"email_attr,omitempty"`    // default: mail
+	StartTLS           bool   `json:"start_tls,omitempty"`
+	InsecureSkipVerify bool   `json:"insecure_skip_verify,omitempty"`
 }
 
 // SAMLConfig holds the minimum required to drive an SP-initiated SAML 2.0
@@ -496,13 +496,13 @@ type LDAPConfig struct {
 // fetch + parse on demand) or the manual trio (IDPEntityID, SSOURL,
 // Certificate) must be populated.
 type SAMLConfig struct {
-	MetadataURL  string `json:"metadata_url,omitempty"`
-	IDPEntityID  string `json:"idp_entity_id,omitempty"`
-	SSOURL       string `json:"sso_url,omitempty"`
-	Certificate  string `json:"certificate,omitempty"` // PEM-encoded IdP signing certificate
+	MetadataURL string `json:"metadata_url,omitempty"`
+	IDPEntityID string `json:"idp_entity_id,omitempty"`
+	SSOURL      string `json:"sso_url,omitempty"`
+	Certificate string `json:"certificate,omitempty"` // PEM-encoded IdP signing certificate
 
 	// SP (our) side. When blank we synthesize entity_id = <base_url>/api/auth/saml/metadata?provider=<id>
-	SPEntityID   string `json:"sp_entity_id,omitempty"`
+	SPEntityID string `json:"sp_entity_id,omitempty"`
 
 	// Attribute mapping — leave blank for sensible defaults (NameID for
 	// subject, "email"/"mail" for email, "preferred_username" or the
@@ -542,22 +542,22 @@ type Role struct {
 // base64-encoded string so it fits cleanly in command params. See
 // server/grants.go for signing; agent/grants.go for validation.
 type MigrationGrant struct {
-	ID         string `json:"id"`         // uuid-like
-	Source     string `json:"src"`        // source host ID
-	Dest       string `json:"dst"`        // destination host ID
-	VMUUID     string `json:"vm_uuid"`    // bound VM
-	VMName     string `json:"vm_name,omitempty"`
-	IssuedAt   int64  `json:"iat"`        // unix seconds
-	ExpiresAt  int64  `json:"exp"`        // unix seconds — typically 5 min
-	Mode       string `json:"mode"`       // "live" | "offline"
+	ID        string `json:"id"`      // uuid-like
+	Source    string `json:"src"`     // source host ID
+	Dest      string `json:"dst"`     // destination host ID
+	VMUUID    string `json:"vm_uuid"` // bound VM
+	VMName    string `json:"vm_name,omitempty"`
+	IssuedAt  int64  `json:"iat"`  // unix seconds
+	ExpiresAt int64  `json:"exp"`  // unix seconds — typically 5 min
+	Mode      string `json:"mode"` // "live" | "offline"
 }
 
 // SignedGrant is the envelope ready for transport. Payload is the
 // JSON encoding of MigrationGrant; Signature is the Ed25519 signature
 // over Payload using the server's grant-signing key.
 type SignedGrant struct {
-	Payload   []byte `json:"payload"`     // canonical JSON bytes of MigrationGrant
-	Signature []byte `json:"signature"`   // Ed25519 signature over Payload
+	Payload   []byte `json:"payload"`   // canonical JSON bytes of MigrationGrant
+	Signature []byte `json:"signature"` // Ed25519 signature over Payload
 }
 
 // HypervisorCert (v5.10) records one leaf certificate issued by the
@@ -570,17 +570,17 @@ type SignedGrant struct {
 // cert is on the revocation list; new migrations that carry this
 // certificate's subject CN will be refused (v5.10.1+).
 type HypervisorCert struct {
-	HostID      string    `json:"host_id"`
-	SerialHex   string    `json:"serial_hex"`
-	Fingerprint string    `json:"fingerprint"` // SHA-256 of DER, colon-hex
-	Subject     string    `json:"subject,omitempty"`
-	NotBefore   time.Time `json:"not_before"`
-	NotAfter    time.Time `json:"not_after"`
-	IssuedAt    time.Time `json:"issued_at"`
-	IssuedBy    string    `json:"issued_by,omitempty"` // user ID that triggered enrollment
-	RevokedAt   time.Time `json:"revoked_at,omitempty"`
-	RevokedBy   string    `json:"revoked_by,omitempty"`
-	RevokeReason string   `json:"revoke_reason,omitempty"`
+	HostID       string    `json:"host_id"`
+	SerialHex    string    `json:"serial_hex"`
+	Fingerprint  string    `json:"fingerprint"` // SHA-256 of DER, colon-hex
+	Subject      string    `json:"subject,omitempty"`
+	NotBefore    time.Time `json:"not_before"`
+	NotAfter     time.Time `json:"not_after"`
+	IssuedAt     time.Time `json:"issued_at"`
+	IssuedBy     string    `json:"issued_by,omitempty"` // user ID that triggered enrollment
+	RevokedAt    time.Time `json:"revoked_at,omitempty"`
+	RevokedBy    string    `json:"revoked_by,omitempty"`
+	RevokeReason string    `json:"revoke_reason,omitempty"`
 }
 
 // APIToken (v5.5) is a long-lived bearer credential for scripted use
@@ -591,18 +591,19 @@ type HypervisorCert struct {
 // the model small.
 //
 // Token wire format: "kvmc_<id>.<secret>"
-//   <id>     — 8 hex chars, public, used to look up the row
-//   <secret> — 48 hex chars, high-entropy random, never persisted
+//
+//	<id>     — 8 hex chars, public, used to look up the row
+//	<secret> — 48 hex chars, high-entropy random, never persisted
 type APIToken struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	OwnerID    string    `json:"owner_id"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	OwnerID string `json:"owner_id"`
 	// Kind distinguishes user-minted tokens (self-service, default 30d
 	// expiry, managed from the user menu) from system-level tokens
 	// (admin-minted, longer-lived, managed from Settings). Both types
 	// still inherit their owner's permissions — "system" just means the
 	// owner is typically an admin used as a service account.
-	Kind       string    `json:"kind"` // "user" | "system"
+	Kind       string    `json:"kind"`           // "user" | "system"
 	Hash       string    `json:"hash,omitempty"` // never returned via API
 	CreatedAt  time.Time `json:"created_at"`
 	ExpiresAt  time.Time `json:"expires_at,omitempty"`
@@ -638,7 +639,7 @@ type Features struct {
 	// optionally configure notifications, metrics, and enrol the first
 	// hypervisor. Back-filled to true on upgrades that already have an
 	// admin user so existing installs don't see the wizard.
-	SetupComplete   bool      `json:"setup_complete"`
+	SetupComplete    bool      `json:"setup_complete"`
 	SetupCompletedAt time.Time `json:"setup_completed_at,omitempty"`
 }
 
@@ -679,10 +680,10 @@ type MigrationRecord struct {
 	VMName      string `json:"vm_name"`
 	SourceHost  string `json:"source_host"`
 	DestHost    string `json:"dest_host"`
-	Mode        string `json:"mode"`        // "offline" | "live"
+	Mode        string `json:"mode"`                // "offline" | "live"
 	Transport   string `json:"transport,omitempty"` // "tls" | "ssh" (v5.10.7)
-	Status      string `json:"status"`      // "running" | "complete" | "failed"
-	StartedAt   int64  `json:"started_at"`  // unix seconds
+	Status      string `json:"status"`              // "running" | "complete" | "failed"
+	StartedAt   int64  `json:"started_at"`          // unix seconds
 	CompletedAt int64  `json:"completed_at,omitempty"`
 	ElapsedSec  int64  `json:"elapsed_sec,omitempty"`
 	DiskSizeMB  int64  `json:"disk_size_mb,omitempty"`

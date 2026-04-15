@@ -40,9 +40,9 @@ import (
 // anyway.
 
 var (
-	grantPubKey     ed25519.PublicKey
-	grantPubKeyMu   sync.RWMutex
-	consumedGrants  = map[string]time.Time{} // grant_id → accepted_at (expiry cleanup on set)
+	grantPubKey      ed25519.PublicKey
+	grantPubKeyMu    sync.RWMutex
+	consumedGrants   = map[string]time.Time{} // grant_id → accepted_at (expiry cleanup on set)
 	consumedGrantsMu sync.Mutex
 	// activeGrantsByVM tracks recently-accepted grants keyed by VM
 	// name so the libvirt qemu hook can ask "is there an authorised
@@ -53,14 +53,14 @@ var (
 )
 
 type activeGrant struct {
-	ID        string
+	ID         string
 	AcceptedAt time.Time
-	ExpiresAt time.Time
+	ExpiresAt  time.Time
 }
 
 const (
-	grantLogPath    = "/var/lib/kvm-center/consumed-grants.log"
-	activeGrantTTL  = 10 * time.Minute // hook consultation window
+	grantLogPath   = "/var/lib/kvm-center/consumed-grants.log"
+	activeGrantTTL = 10 * time.Minute // hook consultation window
 )
 
 // loadGrantPubKey fetches the server's Ed25519 public key and caches
@@ -79,7 +79,9 @@ func loadGrantPubKey(serverURL string) {
 		log.Printf("grants: pubkey fetch %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 		return
 	}
-	var r struct{ PubkeyHex string `json:"pubkey_hex"` }
+	var r struct {
+		PubkeyHex string `json:"pubkey_hex"`
+	}
 	if jerr := json.Unmarshal(body, &r); jerr != nil || r.PubkeyHex == "" {
 		log.Printf("grants: pubkey response malformed")
 		return
@@ -237,7 +239,9 @@ func handlePrepareGrant(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
-	var req struct{ Grant string `json:"grant"` }
+	var req struct {
+		Grant string `json:"grant"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Grant == "" {
 		http.Error(w, "grant required", http.StatusBadRequest)
 		return

@@ -303,20 +303,20 @@ func handleIDPUpdate(store *Store) http.Handler {
 			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		case http.MethodPost, http.MethodPut, http.MethodPatch:
 			var req struct {
-				Name          *string `json:"name"`
-				Kind          *string `json:"kind"`
-				Enabled       *bool   `json:"enabled"`
-				Issuer        *string `json:"issuer"`
-				AuthURL       *string `json:"auth_url"`
-				TokenURL      *string `json:"token_url"`
-				UserinfoURL   *string `json:"userinfo_url"`
-				ClientID      *string `json:"client_id"`
-				ClientSecret  *string `json:"client_secret"`
-				Scopes        *string `json:"scopes"`
-				DefaultRoleID *string `json:"default_role_id"`
-				SubjectClaim  *string `json:"subject_claim"`
-				EmailClaim    *string `json:"email_claim"`
-				UsernameClaim *string `json:"username_claim"`
+				Name          *string            `json:"name"`
+				Kind          *string            `json:"kind"`
+				Enabled       *bool              `json:"enabled"`
+				Issuer        *string            `json:"issuer"`
+				AuthURL       *string            `json:"auth_url"`
+				TokenURL      *string            `json:"token_url"`
+				UserinfoURL   *string            `json:"userinfo_url"`
+				ClientID      *string            `json:"client_id"`
+				ClientSecret  *string            `json:"client_secret"`
+				Scopes        *string            `json:"scopes"`
+				DefaultRoleID *string            `json:"default_role_id"`
+				SubjectClaim  *string            `json:"subject_claim"`
+				EmailClaim    *string            `json:"email_claim"`
+				UsernameClaim *string            `json:"username_claim"`
 				LDAP          *models.LDAPConfig `json:"ldap"`
 				SAML          *models.SAMLConfig `json:"saml"`
 			}
@@ -325,24 +325,50 @@ func handleIDPUpdate(store *Store) http.Handler {
 				return
 			}
 			err := store.UpdateIDP(id, func(p *models.IdentityProvider) error {
-				if req.Name != nil { p.Name = *req.Name }
-				if req.Kind != nil { p.Kind = *req.Kind }
-				if req.Enabled != nil { p.Enabled = *req.Enabled }
-				if req.Issuer != nil { p.Issuer = *req.Issuer }
-				if req.AuthURL != nil { p.AuthURL = *req.AuthURL }
-				if req.TokenURL != nil { p.TokenURL = *req.TokenURL }
-				if req.UserinfoURL != nil { p.UserinfoURL = *req.UserinfoURL }
-				if req.ClientID != nil { p.ClientID = *req.ClientID }
+				if req.Name != nil {
+					p.Name = *req.Name
+				}
+				if req.Kind != nil {
+					p.Kind = *req.Kind
+				}
+				if req.Enabled != nil {
+					p.Enabled = *req.Enabled
+				}
+				if req.Issuer != nil {
+					p.Issuer = *req.Issuer
+				}
+				if req.AuthURL != nil {
+					p.AuthURL = *req.AuthURL
+				}
+				if req.TokenURL != nil {
+					p.TokenURL = *req.TokenURL
+				}
+				if req.UserinfoURL != nil {
+					p.UserinfoURL = *req.UserinfoURL
+				}
+				if req.ClientID != nil {
+					p.ClientID = *req.ClientID
+				}
 				// Empty secret means "keep current" — prevents the UI from
 				// wiping it, since we never send it back down.
 				if req.ClientSecret != nil && *req.ClientSecret != "" {
 					p.ClientSecret = *req.ClientSecret
 				}
-				if req.Scopes != nil { p.Scopes = *req.Scopes }
-				if req.DefaultRoleID != nil { p.DefaultRoleID = *req.DefaultRoleID }
-				if req.SubjectClaim != nil { p.SubjectClaim = *req.SubjectClaim }
-				if req.EmailClaim != nil { p.EmailClaim = *req.EmailClaim }
-				if req.UsernameClaim != nil { p.UsernameClaim = *req.UsernameClaim }
+				if req.Scopes != nil {
+					p.Scopes = *req.Scopes
+				}
+				if req.DefaultRoleID != nil {
+					p.DefaultRoleID = *req.DefaultRoleID
+				}
+				if req.SubjectClaim != nil {
+					p.SubjectClaim = *req.SubjectClaim
+				}
+				if req.EmailClaim != nil {
+					p.EmailClaim = *req.EmailClaim
+				}
+				if req.UsernameClaim != nil {
+					p.UsernameClaim = *req.UsernameClaim
+				}
 				if req.SAML != nil {
 					p.SAML = req.SAML
 				}

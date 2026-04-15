@@ -125,9 +125,9 @@ func handleCancelMigrate(w http.ResponseWriter, r *http.Request) {
 // offlineMigrateMTLS. Zero value = previous behaviour (default pool,
 // keep VM name, keep original MACs).
 type MTLSOptions struct {
-	TargetPool     string // destination storage pool; empty = "default"
-	NewVMName      string // empty = keep source VM name
-	RegenerateMAC  bool   // rewrite every <mac/> in domain XML to a fresh random local MAC
+	TargetPool    string // destination storage pool; empty = "default"
+	NewVMName     string // empty = keep source VM name
+	RegenerateMAC bool   // rewrite every <mac/> in domain XML to a fresh random local MAC
 }
 
 func startOfflineMigrate(vmName, dest string, keepRaw bool, transport string, mtlsOptions MTLSOptions) {
@@ -202,11 +202,11 @@ func offlineMigrate(ctx context.Context, vmName, dest string, keepRaw bool) erro
 
 	// Track state so rollback knows what to undo.
 	wasRunning := false
-	vmShutDown := false                  // true once we've stopped the VM
-	var sourceDiskPaths []string         // original disk paths for cleanup on success
-	var transferredFiles []string        // remote paths to clean up on rollback
+	vmShutDown := false           // true once we've stopped the VM
+	var sourceDiskPaths []string  // original disk paths for cleanup on success
+	var transferredFiles []string // remote paths to clean up on rollback
 	definedOnTarget := false
-	var tmpFiles []string                // local temp files to clean up
+	var tmpFiles []string // local temp files to clean up
 
 	// ── Rollback helper ──────────────────────────────────────
 	rollback := func(reason string) {
