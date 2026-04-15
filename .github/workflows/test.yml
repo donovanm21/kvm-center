@@ -1,14 +1,20 @@
 name: test
 
-# GitHub Actions workflow — mirrors .gitea/workflows/test.yml byte-for-
-# byte so the same gates run whether the push lands on Gitea or a
-# GitHub mirror. Keep the two files in sync; if one ever needs a
-# platform-specific tweak, note it in docs/DEVELOPMENT.md.
+# GitHub Actions workflow — same gates as .gitea/workflows/test.yml.
+# The two are intentionally NOT byte-identical: GitHub-hosted runners
+# ship the `gh` CLI (cleaner than the Gitea-side curl/python dance),
+# and the `permissions:` block is a GitHub-ism. Keep the gate posture
+# and version stamps aligned; platform differences documented in
+# docs/DEVELOPMENT.md.
 #
-# Security-gate posture (v5.20.6):
-#   - govulncheck:  BLOCKING on any reachable Go vuln.
-#   - npm audit:    BLOCKING on CRITICAL; WARN on high/moderate/low.
-#   - gitleaks:     BLOCKING on any secret match.
+# Security-gate posture (v5.20.13):
+#   - Go 1.25, govulncheck blocking on any reachable stdlib / dep vuln.
+#   - npm audit blocking on CRITICAL webui deps, warn on high+ below.
+#   - gitleaks blocking on any match in working tree or history;
+#     historical placeholders allowlisted via .gitleaksignore.
+#   - open-issue-on-failure files / comments on a single
+#     security:ci-blocker-labelled issue when any of the above fail
+#     on a push to main.
 
 on:
   push:

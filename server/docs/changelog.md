@@ -10,6 +10,20 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.14
+- **CI parity sync** — verified and documented that every security
+  fix landed since v5.20.5 applies equally to GitHub Actions:
+  - Go 1.25 toolchain: already ported in v5.20.9.
+  - Gitleaks history allowlist: `.gitleaksignore` at repo root,
+    gitleaks picks it up automatically on both platforms.
+  - gofmt / lockfile / package-lock.json / go.mod changes: source
+    tree, shared.
+  - Posture comment synced at the top of both workflow files.
+  The one intentional divergence is the `open-issue-on-failure`
+  job — Gitea uses curl + python/urllib, GitHub uses the
+  pre-installed `gh` CLI. DEVELOPMENT.md updated to call this out
+  so a future editor doesn't try to force byte-identical files.
+
 ## v5.20.13
 - **Fix** — `gofmt -w server/host_metrics_test.go`. The new file
   landed with a couple of spacing quirks Go 1.25's gofmt rewrote
