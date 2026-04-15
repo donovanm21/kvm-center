@@ -202,4 +202,7 @@ export interface Features {
   disable_migrations?: boolean;
   disable_storage_upload?: boolean;
   disable_storage_delete?: boolean;
+  setup_complete?: boolean;
+  setup_completed_at?: string;
+  public_url?: string;
 }

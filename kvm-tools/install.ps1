@@ -5,10 +5,10 @@
 # telemetry (OS, kernel, IPs, filesystems) to the kvm-center server.
 #
 # Usage (run from an elevated PowerShell prompt):
-#   .\install.ps1 -Server http://10.10.100.8:8090
+#   .\install.ps1 -Server http://kvm-center.example.com:8090
 #
 # Or one-shot from the server:
-#   iwr -useb http://10.10.100.8:8090/downloads/install-kvm-tools.ps1 | iex
+#   iwr -useb http://kvm-center.example.com:8090/downloads/install-kvm-tools.ps1 | iex
 # (when invoked that way the script will fetch kvm-tools.exe from the same
 #  /downloads/ path automatically)
 
@@ -19,7 +19,7 @@ param(
     [string]$BinaryUrl = ""
 )
 
-if (-not $Server) { $Server = "http://10.10.100.8:8090" }
+if (-not $Server) { $Server = "http://localhost:8090" }
 
 $ErrorActionPreference = "Stop"
 $InstallDir = "C:\Program Files\kvm-tools"
@@ -108,7 +108,7 @@ $state = (Get-ScheduledTask -TaskName $TaskName).State
 $lastResult = (Get-ScheduledTaskInfo -TaskName $TaskName).LastTaskResult
 if ($state -eq "Running" -or $lastResult -eq 0 -or $lastResult -eq 267009) {
     Write-Info "kvm-tools is running (state=$state, lastResult=$lastResult)"
-    Write-Info "Verify in kvm-center: http://10.10.100.8:8096"
+    Write-Info "Verify in kvm-center: $Server"
 } else {
     Write-Warn "kvm-tools task state=$state lastResult=$lastResult — check Task Scheduler for details"
 }

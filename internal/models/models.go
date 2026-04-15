@@ -641,6 +641,13 @@ type Features struct {
 	// admin user so existing installs don't see the wizard.
 	SetupComplete    bool      `json:"setup_complete"`
 	SetupCompletedAt time.Time `json:"setup_completed_at,omitempty"`
+
+	// PublicURL is the operator-configured canonical URL clients use to
+	// reach this server (e.g. https://kvm.example.com). Threaded into
+	// Deployment page install snippets and notification webhook deep
+	// links. Empty means "fall back to window.location in the SPA and
+	// disable deep links in webhooks".
+	PublicURL string `json:"public_url,omitempty"`
 }
 
 // Permission constants. PermAdmin is a wildcard granting everything.

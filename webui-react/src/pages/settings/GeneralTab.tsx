@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useFeatures } from '@/hooks/useInventory';
 import { useAuth } from '@/hooks/useAuth';
 import { useUpdateFeatures } from '@/hooks/useAdminResources';
@@ -34,6 +35,8 @@ export function GeneralTab() {
 
   return (
     <div style={{ maxWidth: 720 }}>
+      <PublicURLSection canEdit={canEdit} />
+
       <div style={introStyle}>
         Features are enabled by default. Disabling one here greys the corresponding buttons out
         for every user and the server rejects the underlying API call — a defense-in-depth
@@ -61,6 +64,88 @@ export function GeneralTab() {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// PublicURLSection persists Features.PublicURL, the canonical address
+// clients use to reach this server. Feeds the Deployment page install
+// snippets and notification webhook deep links. Empty falls back to
+// window.location / KVM_CENTER_PUBLIC_URL env.
+function PublicURLSection({ canEdit }: { canEdit: boolean }) {
+  const [value, setValue] = useState('');
+  const [saved, setSaved] = useState('');
+  const [status, setStatus] = useState<'idle' | 'saving' | 'ok' | 'err'>('idle');
+  const [errMsg, setErrMsg] = useState('');
+
+  useEffect(() => {
+    fetch('/api/setup/state')
+      .then(r => r.json())
+      .then(d => {
+        const u = (d?.public_url || '') as string;
+        setValue(u);
+        setSaved(u);
+      })
+      .catch(() => {});
+  }, []);
+
+  const save = async () => {
+    setStatus('saving');
+    setErrMsg('');
+    try {
+      const r = await fetch('/api/settings/public-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ public_url: value.trim() }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setStatus('err');
+        setErrMsg(j.error || `HTTP ${r.status}`);
+        return;
+      }
+      const j = await r.json();
+      setValue(j.public_url || '');
+      setSaved(j.public_url || '');
+      setStatus('ok');
+      setTimeout(() => setStatus('idle'), 2000);
+    } catch (e: any) {
+      setStatus('err');
+      setErrMsg(String(e?.message || e));
+    }
+  };
+
+  const dirty = value.trim().replace(/\/$/, '') !== saved.replace(/\/$/, '');
+
+  return (
+    <div style={{ marginBottom: 22, padding: '14px 16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)', marginBottom: 4 }}>
+        Public URL
+      </div>
+      <div style={{ ...helpStyle, marginBottom: 10, maxWidth: 620 }}>
+        Canonical address clients use to reach this server (e.g. <code>https://kvm.example.com</code>).
+        Threads into Deployment page install snippets and notification webhook deep links.
+        Leave blank to fall back to the browser's current URL.
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          placeholder="https://kvm.example.com"
+          disabled={!canEdit}
+          style={{ flex: 1, minWidth: 260, padding: '6px 10px', fontSize: 13, background: 'var(--surface-2)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 4 }}
+        />
+        <button
+          onClick={save}
+          disabled={!canEdit || !dirty || status === 'saving'}
+          style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, cursor: (!canEdit || !dirty) ? 'not-allowed' : 'pointer', opacity: (!canEdit || !dirty) ? 0.5 : 1 }}
+        >
+          {status === 'saving' ? 'Saving…' : 'Save'}
+        </button>
+        {status === 'ok' && <span style={{ fontSize: 12, color: '#3FB950' }}>Saved</span>}
+        {status === 'err' && <span style={{ fontSize: 12, color: '#F85149' }}>{errMsg}</span>}
       </div>
     </div>
   );

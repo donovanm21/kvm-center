@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -26,6 +29,7 @@ func handleSetupState(store *Store) http.HandlerFunc {
 			"complete":     f.SetupComplete,
 			"completed_at": f.SetupCompletedAt,
 			"has_any_host": len(store.GetHosts()) > 0,
+			"public_url":   f.PublicURL,
 		})
 	}
 }
@@ -48,6 +52,53 @@ func handleSetupComplete(store *Store) http.HandlerFunc {
 			audit(store, r, AuditFeatures, "setup", map[string]string{"complete": "true"}, true, "")
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"complete": true})
+	}
+}
+
+// handlePublicURL lets an admin set or clear the canonical public URL
+// used by the Deployment page install snippets and notification deep
+// links. POST body: {"public_url":"https://kvm.example.com"} — empty
+// clears, falling back to KVM_CENTER_PUBLIC_URL env or the SPA's own
+// window.location.
+func handlePublicURL(store *Store) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost && r.Method != http.MethodPut {
+			writeError(w, http.StatusMethodNotAllowed, "POST / PUT only")
+			return
+		}
+		var body struct {
+			PublicURL string `json:"public_url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON")
+			return
+		}
+		u := strings.TrimSpace(body.PublicURL)
+		u = strings.TrimRight(u, "/")
+		if u != "" && !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+			writeError(w, http.StatusBadRequest, "public_url must start with http:// or https://")
+			return
+		}
+		f := store.GetFeatures()
+		f.PublicURL = u
+		store.SetFeatures(f)
+		audit(store, r, AuditFeatures, "public_url", map[string]string{"public_url": u}, true, "")
+		writeJSON(w, http.StatusOK, map[string]any{"public_url": u})
+	})
+}
+
+// seedPublicURLFromEnv copies KVM_CENTER_PUBLIC_URL into Features on
+// first boot so bootstrap.sh --interactive can pre-populate the value
+// without a UI round-trip. Once an admin saves any value (including
+// empty) from the Settings page, the env is no longer consulted.
+func seedPublicURLFromEnv(store *Store) {
+	f := store.GetFeatures()
+	if f.PublicURL != "" {
+		return
+	}
+	if env := strings.TrimSpace(os.Getenv("KVM_CENTER_PUBLIC_URL")); env != "" {
+		f.PublicURL = strings.TrimRight(env, "/")
+		store.SetFeatures(f)
 	}
 }
 

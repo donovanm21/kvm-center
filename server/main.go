@@ -325,7 +325,10 @@ func main() {
 	// needs to read it before the user signs in; /complete requires
 	// user.manage so only admins can close out the wizard.
 	backfillSetupComplete(store)
+	seedPublicURLFromEnv(store)
+	notifyStore = store
 	mux.HandleFunc("/api/setup/state", handleSetupState(store))
+	mux.Handle("/api/settings/public-url", requirePerm(store, "user.manage", handlePublicURL(store)))
 	mux.Handle("/api/setup/complete", requirePerm(store, "user.manage", http.HandlerFunc(handleSetupComplete(store))))
 	// Database backend status + migration (v5.1+). Gated on user.manage;
 	// considered a platform-ops operation alongside TLS management.

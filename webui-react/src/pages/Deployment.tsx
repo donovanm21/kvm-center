@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 type OS = 'rhel' | 'debian' | 'windows';
 
@@ -11,12 +11,24 @@ type OS = 'rhel' | 'debian' | 'windows';
  * /downloads/*. The standalone build portal on :8097 is retired.
  */
 export function Deployment() {
-  const serverURL    = `${location.protocol}//${location.host}`;
+  // Operator-configured public URL (Settings → General). When set, it
+  // threads through every install snippet so hypervisors + guests use
+  // the same canonical address regardless of how the admin happens to
+  // be browsing (LAN IP vs FQDN vs reverse proxy). Fallback is
+  // window.location to preserve prior behaviour for unconfigured installs.
+  const [publicURL, setPublicURL] = useState<string>('');
+  useEffect(() => {
+    fetch('/api/setup/state')
+      .then(r => r.json())
+      .then(d => setPublicURL((d?.public_url || '').replace(/\/$/, '')))
+      .catch(() => {});
+  }, []);
+  const serverURL    = publicURL || `${location.protocol}//${location.host}`;
   // Hypervisors + guests pull install scripts before they have any way
   // to trust a self-signed cert, so default the installer URLs to the
   // plaintext :8090 endpoint colocated with the server. The UI still
   // offers a TLS URL for the verification commands.
-  const plaintextURL = `http://${location.hostname}:8090`;
+  const plaintextURL = publicURL || `http://${location.hostname}:8090`;
   const downloads    = `${plaintextURL}/downloads`;
 
   return (

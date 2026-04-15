@@ -25,7 +25,7 @@ PKI_SERVER=""
 usage() {
   echo "Usage: $0 --server <url> [--port <port>] [--interval <duration>]"
   echo "                      [--enroll-token <token>] [--pki-server <url>] [--host-id <id>]"
-  echo "  --server        Control plane URL (required), e.g. http://10.10.100.8:8090"
+  echo "  --server        Control plane URL (required), e.g. http://kvm-center.example.com:8090"
   echo "  --port          Agent command port (default: 8081)"
   echo "  --interval      Telemetry interval (default: 30s)"
   echo "  --enroll-token  One-time token from kvm-center admin — exchanges a CSR for a"

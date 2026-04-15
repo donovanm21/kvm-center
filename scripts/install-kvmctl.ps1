@@ -21,11 +21,11 @@
   Overwrite without prompting.
 
 .EXAMPLE
-  iwr http://10.10.100.8:8090/downloads/install-kvmctl.ps1 -UseBasicParsing | iex
+  iwr http://kvm-center.example.com:8090/downloads/install-kvmctl.ps1 -UseBasicParsing | iex
     (then re-open PowerShell for the PATH update)
 
 .EXAMPLE
-  .\install-kvmctl.ps1 -Portal http://10.10.100.8:8090/downloads -InstallDir C:\tools
+  .\install-kvmctl.ps1 -Portal http://kvm-center.example.com:8090/downloads -InstallDir C:\tools
 #>
 [CmdletBinding()]
 param(

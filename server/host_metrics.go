@@ -127,7 +127,7 @@ func handleHostMetrics(store *Store) http.HandlerFunc {
 		id := parts[2]
 		samples := store.HostMetricsSnapshot(id)
 		if samples == nil {
-			// Try FQDN fallback (hv01 vs hv01.don.homelab).
+			// Try FQDN fallback (hv01 vs hv01.cluster.local).
 			for _, h := range store.GetHosts() {
 				if strings.EqualFold(h.ID, id) ||
 					strings.EqualFold(strings.SplitN(h.ID, ".", 2)[0], id) {

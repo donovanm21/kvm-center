@@ -37,6 +37,12 @@ func handleFeaturesUpdate(store *Store) http.Handler {
 		cur := store.GetFeatures()
 		f.SetupComplete = cur.SetupComplete
 		f.SetupCompletedAt = cur.SetupCompletedAt
+		// Preserve PublicURL too: legacy SPA tabs don't send it and
+		// we don't want to wipe the operator's configured URL on a
+		// Disable* toggle save. /api/settings/public-url owns writes.
+		if f.PublicURL == "" {
+			f.PublicURL = cur.PublicURL
+		}
 		store.SetFeatures(f)
 		audit(store, r, AuditFeatures, "features", map[string]string{
 			"disable_vm_create":      boolToStr(f.DisableVMCreate),

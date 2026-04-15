@@ -1,17 +1,17 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # install.sh — one-shot installer for kvm-tools on a guest VM.
 #
 # Installs /opt/kvm-tools/kvm-tools and a systemd unit that reports guest
 # telemetry (OS, kernel, IPs, filesystems) to the kvm-center server.
 #
 # Usage:
-#   sudo ./install.sh --server http://10.10.100.8:8090 [--interval 30s]
+#   sudo ./install.sh --server http://kvm-center.example.com:8090 [--interval 30s]
 #
 # Or set via env: KVM_TOOLS_SERVER=http://... sudo ./install.sh
 
 set -euo pipefail
 
-SERVER="${KVM_TOOLS_SERVER:-http://10.10.100.8:8090}"
+SERVER="${KVM_TOOLS_SERVER:-http://localhost:8090}"
 INTERVAL="30s"
 INSTALL_DIR="/opt/kvm-tools"
 BIN_NAME="kvm-tools"
