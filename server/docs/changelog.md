@@ -10,6 +10,17 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.1
+- **Installer detects existing state.** `bootstrap.sh --interactive`
+  now checks for a prior `.env`, the `kvm-center-mongo` volume, and a
+  running stack. If any of them exist it prompts with four choices:
+  *keep* (re-run `--deploy` against the current state — safest),
+  *reconfig* (regenerate `.env` and wipe the Mongo volume — requires
+  an extra confirmation because the old volume's auth will be
+  orphaned), *fresh* (destructive nuke: `docker compose down -v`,
+  delete `.env` and every `.env.bak.*`, start over — double-confirmed),
+  or *cancel*. Hypervisor-side data is never touched by any of these.
+
 ## v5.20.0
 - **Interactive installer.** `scripts/bootstrap.sh --interactive`
   is a bash+whiptail wizard that prompts for Mongo user / password
