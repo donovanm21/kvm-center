@@ -47,20 +47,34 @@ without the licensing, and without the footprint.
 
 ## Quick start
 
-One command on the host that will run the control plane:
+Interactive installer (recommended for fresh hosts — walks you
+through Mongo creds and the cluster DNS domain, writes `.env`
+with mode `0600`, then deploys):
 
 ```sh
 git clone <repo> /opt/kvm-center
 cd /opt/kvm-center
+scripts/bootstrap.sh --interactive
+```
+
+Re-running `--interactive` on an already-installed host opens a
+state-aware menu — **keep** (safe redeploy), **reconfig**,
+**fresh** (destructive nuke, double-confirmed), or **cancel** —
+so you can't silently clobber a working stack.
+
+For automated redeploys (CI, SSH loops) skip the TUI:
+
+```sh
 scripts/bootstrap.sh --deploy
 ```
 
-That builds the stack, brings it up on port **8190**, and — when
-you enroll your first hypervisor — pushes the agent binary out
-over SSH and mints its leaf certificate.
+Either path brings the stack up on port **8190**. Open it in a
+browser, create the admin account, and the built-in **setup
+wizard** steps you through enrolling your first hypervisor plus
+optional notifications + metrics — every step is skippable.
 
-See [**Getting started**](server/docs/getting-started.md) for
-hypervisor enrollment, TLS options, and the first-boot wizard.
+See [**Getting started**](server/docs/getting-started.md) for the
+full walkthrough, TLS options, and `kvmctl` setup.
 
 ---
 
