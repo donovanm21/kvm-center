@@ -1,0 +1,15 @@
+# gitleaks fingerprints that have been reviewed and confirmed safe.
+# Format: <commit-sha>:<path>:<rule-id>:<line>
+#
+# Anything added here is scanned again on every run — if the finding
+# moves (new line, new commit) the ignore no longer matches and the
+# scanner alerts again. Don't use this file to silence real secrets;
+# rotate + filter-repo for those.
+
+# v5.20.11: historical commit of server/docs/authentication.md had a
+# bearer-token EXAMPLE whose shape (TOKEN=<blob>) tripped gitleaks'
+# generic-api-key rule. The token was never real — it's a placeholder
+# in a docs page. HEAD is fixed (the variable-assignment pattern is
+# gone); this entry silences the old blob that filter-repo would
+# otherwise have to rewrite.
+849d3143c3b540716d0f10661c1ce50bd73f51e0:server/docs/authentication.md:generic-api-key:81

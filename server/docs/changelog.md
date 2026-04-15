@@ -10,6 +10,20 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.11
+- **Fix** — final gitleaks holdout was a historical commit of
+  `authentication.md` where an example bearer token used the
+  `TOKEN=<blob>` shape that trips the `generic-api-key` rule.
+  HEAD is already reworded; added the finding's fingerprint to a
+  new `.gitleaksignore` (one line, fully documented) so the gate
+  goes green without a second history rewrite. Real secrets
+  should never be allowlisted — rotate + `git filter-repo`
+  instead, as the README for that file spells out.
+- **Confirmed end-to-end** — on run 43 (v5.20.10) the
+  `open-issue-on-failure` job successfully filed issue #1 against
+  the repo when gitleaks tripped. The dedup-by-label path will
+  pick up subsequent failures as comments on the same issue.
+
 ## v5.20.10
 - **Fix** — gitleaks kept matching a placeholder bearer-token
   example in `authentication.md` because the assignment shape
