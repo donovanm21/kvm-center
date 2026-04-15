@@ -18,6 +18,7 @@ import { KVMTools } from './pages/KVMTools';
 import { Migrations } from './pages/Migrations';
 import { Deployment } from './pages/Deployment';
 import { Settings } from './pages/Settings';
+import { Docs } from './pages/Docs';
 
 // Port of each v3 view lands as its own route and replaces the stub.
 // Phase 1 ships Dashboard parity only.
@@ -66,6 +67,8 @@ function Shell() {
         <Route path="/kvm-tools" element={<KVMTools />} />
         <Route path="/deployment" element={<Deployment />} />
         <Route path="/settings/*" element={<Settings />} />
+        <Route path="/docs" element={<Docs />} />
+        <Route path="/docs/:slug" element={<Docs />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

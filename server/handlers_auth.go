@@ -622,6 +622,8 @@ var publicAPIPrefixes = []string{
 	// Migration grant public key is trust material, safe to expose so
 	// agents can cache it before they hold a session.
 	"/api/migrations/grant-pubkey",
+	// In-app docs are reference material — public.
+	"/api/docs/",
 }
 
 func authMiddleware(store *Store, next http.Handler) http.Handler {
