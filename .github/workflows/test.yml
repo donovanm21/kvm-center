@@ -1,0 +1,104 @@
+name: test
+
+# GitHub Actions workflow — mirrors .gitea/workflows/test.yml byte-for-
+# byte so the same gates run whether the push lands on Gitea or a
+# GitHub mirror. Keep the two files in sync; if one ever needs a
+# platform-specific tweak, note it in docs/DEVELOPMENT.md.
+#
+# Security-gate posture (v5.20.6):
+#   - govulncheck:  BLOCKING on any reachable Go vuln.
+#   - npm audit:    BLOCKING on CRITICAL; WARN on high/moderate/low.
+#   - gitleaks:     BLOCKING on any secret match.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: go mod tidy
+        run: go mod tidy
+
+      - name: gofmt
+        run: |
+          changed=$(gofmt -l .)
+          if [ -n "$changed" ]; then
+            echo "files need gofmt:"; echo "$changed"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)"/bin/govulncheck ./...
+
+  webui-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: npm ci
+        working-directory: webui-react
+        run: npm ci --no-audit --no-fund --loglevel=error
+
+      - name: npm audit (CRITICAL — blocking)
+        working-directory: webui-react
+        run: npm audit --audit-level=critical --omit=dev
+
+      - name: npm audit (high / moderate — warn only)
+        working-directory: webui-react
+        continue-on-error: true
+        run: |
+          echo "::group::npm audit summary"
+          npm audit --audit-level=high --omit=dev || true
+          echo "::endgroup::"
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks
+        run: |
+          GITLEAKS_VERSION=8.18.4
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /tmp
+          /tmp/gitleaks detect --source . --no-banner --redact --verbose
+
+  summary:
+    needs: [lint-test, webui-audit, gitleaks]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: report
+        run: |
+          echo "lint-test:   ${{ needs.lint-test.result }}"
+          echo "webui-audit: ${{ needs.webui-audit.result }}"
+          echo "gitleaks:    ${{ needs.gitleaks.result }}"
+          if [ "${{ needs.lint-test.result }}"   = "success" ] \
+          && [ "${{ needs.webui-audit.result }}" = "success" ] \
+          && [ "${{ needs.gitleaks.result }}"    = "success" ]; then
+            echo "All security gates passed."
+          else
+            echo "::error::One or more security gates failed — see individual job logs."
+            exit 1
+          fi
