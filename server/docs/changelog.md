@@ -10,6 +10,22 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.10
+- **Fix** — gitleaks kept matching a placeholder bearer-token
+  example in `authentication.md` because the assignment shape
+  `TOKEN=<base64-ish>` alone satisfies gitleaks' generic-api-key
+  rule. Reworded the example to an inline curl with a
+  `kvmc_YOUR_TOKEN_HERE` placeholder that doesn't trip the regex.
+- **Fix** — the `open-issue-on-failure` Gitea job crashed with
+  `KeyError: 'BODY'` on every run because the shell heredoc vars
+  weren't exported into `python3 -c`. Rewrote the job to inline
+  the whole request flow in a single `python3 - <<PY` block using
+  `urllib.request`; no more brittle shell-to-python env bridges,
+  and the label-attach failure is now swallowed cleanly so a
+  fresh repo without the `security:ci-blocker` label doesn't
+  cascade into a red "issue-opener failed" on top of the real
+  gate failure.
+
 ## v5.20.9
 - **Security** — closed every finding run 41 surfaced:
   - **Go 1.25** everywhere (go.mod, Dockerfile.server, both
