@@ -29,6 +29,14 @@ func handleFeaturesUpdate(store *Store) http.Handler {
 			writeError(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}
+		// This endpoint only manages the Disable* toggles. SetupComplete /
+		// SetupCompletedAt are owned by /api/setup/complete and must not
+		// round-trip through here — a stale SPA tab that loaded before
+		// v5.20 would send a payload without those fields and we'd
+		// clobber them to zero, re-triggering the wizard. Preserve.
+		cur := store.GetFeatures()
+		f.SetupComplete = cur.SetupComplete
+		f.SetupCompletedAt = cur.SetupCompletedAt
 		store.SetFeatures(f)
 		audit(store, r, AuditFeatures, "features", map[string]string{
 			"disable_vm_create":      boolToStr(f.DisableVMCreate),

@@ -10,6 +10,13 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.3
+- **Fix** — `POST /api/settings/update` no longer clobbers the
+  `SetupComplete` flag when the payload omits it. Only the Disable*
+  toggles round-trip through that endpoint now; setup state is
+  preserved from the current in-memory value. Prevents a stale SPA
+  tab from retriggering the first-boot wizard.
+
 ## v5.20.2
 - **Docs refresh.** README quick start now leads with
   `--interactive`; `getting-started.md` explains the first-boot
