@@ -66,6 +66,12 @@ func (s *Store) startSnapshotScheduler(ctx context.Context) {
 // the slice of due policies under the lock, then release it so the
 // agent calls don't serialise the whole store.
 func (s *Store) runDueSnapshotPolicies(ctx context.Context) {
+	// v5.18.8: respect the global disable_snapshots kill-switch. Without
+	// this the scheduler kept firing policies + taking snapshots even
+	// when the operator had flipped the feature off in General.
+	if f := s.GetFeatures(); f.DisableSnapshots {
+		return
+	}
 	now := time.Now().UTC()
 	s.mu.RLock()
 	due := make([]*models.SnapshotPolicy, 0)
@@ -330,8 +336,13 @@ func handleSnapshotPolicies(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
+			// GET stays open so the UI can still render the list and
+			// show a "snapshots disabled" banner when the flag is on.
 			writeJSON(w, http.StatusOK, store.ListSnapshotPolicies())
 		case http.MethodPost:
+			if featureBlocked(w, store, "snapshots", "snapshot policies") {
+				return
+			}
 			var p models.SnapshotPolicy
 			if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
@@ -373,6 +384,9 @@ func handleSnapshotPolicy(store *Store) http.HandlerFunc {
 				writeError(w, http.StatusMethodNotAllowed, "POST only")
 				return
 			}
+			if featureBlocked(w, store, "snapshots", "snapshot policies") {
+				return
+			}
 			p := store.GetSnapshotPolicy(id)
 			if p == nil {
 				writeError(w, http.StatusNotFound, "policy not found")
@@ -385,6 +399,9 @@ func handleSnapshotPolicy(store *Store) http.HandlerFunc {
 		}
 		switch r.Method {
 		case http.MethodDelete:
+			if featureBlocked(w, store, "snapshots", "snapshot policies") {
+				return
+			}
 			if err := store.DeleteSnapshotPolicy(id); err != nil {
 				audit(store, r, AuditSnapPolicyDelete, "policy/"+id, nil, false, err.Error())
 				writeError(w, http.StatusNotFound, err.Error())
@@ -393,6 +410,9 @@ func handleSnapshotPolicy(store *Store) http.HandlerFunc {
 			audit(store, r, AuditSnapPolicyDelete, "policy/"+id, nil, true, "")
 			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		case http.MethodPut, http.MethodPatch:
+			if featureBlocked(w, store, "snapshots", "snapshot policies") {
+				return
+			}
 			var req struct {
 				Name          *string  `json:"name,omitempty"`
 				Enabled       *bool    `json:"enabled,omitempty"`
