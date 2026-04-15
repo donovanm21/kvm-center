@@ -65,12 +65,12 @@ const guestToolsFreshness = 5 * time.Minute
 
 // Store is the in-memory data store backed by a JSON file.
 type Store struct {
-	mu         sync.RWMutex
+	mu sync.RWMutex
 	// saveWG tracks in-flight async Save goroutines so tests can
 	// wait for persistence before tearing down TempDir. Production
 	// code never needs to wait — the fire-and-forget pattern is
 	// correct for the hot path.
-	saveWG sync.WaitGroup
+	saveWG     sync.WaitGroup
 	hosts      map[string]*models.Host
 	vms        map[string][]*models.VM          // keyed by host_id
 	storage    map[string][]*models.StoragePool // keyed by host_id
