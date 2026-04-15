@@ -10,6 +10,14 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.6
+- **GitHub Actions support.** Mirrored `.gitea/workflows/test.yml` to
+  `.github/workflows/test.yml` so the same three security gates
+  (govulncheck / npm audit / gitleaks) plus gofmt / vet / test run
+  on GitHub forks out of the box. The workflow syntax is portable;
+  both files are kept byte-identical. Platform notes in
+  `docs/DEVELOPMENT.md`.
+
 ## v5.20.5
 - **CI security gates.** `.gitea/workflows/test.yml` now runs three
   vulnerability scanners on every push:
