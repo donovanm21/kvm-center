@@ -9,7 +9,7 @@
   directory to the user's PATH.
 
 .PARAMETER Portal
-  http://HOST:8097 base URL of the kvm-center build portal. Required.
+  http://HOST:8090/downloads base URL of the kvm-center build portal. Required.
 
 .PARAMETER InstallDir
   Target directory. Defaults to %LOCALAPPDATA%\Programs\kvm-center.
@@ -21,11 +21,11 @@
   Overwrite without prompting.
 
 .EXAMPLE
-  iwr http://REDACTED-HOST:8097/install-kvmctl.ps1 -UseBasicParsing | iex
+  iwr http://REDACTED-HOST:8090/downloads/install-kvmctl.ps1 -UseBasicParsing | iex
     (then re-open PowerShell for the PATH update)
 
 .EXAMPLE
-  .\install-kvmctl.ps1 -Portal http://REDACTED-HOST:8097 -InstallDir C:\tools
+  .\install-kvmctl.ps1 -Portal http://REDACTED-HOST:8090/downloads -InstallDir C:\tools
 #>
 [CmdletBinding()]
 param(

@@ -29,9 +29,8 @@ Ports:
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| 8090 | HTTP     | Agent telemetry + API (fallback for agents without the cluster CA) |
+| 8090 | HTTP     | Agent telemetry + API + `/downloads/*` (binaries + install scripts, reachable before an agent trusts the cluster CA) |
 | 8190 | HTTPS    | Web UI + API (operator-facing) |
-| 8097 | HTTP     | Build portal — serves agent binaries, installer scripts, the kvmctl CLI |
 
 ## 2. Create the admin account
 
@@ -52,7 +51,7 @@ CA. Two steps:
 2. **Run the installer** on the hypervisor:
 
    ```sh
-   curl -fsSL http://<server>:8097/install-agent.sh | bash -s -- \
+   curl -fsSL http://<server>:8090/downloads/install-agent.sh | bash -s -- \
      --server http://<server>:8090 \
      --host-id hv01.example.com \
      --enroll-token enroll_…
@@ -70,8 +69,8 @@ on the host detail page confirms the cert is live.
 ## 4. Set up the CLI (optional)
 
 ```sh
-curl -fsSL http://<server>:8097/install-kvmctl.sh | bash -s -- \
-  --portal http://<server>:8097
+curl -fsSL http://<server>:8090/downloads/install-kvmctl.sh | bash -s -- \
+  --portal http://<server>:8090/downloads
 # then mint a token in the user menu → My API tokens
 kvmctl login --server https://<server>:8190 --token kvmc_…
 kvmctl hosts

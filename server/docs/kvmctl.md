@@ -15,8 +15,8 @@ token minted from the user menu (personal) or Settings → API Tokens
 ### Linux / macOS (one-shot)
 
 ```sh
-curl -fsSL http://<portal>:8097/install-kvmctl.sh | bash -s -- \
-  --portal http://<portal>:8097
+curl -fsSL http://<server>:8090/downloads/install-kvmctl.sh | bash -s -- \
+  --portal http://<server>:8090/downloads
 ```
 
 Auto-detects OS + arch, installs to `/usr/local/bin` (falls back to
@@ -26,13 +26,13 @@ Auto-detects OS + arch, installs to `/usr/local/bin` (falls back to
 ### Windows PowerShell
 
 ```powershell
-iwr http://<portal>:8097/install-kvmctl.ps1 -UseBasicParsing -OutFile $env:TEMP\i.ps1
-& $env:TEMP\i.ps1 -Portal http://<portal>:8097
+iwr http://<server>:8090/downloads/install-kvmctl.ps1 -UseBasicParsing -OutFile $env:TEMP\i.ps1
+& $env:TEMP\i.ps1 -Portal http://<server>:8090/downloads
 ```
 
 ### Manual download
 
-Binaries are on the build portal: `kvmctl-linux-amd64`,
+Binaries are served at `/downloads/`: `kvmctl-linux-amd64`,
 `-linux-arm64`, `-darwin-amd64`, `-darwin-arm64`,
 `-windows-amd64.exe`.
 

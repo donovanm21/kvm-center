@@ -10,6 +10,24 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.16.0
+- **Consolidated build portal into the server.** The standalone
+  `kvm-center-build` container (port **8097**) is retired. Agent /
+  kvm-tools / kvmctl binaries and install scripts are now served
+  directly by `kvm-center-server` under `/downloads/*`, baked into
+  the server image at build time. One fewer container, one fewer
+  firewall hole, one fewer URL to remember.
+- **Breaking:** `http://<host>:8097/...` URLs in old bookmarks /
+  scripts no longer resolve. Update to
+  `http://<server>:8090/downloads/...`. `update-agent.sh`,
+  `install-agent.sh`, `install-kvmctl.sh/.ps1`, and the kvm-tools
+  Windows installer all default to the new path. `bootstrap.sh
+  --update-agents` rolls the new URL to every hypervisor
+  automatically on the next deploy.
+- **Deployment page.** Rewritten to link same-origin
+  `/downloads/*`, drop the 8097 health probe, and include kvmctl
+  binaries + installers in the direct-download table.
+
 ## v5.15.0
 - **Docs** — new **Operations** section with two pages:
   *Networking & firewall* (every port kvm-center listens on, the
