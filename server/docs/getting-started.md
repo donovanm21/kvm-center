@@ -54,7 +54,7 @@ CA. Two steps:
    ```sh
    curl -fsSL http://<server>:8097/install-agent.sh | bash -s -- \
      --server http://<server>:8090 \
-     --host-id hvnode01.example.com \
+     --host-id hv01.example.com \
      --enroll-token enroll_…
    ```
 

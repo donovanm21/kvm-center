@@ -40,7 +40,7 @@ The unified command path. Body:
 
 ```json
 {
-  "host_id": "hvnode01.example.com",
+  "host_id": "hv01.example.com",
   "vm_uuid": "…",
   "vm_name": "web01",
   "action": "START",
@@ -80,7 +80,7 @@ Proxies the agent's `/snapshots/<vm>` endpoint.
 ## Hypervisor PKI (v5.10+)
 
 ### `POST /api/ca/enroll`
-Admin-only. Body: `{"host_id": "hvnode01.example.com"}`. Returns a
+Admin-only. Body: `{"host_id": "hv01.example.com"}`. Returns a
 one-time enrollment token (10-min TTL).
 
 ### `POST /api/ca/sign`
