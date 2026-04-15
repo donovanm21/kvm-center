@@ -10,6 +10,12 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.17.1
+- **Host detail de-duped.** The VM list that used to render on both
+  Summary and the VMs tab now lives only on the VMs tab, which
+  picks up the richer row (per-VM CPU bar + lifecycle + console
+  actions) plus the guest-tools column that used to be VMs-tab-only.
+
 ## v5.17.0
 - **In-UI host sparklines.** Host detail page now shows last-hour
   CPU / memory / aggregate-storage-% sparklines under the resource
