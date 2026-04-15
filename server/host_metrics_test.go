@@ -37,12 +37,12 @@ func TestHostMetricRing_WrapsAndKeepsOrder(t *testing.T) {
 		t.Fatalf("snapshot len=%d, want %d", len(got), hostMetricCap)
 	}
 	// The oldest retained sample should be index (total - cap).
-	wantFirst := float64(hostMetricCap/2)
+	wantFirst := float64(hostMetricCap / 2)
 	if got[0].CPU != wantFirst {
 		t.Errorf("first retained sample CPU=%v, want %v", got[0].CPU, wantFirst)
 	}
 	// And the newest should reflect the last push.
-	wantLast := float64(hostMetricCap+hostMetricCap/2-1)
+	wantLast := float64(hostMetricCap + hostMetricCap/2 - 1)
 	if got[len(got)-1].CPU != wantLast {
 		t.Errorf("last sample CPU=%v, want %v", got[len(got)-1].CPU, wantLast)
 	}
