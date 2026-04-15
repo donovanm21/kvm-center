@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiGet, apiPost } from '@/api/client';
+import { PaginationBar, usePagination } from '@/components/Pagination';
 import { useAuth } from '@/hooks/useAuth';
 import { useVMs } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
@@ -80,6 +81,7 @@ export function SnapshotPolicies() {
   if (policies.error) return <div className="tone-panel danger" style={{ padding: 12, fontSize: 12 }}>Failed to load: {(policies.error as Error).message}</div>;
 
   const list = policies.data ?? [];
+  const pg = usePagination(list);
 
   return (
     <>
@@ -106,6 +108,8 @@ export function SnapshotPolicies() {
             No snapshot policies yet. Create one to schedule automatic snapshots with retention.
           </div>
         ) : (
+          <>
+          <div className="data-table-scroll">
           <table className="data-table">
             <thead>
               <tr>
@@ -119,7 +123,7 @@ export function SnapshotPolicies() {
               </tr>
             </thead>
             <tbody>
-              {list.map((p) => (
+              {pg.items.map((p) => (
                 <tr key={p.id}>
                   <td style={{ fontWeight: 500, color: 'var(--text-strong)' }}>{p.name}</td>
                   <td><span className={`tone-pill ${p.enabled ? 'ok' : 'muted'}`}>{p.enabled ? 'enabled' : 'disabled'}</span></td>
@@ -151,6 +155,9 @@ export function SnapshotPolicies() {
               ))}
             </tbody>
           </table>
+          </div>
+          <PaginationBar pagination={pg} noun="policies" />
+          </>
         )}
       </div>
 
