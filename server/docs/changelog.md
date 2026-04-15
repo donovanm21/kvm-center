@@ -10,6 +10,13 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.15.0
+- **Docs** — new **Operations** section with two pages:
+  *Networking & firewall* (every port kvm-center listens on, the
+  firewalld recipe, live/offline migration bandwidth budgets) and
+  *Remote access* (VPN / reverse-proxy / Zero Trust topologies for
+  publishing the control plane safely).
+
 ## v5.14.0
 - **In-app docs site.** Markdown files under `server/docs/` are
   embedded into the binary, rendered with goldmark, and served via
