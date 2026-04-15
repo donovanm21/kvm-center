@@ -61,7 +61,14 @@ case "$MODE" in
 
   --stack)
     echo "Building and starting KVM Center stack..."
-    docker compose build
+    # Pass the current commit SHA as a build arg so the Dockerfile's
+    # test + build stages pick up a fresh layer on every new commit.
+    # Without this, BuildKit can reuse a stale `go test ./...` layer
+    # from a prior state and report green even when the current source
+    # has broken tests — we hit this on v5.13.1. Commit SHA is already
+    # HEAD at this point because --deploy did a `git reset --hard`.
+    GIT_SHA=$(git rev-parse HEAD)
+    docker compose build --build-arg GIT_SHA="$GIT_SHA"
     docker compose up -d
     echo ""
     echo "  Web UI → http://$(hostname -I | awk '{print $1}'):8095"
@@ -95,7 +102,14 @@ EOF_ENV
       chmod 0600 .env
       echo "Wrote .env (0600). Keep this file safe and off-host for disaster recovery."
     fi
-    docker compose build
+    # Pass the current commit SHA as a build arg so the Dockerfile's
+    # test + build stages pick up a fresh layer on every new commit.
+    # Without this, BuildKit can reuse a stale `go test ./...` layer
+    # from a prior state and report green even when the current source
+    # has broken tests — we hit this on v5.13.1. Commit SHA is already
+    # HEAD at this point because --deploy did a `git reset --hard`.
+    GIT_SHA=$(git rev-parse HEAD)
+    docker compose build --build-arg GIT_SHA="$GIT_SHA"
     docker compose up -d
     echo "Stack deployed. Pushing fresh agent binary to each hypervisor…"
     "$REPO_DIR/scripts/bootstrap.sh" --update-agents || \
