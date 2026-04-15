@@ -10,6 +10,18 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.18.0
+- **Scrollable + paginated tables.** Every heavy list (Hosts,
+  VMs, Tools update centre, Host detail VMs/Storage tabs) now
+  wraps the table in a scroll region with a sticky header row and
+  a standard pagination footer: 10 / 25 / 50 / 100 / All, default
+  25, first/prev/next/last controls. No more rows getting cut off
+  at the bottom of a tall list.
+- New shared primitive: `usePagination` + `<PaginationBar>` in
+  `components/Pagination.tsx`. The legacy controlled `Pagination`
+  component is kept as a thin shim so the Dashboard / Migrations /
+  Storage callers keep working unchanged.
+
 ## v5.17.2
 - **VMs list Guest-tools column.** Replaced the plain text with the
   same tone-pill style as the Tools update centre: `current · vX.Y`,

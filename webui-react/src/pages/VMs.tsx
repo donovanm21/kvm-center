@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { CreateVMModal } from '@/components/CreateVMModal';
 import { KVMToolsPill } from '@/components/KVMToolsPill';
+import { PaginationBar, usePagination } from '@/components/Pagination';
 import { SortableTH, useSort } from '@/components/SortableTH';
 import { useVMs, useFeatures, useKVMToolsLatest, useMigrations } from '@/hooks/useInventory';
 import { useAuth } from '@/hooks/useAuth';
@@ -60,6 +61,8 @@ export function VMs() {
     return [...base].sort((a, b) => compare(a[sort.key], b[sort.key]));
   }, [vms.data, query, sort, compare]);
 
+  const pg = usePagination(filtered);
+
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
@@ -85,6 +88,8 @@ export function VMs() {
           <EmptyRow text={query ? 'No VMs match your search.' : 'No VMs have reported yet.'} />
         )}
         {filtered.length > 0 && (
+          <>
+          <div className="data-table-scroll">
           <table className="data-table">
             <thead>
               <tr>
@@ -98,7 +103,7 @@ export function VMs() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((v) => (
+              {pg.items.map((v) => (
                 <VMRow
                   key={v.uuid}
                   vm={v}
@@ -108,6 +113,9 @@ export function VMs() {
               ))}
             </tbody>
           </table>
+          </div>
+          <PaginationBar pagination={pg} noun="VMs" />
+          </>
         )}
       </div>
       <CreateVMModal open={createOpen} onClose={() => setCreateOpen(false)} />

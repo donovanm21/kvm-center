@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { apiPost } from '@/api/client';
+import { PaginationBar, usePagination } from '@/components/Pagination';
 import { SortableTH, useSort } from '@/components/SortableTH';
 import { useAuth } from '@/hooks/useAuth';
 import { useKVMToolsLatest, useVMs } from '@/hooks/useInventory';
@@ -82,6 +83,8 @@ export function KVMTools() {
   const updateable = rows.filter((r) => r.status === 'outdated' || r.status === 'missing');
   const allSelected = updateable.length > 0 && updateable.every((r) => selected.has(r.vm.uuid));
   const someSelected = updateable.some((r) => selected.has(r.vm.uuid));
+
+  const pg = usePagination(rows);
 
   const toggle = (uuid: string) => {
     setSelected((cur) => {
@@ -173,6 +176,8 @@ export function KVMTools() {
               : 'No VMs match this filter.'}
           </div>
         ) : (
+          <>
+          <div className="data-table-scroll">
           <table className="data-table">
             <thead>
               <tr>
@@ -193,7 +198,7 @@ export function KVMTools() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ vm, status }) => {
+              {pg.items.map(({ vm, status }) => {
                 const checked = selected.has(vm.uuid);
                 const updateable = status === 'outdated' || status === 'missing';
                 return (
@@ -228,6 +233,9 @@ export function KVMTools() {
               })}
             </tbody>
           </table>
+          </div>
+          <PaginationBar pagination={pg} noun="VMs" />
+          </>
         )}
       </div>
 
