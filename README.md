@@ -1,17 +1,116 @@
-# KVM Center
+<div align="center">
 
-A centralised management platform for KVM hypervisor fleets —
-single pane of glass for VMs, hosts, snapshots, migrations,
-notifications, metrics, and audit. Built in Go + React. Stateless
-server, tiny Go agents, MongoDB persistence, mutual-TLS-authenticated
-migrations with signed per-migration grants.
+<img src="docs/assets/logo.svg" alt="kvm-center" width="112" height="112">
+
+<img src="docs/assets/wordmark.svg" alt="kvm center" height="44">
+
+**A single pane of glass for your KVM hypervisor fleet.**
+
+Inventory, live + offline migrations, snapshots, VNC consoles,
+mTLS between hosts, signed per-migration grants, in-app docs,
+Influx-backed metrics — all in one Go binary and a tiny agent.
+
+[Quick start](#quick-start) · [Documentation](server/docs/overview.md) · [Architecture](server/docs/architecture.md) · [Changelog](server/docs/changelog.md)
+
+![Go](https://img.shields.io/badge/Go-1.22-00ADD8?style=flat-square&logo=go&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)
+![libvirt](https://img.shields.io/badge/libvirt-qemu%2Btls-E3571E?style=flat-square)
+![Status](https://img.shields.io/badge/status-active-3FB950?style=flat-square)
+
+</div>
+
+---
+
+## Why kvm-center
+
+Running KVM directly is great. Running ten of them is a chore —
+SSHing between hosts, juggling `virsh`, hand-copying disks,
+remembering which pool lives where. kvm-center gives you the
+vCenter-style control surface KVM deserves, without the appliance,
+without the licensing, and without the footprint.
+
+- **One server, many hypervisors.** A stateless Go control plane
+  and a ~7 MB agent per host. MongoDB for persistence, nothing else.
+- **Migrations that just work.** Live or offline, over native
+  `qemu+tls://` with Ed25519-signed per-migration grants. No SSH
+  key sprawl, no shared NFS assumed.
+- **Snapshots, consoles, metrics.** Per-VM snapshot timelines,
+  in-browser VNC, InfluxDB line-protocol metrics with a downloadable
+  Grafana dashboard.
+- **Auth that fits your org.** Local users, API tokens, LDAP, SAML,
+  OIDC, and 2FA — all in the same binary.
+- **Docs that ship with the code.** `server/docs/*.md` is embedded
+  and rendered in-app. The Help icon in the top bar is how your
+  operators learn the product.
+
+---
+
+## Quick start
+
+One command on the host that will run the control plane:
+
+```sh
+git clone <repo> /opt/kvm-center
+cd /opt/kvm-center
+scripts/bootstrap.sh --deploy
+```
+
+That builds the stack, brings it up on port **8190**, and — when
+you enroll your first hypervisor — pushes the agent binary out
+over SSH and mints its leaf certificate.
+
+See [**Getting started**](server/docs/getting-started.md) for
+hypervisor enrollment, TLS options, and the first-boot wizard.
+
+---
+
+## What's in the box
+
+| Surface | What it does |
+|---|---|
+| **Dashboard** | Fleet-wide CPU / memory / storage rollup, health pills per host, recent migrations. |
+| **Hosts** | Per-hypervisor telemetry, mTLS enrollment state, storage pools, network bridges. |
+| **VMs** | Start / stop / restart / migrate / snapshot / console — sortable, searchable, bulk-selectable. |
+| **Migrations** | Live + offline, transport toggle (mTLS / SSH), advanced modal for pool picker, VM rename, MAC regen. |
+| **Snapshots** | Per-VM timelines, fleet-wide snapshot overview, create / revert / delete. |
+| **Metrics** | Influx v2 sink, Grafana dashboard JSON served from `/api/grafana/dashboard.json`. |
+| **Audit** | Every state-changing action, filterable, shippable to syslog / HTTP. |
+| **Settings** | Users, IdPs, API tokens, TLS management, notification channels, DB status. |
+| **Docs** | Embedded help site under `/docs`, rendered from `server/docs/*.md`. |
+| **kvmctl** | Cross-platform CLI for scripting against the same API. |
+
+---
+
+## Architecture
+
+```
+Browser ─── :8190 ──▶  kvm-center-server (Go)
+                       │   HTTPS · session / bearer
+                       ▼
+                  MongoDB persistence
+                       ▲
+                       │   HTTPS
+                       ▼
+           ┌────────────┬────────────┐
+           │            │            │
+        hv01:8081    hv02:8081    hv03:8081
+        (kvm-center-agent systemd)
+           ↕            ↕            ↕
+           └── qemu+tls :16514 (east-west) ──┘
+                signed grants · libvirt hook enforced
+```
+
+Full diagram and trust boundaries:
+[**Architecture**](server/docs/architecture.md).
+
+---
 
 ## Documentation
 
-The canonical documentation ships with the server binary and is
-served under **`/docs`** in the running UI (Help icon top-right).
-Source markdown lives at [`server/docs/`](server/docs/) — edits
-travel with the release binary.
+The canonical docs ship with the server binary and render under
+**`/docs`** in the running UI (Help icon, top-right). Source
+markdown lives next to the code so a release binary can never
+drift out of sync with its own help site.
 
 | Page | Source |
 |------|--------|
@@ -29,43 +128,33 @@ travel with the release binary.
 
 ### Contributor docs
 
-These stay at the repo root — different audience, rarely read by
-operators:
+Different audience — rarely read by operators, kept at the repo root:
 
-- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — working on
-  kvm-center itself (local build, test harness, release process).
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — building and
+  testing kvm-center itself.
 - [`docs/STYLE_GUIDE.md`](docs/STYLE_GUIDE.md) — frontend design
   tokens and component conventions.
+
+---
 
 ## Editorial policy
 
 A feature commit that changes operator-visible behaviour updates
-[`server/docs/`](server/docs/) in the same commit, not a follow-up.
-Every tagged release adds an entry to
+[`server/docs/`](server/docs/) **in the same commit**, not a
+follow-up. Every tagged release adds an entry to
 [`server/docs/changelog.md`](server/docs/changelog.md) — no dates,
 version heading only.
 
-## Quick start
+---
 
-```sh
-git clone <repo> /opt/kvm-center
-cd /opt/kvm-center
-scripts/bootstrap.sh --deploy
-```
+## License
 
-See [Getting started](server/docs/getting-started.md) for the rest.
+kvm-center is a homelab-origin project currently published without
+a redistribution licence. Feel free to read, fork, and run it; if
+you'd like to build on it commercially, open an issue first.
 
-## Architecture at a glance
+<div align="center">
 
-```
-Browser → :8190 → kvm-center-server (Go)
-                     ↑ HTTPS + session / bearer token
-                     ↓ HTTPS/HTTP
-              hvnode01:8081  hvnode02:8081  …
-              (kvm-center-agent systemd service)
-                    ↕ qemu+tls :16514 between agents
-                      (signed grants, libvirt hook enforced)
-```
+Built with Go, React, and a deep suspicion of appliances.
 
-Full diagram + trust boundaries in
-[architecture](server/docs/architecture.md).
+</div>
