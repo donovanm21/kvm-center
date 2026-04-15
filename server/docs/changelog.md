@@ -10,6 +10,14 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.18.2
+- **Pagination styling matches the Audit tab.** Dropped the custom
+  scrollbar treatment and the custom chevron on the rows-per-page
+  selector in favour of the native caret and the plain `bg-input /
+  border / 4px radius / 32 px height` input box the Audit tab
+  already uses for its filters. Pagination buttons follow the
+  same box so the footer reads as one row of identical controls.
+
 ## v5.18.1
 - **Themed scrollbars + page-size dropdown.** The table scroll region
   now uses a slim, dark WebKit scrollbar with an accent hover state
