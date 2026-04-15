@@ -1,12 +1,15 @@
 import { useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+
+import { apiGet } from './api/client';
 
 import { Layout } from './components/Layout';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { ToastProvider } from './hooks/useToast';
 import { subscribeToServerEvents } from './api/events';
 import { Login } from './pages/Login';
+import { Setup } from './pages/Setup';
 import { Dashboard } from './pages/Dashboard';
 import { VMs } from './pages/VMs';
 import { VMDetail } from './pages/VMDetail';
@@ -45,11 +48,37 @@ function Shell() {
     return subscribeToServerEvents(qc);
   }, [user, qc]);
 
+  // First-boot wizard gate. Runs after login so it has user context.
+  // Only admins see the wizard; non-admins skip it entirely because
+  // completing it requires user.manage anyway.
+  const setup = useQuery({
+    queryKey: ['setup-state'],
+    queryFn: () => apiGet<{ complete: boolean }>('/api/setup/state'),
+    enabled: !!user,
+  });
+  const location = useLocation();
+  const nav = useNavigate();
+  const isAdmin = !!user?.permissions?.includes('user.manage') || !!user?.permissions?.includes('admin');
+  useEffect(() => {
+    if (!user || !setup.data || setup.data.complete) return;
+    if (!isAdmin) return;
+    if (location.pathname.startsWith('/setup')) return;
+    nav('/setup', { replace: true });
+  }, [user, setup.data, isAdmin, location.pathname, nav]);
+
   if (loading) {
     return <div className="loading-screen">Loading…</div>;
   }
   if (!user) {
     return <Login />;
+  }
+  if (setup.data && !setup.data.complete && isAdmin) {
+    return (
+      <Routes>
+        <Route path="/setup" element={<Setup />} />
+        <Route path="*" element={<Navigate to="/setup" replace />} />
+      </Routes>
+    );
   }
   return (
     <Layout>
