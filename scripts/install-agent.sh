@@ -171,21 +171,17 @@ polkit.addRule(function(action, subject) {
 });
 POLKIT_EOF
 
-# SSH keypair for migration trust.
+# SSH keypair for the legacy qemu+ssh migration fallback. Always
+# generated locally per host (v5.20.9 — the shared repo-committed
+# keypair was retired after it leaked through gitleaks). mTLS /
+# qemu+tls migrations are the default on v5.10+ and don't need this
+# key; it only matters for the legacy SSH fallback between nodes that
+# haven't been mTLS-enrolled.
 MIGRATOR_SSH="/var/lib/kvm-migrator/.ssh"
 mkdir -p "$MIGRATOR_SSH"
 if [[ ! -f "${MIGRATOR_SSH}/id_ed25519" ]]; then
-  # Check for a shared key provided alongside this installer.
-  KEY_SRC="${SCRIPT_DIR}/kvm-migrator-key"
-  PUBKEY_SRC="${SCRIPT_DIR}/kvm-migrator-key.pub"
-  if [[ -f "$KEY_SRC" && -f "$PUBKEY_SRC" ]]; then
-    cp "$KEY_SRC" "${MIGRATOR_SSH}/id_ed25519"
-    cp "$PUBKEY_SRC" "${MIGRATOR_SSH}/id_ed25519.pub"
-    echo "  Installed shared migration keypair"
-  else
-    ssh-keygen -t ed25519 -N "" -f "${MIGRATOR_SSH}/id_ed25519" -C kvm-migrator >/dev/null 2>&1
-    echo "  Generated new migration keypair (exchange with existing nodes manually)"
-  fi
+  ssh-keygen -t ed25519 -N "" -f "${MIGRATOR_SSH}/id_ed25519" -C kvm-migrator >/dev/null 2>&1
+  echo "  Generated migration keypair (cross-authorize with peers if you use the SSH fallback)"
 fi
 
 # Authorize the key and populate known_hosts for other nodes.

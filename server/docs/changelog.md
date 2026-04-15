@@ -10,6 +10,29 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.9
+- **Security** — closed every finding run 41 surfaced:
+  - **Go 1.25** everywhere (go.mod, Dockerfile.server, both
+    workflows). Fixes 24 reachable stdlib vulns that had landed in
+    the 1.22 line since we pinned it.
+  - **github.com/russellhaering/goxmldsig v1.6.0** — fixes the one
+    transitive dep vuln govulncheck flagged.
+  - **Retired the shared `migration-keys/` keypair.** The installer
+    always generates a fresh keypair per host now; the legacy
+    "drop a shared key beside the installer" branch is gone.
+    `migration-keys/` is `.gitignore`d so a future key can't land
+    in tree, and the repo history was scrubbed of the leaked key
+    via `git filter-repo`. **Operators** with fleets that relied
+    on the shared key for qemu+ssh:// migration must cross-
+    authorize the per-host keys (or switch to qemu+tls:// which
+    doesn't need it). See `docs/DEVELOPMENT.md` for the rotation
+    steps.
+  - **Replaced the realistic-looking token example** in
+    authentication.md with an obviously-fake placeholder so
+    gitleaks stops flagging it.
+  - **Checked in `webui-react/package-lock.json`** so `npm ci` can
+    run in CI; unblocks the npm-audit gate.
+
 ## v5.20.8
 - **Fix** — Gitea Actions runner was cancelling every workflow on
   this repo because it advertised `docker / linux / amd64` and the
