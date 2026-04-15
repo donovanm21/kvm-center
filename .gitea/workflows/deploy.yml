@@ -1,0 +1,175 @@
+name: deploy
+
+# Continuous deployment to the operator's docker host (10.10.100.8
+# by default) on every green main-branch push. Fires AFTER the
+# `test` workflow finishes so a failing gate (gofmt, vet, tests,
+# govulncheck, npm audit, gitleaks) keeps a broken change off the
+# deployed stack.
+#
+# Secrets expected at the repo level (Settings -> Actions -> Secrets):
+#
+#   DEPLOY_HOST       — e.g. 10.10.100.8
+#   DEPLOY_USER       — e.g. root (or a sudoers-scoped deploy user)
+#   DEPLOY_SSH_KEY    — full ed25519 private key PEM; pubkey authorized
+#                       for DEPLOY_USER@DEPLOY_HOST
+#   HVNODE_SSH_PASS   — password bootstrap.sh uses via sshpass to
+#                       push fresh agent binaries to each hypervisor.
+#                       Leave unset if your hvnodes use key-based auth.
+#
+# The workflow won't run and won't silently degrade if any of these
+# are missing — the preflight step below aborts with a clear message.
+# This is intentional: a CD pipeline that quietly does nothing is
+# worse than one that tells you it didn't.
+
+on:
+  workflow_run:
+    workflows: [test]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Only fire when the upstream `test` workflow actually passed on a
+    # push to main. PR runs never satisfy both conditions.
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    concurrency:
+      # Serialise deploys — the host's docker compose + agent-push
+      # loop isn't safe against two concurrent runs, and queueing
+      # lets a fresh push cancel an in-flight one rather than racing.
+      group: kvm-center-deploy
+      cancel-in-progress: true
+    steps:
+      - name: preflight
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          missing=()
+          [ -z "$DEPLOY_HOST" ]    && missing+=(DEPLOY_HOST)
+          [ -z "$DEPLOY_USER" ]    && missing+=(DEPLOY_USER)
+          [ -z "$DEPLOY_SSH_KEY" ] && missing+=(DEPLOY_SSH_KEY)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing Gitea secret(s): ${missing[*]}"
+            echo "::error::Set them under Settings → Actions → Secrets on this repo."
+            exit 1
+          fi
+          echo "preflight ok"
+
+      - name: prepare SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -eu
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: run bootstrap.sh --deploy on the host
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          HVNODE_SSH_PASS: ${{ secrets.HVNODE_SSH_PASS }}
+          COMMIT: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -eu
+          # Feed the remote shell via stdin so we don't have to wrangle
+          # nested quoting of the (possibly-special-char) HVNODE_SSH_PASS
+          # on the ssh command line. Gitea secrets are masked in logs but
+          # not in process arg lists, so keeping them out of argv matters.
+          ssh -i ~/.ssh/id_ed25519 \
+              -o StrictHostKeyChecking=yes \
+              "$DEPLOY_USER@$DEPLOY_HOST" \
+              /bin/bash <<REMOTE
+          set -e
+          cd /opt/kvm-center
+          git fetch origin
+          git reset --hard ${COMMIT}
+          export KVM_HVNODE_SSH_PASS='${HVNODE_SSH_PASS//\'/\'\\\'\'}'
+          ./scripts/bootstrap.sh --deploy
+          REMOTE
+          echo "Deployed commit ${COMMIT:0:12} to $DEPLOY_HOST."
+
+      - name: post-deploy healthcheck
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          set -eu
+          # kvm-center-server takes a few seconds to come up after
+          # compose recreate; retry briefly before calling it red.
+          for i in 1 2 3 4 5 6; do
+            if curl -sfk "https://$DEPLOY_HOST:8190/api/version" > /tmp/ver; then
+              echo "server reports: $(cat /tmp/ver)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Server didn't come back on :8190 after deploy."
+          exit 1
+
+  # Auto-file an issue when a deploy trips, using the same
+  # dedup-by-label machinery the test workflow uses for security
+  # failures. Label is different so the two flows don't cross-dedup.
+  open-issue-on-deploy-failure:
+    needs: deploy
+    if: failure() && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: file deploy failure issue
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -eu
+          if [ -z "${TOKEN:-}" ]; then
+            echo "No token — skipping auto-issue."; exit 0
+          fi
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error, urllib.parse
+          api  = os.environ["REPO_API"]
+          tok  = os.environ["TOKEN"]
+          hdrs = {"Authorization": f"token {tok}", "Content-Type": "application/json"}
+          label = "deploy:ci-blocker"
+          body = (
+              "**Automated report** — the CD pipeline failed to deploy "
+              f"`{os.environ['SHA']}` to production.\n\n"
+              f"- run: {os.environ['RUN_URL']}\n"
+              "- likely causes: SSH trust, HVNODE_SSH_PASS secret, docker "
+              "  compose build failure, or the post-deploy /api/version "
+              "  healthcheck couldn't reach the server.\n\n"
+              "Fix and re-push, or run `scripts/bootstrap.sh --deploy` "
+              "manually on the host to catch up."
+          )
+          def do(method, url, payload=None):
+              data = json.dumps(payload).encode() if payload is not None else None
+              req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
+              with urllib.request.urlopen(req) as r:
+                  return json.loads(r.read() or b"null")
+          q = urllib.parse.urlencode({"state": "open", "type": "issues", "labels": label})
+          try:
+              found = do("GET", f"{api}/issues?{q}")
+          except urllib.error.HTTPError:
+              found = []
+          if found:
+              num = found[0]["number"]
+              print(f"Updating existing issue #{num}")
+              do("POST", f"{api}/issues/{num}/comments", {"body": body})
+          else:
+              print("Opening new issue")
+              issue = do("POST", f"{api}/issues", {
+                  "title": "[CD] deploy to production failing on main",
+                  "body": body,
+              })
+              try:
+                  do("POST", f"{api}/issues/{issue['number']}/labels", {"labels": [label]})
+              except urllib.error.HTTPError as e:
+                  print(f"(label attach skipped: {e})")
+          PY

@@ -345,6 +345,57 @@ ssh root@10.10.100.8 "cd /opt/kvm-center && \
 
 ---
 
+## Continuous deployment (v5.21.0+)
+
+`.gitea/workflows/deploy.yml` redeploys the operator's docker host
+automatically on every green main-branch push. It fires on the
+`workflow_run: completed` event of the `test` workflow, so any gate
+failure (tests, govulncheck, npm audit, gitleaks) keeps broken
+changes off the deployed stack.
+
+### Secrets
+
+Set these under **Settings → Actions → Secrets** on the repo:
+
+| Secret | Purpose | Example |
+|---|---|---|
+| `DEPLOY_HOST` | docker host running the stack | `10.10.100.8` |
+| `DEPLOY_USER` | user to SSH in as | `root` |
+| `DEPLOY_SSH_KEY` | ed25519 private key PEM; the pubkey is in the user's `authorized_keys` on the host | `-----BEGIN OPENSSH PRIVATE KEY-----…` |
+| `HVNODE_SSH_PASS` | password `bootstrap.sh --update-agents` uses via sshpass to push fresh agent binaries to each hypervisor. Leave unset if hv nodes use key-based auth. | `mypassword` |
+
+The workflow's preflight step aborts with a clear error if any
+secret is missing rather than silently degrading.
+
+### Pipeline
+
+```
+push to main -> test (5 jobs) -> [green] -> deploy.yml
+                                             ├─ preflight secrets
+                                             ├─ prepare SSH
+                                             ├─ ssh host: git reset --hard $SHA && --deploy
+                                             └─ curl /api/version  (healthcheck w/ retry)
+```
+
+On failure a `deploy:ci-blocker` labelled issue is filed (same
+dedup pattern as the security-gate flow). Separate label so the two
+channels don't cross-comment.
+
+### Rotating the deploy SSH key
+
+```sh
+# On your laptop
+ssh-keygen -t ed25519 -N "" -f /tmp/cd_deploy_key -C gitea-cd@kvm-center
+# Install the new pubkey on the docker host
+ssh root@10.10.100.8 "echo '$(cat /tmp/cd_deploy_key.pub)' >> ~/.ssh/authorized_keys"
+# Push the new private key as the DEPLOY_SSH_KEY secret (via Gitea API
+# or the Settings UI), then remove the old pubkey line from
+# authorized_keys on the host. Shred the local copies.
+shred -u /tmp/cd_deploy_key /tmp/cd_deploy_key.pub
+```
+
+---
+
 ## CI security gates (v5.20.5+)
 
 Two parallel workflow files — `.gitea/workflows/test.yml` (primary;
