@@ -102,3 +102,56 @@ jobs:
             echo "::error::One or more security gates failed — see individual job logs."
             exit 1
           fi
+
+  # Auto-open a GitHub issue when a security gate trips on main, so a
+  # CVE landing overnight leaves a durable trail. Uses the `gh` CLI
+  # which comes pre-installed on GitHub-hosted runners and picks up
+  # GITHUB_TOKEN automatically.
+  open-issue-on-failure:
+    needs: [lint-test, webui-audit, gitleaks]
+    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: file CI failure issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          LINT: ${{ needs.lint-test.result }}
+          WEB:  ${{ needs.webui-audit.result }}
+          LEAK: ${{ needs.gitleaks.result }}
+        run: |
+          set -eu
+          LABEL="security:ci-blocker"
+          # Make sure the label exists (idempotent — swallow "already exists").
+          gh label create "$LABEL" --color "B60205" --description "CI security gate failure" 2>/dev/null || true
+
+          BODY=$(cat <<MARKDOWN
+          **Automated report** — a security gate failed on \`main\`.
+
+          - commit: \`$SHA\`
+          - run: $RUN_URL
+          - lint-test: \`$LINT\`
+          - webui-audit: \`$WEB\`
+          - gitleaks: \`$LEAK\`
+
+          See the linked run for the specific finding. Triage playbook in [docs/DEVELOPMENT.md](../blob/main/docs/DEVELOPMENT.md#ci-security-gates-v5205).
+          MARKDOWN
+          )
+
+          # Best-effort dedup by label — comment on the existing open
+          # issue instead of opening a duplicate.
+          existing=$(gh issue list --state open --label "$LABEL" --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "Updating existing issue #$existing"
+            gh issue comment "$existing" --body "$BODY"
+          else
+            echo "Opening new issue"
+            gh issue create \
+              --title "[CI] security gate failing on main" \
+              --label "$LABEL" \
+              --body "$BODY"
+          fi

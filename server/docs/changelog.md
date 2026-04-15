@@ -10,6 +10,14 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.7
+- **Auto-filed issues on CI security-gate failure.** Both workflows
+  now add an `open-issue-on-failure` job that fires when a gate
+  fails on a push to `main`. A fresh issue is filed with the
+  `security:ci-blocker` label, commit SHA, and a link to the failing
+  run. Re-failures drop a comment on the existing issue instead of
+  opening a duplicate. PR failures are still inline-only.
+
 ## v5.20.6
 - **GitHub Actions support.** Mirrored `.gitea/workflows/test.yml` to
   `.github/workflows/test.yml` so the same three security gates
