@@ -11,6 +11,14 @@ COPY . .
 RUN cp /src/server/VERSION /src/kvm-tools/VERSION
 RUN go mod tidy
 
+# GIT_SHA busts BuildKit's layer cache on every new commit so
+# `go test ./...` below re-runs against the current source. Without
+# it we hit a v5.13.1 regression where a stale test layer reported
+# green against stale state. bootstrap.sh --deploy passes the HEAD
+# SHA; standalone `docker build` callers get a fallback "dev".
+ARG GIT_SHA=dev
+RUN echo "test stage @ $GIT_SHA"
+
 # v5.12: fail the build if any unit test breaks. Keeps the deploy
 # pipeline honest — agents never pick up a binary whose test suite
 # we knowingly broke. Runs before the cross-compilation steps so
