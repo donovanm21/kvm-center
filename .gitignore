@@ -16,4 +16,5 @@ server/staticv4/dist/
 .claude/
 .env
 .env.bak.*
+migration-keys/
 *.migrated

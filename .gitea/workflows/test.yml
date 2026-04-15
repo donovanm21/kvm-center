@@ -26,7 +26,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25'
 
       # go.sum is generated on-demand in Dockerfile.build via `go mod
       # tidy` and isn't committed, so the CI job has to materialise
