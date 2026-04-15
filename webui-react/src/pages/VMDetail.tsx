@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ActionsMenu, type ActionGroup } from '@/components/ActionsMenu';
 import { MigrateModal } from '@/components/MigrateModal';
 import { Modal } from '@/components/Modal';
+import { PaginationBar, usePagination } from '@/components/Pagination';
 import { apiPost } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useFeatures, useHosts, useKVMToolsLatest, useMigrations, useVMs } from '@/hooks/useInventory';
@@ -993,25 +994,29 @@ function SnapshotsTab({ vm }: { vm: VM }) {
   const del = useDeleteSnapshot();
   const canSnap = hasPerm('vm.snapshot') && !features.data?.disable_snapshots;
 
+  const pg = usePagination(snaps.data ?? []);
+
   return (
-    <div className="panel">
-      <h2>Snapshots</h2>
-      {snaps.isLoading && <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading…</div>}
+    <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
+      <h2 style={{ margin: 0, padding: '16px 20px 10px', fontSize: 15 }}>Snapshots</h2>
+      {snaps.isLoading && <div style={{ padding: '0 20px 16px', color: 'var(--text-muted)', fontSize: 12 }}>Loading…</div>}
       {snaps.error && (
-        <div style={{ color: '#F85149', fontSize: 12 }}>
+        <div style={{ padding: '0 20px 16px', color: '#F85149', fontSize: 12 }}>
           Failed to load snapshots: {(snaps.error as Error).message}
         </div>
       )}
       {snaps.data && snaps.data.length === 0 && (
-        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No snapshots yet.</div>
+        <div style={{ padding: '0 20px 16px', color: 'var(--text-muted)', fontSize: 12 }}>No snapshots yet.</div>
       )}
       {snaps.data && snaps.data.length > 0 && (
+        <>
+        <div className="data-table-scroll">
         <table className="data-table">
           <thead>
             <tr><th>Snapshot</th><th>Created</th><th>State</th><th>Parent</th><th>Actions</th></tr>
           </thead>
           <tbody>
-            {snaps.data.map((s: Snapshot) => (
+            {pg.items.map((s: Snapshot) => (
               <tr key={s.name}>
                 <td style={{ fontWeight: 500, color: 'var(--text-strong)' }}>
                   {s.name}{' '}
@@ -1065,6 +1070,9 @@ function SnapshotsTab({ vm }: { vm: VM }) {
             ))}
           </tbody>
         </table>
+        </div>
+        <PaginationBar pagination={pg} noun="snapshots" />
+        </>
       )}
     </div>
   );

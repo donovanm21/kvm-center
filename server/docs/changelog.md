@@ -10,6 +10,13 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.18.4
+- **Pagination on the per-VM Snapshots tab + Storage page.** Both
+  surfaces can grow without bound; they now render inside the same
+  scrollable container + pagination footer as the rest of the UI.
+  Storage migrated off the legacy controlled `Pagination` shim onto
+  `usePagination` for the rows-per-page selector.
+
 ## v5.18.3
 - **Dark scrollbars + dark dropdowns — everywhere.** Native OS chrome
   on `<select>` and default scrollbars were bleeding through on the
