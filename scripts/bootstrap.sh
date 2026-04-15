@@ -124,7 +124,7 @@ EOF_ENV
     #   2. data.json inside the kvm-center-server container (no auth needed)
     #   3. /api/hosts (requires the server to allow unauth read; usually fails)
     # SSH auth: passwordless preferred, or sshpass + KVM_HVNODE_SSH_PASS.
-    BUILD_URL="${KVM_CENTER_BUILD_URL:-http://10.10.100.8:8097}"
+    BUILD_URL="${KVM_CENTER_BUILD_URL:-http://10.10.100.8:8090/downloads}"
     SSH_USER="${KVM_HVNODE_SSH_USER:-root}"
     if ! command -v curl >/dev/null 2>&1; then
       echo "ERROR: --update-agents needs curl" >&2

@@ -543,19 +543,20 @@ func handleGuestTelemetry(store *Store) http.HandlerFunc {
 	}
 }
 
-// kvmToolsBinaryURL returns the build-portal URL the in-guest daemon
-// should pull from. Hard-codes the linux/amd64 binary because that's
-// the only arch we ship today; the build portal lives on the same host
-// as the kvm-center server, just on a separate compose-mapped port.
+// kvmToolsBinaryURL returns the URL the in-guest daemon should pull
+// its self-update from. Hard-codes linux/amd64 because that's the
+// only guest arch we ship today. Since v5.16 downloads live on the
+// server itself under /downloads/*, so the URL is same-origin with
+// whatever port the guest originally registered against.
 func kvmToolsBinaryURL(r *http.Request) string {
-	host := r.Host
-	if i := strings.Index(host, ":"); i >= 0 {
-		host = host[:i]
-	}
 	if env := os.Getenv("KVM_TOOLS_BINARY_URL"); env != "" {
 		return env
 	}
-	return fmt.Sprintf("http://%s:8097/kvm-tools-amd64", host)
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s/downloads/kvm-tools-linux-amd64", scheme, r.Host)
 }
 
 // GET /api/kvm-tools/version — returns the kvm-tools build the server
@@ -990,23 +991,6 @@ func handleMigrateStatus(store *Store) http.HandlerFunc {
 // GET /health — liveness probe.
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-// handlePortalHealth probes the build portal on plain HTTP from the
-// server side, sidestepping mixed-content blocks when the SPA is
-// served over HTTPS. Used by Deployment → "Portal online/unreachable".
-func handlePortalHealth(w http.ResponseWriter, r *http.Request) {
-	host := r.Host
-	if i := strings.Index(host, ":"); i > 0 {
-		host = host[:i]
-	}
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://" + host + ":8097/")
-	ok := err == nil && resp != nil && resp.StatusCode < 500
-	if resp != nil {
-		resp.Body.Close()
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": ok})
 }
 
 // clientIP extracts the real client IP, honouring X-Forwarded-For.

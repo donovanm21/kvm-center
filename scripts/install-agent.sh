@@ -292,13 +292,10 @@ print("  Issued cert valid until", d.get("not_after","?"))
     # Fall back to the build portal when the hook isn't colocated with
     # this installer (curl | bash style).
     if [[ ! -f "$HOOK_SRC" ]]; then
-      # Derive portal from SERVER_URL host + :8097.
-      PORTAL_HOST="$(echo "$SERVER_URL" | sed -E 's|^https?://||; s|[:/].*||')"
-      if [[ -n "$PORTAL_HOST" ]]; then
-        TMP_HOOK="$(mktemp)"
-        if curl -fsSL "http://${PORTAL_HOST}:8097/libvirt-hooks-qemu.sh" -o "$TMP_HOOK" 2>/dev/null; then
-          HOOK_SRC="$TMP_HOOK"
-        fi
+      # v5.16+: downloads live on the server itself under /downloads/.
+      TMP_HOOK="$(mktemp)"
+      if curl -fsSLk "${SERVER_URL%/}/downloads/libvirt-hooks-qemu.sh" -o "$TMP_HOOK" 2>/dev/null; then
+        HOOK_SRC="$TMP_HOOK"
       fi
     fi
     if [[ -f "$HOOK_SRC" ]]; then

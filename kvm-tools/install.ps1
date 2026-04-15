@@ -7,10 +7,10 @@
 # Usage (run from an elevated PowerShell prompt):
 #   .\install.ps1 -Server http://10.10.100.8:8090
 #
-# Or one-shot from the deployment portal:
-#   iwr -useb http://10.10.100.8:8097/install-kvm-tools.ps1 | iex
+# Or one-shot from the server:
+#   iwr -useb http://10.10.100.8:8090/downloads/install-kvm-tools.ps1 | iex
 # (when invoked that way the script will fetch kvm-tools.exe from the same
-#  portal automatically)
+#  /downloads/ path automatically)
 
 [CmdletBinding()]
 param(
@@ -47,9 +47,8 @@ if (Test-Path $LocalBin) {
     $Source = $LocalBinAlt
 } else {
     if (-not $BinaryUrl) {
-        # Derive download URL from $Server: replace 8090 with 8097 (deployment portal)
-        $portal = $Server -replace ":8090.*$", ":8097"
-        $BinaryUrl = "$portal/kvm-tools-windows-amd64.exe"
+        # v5.16+: downloads live on the server itself under /downloads/.
+        $BinaryUrl = "$($Server.TrimEnd('/'))/downloads/kvm-tools-windows-amd64.exe"
     }
     Write-Info "Downloading $BinaryUrl ..."
     $tmp = Join-Path $env:TEMP "kvm-tools.exe"

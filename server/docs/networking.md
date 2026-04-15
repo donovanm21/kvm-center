@@ -17,9 +17,8 @@ for bandwidth during migrations.
 | Port  | Protocol | Consumer             | Scope            | Notes |
 |-------|----------|----------------------|------------------|-------|
 | 8190  | HTTPS    | Operators + kvmctl   | LAN / trusted    | Primary UI + API. Terminate behind a reverse proxy for WAN exposure. |
-| 8090  | HTTP     | Internal             | localhost        | Plaintext API — listen only on loopback or the management VLAN. |
+| 8090  | HTTP     | Agents + install one-liners | Management VLAN | Plaintext API + `/downloads/*` for agent / kvm-tools / kvmctl binaries. Agents trust this during bootstrap before they've pinned the server cert. |
 | 8096  | HTTP     | Legacy SPA (nginx)   | localhost        | Kept for `/legacy/` access; retire once no one browses it. |
-| 8097  | HTTP     | Build + download portal | Hypervisors   | Serves agent / kvm-tools / kvmctl binaries. Hypervisors must reach this during install + update. |
 
 ### Hypervisors
 
@@ -50,7 +49,7 @@ firewall-cmd --reload
 
 # control plane
 firewall-cmd --permanent --add-port=8190/tcp
-firewall-cmd --permanent --add-port=8097/tcp
+firewall-cmd --permanent --add-port=8090/tcp
 firewall-cmd --reload
 ```
 
@@ -58,7 +57,8 @@ Traffic directions to permit between nodes:
 
 - **Control plane → hypervisors**: 8081/tcp.
 - **Hypervisors → control plane**: 8190/tcp (telemetry + CA enroll)
-  and 8097/tcp (binary pulls during `update-agent.sh`).
+  and 8090/tcp (binary pulls during `update-agent.sh`, via
+  `/downloads/*`).
 - **Hypervisor ↔ hypervisor**: 16514/tcp and 49152-49215/tcp.
   East-west only — never exposed beyond the management VLAN.
 - **Operators → control plane**: 8190/tcp. If users hit the UI via
@@ -120,8 +120,8 @@ follow it across.
 
 ## Hardening checklist
 
-- Expose **8190** only. Everything else (8090/8096/8097) should be
-  localhost or management-VLAN-only.
+- Expose **8190** to operators. 8090 (agents + download one-liners)
+  stays management-VLAN-only; 8096 stays localhost.
 - Put the server behind a reverse proxy if operators come in over
   WAN. HSTS + a real cert beats the self-signed bundle.
 - Lock 16514 + the QEMU range to the hypervisor subnet.

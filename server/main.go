@@ -277,7 +277,20 @@ func main() {
 		mux.Handle("/api/tls/regenerate", requirePerm(store, "tls.manage", auditTLSHandler(store, AuditTLSRegenerate, handleTLSRegenerate(certPath, keyPath))))
 	}
 	mux.HandleFunc("/health", handleHealth)
-	mux.HandleFunc("/api/portal/health", handlePortalHealth)
+
+	// /downloads/* serves the cross-compiled agent / kvm-tools / kvmctl
+	// binaries plus install scripts. v5.16 folded this in from the
+	// standalone kvm-center-build container (port 8097). Unauthenticated
+	// by design — install scripts need to be pullable before enrollment,
+	// and the enrollment token is what actually gates cluster access.
+	if dir := os.Getenv("KVM_CENTER_DOWNLOADS_DIR"); dir != "" {
+		if st, err := os.Stat(dir); err == nil && st.IsDir() {
+			mux.Handle("/downloads/", http.StripPrefix("/downloads/", http.FileServer(http.Dir(dir))))
+			log.Printf("downloads: serving %s under /downloads/", dir)
+		} else {
+			log.Printf("downloads: KVM_CENTER_DOWNLOADS_DIR=%s is not a directory; /downloads/ disabled", dir)
+		}
+	}
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"version":"` + Version + `"}`))

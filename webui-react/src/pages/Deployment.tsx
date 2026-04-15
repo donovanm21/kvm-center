@@ -1,39 +1,27 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 type OS = 'rhel' | 'debian' | 'windows';
 
 /**
  * Deployment page — one place that hands out install snippets for the
  * two agents (guest-side kvm-tools and host-side kvm-center-agent), a
- * direct-download manifest for the build-portal artefacts, and the
- * verification curls. Ported from the v3 snippets view.
+ * direct-download manifest, and the verification curls.
  *
- * The portal URL is derived at runtime from the current hostname so
- * port-forwards and reverse-proxied deploys just work without any
- * configuration.
+ * v5.16: downloads are served by the kvm-center-server itself under
+ * /downloads/*. The standalone build portal on :8097 is retired.
  */
 export function Deployment() {
-  // Build portal serves plain HTTP on :8097 (agents/guests fetch over
-  // HTTP without our self-signed CA). Force http:// so the probe and
-  // snippets stay reachable when the SPA itself is served over HTTPS.
-  const portalURL = `http://${location.hostname}:8097`;
-  const serverURL = `${location.protocol}//${location.host}`;
-  const [reachable, setReachable] = useState<'checking' | 'ok' | 'down'>('checking');
-
-  useEffect(() => {
-    const ctrl = new AbortController();
-    // Probe via the server to dodge mixed-content blocks under HTTPS
-    // (the build portal is plain HTTP on :8097 and won't have TLS).
-    fetch('/api/portal/health', { signal: ctrl.signal })
-      .then((r) => r.json())
-      .then((j) => setReachable(j.ok ? 'ok' : 'down'))
-      .catch(() => setReachable('down'));
-    return () => ctrl.abort();
-  }, [portalURL]);
+  const serverURL    = `${location.protocol}//${location.host}`;
+  // Hypervisors + guests pull install scripts before they have any way
+  // to trust a self-signed cert, so default the installer URLs to the
+  // plaintext :8090 endpoint colocated with the server. The UI still
+  // offers a TLS URL for the verification commands.
+  const plaintextURL = `http://${location.hostname}:8090`;
+  const downloads    = `${plaintextURL}/downloads`;
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
-      <IntroBanner portalURL={portalURL} />
+      <IntroBanner downloads={downloads} />
 
       <PackageCard
         icon={<span className="tone-icon-tile accent" style={iconTileStyle}>✚</span>}
@@ -42,43 +30,41 @@ export function Deployment() {
           <>
             Install inside a guest VM to surface guest OS, hostname, IP addresses, and
             per-mountpoint filesystem usage in the kvm-center UI. Reports to{' '}
-            <code style={inlineCode}>{serverURL}</code> every 30 seconds. Once installed, the
+            <code style={inlineCode}>{plaintextURL}</code> every 30 seconds. Once installed, the
             VM's pill in the Summary tab flips to{' '}
             <strong style={{ color: '#3FB950' }}>KVM Tools: running</strong>.
           </>
         }
-        portalStatus={reachable}
         snippets={{
           rhel: {
-            label: '🎩 RHEL / Rocky',
+            label: 'RHEL / Rocky',
             body:
               `# Run as root on the guest VM (Rocky / RHEL / CentOS / Fedora)
-curl -fsSL ${portalURL}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
-curl -fsSL ${portalURL}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
+curl -fsSL ${downloads}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
+curl -fsSL ${downloads}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
 chmod +x /tmp/install-kvm-tools.sh /tmp/kvm-tools-amd64
-sudo /tmp/install-kvm-tools.sh --server ${serverURL}`,
+sudo /tmp/install-kvm-tools.sh --server ${plaintextURL}`,
             footer: 'Installs /opt/kvm-tools/kvm-tools and a systemd unit. Requires root.',
           },
           debian: {
-            label: '🐧 Debian / Ubuntu',
+            label: 'Debian / Ubuntu',
             body:
               `# Run as root on the guest VM (Debian / Ubuntu / Mint)
-curl -fsSL ${portalURL}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
-curl -fsSL ${portalURL}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
+curl -fsSL ${downloads}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
+curl -fsSL ${downloads}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
 chmod +x /tmp/install-kvm-tools.sh /tmp/kvm-tools-amd64
-sudo /tmp/install-kvm-tools.sh --server ${serverURL}`,
+sudo /tmp/install-kvm-tools.sh --server ${plaintextURL}`,
             footer: 'Installs /opt/kvm-tools/kvm-tools and a systemd unit. Requires root.',
           },
           windows: {
-            label: '⊞ Windows (PowerShell)',
+            label: 'Windows (PowerShell)',
             body:
               `# Run from an elevated PowerShell prompt on the guest VM
-$portal = '${portalURL}'
-$server = '${serverURL}'
+$server = '${plaintextURL}'
 $tmp = Join-Path $env:TEMP 'kvm-tools-install'
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-Invoke-WebRequest -Uri "$portal/kvm-tools-windows-amd64.exe" -OutFile "$tmp\\kvm-tools.exe" -UseBasicParsing
-Invoke-WebRequest -Uri "$portal/install-kvm-tools.ps1"       -OutFile "$tmp\\install-kvm-tools.ps1" -UseBasicParsing
+Invoke-WebRequest -Uri "$server/downloads/kvm-tools-windows-amd64.exe" -OutFile "$tmp\\kvm-tools.exe" -UseBasicParsing
+Invoke-WebRequest -Uri "$server/downloads/install-kvm-tools.ps1"       -OutFile "$tmp\\install-kvm-tools.ps1" -UseBasicParsing
 Set-Location $tmp
 .\\install-kvm-tools.ps1 -Server $server`,
             footer: 'Registers a scheduled task running as SYSTEM on next boot.',
@@ -97,38 +83,37 @@ Set-Location $tmp
             <code style={inlineCode}>8081</code> for command routing from the server.
           </>
         }
-        portalStatus={reachable}
         snippets={{
           rhel: {
-            label: '🎩 RHEL / Rocky',
+            label: 'RHEL / Rocky',
             body:
               `# Run as root on the new KVM hypervisor (Rocky / RHEL / CentOS)
-curl -fsSL ${portalURL}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
-curl -fsSL ${portalURL}/install-agent.sh       -o /tmp/install-agent.sh
+curl -fsSL ${downloads}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
+curl -fsSL ${downloads}/install-agent.sh       -o /tmp/install-agent.sh
 chmod +x /tmp/install-agent.sh /tmp/kvm-center-agent-amd64
 # Open the agent command port (only required if firewalld is active)
 sudo firewall-cmd --add-port=8081/tcp --permanent && sudo firewall-cmd --reload
-sudo /tmp/install-agent.sh --server ${serverURL}`,
+sudo /tmp/install-agent.sh --server ${plaintextURL}`,
             footer:
               'Requires libvirtd running and virsh in PATH. The installer writes /etc/systemd/system/kvm-center-agent.service and enables it at boot.',
           },
           debian: {
-            label: '🐧 Debian / Ubuntu',
+            label: 'Debian / Ubuntu',
             body:
               `# Run as root on the new KVM hypervisor (Debian / Ubuntu)
-curl -fsSL ${portalURL}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
-curl -fsSL ${portalURL}/install-agent.sh       -o /tmp/install-agent.sh
+curl -fsSL ${downloads}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
+curl -fsSL ${downloads}/install-agent.sh       -o /tmp/install-agent.sh
 chmod +x /tmp/install-agent.sh /tmp/kvm-center-agent-amd64
 # Open the agent command port (only required if ufw is active)
 sudo ufw allow 8081/tcp
-sudo /tmp/install-agent.sh --server ${serverURL}`,
+sudo /tmp/install-agent.sh --server ${plaintextURL}`,
             footer:
               'Requires libvirtd running and virsh in PATH. The installer writes /etc/systemd/system/kvm-center-agent.service and enables it at boot.',
           },
         }}
       />
 
-      <DirectDownloads portalURL={portalURL} />
+      <DirectDownloads downloads={downloads} />
 
       <VerifyCard serverURL={serverURL} />
     </div>
@@ -136,16 +121,17 @@ sudo /tmp/install-agent.sh --server ${serverURL}`,
 }
 
 /* ── Intro ───────────────────────────────────────────────── */
-function IntroBanner({ portalURL }: { portalURL: string }) {
+function IntroBanner({ downloads }: { downloads: string }) {
   return (
     <div style={introBannerStyle}>
       <div>
         <strong style={{ color: 'var(--text-strong)' }}>One-shot installs.</strong>{' '}
-        Copy a snippet, paste it on the target host, done. The download portal is hosted at{' '}
-        <a href={portalURL} target="_blank" rel="noopener noreferrer" style={introLinkStyle}>
-          {portalURL}
+        Copy a snippet, paste it on the target host, done. Binaries and install
+        scripts are served by this server at{' '}
+        <a href={downloads} target="_blank" rel="noopener noreferrer" style={introLinkStyle}>
+          {downloads}
         </a>{' '}
-        and serves the latest cross-compiled binaries built from this repository.
+        — cross-compiled from the commit the current server image was built from.
       </div>
     </div>
   );
@@ -158,9 +144,8 @@ interface PackageCardProps {
   title: string;
   description: React.ReactNode;
   snippets: Partial<Record<OS, SnippetDef>>;
-  portalStatus: 'checking' | 'ok' | 'down';
 }
-function PackageCard({ icon, title, description, snippets, portalStatus }: PackageCardProps) {
+function PackageCard({ icon, title, description, snippets }: PackageCardProps) {
   const available = useMemo(
     () => (Object.keys(snippets) as OS[]).filter((k) => snippets[k]),
     [snippets],
@@ -173,10 +158,7 @@ function PackageCard({ icon, title, description, snippets, portalStatus }: Packa
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         {icon}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text-strong)' }}>{title}</h2>
-            <PortalPill state={portalStatus} />
-          </div>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text-strong)' }}>{title}</h2>
           <p style={{ margin: '6px 0 0 0', fontSize: 12, color: 'var(--text-body)', lineHeight: 1.55 }}>
             {description}
           </p>
@@ -213,20 +195,8 @@ function PackageCard({ icon, title, description, snippets, portalStatus }: Packa
   );
 }
 
-function PortalPill({ state }: { state: 'checking' | 'ok' | 'down' }) {
-  if (state === 'checking') return <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Probing…</span>;
-  const ok = state === 'ok';
-  return (
-    <span
-      className={`tone-pill ${ok ? 'ok' : 'danger'}`}
-    >
-      ● Portal {ok ? 'online' : 'unreachable'}
-    </span>
-  );
-}
-
 /* ── Direct downloads ────────────────────────────────────── */
-function DirectDownloads({ portalURL }: { portalURL: string }) {
+function DirectDownloads({ downloads }: { downloads: string }) {
   const files: { name: string; desc: string }[] = [
     { name: 'kvm-tools-linux-amd64',        desc: 'KVM Tools — Linux x86_64' },
     { name: 'kvm-tools-linux-arm64',        desc: 'KVM Tools — Linux ARM64' },
@@ -236,6 +206,13 @@ function DirectDownloads({ portalURL }: { portalURL: string }) {
     { name: 'kvm-center-agent-amd64',       desc: 'Hypervisor agent — Linux x86_64' },
     { name: 'kvm-center-agent-arm64',       desc: 'Hypervisor agent — Linux ARM64' },
     { name: 'install-agent.sh',             desc: 'Hypervisor agent installer' },
+    { name: 'kvmctl-linux-amd64',           desc: 'kvmctl CLI — Linux x86_64' },
+    { name: 'kvmctl-linux-arm64',           desc: 'kvmctl CLI — Linux ARM64' },
+    { name: 'kvmctl-darwin-amd64',          desc: 'kvmctl CLI — macOS Intel' },
+    { name: 'kvmctl-darwin-arm64',          desc: 'kvmctl CLI — macOS Apple Silicon' },
+    { name: 'kvmctl-windows-amd64.exe',     desc: 'kvmctl CLI — Windows x86_64' },
+    { name: 'install-kvmctl.sh',            desc: 'kvmctl installer (Linux / macOS)' },
+    { name: 'install-kvmctl.ps1',           desc: 'kvmctl installer (Windows)' },
   ];
   return (
     <div className="panel" style={{ padding: 22 }}>
@@ -243,8 +220,8 @@ function DirectDownloads({ portalURL }: { portalURL: string }) {
         <span style={{ color: '#3FB950' }}>↓</span> Direct Downloads
       </h2>
       <p style={{ margin: '4px 0 14px 0', fontSize: 12, color: 'var(--text-muted)' }}>
-        Cross-compiled from the latest commit by the build container at{' '}
-        <a href={portalURL} target="_blank" rel="noopener noreferrer" style={introLinkStyle}>{portalURL}</a>
+        Cross-compiled into the server image at build time. Served at{' '}
+        <a href={downloads} target="_blank" rel="noopener noreferrer" style={introLinkStyle}>{downloads}</a>.
       </p>
       <table className="data-table">
         <thead>
@@ -255,7 +232,7 @@ function DirectDownloads({ portalURL }: { portalURL: string }) {
             <tr key={f.name}>
               <td>
                 <a
-                  href={`${portalURL}/${f.name}`}
+                  href={`${downloads}/${f.name}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: 'var(--accent-hover)', fontFamily: "'SF Mono', monospace", fontSize: 12 }}
@@ -275,13 +252,13 @@ function DirectDownloads({ portalURL }: { portalURL: string }) {
 /* ── Verification ────────────────────────────────────────── */
 function VerifyCard({ serverURL }: { serverURL: string }) {
   const snippet = `# 1. Server liveness
-curl -s ${serverURL}/health
+curl -sk ${serverURL}/health
 
 # 2. List all hosts the server knows about
-curl -s ${serverURL}/api/hosts | python3 -m json.tool
+curl -sk ${serverURL}/api/hosts | python3 -m json.tool
 
 # 3. List all VMs (look for guest_agent: true after kvm-tools install)
-curl -s ${serverURL}/api/vms | python3 -m json.tool`;
+curl -sk ${serverURL}/api/vms | python3 -m json.tool`;
   return (
     <div className="panel" style={{ padding: 22 }}>
       <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -308,10 +285,6 @@ function CopyBlock({ body }: { body: string }) {
     setTimeout(() => setState('idle'), 1800);
   };
   const copy = async () => {
-    // navigator.clipboard requires a secure context (HTTPS or localhost).
-    // The kvm-center UI is typically served over plain HTTP on a homelab
-    // LAN, so fall back to the legacy execCommand('copy') path which
-    // works without a secure context.
     if (window.isSecureContext && navigator.clipboard?.writeText) {
       try {
         await navigator.clipboard.writeText(body);
