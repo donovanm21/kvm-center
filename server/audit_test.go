@@ -75,6 +75,11 @@ func TestAddAuditEvent_RingBufferTrim(t *testing.T) {
 	for i := 0; i < auditRetentionMax+50; i++ {
 		s.AddAuditEvent(&models.AuditEvent{Action: "test"})
 	}
+	// Drain the fire-and-forget Save goroutines before the test's
+	// TempDir teardown runs — otherwise a late rename into the
+	// already-removed directory trips the testing harness's
+	// RemoveAll cleanup with "directory not empty".
+	s.saveWG.Wait()
 	evs, _ := s.GetAuditEvents(AuditFilter{Limit: auditRetentionMax + 100})
 	if len(evs) > auditRetentionMax {
 		t.Errorf("audit log exceeded retention cap: %d > %d", len(evs), auditRetentionMax)

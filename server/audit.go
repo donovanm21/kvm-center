@@ -92,7 +92,11 @@ func (s *Store) AddAuditEvent(ev *models.AuditEvent) {
 	}
 	s.mu.Unlock()
 	// Async persist so log-heavy requests don't block on Mongo write.
-	go s.Save()
+	s.saveWG.Add(1)
+	go func() {
+		defer s.saveWG.Done()
+		s.Save()
+	}()
 	// Best-effort enqueue to the shipper worker. Non-blocking — a
 	// stuck aggregator must never back-pressure the audit-write path.
 	if s.auditShipQueue != nil {
