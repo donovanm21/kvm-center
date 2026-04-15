@@ -10,6 +10,26 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.21.0
+- **Continuous deployment.** New `.gitea/workflows/deploy.yml`
+  redeploys the docker host automatically on every green
+  main-branch push. Triggered by the `test` workflow's completion
+  — every gate (tests + govulncheck + npm audit + gitleaks) must
+  pass before the deploy fires.
+- Secrets-driven: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`,
+  `HVNODE_SSH_PASS`. A preflight step aborts early with a clear
+  error if any are missing rather than silently degrading.
+- SSH session feeds the remote shell via stdin so the (possibly-
+  special-char) `HVNODE_SSH_PASS` never lands in argv.
+- Concurrency-guarded: a fresh push cancels an in-flight deploy
+  rather than racing two `docker compose build` loops.
+- Post-deploy healthcheck polls `/api/version` with 6 × 5 s
+  retries so a slow container start doesn't flag red.
+- Auto-files a `deploy:ci-blocker`-labelled issue on failure,
+  reusing the same dedup-by-label machinery as the security flow.
+- Playbook (secrets table + key rotation) in
+  `docs/DEVELOPMENT.md`.
+
 ## v5.20.14
 - **CI parity sync** — verified and documented that every security
   fix landed since v5.20.5 applies equally to GitHub Actions:
