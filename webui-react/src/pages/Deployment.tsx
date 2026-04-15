@@ -196,24 +196,49 @@ function PackageCard({ icon, title, description, snippets }: PackageCardProps) {
 }
 
 /* ── Direct downloads ────────────────────────────────────── */
+type DownloadGroup = 'tools' | 'agent' | 'kvmctl';
+interface DownloadFile { name: string; desc: string }
+const DOWNLOAD_GROUPS: { key: DownloadGroup; label: string; files: DownloadFile[] }[] = [
+  {
+    key: 'tools',
+    label: 'KVM Tools',
+    files: [
+      { name: 'kvm-tools-linux-amd64',       desc: 'Guest daemon — Linux x86_64' },
+      { name: 'kvm-tools-linux-arm64',       desc: 'Guest daemon — Linux ARM64' },
+      { name: 'kvm-tools-windows-amd64.exe', desc: 'Guest daemon — Windows x86_64' },
+      { name: 'install-kvm-tools.sh',        desc: 'Installer — Linux (bash)' },
+      { name: 'install-kvm-tools.ps1',       desc: 'Installer — Windows (PowerShell)' },
+    ],
+  },
+  {
+    key: 'agent',
+    label: 'Hypervisor Agent',
+    files: [
+      { name: 'kvm-center-agent-amd64', desc: 'Hypervisor agent — Linux x86_64' },
+      { name: 'kvm-center-agent-arm64', desc: 'Hypervisor agent — Linux ARM64' },
+      { name: 'install-agent.sh',       desc: 'Installer — systemd unit + mTLS enrol' },
+      { name: 'update-agent.sh',        desc: 'In-place updater (used by bootstrap --update-agents)' },
+    ],
+  },
+  {
+    key: 'kvmctl',
+    label: 'kvmctl CLI',
+    files: [
+      { name: 'kvmctl-linux-amd64',       desc: 'kvmctl — Linux x86_64' },
+      { name: 'kvmctl-linux-arm64',       desc: 'kvmctl — Linux ARM64' },
+      { name: 'kvmctl-darwin-amd64',      desc: 'kvmctl — macOS Intel' },
+      { name: 'kvmctl-darwin-arm64',      desc: 'kvmctl — macOS Apple Silicon' },
+      { name: 'kvmctl-windows-amd64.exe', desc: 'kvmctl — Windows x86_64' },
+      { name: 'install-kvmctl.sh',        desc: 'Installer — Linux / macOS' },
+      { name: 'install-kvmctl.ps1',       desc: 'Installer — Windows (PowerShell)' },
+    ],
+  },
+];
+
 function DirectDownloads({ downloads }: { downloads: string }) {
-  const files: { name: string; desc: string }[] = [
-    { name: 'kvm-tools-linux-amd64',        desc: 'KVM Tools — Linux x86_64' },
-    { name: 'kvm-tools-linux-arm64',        desc: 'KVM Tools — Linux ARM64' },
-    { name: 'kvm-tools-windows-amd64.exe',  desc: 'KVM Tools — Windows x86_64' },
-    { name: 'install-kvm-tools.sh',         desc: 'KVM Tools installer (Linux)' },
-    { name: 'install-kvm-tools.ps1',        desc: 'KVM Tools installer (Windows)' },
-    { name: 'kvm-center-agent-amd64',       desc: 'Hypervisor agent — Linux x86_64' },
-    { name: 'kvm-center-agent-arm64',       desc: 'Hypervisor agent — Linux ARM64' },
-    { name: 'install-agent.sh',             desc: 'Hypervisor agent installer' },
-    { name: 'kvmctl-linux-amd64',           desc: 'kvmctl CLI — Linux x86_64' },
-    { name: 'kvmctl-linux-arm64',           desc: 'kvmctl CLI — Linux ARM64' },
-    { name: 'kvmctl-darwin-amd64',          desc: 'kvmctl CLI — macOS Intel' },
-    { name: 'kvmctl-darwin-arm64',          desc: 'kvmctl CLI — macOS Apple Silicon' },
-    { name: 'kvmctl-windows-amd64.exe',     desc: 'kvmctl CLI — Windows x86_64' },
-    { name: 'install-kvmctl.sh',            desc: 'kvmctl installer (Linux / macOS)' },
-    { name: 'install-kvmctl.ps1',           desc: 'kvmctl installer (Windows)' },
-  ];
+  const [active, setActive] = useState<DownloadGroup>('tools');
+  const current = DOWNLOAD_GROUPS.find((g) => g.key === active) ?? DOWNLOAD_GROUPS[0];
+
   return (
     <div className="panel" style={{ padding: 22 }}>
       <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -223,12 +248,35 @@ function DirectDownloads({ downloads }: { downloads: string }) {
         Cross-compiled into the server image at build time. Served at{' '}
         <a href={downloads} target="_blank" rel="noopener noreferrer" style={introLinkStyle}>{downloads}</a>.
       </p>
+
+      <div style={downloadTabsStyle}>
+        {DOWNLOAD_GROUPS.map((g) => {
+          const isActive = g.key === active;
+          return (
+            <button
+              key={g.key}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActive(g.key)}
+              style={{
+                ...downloadTabStyle,
+                color: isActive ? 'var(--text-strong)' : 'var(--text-muted)',
+                borderBottomColor: isActive ? 'var(--accent)' : 'transparent',
+              }}
+            >
+              {g.label} <span style={{ color: 'var(--text-faded)', marginLeft: 4 }}>{g.files.length}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <table className="data-table">
         <thead>
-          <tr><th>File</th><th>Description</th></tr>
+          <tr><th style={{ width: 280 }}>File</th><th>Description</th></tr>
         </thead>
         <tbody>
-          {files.map((f) => (
+          {current.files.map((f) => (
             <tr key={f.name}>
               <td>
                 <a
@@ -248,6 +296,22 @@ function DirectDownloads({ downloads }: { downloads: string }) {
     </div>
   );
 }
+
+const downloadTabsStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 4,
+  marginBottom: 12,
+  borderBottom: '1px solid var(--border)',
+};
+const downloadTabStyle: React.CSSProperties = {
+  padding: '8px 14px',
+  fontSize: 12,
+  fontWeight: 500,
+  background: 'transparent',
+  border: 'none',
+  borderBottom: '2px solid transparent',
+  cursor: 'pointer',
+};
 
 /* ── Verification ────────────────────────────────────────── */
 function VerifyCard({ serverURL }: { serverURL: string }) {
