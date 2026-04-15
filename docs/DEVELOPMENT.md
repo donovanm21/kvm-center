@@ -347,13 +347,16 @@ ssh root@REDACTED-HOST "cd /opt/kvm-center && \
 
 ## CI security gates (v5.20.5+)
 
-Two identical workflow files — `.gitea/workflows/test.yml` (primary;
+Two parallel workflow files — `.gitea/workflows/test.yml` (primary;
 your day-to-day Gitea instance at REDACTED-HOST:9001) and
 `.github/workflows/test.yml` (for any GitHub mirror / fork) — run the
 same three scanners on every push and PR alongside the gofmt / vet /
-test suite. Keep the two files byte-identical when changing the
-pipeline; the workflow syntax is portable across both platforms, so
-one file isn't a platform upgrade over the other.
+test suite. The **gates** must stay aligned (same Go version, same
+npm-audit thresholds, same gitleaks blocking behaviour); the
+**plumbing** may diverge where a platform ships a cleaner primitive
+— e.g. the GitHub job uses `gh` CLI for issue filing, the Gitea job
+uses `curl` + `python3 -c urllib.request` because `gh` isn't on the
+Gitea runner image.
 
 All three gates have escape hatches so a blocker can be unstuck
 quickly.
