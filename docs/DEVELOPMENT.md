@@ -365,8 +365,21 @@ quickly.
 | **npm audit --audit-level=high** | same, warn-only | Non-blocking, but the summary appears in the CI log / email | Track for the next release. |
 | **gitleaks** | full working tree + git history | Blocking on any match | **Rotate the leaked credential first**, then rewrite or `git filter-repo` the commit. Add a `gitleaks:allow` fingerprint only for verified false positives. |
 
-The `summary` job aggregates all three so Gitea's failure email names
-which gate tripped.
+The `summary` job aggregates all three so Gitea's / GitHub's failure
+email names which gate tripped.
+
+**Auto-filed issues.** When a gate fails on a **push to `main`** (not
+on PRs — those surface inline) a new issue is filed carrying the
+`security:ci-blocker` label, commit SHA, and a link to the failing
+run. If an issue with that label is already open, the workflow drops
+a comment on it instead of opening a duplicate. Close the issue by
+hand once the gate passes again. Works on both platforms:
+
+- **Gitea** — uses the per-run `secrets.GITHUB_TOKEN` that Gitea
+  Actions provides automatically.
+- **GitHub** — same secret, plus `issues: write` in the job's
+  `permissions:` block. The `gh` CLI ships pre-installed on hosted
+  runners.
 
 ---
 
