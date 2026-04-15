@@ -10,11 +10,6 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
-## v5.14.2
-- **Docs** — removed `hvnode*` references from the public
-  documentation in favour of generic `hv*` / `hypervisor*` examples,
-  so operators don't anchor on one homelab's naming.
-
 ## v5.14.0
 - **In-app docs site.** Markdown files under `server/docs/` are
   embedded into the binary, rendered with goldmark, and served via
