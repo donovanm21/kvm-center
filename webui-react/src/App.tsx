@@ -36,7 +36,7 @@ export function App() {
 }
 
 function Shell() {
-  const { user, loading } = useAuth();
+  const { user, loading, hasPerm } = useAuth();
   const qc = useQueryClient();
 
   // Subscribe to the server push stream for the lifetime of the
@@ -58,7 +58,7 @@ function Shell() {
   });
   const location = useLocation();
   const nav = useNavigate();
-  const isAdmin = !!user?.permissions?.includes('user.manage') || !!user?.permissions?.includes('admin');
+  const isAdmin = hasPerm('user.manage') || hasPerm('admin');
   useEffect(() => {
     if (!user || !setup.data || setup.data.complete) return;
     if (!isAdmin) return;
