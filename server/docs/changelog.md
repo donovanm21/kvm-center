@@ -10,6 +10,11 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.18.6
+- **Fix** — Snapshot Policies tab blanked out because `usePagination`
+  was called after an early `isLoading` return, violating the Rules
+  of Hooks. Moved above the guards.
+
 ## v5.18.5
 - **Pagination on Snapshot Policies.** Same scroll region + footer
   as the rest of the UI for the Settings → Snapshot Policies list.
