@@ -117,17 +117,101 @@ case "$MODE" in
         [[ "$a" == "y" || "$a" == "Y" ]]
       fi
     }
-
-    # Existing .env wins unless the operator explicitly overwrites —
-    # clobbering silently would blow away Mongo creds matching the
-    # live volume and lock everyone out.
-    if [[ -f .env ]]; then
-      if ask_yesno "kvm-center" ".env already exists. Keep it and just run --deploy?"; then
-        "$REPO_DIR/scripts/bootstrap.sh" --deploy
-        exit $?
+    # menu title msg tag1 label1 tag2 label2 ... — sets REPLY to the picked tag
+    menu() {
+      local title="$1" msg="$2"; shift 2
+      if [[ $HAVE_WHIPTAIL -eq 1 ]]; then
+        REPLY=$(whiptail --title "$title" --menu "$msg" 18 78 8 "$@" 3>&1 1>&2 2>&3) || return 1
+      else
+        echo "$msg"
+        local items=("$@") i=1
+        local tags=()
+        while [[ $# -gt 0 ]]; do
+          tags+=("$1")
+          echo "  $i) $2"
+          shift 2
+          i=$((i + 1))
+        done
+        read -rp "Pick 1-${#tags[@]}: " n
+        [[ "$n" =~ ^[0-9]+$ ]] && (( n >= 1 && n <= ${#tags[@]} )) || return 1
+        REPLY="${tags[$((n - 1))]}"
       fi
-      cp .env ".env.bak.$(date +%s)"
-      echo "Backed up existing .env."
+    }
+
+    # Detect what's already on disk so a re-run doesn't silently clobber
+    # a working install. Three outcomes the operator gets to pick from:
+    #   * keep      — preserve .env + Mongo volume, just redeploy code
+    #   * reconfig  — regenerate .env (new Mongo password → WILL lock
+    #                 you out of the existing Mongo volume; we warn)
+    #   * fresh     — nuke containers + named volumes + .env, start over
+    HAS_ENV=0; [[ -f .env ]] && HAS_ENV=1
+    HAS_MONGO=0
+    if command -v docker >/dev/null 2>&1; then
+      docker volume inspect kvm-center_kvm-center-mongo-data >/dev/null 2>&1 && HAS_MONGO=1
+    fi
+    STACK_UP=0
+    if command -v docker >/dev/null 2>&1; then
+      docker inspect kvm-center-server >/dev/null 2>&1 && STACK_UP=1
+    fi
+
+    if [[ $HAS_ENV -eq 1 || $HAS_MONGO -eq 1 || $STACK_UP -eq 1 ]]; then
+      echo "Detected existing install: .env=$HAS_ENV, mongo-volume=$HAS_MONGO, stack-running=$STACK_UP"
+      menu "kvm-center — existing install" \
+           "This host already has kvm-center state. What should I do?" \
+           "keep"     "Keep everything and run --deploy (safest, no data loss)" \
+           "reconfig" "Regenerate .env — NEW Mongo password (locks out the existing volume)" \
+           "fresh"    "Wipe containers + volumes + .env and start over (destroys ALL data)" \
+           "cancel"   "Cancel — don't touch anything" \
+        || { echo "aborted"; exit 1; }
+
+      case "$REPLY" in
+        keep)
+          "$REPO_DIR/scripts/bootstrap.sh" --deploy
+          exit $?
+          ;;
+        reconfig)
+          if ! ask_yesno "kvm-center" \
+               "Regenerating .env will set a NEW Mongo password. The existing Mongo volume was initialised with the OLD one and WILL NOT authenticate — you'll lose all state in Mongo (VMs, snapshots, audit, users). Continue?"; then
+            echo "Cancelled."
+            exit 0
+          fi
+          if [[ $HAS_ENV -eq 1 ]]; then
+            cp .env ".env.bak.$(date +%s)"
+            echo "Backed up existing .env to .env.bak.$(date +%s)."
+          fi
+          # Stop the stack so the next --deploy starts clean against
+          # the fresh Mongo volume we're about to wipe.
+          if [[ $STACK_UP -eq 1 ]]; then docker compose down; fi
+          if [[ $HAS_MONGO -eq 1 ]]; then docker volume rm -f kvm-center_kvm-center-mongo-data >/dev/null || true; fi
+          # Fall through to the prompts below.
+          ;;
+        fresh)
+          if ! ask_yesno "kvm-center — DESTRUCTIVE" \
+               "This will:
+  • docker compose down -v (removes ALL kvm-center containers and volumes)
+  • delete .env and any .env.bak.* files
+  • drop the locally generated TLS material
+
+VM / hypervisor data on your hypervisors is NOT touched. Proceed?"; then
+            echo "Cancelled."
+            exit 0
+          fi
+          docker compose down -v 2>&1 | grep -vE '^\s*$' || true
+          # docker compose down -v handles named volumes declared in
+          # docker-compose.yml; be explicit about kvm-center-tls and
+          # -data in case they were created under a different project
+          # name on a previous deploy.
+          for v in kvm-center_kvm-center-mongo-data kvm-center_kvm-center-data kvm-center_kvm-center-tls; do
+            docker volume rm -f "$v" >/dev/null 2>&1 || true
+          done
+          rm -f .env .env.bak.*
+          echo "Clean slate. Proceeding with fresh install…"
+          ;;
+        cancel)
+          echo "Cancelled."
+          exit 0
+          ;;
+      esac
     fi
 
     prompt "MongoDB" "MongoDB username" "kvmcenter" || { echo aborted; exit 1; }
