@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { CreateVMModal } from '@/components/CreateVMModal';
+import { KVMToolsPill } from '@/components/KVMToolsPill';
 import { SortableTH, useSort } from '@/components/SortableTH';
-import { useVMs, useFeatures, useMigrations } from '@/hooks/useInventory';
+import { useVMs, useFeatures, useKVMToolsLatest, useMigrations } from '@/hooks/useInventory';
 import { useAuth } from '@/hooks/useAuth';
 import type { VM } from '@/types';
 
@@ -25,6 +26,7 @@ export function VMs() {
   const vms = useVMs();
   const features = useFeatures();
   const migrations = useMigrations();
+  const latest = useKVMToolsLatest();
   const { hasPerm } = useAuth();
   const [query, setQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
@@ -97,7 +99,12 @@ export function VMs() {
             </thead>
             <tbody>
               {filtered.map((v) => (
-                <VMRow key={v.uuid} vm={v} lock={locks.get(lockKey(v.host_id, v.name))} />
+                <VMRow
+                  key={v.uuid}
+                  vm={v}
+                  lock={locks.get(lockKey(v.host_id, v.name))}
+                  latestKVMTools={latest.data?.version ?? ''}
+                />
               ))}
             </tbody>
           </table>
@@ -108,7 +115,7 @@ export function VMs() {
   );
 }
 
-function VMRow({ vm, lock }: { vm: VM; lock?: LockReason }) {
+function VMRow({ vm, lock, latestKVMTools }: { vm: VM; lock?: LockReason; latestKVMTools: string }) {
   const navigate = useNavigate();
   const locked = !!lock;
   const lockTitle = lock === 'migrating'
@@ -152,8 +159,8 @@ function VMRow({ vm, lock }: { vm: VM; lock?: LockReason }) {
           ? `${vm.disk_usage_gb.toFixed(1)} / ${vm.disk_total_gb.toFixed(0)} GB`
           : '—'}
       </td>
-      <td style={{ color: vm.guest_agent ? '#3FB950' : 'var(--text-faded)' }}>
-        {vm.guest_agent ? (vm.guest_source ?? 'present') : '—'}
+      <td>
+        <KVMToolsPill vm={vm} latest={latestKVMTools} showVersion />
       </td>
     </tr>
   );
