@@ -5,10 +5,14 @@ name: test
 # no network access beyond the module proxy + osv.dev / npm registry
 # for the vuln scanners.
 #
-# Security-gate posture (v5.20.5):
-#   - govulncheck:  BLOCKING on any reachable Go vuln.
-#   - npm audit:    BLOCKING on CRITICAL; WARN on high/moderate/low.
-#   - gitleaks:     BLOCKING on any secret match.
+# Security-gate posture (v5.20.13):
+#   - Go 1.25, govulncheck blocking on any reachable stdlib / dep vuln.
+#   - npm audit blocking on CRITICAL webui deps, warn on high+ below.
+#   - gitleaks blocking on any match in working tree or history;
+#     historical placeholders allowlisted via .gitleaksignore.
+#   - open-issue-on-failure files / comments on a single
+#     security:ci-blocker-labelled issue when any of the above fail
+#     on a push to main.
 # Gitea surfaces workflow failures in the repo Actions tab + emails
 # watchers; the summary step below prints a concise line so the alert
 # carries enough context to triage.
