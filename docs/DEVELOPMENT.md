@@ -347,9 +347,16 @@ ssh root@10.10.100.8 "cd /opt/kvm-center && \
 
 ## CI security gates (v5.20.5+)
 
-`.gitea/workflows/test.yml` runs three scanners on every push and PR
-alongside the gofmt / vet / test suite. All three have escape hatches
-so a blocker can be unstuck quickly.
+Two identical workflow files — `.gitea/workflows/test.yml` (primary;
+your day-to-day Gitea instance at 10.10.100.8:9001) and
+`.github/workflows/test.yml` (for any GitHub mirror / fork) — run the
+same three scanners on every push and PR alongside the gofmt / vet /
+test suite. Keep the two files byte-identical when changing the
+pipeline; the workflow syntax is portable across both platforms, so
+one file isn't a platform upgrade over the other.
+
+All three gates have escape hatches so a blocker can be unstuck
+quickly.
 
 | Gate | Scope | Failure mode | Triage |
 |---|---|---|---|
