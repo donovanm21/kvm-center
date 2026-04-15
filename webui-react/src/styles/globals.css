@@ -54,6 +54,54 @@ body {
 }
 ::selection { background: #E3571E44; color: var(--text-strong); }
 
+/* ── Global select + scrollbar overrides ──────────────────────
+   Native selects on macOS / Windows render with a light OS chrome
+   ("shiny") that doesn't belong on our dark canvas. Strip the
+   widget styling and paint a chevron ourselves. Same story for the
+   default scrollbars — flip them to a slim dark thumb so they read
+   as part of the panel. Scoped to actual form controls so it can't
+   leak into iframe content or embedded docs. */
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4 L5 7 L8 4' fill='none' stroke='%238B949E' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 10px;
+  padding-right: 28px;                 /* reserve room for the chevron */
+  background-color: var(--bg-input);
+  color: var(--text-body);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+select:hover { border-color: var(--text-faded); }
+select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(227, 87, 30, 0.35);
+}
+/* The popup / listbox that the OS draws is outside our DOM, so the
+   <option> rows fall back to the platform picker. Setting the bg
+   here makes Chrome on Linux honour the dark treatment. */
+select option { background: var(--bg-input); color: var(--text-body); }
+
+/* Scrollbars — Firefox */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+body.light-mode * { scrollbar-color: #C9D1D9 transparent; }
+
+/* Scrollbars — WebKit (Chrome, Safari, Edge). Slim, dark, accent on hover. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 2px solid var(--bg);         /* inset border thins the thumb and blends */
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+::-webkit-scrollbar-corner { background: transparent; }
+
 a { color: var(--accent); text-decoration: none; }
 a:hover { color: var(--accent-hover); }
 
@@ -397,6 +445,11 @@ body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
   top: 0;
   background: var(--bg-input);
   z-index: 1;
+}
+/* The container sits on --surface (panel), so blend the scrollbar
+   thumb's inset border with that instead of the page body. */
+.data-table-scroll::-webkit-scrollbar-thumb {
+  border-color: var(--surface);
 }
 
 /* Pagination footer sits below the scroll region, reuses the same
