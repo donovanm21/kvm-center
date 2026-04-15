@@ -345,6 +345,24 @@ ssh root@REDACTED-HOST "cd /opt/kvm-center && \
 
 ---
 
+## CI security gates (v5.20.5+)
+
+`.gitea/workflows/test.yml` runs three scanners on every push and PR
+alongside the gofmt / vet / test suite. All three have escape hatches
+so a blocker can be unstuck quickly.
+
+| Gate | Scope | Failure mode | Triage |
+|---|---|---|---|
+| **govulncheck** | Go stdlib + direct + transitive deps, **reachable symbols only** | Blocking on any finding | Bump the affected module. When no fix exists, pin to a tolerated tag and track the CVE in the PR. |
+| **npm audit --audit-level=critical** | webui-react production deps | Blocking on critical | `npm audit fix` locally; if a major bump is required, file it as a follow-up and note the CVE. |
+| **npm audit --audit-level=high** | same, warn-only | Non-blocking, but the summary appears in the CI log / email | Track for the next release. |
+| **gitleaks** | full working tree + git history | Blocking on any match | **Rotate the leaked credential first**, then rewrite or `git filter-repo` the commit. Add a `gitleaks:allow` fingerprint only for verified false positives. |
+
+The `summary` job aggregates all three so Gitea's failure email names
+which gate tripped.
+
+---
+
 ## Planned Improvements
 
 | Feature | Notes |
