@@ -10,6 +10,17 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.18.8
+- **Fix** — `disable_snapshots` now also gates snapshot policies.
+  Before this, flipping the flag in Settings → General blocked ad-hoc
+  snapshots but left the policy scheduler ticking and the CRUD
+  endpoints wide open, so policy-driven snapshots kept happening
+  silently. The scheduler now short-circuits when the flag is on,
+  every write on `/api/snapshot-policies{,/…,/…/run}` returns 403,
+  and the UI shows a banner + disables New / Edit / Run / Delete
+  buttons with a "disabled in General" tooltip. GET stays open so
+  the list still renders for audit / read-only reasons.
+
 ## v5.18.7
 - **Security** — `disable_console` now gates the full console
   surface end-to-end. Before this, only the Launch Console button

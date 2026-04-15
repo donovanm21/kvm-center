@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '@/api/client';
 import { PaginationBar, usePagination } from '@/components/Pagination';
 import { useAuth } from '@/hooks/useAuth';
-import { useVMs } from '@/hooks/useInventory';
+import { useFeatures, useVMs } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
 
 interface SnapshotPolicy {
@@ -41,7 +41,18 @@ export function SnapshotPolicies() {
   const { hasPerm } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const canManage = hasPerm('vm.snapshot');
+  const features = useFeatures();
+  const snapshotsDisabled = !!features.data?.disable_snapshots;
+  // Flipping disable_snapshots in General must fully gate this page —
+  // both the server (scheduler + CRUD) and the UI affordances. The
+  // server returns 403 on any write anyway; this just stops the
+  // operator's clicks from making a doomed round-trip.
+  const canManage = hasPerm('vm.snapshot') && !snapshotsDisabled;
+  const manageTitle = !hasPerm('vm.snapshot')
+    ? 'Requires vm.snapshot'
+    : snapshotsDisabled
+      ? 'Snapshots are disabled in Settings → General'
+      : '';
 
   const policies = useQuery({
     queryKey: ['snapshot-policies'],
@@ -88,6 +99,13 @@ export function SnapshotPolicies() {
 
   return (
     <>
+      {snapshotsDisabled && (
+        <div className="tone-panel warn" style={{ padding: 12, fontSize: 12, marginBottom: 12 }}>
+          Snapshots are disabled in <strong>Settings → General</strong>. The
+          scheduler is paused and no policy can be created, edited, run, or
+          deleted until the feature is re-enabled.
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 12 }}>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, maxWidth: 720 }}>
           Schedule recurring snapshots per VM with retention. The server's scheduler ticks once a
@@ -99,7 +117,7 @@ export function SnapshotPolicies() {
           className="btn-primary-sm"
           disabled={!canManage}
           onClick={() => setEditing(newPolicy())}
-          title={!canManage ? 'Requires vm.snapshot' : ''}
+          title={manageTitle}
         >
           + New policy
         </button>
