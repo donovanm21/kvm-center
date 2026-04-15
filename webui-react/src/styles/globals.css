@@ -383,6 +383,61 @@ body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
 .data-table tbody tr.clickable { cursor: pointer; }
 .data-table tbody tr.clickable:hover { background: var(--surface-2); }
 
+/* Scrollable wrapper for long tables. Vertical overflow opens a scroll
+   region; the thead sticks so column labels stay visible while reading
+   down. Pair with the panel wrapper to keep the border treatment. */
+.data-table-scroll {
+  overflow: auto;
+  max-height: 60vh;
+}
+.data-table-scroll .data-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-input);
+  z-index: 1;
+}
+
+/* Pagination footer sits below the scroll region, reuses the same
+   token palette as section headers. */
+.data-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.data-pagination .spacer { flex: 1; }
+.data-pagination select {
+  height: 26px;
+  padding: 0 8px;
+  background: var(--bg-input);
+  color: var(--text-body);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.data-pagination button {
+  height: 26px;
+  min-width: 28px;
+  padding: 0 8px;
+  background: var(--surface-2);
+  color: var(--text-body);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.data-pagination button:hover:not(:disabled) { background: var(--surface-3); color: var(--text-strong); }
+.data-pagination button:disabled { opacity: 0.35; cursor: not-allowed; }
+.data-pagination .current { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+
 /* ── In-app docs (v5.14) ─────────────────────────────────────
    Prose styling for the markdown rendered under /docs. Scoped so
    it doesn't leak into other panels. */

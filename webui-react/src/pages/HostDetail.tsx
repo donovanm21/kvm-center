@@ -6,6 +6,7 @@ import { apiPost } from '@/api/client';
 import { HostMetricsGraphs } from '@/components/HostMetricsGraphs';
 import { KVMToolsPill } from '@/components/KVMToolsPill';
 import { Modal } from '@/components/Modal';
+import { PaginationBar, usePagination } from '@/components/Pagination';
 import { useAuth } from '@/hooks/useAuth';
 import { useFeatures, useHosts, useKVMToolsLatest, useStorage, useVMs } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
@@ -479,30 +480,34 @@ function VMsTab({ host }: { host: Host }) {
     () => (vms.data ?? []).filter((v: VM) => v.host_id === host.id),
     [vms.data, host.id],
   );
+  const pg = usePagination(list);
   if (list.length === 0) {
     return <div className="panel" style={{ color: 'var(--text-muted)', fontSize: 12 }}>No VMs on this host.</div>;
   }
   return (
     <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>State</th>
-            <th>CPUs</th>
-            <th>Memory</th>
-            <th>Disk</th>
-            <th style={{ width: 160 }}>CPU usage</th>
-            <th>Guest tools</th>
-            <th style={{ width: 180 }}>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {list.map((v) => (
-            <HostVMRow key={v.uuid} vm={v} host={host} latestKVMTools={latest.data?.version ?? ''} />
-          ))}
-        </tbody>
-      </table>
+      <div className="data-table-scroll">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>State</th>
+              <th>CPUs</th>
+              <th>Memory</th>
+              <th>Disk</th>
+              <th style={{ width: 160 }}>CPU usage</th>
+              <th>Guest tools</th>
+              <th style={{ width: 180 }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pg.items.map((v) => (
+              <HostVMRow key={v.uuid} vm={v} host={host} latestKVMTools={latest.data?.version ?? ''} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <PaginationBar pagination={pg} noun="VMs" />
     </div>
   );
 }
@@ -519,6 +524,7 @@ function StorageTab({ host }: { host: Host }) {
   }
   return (
     <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="data-table-scroll">
       <table className="data-table">
         <thead>
           <tr>
@@ -565,6 +571,7 @@ function StorageTab({ host }: { host: Host }) {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

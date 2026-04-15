@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+import { PaginationBar, usePagination } from '@/components/Pagination';
 import { SortableTH, useSort } from '@/components/SortableTH';
 import { useHosts, useVMs } from '@/hooks/useInventory';
 import type { Host } from '@/types';
@@ -39,6 +40,8 @@ export function Hosts() {
     return [...base].sort((a, b) => compare(a[sort.key], b[sort.key]));
   }, [hosts.data, query, sort, compare]);
 
+  const pg = usePagination(filtered);
+
   return (
     <>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14 }}>
@@ -58,6 +61,8 @@ export function Hosts() {
           <Empty>{query ? 'No hosts match your search.' : 'No hypervisors have reported yet.'}</Empty>
         )}
         {filtered.length > 0 && (
+          <>
+          <div className="data-table-scroll">
           <table className="data-table">
             <thead>
               <tr>
@@ -72,11 +77,14 @@ export function Hosts() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((h) => (
+              {pg.items.map((h) => (
                 <HostRow key={h.id} host={h} vmStats={vmCountByHost[h.id]} />
               ))}
             </tbody>
           </table>
+          </div>
+          <PaginationBar pagination={pg} noun="hosts" />
+          </>
         )}
       </div>
     </>
