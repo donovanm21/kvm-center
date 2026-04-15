@@ -1,0 +1,10 @@
+<svg width="260" height="52" viewBox="0 0 260 52" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .wm { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+          font-weight: 700; font-size: 40px; letter-spacing: -0.4px; }
+    .wm-a { fill: #F0F6FC; }
+    .wm-b { fill: #E3571E; }
+  </style>
+  <text x="0" y="40" class="wm wm-a">kvm</text>
+  <text x="78" y="40" class="wm wm-b">center</text>
+</svg>
