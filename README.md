@@ -140,14 +140,23 @@ drift out of sync with its own help site.
 | Troubleshooting | [`server/docs/troubleshooting.md`](server/docs/troubleshooting.md) |
 | Changelog (no dates, newest first) | [`server/docs/changelog.md`](server/docs/changelog.md) |
 
-### Contributor docs
+### Contributors
 
-Different audience — rarely read by operators, kept at the repo root:
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for how to propose changes,
+[`SECURITY.md`](SECURITY.md) for private vulnerability reporting, and
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) for the ground rules.
+Development and style guides are shared directly with contributors
+once they're onboarded.
 
-- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — building and
-  testing kvm-center itself.
-- [`docs/STYLE_GUIDE.md`](docs/STYLE_GUIDE.md) — frontend design
-  tokens and component conventions.
+---
+
+## Support
+
+kvm-center is maintained as a side project. Bug reports and pull
+requests are welcome via GitHub issues; response times vary and
+there's no commercial SLA. For security issues, please use the
+private reporting channel described in
+[`SECURITY.md`](SECURITY.md) rather than a public issue.
 
 ---
 
@@ -163,9 +172,9 @@ version heading only.
 
 ## License
 
-kvm-center is a homelab-origin project currently published without
-a redistribution licence. Feel free to read, fork, and run it; if
-you'd like to build on it commercially, open an issue first.
+kvm-center is released under the [MIT License](LICENSE). You are
+free to use, modify, and redistribute it, including commercially,
+subject to the terms of that license.
 
 <div align="center">
 
