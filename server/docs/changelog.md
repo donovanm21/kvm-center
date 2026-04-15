@@ -10,6 +10,10 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.18.5
+- **Pagination on Snapshot Policies.** Same scroll region + footer
+  as the rest of the UI for the Settings → Snapshot Policies list.
+
 ## v5.18.4
 - **Pagination on the per-VM Snapshots tab + Storage page.** Both
   surfaces can grow without bound; they now render inside the same
