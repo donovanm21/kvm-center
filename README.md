@@ -12,7 +12,7 @@ Influx-backed metrics — all in one Go binary and a tiny agent.
 
 [Quick start](#quick-start) · [Documentation](server/docs/overview.md) · [Architecture](server/docs/architecture.md) · [Changelog](server/docs/changelog.md)
 
-[![CI](https://github.com/OWNER/kvm-center/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/OWNER/kvm-center/actions/workflows/test.yml)
+[![CI](https://github.com/donovanm21/kvm-center/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/donovanm21/kvm-center/actions/workflows/test.yml)
 ![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)
 ![libvirt](https://img.shields.io/badge/libvirt-qemu%2Btls-E3571E?style=flat-square)
