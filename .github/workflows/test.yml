@@ -4,8 +4,7 @@ name: test
 # The two are intentionally NOT byte-identical: GitHub-hosted runners
 # ship the `gh` CLI (cleaner than the Gitea-side curl/python dance),
 # and the `permissions:` block is a GitHub-ism. Keep the gate posture
-# and version stamps aligned; platform differences documented in
-# docs/DEVELOPMENT.md.
+# and version stamps aligned.
 #
 # Security-gate posture (v5.20.13):
 #   - Go 1.25, govulncheck blocking on any reachable stdlib / dep vuln.
@@ -144,7 +143,7 @@ jobs:
           - webui-audit: \`$WEB\`
           - gitleaks: \`$LEAK\`
 
-          See the linked run for the specific finding. Triage playbook in [docs/DEVELOPMENT.md](../blob/main/docs/DEVELOPMENT.md#ci-security-gates-v5205).
+          See the linked run for the specific finding.
           MARKDOWN
           )
 

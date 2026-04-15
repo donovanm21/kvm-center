@@ -77,7 +77,7 @@ loop against a backend running on `:8090`.
 
 ## What we won't merge
 
-- Code without a license-compatible license (the project is MIT).
+- Code without a license-compatible license (the project is Apache-2.0).
 - Changes that remove or weaken the security gates in CI.
 - Additions that bundle operator-specific secrets, hostnames, or
   network details into the shipped tree.

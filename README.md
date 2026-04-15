@@ -12,9 +12,11 @@ Influx-backed metrics — all in one Go binary and a tiny agent.
 
 [Quick start](#quick-start) · [Documentation](server/docs/overview.md) · [Architecture](server/docs/architecture.md) · [Changelog](server/docs/changelog.md)
 
-![Go](https://img.shields.io/badge/Go-1.22-00ADD8?style=flat-square&logo=go&logoColor=white)
+[![CI](https://github.com/OWNER/kvm-center/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/OWNER/kvm-center/actions/workflows/test.yml)
+![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)
 ![libvirt](https://img.shields.io/badge/libvirt-qemu%2Btls-E3571E?style=flat-square)
+![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)
 ![Status](https://img.shields.io/badge/status-active-3FB950?style=flat-square)
 
 </div>
@@ -172,9 +174,10 @@ version heading only.
 
 ## License
 
-kvm-center is released under the [MIT License](LICENSE). You are
-free to use, modify, and redistribute it, including commercially,
-subject to the terms of that license.
+kvm-center is released under the [Apache License 2.0](LICENSE). You
+are free to use, modify, and redistribute it, including commercially,
+subject to the terms of that license — which includes an explicit
+patent grant from contributors.
 
 <div align="center">
 
