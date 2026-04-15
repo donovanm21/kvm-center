@@ -10,6 +10,12 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.13
+- **Fix** — `gofmt -w server/host_metrics_test.go`. The new file
+  landed with a couple of spacing quirks Go 1.25's gofmt rewrote
+  (`hostMetricCap / 2` instead of `hostMetricCap/2`); lint-test
+  caught it on run 45. The fix is whitespace-only.
+
 ## v5.20.12
 - **Tests** — added coverage for two modules shipped without tests:
   - `server/setup.go` (first-boot wizard) — state handler before
