@@ -9,7 +9,50 @@ RUN npm install --no-audit --no-fund --loglevel=error
 COPY webui-react/ ./
 RUN npm run build
 
-# ── Stage 1b: Build the Go server ─────────────────────────────────────────────
+# ── Stage 1b: Cross-compile every distributable binary ────────────────────────
+# Produces /dist with every agent/kvm-tools/kvmctl variant + install
+# scripts. The runtime image copies this into /app/dist so the server
+# can serve them over /downloads/*. Consolidates what used to be the
+# standalone kvm-center-build container on port 8097 (v5.16).
+FROM golang:1.22-alpine AS artifacts
+
+WORKDIR /src
+COPY . .
+RUN cp /src/server/VERSION /src/kvm-tools/VERSION
+RUN go mod tidy
+
+# GIT_SHA busts BuildKit's layer cache on every new commit so the
+# cross-compile layers re-run against the current source. bootstrap.sh
+# --deploy passes the HEAD SHA; standalone callers get "dev".
+ARG GIT_SHA=dev
+RUN echo "artifacts stage @ $GIT_SHA"
+
+RUN mkdir -p /dist && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o /dist/kvm-center-agent-amd64 ./agent && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o /dist/kvm-center-agent-arm64 ./agent && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o /dist/kvm-tools-linux-amd64 ./kvm-tools && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o /dist/kvm-tools-linux-arm64 ./kvm-tools && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o /dist/kvm-tools-windows-amd64.exe ./kvm-tools && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o /dist/kvmctl-linux-amd64       ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o /dist/kvmctl-linux-arm64       ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o /dist/kvmctl-darwin-amd64      ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o /dist/kvmctl-darwin-arm64      ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o /dist/kvmctl-windows-amd64.exe ./cmd/kvmctl && \
+    cp /src/scripts/install-agent.sh      /dist/ && \
+    cp /src/scripts/update-agent.sh       /dist/ && \
+    cp /src/kvm-tools/install.sh          /dist/install-kvm-tools.sh && \
+    cp /src/kvm-tools/install.ps1         /dist/install-kvm-tools.ps1 && \
+    cp /src/scripts/install-kvmctl.sh     /dist/install-kvmctl.sh && \
+    cp /src/scripts/install-kvmctl.ps1    /dist/install-kvmctl.ps1 && \
+    cp /src/scripts/libvirt-hooks-qemu.sh /dist/libvirt-hooks-qemu.sh && \
+    chmod +x /dist/install-agent.sh /dist/update-agent.sh /dist/install-kvm-tools.sh \
+             /dist/install-kvmctl.sh /dist/libvirt-hooks-qemu.sh && \
+    (cp /src/migration-keys/kvm-migrator-key     /dist/ 2>/dev/null || true) && \
+    (cp /src/migration-keys/kvm-migrator-key.pub /dist/ 2>/dev/null || true) && \
+    ln -sf kvm-tools-linux-amd64 /dist/kvm-tools-amd64 && \
+    ln -sf kvm-tools-linux-arm64 /dist/kvm-tools-arm64
+
+# ── Stage 1c: Build the Go server ─────────────────────────────────────────────
 FROM golang:1.22-alpine AS builder
 
 WORKDIR /src
@@ -20,10 +63,7 @@ COPY . .
 RUN rm -rf server/staticv4/dist
 COPY --from=webui /webui/dist ./server/staticv4/dist
 
-# Resolve dependencies based on source imports. Works whether or not a
-# committed go.sum exists.
 RUN go mod tidy
-# Version is the committed const in server/main.go — single source of truth.
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w" \
     -o /out/kvm-center-server ./server
@@ -34,7 +74,8 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /app
-COPY --from=builder /out/kvm-center-server .
+COPY --from=builder   /out/kvm-center-server .
+COPY --from=artifacts /dist ./dist
 
 RUN mkdir -p /var/lib/kvm-center
 
@@ -42,5 +83,6 @@ EXPOSE 8090
 
 ENV KVM_CENTER_ADDR=:8090
 ENV KVM_CENTER_DATA=/var/lib/kvm-center/data.json
+ENV KVM_CENTER_DOWNLOADS_DIR=/app/dist
 
 ENTRYPOINT ["/app/kvm-center-server"]

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Installs the kvmctl CLI. Detects OS + arch, fetches the matching
-# binary from the kvm-center build portal, drops it into an install
-# directory (default /usr/local/bin), and verifies.
+# binary from the kvm-center server's /downloads/ path, drops it
+# into an install directory (default /usr/local/bin), and verifies.
 #
 # Usage:
-#   curl -fsSL http://<portal>/install-kvmctl.sh | bash -s -- --portal http://<portal>
-#   curl -fsSL http://<portal>/install-kvmctl.sh -o /tmp/i && bash /tmp/i --portal http://<portal> --install-dir ~/.local/bin
+#   curl -fsSL http://<server>:8090/downloads/install-kvmctl.sh | bash -s -- --portal http://<server>:8090/downloads
+#   curl -fsSL http://<server>:8090/downloads/install-kvmctl.sh -o /tmp/i && bash /tmp/i --portal http://<server>:8090/downloads --install-dir ~/.local/bin
 #
 # Flags:
-#   --portal      http://HOST:8097 base URL of the kvm-center build portal (required)
+#   --portal      http://HOST:8090/downloads base URL (required)
 #   --install-dir target directory (default: /usr/local/bin, falls back to ~/.local/bin when /usr/local/bin isn't writable)
 #   --bin-name    installed binary name (default: kvmctl)
 #   --force       overwrite without prompting
@@ -36,7 +36,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -z "$PORTAL" ]] && die "--portal http://HOST:8097 is required"
+[[ -z "$PORTAL" ]] && die "--portal http://HOST:8090/downloads is required"
 PORTAL="${PORTAL%/}"
 
 # ── Detect OS + arch ──────────────────────────────────────────────
@@ -93,8 +93,8 @@ fi
 TMP="$(mktemp -t kvmctl.XXXXXX)"
 trap 'rm -f "$TMP"' EXIT
 info "downloading ${URL}"
-if ! curl -fsSL --connect-timeout 10 "$URL" -o "$TMP"; then
-  die "download failed — is the portal reachable?"
+if ! curl -fsSLk --connect-timeout 10 "$URL" -o "$TMP"; then
+  die "download failed — is the server reachable?"
 fi
 if [[ ! -s "$TMP" ]]; then
   die "downloaded file is empty"
@@ -117,7 +117,7 @@ fi
 "$TARGET" version || die "binary failed to execute"
 cat <<EOF
 
-Next: mint an API token at ${PORTAL%:*}:8190/settings/tokens then log in:
+Next: mint an API token at https://<kvm-center-host>:8190/settings/tokens then log in:
 
   ${BIN_NAME} login --server https://<kvm-center-host>:8190 --token kvmc_…
 EOF

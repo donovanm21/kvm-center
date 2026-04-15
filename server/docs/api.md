@@ -141,4 +141,4 @@ Filter + paginate. Newest first.
 
 - `GET /api/version` — `{"version": "v5.14.0"}`. Public.
 - `GET /health` — `{"status": "ok"}`. Public.
-- `GET /api/portal/health` — server-side probe of the build portal.
+- `GET /downloads/*` — agent / kvm-tools / kvmctl binaries + install scripts (unauthenticated; enrollment token is the real gate on cluster access).

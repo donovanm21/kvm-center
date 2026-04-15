@@ -100,26 +100,6 @@ services:
         max-size: "5m"
         max-file: "2"
 
-  # Permanent download portal that serves the cross-compiled agent and
-  # kvm-tools binaries plus install scripts. Referenced by the Deployment
-  # page in the web UI.
-  kvm-center-build:
-    build:
-      context: .
-      dockerfile: Dockerfile.build
-    image: kvm-center-build:latest
-    container_name: kvm-center-build
-    restart: unless-stopped
-    ports:
-      - "8097:8080"   # Download portal — referenced by the Deployment UI page.
-    networks:
-      - kvm-net
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "2"
-
 networks:
   kvm-net:
     driver: bridge
