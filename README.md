@@ -20,6 +20,8 @@ travel with the release binary.
 | Architecture | [`server/docs/architecture.md`](server/docs/architecture.md) |
 | Authentication (sessions, API tokens, IdPs, 2FA) | [`server/docs/authentication.md`](server/docs/authentication.md) |
 | Migrations (mTLS channel + signed grants) | [`server/docs/migrations.md`](server/docs/migrations.md) |
+| Networking & firewall | [`server/docs/networking.md`](server/docs/networking.md) |
+| Remote access | [`server/docs/remote-access.md`](server/docs/remote-access.md) |
 | `kvmctl` CLI | [`server/docs/kvmctl.md`](server/docs/kvmctl.md) |
 | API reference | [`server/docs/api.md`](server/docs/api.md) |
 | Troubleshooting | [`server/docs/troubleshooting.md`](server/docs/troubleshooting.md) |
