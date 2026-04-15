@@ -10,6 +10,14 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.18.1
+- **Themed scrollbars + page-size dropdown.** The table scroll region
+  now uses a slim, dark WebKit scrollbar with an accent hover state
+  and the Firefox thin/colour equivalents. The rows-per-page
+  selector loses its native chrome in favour of the house dark
+  input style with a custom chevron, so the pagination footer reads
+  as one surface instead of a row of OS widgets.
+
 ## v5.18.0
 - **Scrollable + paginated tables.** Every heavy list (Hosts,
   VMs, Tools update centre, Host detail VMs/Storage tabs) now
