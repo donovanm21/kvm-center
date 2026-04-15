@@ -126,3 +126,70 @@ jobs:
             echo "::error::One or more security gates failed — see individual job logs."
             exit 1
           fi
+
+  # Auto-open a Gitea issue when a security gate trips on main, so a
+  # CVE landing overnight leaves a durable trail (emails get lost in
+  # the noise). Runs only on main-branch pushes — PR failures are
+  # already surfaced inline on the PR itself. Dedup is best-effort:
+  # we skip when an open issue already has our fingerprint label.
+  open-issue-on-failure:
+    needs: [lint-test, webui-audit, gitleaks]
+    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: file CI failure issue
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          LINT: ${{ needs.lint-test.result }}
+          WEB:  ${{ needs.webui-audit.result }}
+          LEAK: ${{ needs.gitleaks.result }}
+        run: |
+          set -eu
+          # Skip entirely if the instance didn't provide a token.
+          if [ -z "${TOKEN:-}" ]; then
+            echo "No token — skipping auto-issue."; exit 0
+          fi
+          # Best-effort dedup: if an open issue already carries our
+          # label, append a comment instead of opening a duplicate.
+          LABEL="security:ci-blocker"
+          existing=$(curl -fsSL -H "Authorization: token $TOKEN" \
+            "$REPO_API/issues?state=open&type=issues&labels=$LABEL" \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["number"] if d else "")' 2>/dev/null || true)
+          BODY=$(cat <<MARKDOWN
+          **Automated report** — a security gate failed on \`main\`.
+
+          - commit: \`$SHA\`
+          - run: $RUN_URL
+          - lint-test: \`$LINT\`
+          - webui-audit: \`$WEB\`
+          - gitleaks: \`$LEAK\`
+
+          See the linked run for the specific finding. Triage playbook in [docs/DEVELOPMENT.md](../blob/main/docs/DEVELOPMENT.md#ci-security-gates-v5205).
+          MARKDOWN
+          )
+          if [ -n "$existing" ]; then
+            echo "Updating existing issue #$existing"
+            curl -fsSL -X POST -H "Authorization: token $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$(python3 -c "import json,os; print(json.dumps({'body': os.environ['BODY']}))")" \
+              "$REPO_API/issues/$existing/comments" >/dev/null
+          else
+            echo "Opening new issue"
+            curl -fsSL -X POST -H "Authorization: token $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$(python3 -c "import json,os; print(json.dumps({'title':'[CI] security gate failing on main','body': os.environ['BODY'], 'labels':[]}))")" \
+              "$REPO_API/issues" >/dev/null
+            # Try to tack on our label; ignore failure (label may not
+            # exist yet on a fresh repo — create it once manually or
+            # via a one-off admin script).
+            last=$(curl -fsSL -H "Authorization: token $TOKEN" \
+              "$REPO_API/issues?state=open&limit=1&type=issues" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["number"])')
+            curl -fsSL -X POST -H "Authorization: token $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"labels\":[\"$LABEL\"]}" \
+              "$REPO_API/issues/$last/labels" >/dev/null || true
+          fi
