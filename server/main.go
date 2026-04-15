@@ -320,6 +320,13 @@ func main() {
 	// needs it to grey out disabled buttons); writes require user.manage.
 	mux.HandleFunc("/api/settings",       handleFeaturesGet(store))
 	mux.Handle("/api/settings/update",    requirePerm(store, "user.manage", handleFeaturesUpdate(store)))
+
+	// First-boot setup wizard (v5.20). /state is public because the SPA
+	// needs to read it before the user signs in; /complete requires
+	// user.manage so only admins can close out the wizard.
+	backfillSetupComplete(store)
+	mux.HandleFunc("/api/setup/state", handleSetupState(store))
+	mux.Handle("/api/setup/complete", requirePerm(store, "user.manage", http.HandlerFunc(handleSetupComplete(store))))
 	// Database backend status + migration (v5.1+). Gated on user.manage;
 	// considered a platform-ops operation alongside TLS management.
 	mux.Handle("/api/settings/database",         requirePerm(store, "user.manage", handleDatabaseStatus(store)))
