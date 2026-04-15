@@ -10,6 +10,18 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.20.5
+- **CI security gates.** `.gitea/workflows/test.yml` now runs three
+  vulnerability scanners on every push:
+  - **govulncheck** — blocking on any reachable Go vuln.
+  - **npm audit** — blocking on *critical* webui-react deps,
+    warn-only on high / moderate / low.
+  - **gitleaks** — blocking on any secret match in working tree
+    or full git history.
+  The `summary` job aggregates the three so Gitea's failure email
+  names which gate tripped. Triage playbook added to
+  `docs/DEVELOPMENT.md`.
+
 ## v5.20.4
 - **Deployment page.** Direct Downloads table split into tabs —
   KVM Tools, Hypervisor Agent, kvmctl CLI — so each component's
