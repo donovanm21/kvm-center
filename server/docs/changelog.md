@@ -10,6 +10,22 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.18.7
+- **Security** — `disable_console` now gates the full console
+  surface end-to-end. Before this, only the Launch Console button
+  and the console-token mint were blocked; the HTML shell
+  (`/api/console/<host>/<vm>`), the WebSocket upgrade
+  (`/api/console-ws/...`), and the VM-screenshot proxy
+  (`/api/vms/screenshot`) all honoured RBAC but skipped the
+  feature flag. A user with `vm.console` could deep-link past the
+  UI toggle. All three handlers now call `featureBlocked()` too.
+- **Settings tab order.** Re-grouped into three clusters:
+  platform basics (General, Database), identity & access (Users,
+  Groups, Roles, Identity Providers, API Tokens, TLS), and
+  operations (Notifications, Metrics, Audit Log). API Tokens
+  moved next to the other auth-related tabs; Audit Log moved to
+  the bottom next to the observability siblings.
+
 ## v5.18.6
 - **Fix** — Snapshot Policies tab blanked out because `usePagination`
   was called after an early `isLoading` return, violating the Rules

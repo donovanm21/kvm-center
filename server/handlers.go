@@ -930,6 +930,12 @@ func handleCancelMigration(store *Store) http.HandlerFunc {
 // TLS origin while the hypervisor agent stays plain-HTTP on the LAN.
 func handleVMScreenshot(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// v5.18.7: screenshot thumbnails are part of the console surface;
+		// honour disable_console so an operator who flipped the flag
+		// doesn't still leak live VM framebuffers over /api/vms/screenshot.
+		if featureBlocked(w, store, "console", "VM console access") {
+			return
+		}
 		hostID := r.URL.Query().Get("host")
 		vmName := r.URL.Query().Get("vm")
 		if hostID == "" || vmName == "" {
