@@ -124,6 +124,11 @@ type Store struct {
 	// caEnrollTokens (v5.10) keyed by one-time token; in-memory only
 	// with short TTL. Consumed by the first successful CSR sign.
 	caEnrollTokens map[string]*caEnrollEntry
+	// hostMetrics (v5.17) is the per-host in-memory ring buffer that
+	// backs the in-UI sparklines. Influx remains the canonical long-term
+	// store; this is glance-at-the-last-hour material, memory-only, and
+	// refills naturally after a restart.
+	hostMetrics map[string]*hostMetricRing
 	features      models.Features
 	dataFile      string
 	// backend is the pluggable persistence layer (JSON file or Mongo).
@@ -184,6 +189,7 @@ func NewStoreWithBackend(backend Backend, dataFile string) *Store {
 		apiTokens:           make(map[string]*models.APIToken),
 		hypervisorCerts:     make(map[string]*models.HypervisorCert),
 		caEnrollTokens:      make(map[string]*caEnrollEntry),
+		hostMetrics:         make(map[string]*hostMetricRing),
 		dataFile:            dataFile,
 		backend:             backend,
 	}
@@ -321,9 +327,13 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 
 	// Metrics side effects — fan out outside the lock. Tight loop
 	// so the per-VM emit stays bounded on a large fleet.
+	poolsCopy := append([]*models.StoragePool(nil), pools...)
 	go func() {
 		s.EmitHostMetrics(&hostCopy, prefix)
 		s.EmitVMMetrics(vmsCopy, prefix)
+		// v5.17: feed the in-UI sparkline ring alongside the Influx
+		// write. Cheap (~1 µs) and memory-only.
+		s.AppendHostMetric(p.HostID, &hostCopy, poolsCopy)
 	}()
 
 	// Notification side effects — fan out outside the lock.
