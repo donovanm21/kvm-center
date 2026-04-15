@@ -63,6 +63,12 @@ func parseConsolePath(reqPath, prefix string) (string, string) {
 // for users carrying the permission.
 func handleConsolePage(_store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// v5.18.7: RBAC alone isn't enough — if the operator flipped
+		// disable_console they still don't want a user with vm.console
+		// to deep-link to this page.
+		if featureBlocked(w, _store, "console", "VM console access") {
+			return
+		}
 		hostID, vmName := parseConsolePath(r.URL.Path, "/api/console")
 		if hostID == "" || vmName == "" {
 			http.Error(w, "path must be /api/console/<host>/<vm>", http.StatusBadRequest)
@@ -88,6 +94,11 @@ func handleConsolePage(_store *Store) http.HandlerFunc {
 // backend work).
 func handleConsoleWSProxy(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// v5.18.7: gate the WebSocket upgrade behind the same flag as
+		// the HTML shell so a savvy client can't bypass the UI hiding.
+		if featureBlocked(w, store, "console", "VM console access") {
+			return
+		}
 		hostID, vmName := parseConsolePath(r.URL.Path, "/api/console-ws")
 		if hostID == "" || vmName == "" {
 			http.Error(w, "path must be /api/console-ws/<host>/<vm>", http.StatusBadRequest)
