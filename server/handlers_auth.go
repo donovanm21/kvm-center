@@ -624,6 +624,9 @@ var publicAPIPrefixes = []string{
 	"/api/migrations/grant-pubkey",
 	// In-app docs are reference material — public.
 	"/api/docs/",
+	// Setup state is public so the SPA can decide whether to render
+	// the wizard before the user logs in. No secrets in the response.
+	"/api/setup/state",
 }
 
 func authMiddleware(store *Store, next http.Handler) http.Handler {
