@@ -3,6 +3,7 @@ import { Link, NavLink, useMatch, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { apiPost } from '@/api/client';
+import { HostMetricsGraphs } from '@/components/HostMetricsGraphs';
 import { Modal } from '@/components/Modal';
 import { useAuth } from '@/hooks/useAuth';
 import { useFeatures, useHosts, useStorage, useVMs } from '@/hooks/useInventory';
@@ -295,6 +296,9 @@ function SummaryTab({ host }: { host: Host }) {
           <UtilBar label="Memory Usage" pct={memPct} color="#8B5CF6" />
         </div>
       </div>
+
+      {/* In-UI sparklines (v5.17) — glance at the last hour. */}
+      <HostMetricsGraphs hostID={host.id} />
 
       {/* Virtual machines on this host */}
       <div>
