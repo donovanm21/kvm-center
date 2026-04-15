@@ -10,6 +10,19 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.19.0
+- **Legacy v3 HTML UI retired.** The React SPA has been the default
+  at `/` since v4.0.0; the legacy HTML has now been removed
+  entirely. Deleted:
+  - the `kvm-center-webui` nginx container and its port **8096**
+  - the `webui/` source tree and the `server/static/` embed
+  - the "Open legacy UI" entry in the user menu
+- `/legacy`, `/legacy/`, `/v4`, and `/v4/` still 308 to `/` so any
+  lingering bookmarks land on the SPA.
+- One fewer container in the stack, one fewer port to whitelist,
+  and the server binary is slightly smaller without the embedded
+  legacy assets.
+
 ## v5.18.8
 - **Fix** — `disable_snapshots` now also gates snapshot policies.
   Before this, flipping the flag in Settings → General blocked ad-hoc

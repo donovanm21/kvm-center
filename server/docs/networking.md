@@ -18,7 +18,6 @@ for bandwidth during migrations.
 |-------|----------|----------------------|------------------|-------|
 | 8190  | HTTPS    | Operators + kvmctl   | LAN / trusted    | Primary UI + API. Terminate behind a reverse proxy for WAN exposure. |
 | 8090  | HTTP     | Agents + install one-liners | Management VLAN | Plaintext API + `/downloads/*` for agent / kvm-tools / kvmctl binaries. Agents trust this during bootstrap before they've pinned the server cert. |
-| 8096  | HTTP     | Legacy SPA (nginx)   | localhost        | Kept for `/legacy/` access; retire once no one browses it. |
 
 ### Hypervisors
 
@@ -121,7 +120,7 @@ follow it across.
 ## Hardening checklist
 
 - Expose **8190** to operators. 8090 (agents + download one-liners)
-  stays management-VLAN-only; 8096 stays localhost.
+  stays management-VLAN-only.
 - Put the server behind a reverse proxy if operators come in over
   WAN. HSTS + a real cert beats the self-signed bundle.
 - Lock 16514 + the QEMU range to the hypervisor subnet.

@@ -2,9 +2,9 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 
-// v4.0.0 cutover: SPA is now the primary UI served at '/'. The legacy
-// v3 HTML still lives at /legacy/ for a grace window so operators with
-// muscle memory can fall back if they hit a snag. /api/* is unchanged.
+// The React SPA is the only shipped UI since v5.18.9. The server
+// 308s /legacy and /v4 bookmarks back to '/'. /api/* is proxied to
+// the Go backend below so cookies work during local dev.
 export default defineConfig({
   base: '/',
   plugins: [react()],
