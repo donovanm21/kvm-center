@@ -148,48 +148,51 @@ jobs:
           LEAK: ${{ needs.gitleaks.result }}
         run: |
           set -eu
-          # Skip entirely if the instance didn't provide a token.
           if [ -z "${TOKEN:-}" ]; then
             echo "No token — skipping auto-issue."; exit 0
           fi
-          # Best-effort dedup: if an open issue already carries our
-          # label, append a comment instead of opening a duplicate.
-          LABEL="security:ci-blocker"
-          existing=$(curl -fsSL -H "Authorization: token $TOKEN" \
-            "$REPO_API/issues?state=open&type=issues&labels=$LABEL" \
-            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["number"] if d else "")' 2>/dev/null || true)
-          BODY=$(cat <<MARKDOWN
-          **Automated report** — a security gate failed on \`main\`.
-
-          - commit: \`$SHA\`
-          - run: $RUN_URL
-          - lint-test: \`$LINT\`
-          - webui-audit: \`$WEB\`
-          - gitleaks: \`$LEAK\`
-
-          See the linked run for the specific finding. Triage playbook in [docs/DEVELOPMENT.md](../blob/main/docs/DEVELOPMENT.md#ci-security-gates-v5205).
-          MARKDOWN
+          # Delegate the whole thing to python so we don't have to
+          # juggle shell heredocs + env var exports + json quoting.
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error, urllib.parse
+          api  = os.environ["REPO_API"]
+          tok  = os.environ["TOKEN"]
+          hdrs = {"Authorization": f"token {tok}", "Content-Type": "application/json"}
+          label = "security:ci-blocker"
+          body = (
+              "**Automated report** — a security gate failed on `main`.\n\n"
+              f"- commit: `{os.environ['SHA']}`\n"
+              f"- run: {os.environ['RUN_URL']}\n"
+              f"- lint-test: `{os.environ['LINT']}`\n"
+              f"- webui-audit: `{os.environ['WEB']}`\n"
+              f"- gitleaks: `{os.environ['LEAK']}`\n\n"
+              "See the linked run for the specific finding. Triage playbook in "
+              "[docs/DEVELOPMENT.md](../blob/main/docs/DEVELOPMENT.md#ci-security-gates-v5205)."
           )
-          if [ -n "$existing" ]; then
-            echo "Updating existing issue #$existing"
-            curl -fsSL -X POST -H "Authorization: token $TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "$(python3 -c "import json,os; print(json.dumps({'body': os.environ['BODY']}))")" \
-              "$REPO_API/issues/$existing/comments" >/dev/null
-          else
-            echo "Opening new issue"
-            curl -fsSL -X POST -H "Authorization: token $TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "$(python3 -c "import json,os; print(json.dumps({'title':'[CI] security gate failing on main','body': os.environ['BODY'], 'labels':[]}))")" \
-              "$REPO_API/issues" >/dev/null
-            # Try to tack on our label; ignore failure (label may not
-            # exist yet on a fresh repo — create it once manually or
-            # via a one-off admin script).
-            last=$(curl -fsSL -H "Authorization: token $TOKEN" \
-              "$REPO_API/issues?state=open&limit=1&type=issues" \
-              | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["number"])')
-            curl -fsSL -X POST -H "Authorization: token $TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"labels\":[\"$LABEL\"]}" \
-              "$REPO_API/issues/$last/labels" >/dev/null || true
-          fi
+          def do(method, url, payload=None):
+              data = json.dumps(payload).encode() if payload is not None else None
+              req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
+              with urllib.request.urlopen(req) as r:
+                  return json.loads(r.read() or b"null")
+          # Dedup by label — comment on existing open issue.
+          q = urllib.parse.urlencode({"state": "open", "type": "issues", "labels": label})
+          try:
+              found = do("GET", f"{api}/issues?{q}")
+          except urllib.error.HTTPError:
+              found = []
+          if found:
+              num = found[0]["number"]
+              print(f"Updating existing issue #{num}")
+              do("POST", f"{api}/issues/{num}/comments", {"body": body})
+          else:
+              print("Opening new issue")
+              issue = do("POST", f"{api}/issues", {
+                  "title": "[CI] security gate failing on main",
+                  "body": body,
+              })
+              # Label may not exist yet on a fresh repo; tolerate 422.
+              try:
+                  do("POST", f"{api}/issues/{issue['number']}/labels", {"labels": [label]})
+              except urllib.error.HTTPError as e:
+                  print(f"(label attach skipped: {e})")
+          PY

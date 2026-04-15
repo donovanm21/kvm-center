@@ -78,8 +78,10 @@ code after the password succeeds.
 ### curl with a token
 
 ```sh
-TOKEN=kvmc_xxxxxxxx.yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
-curl -H "Authorization: Bearer $TOKEN" https://kvm.example.com:8190/api/hosts
+# Bearer token format: kvmc_<8-char id>.<40-char secret> — paste the real
+# value from Settings -> API Tokens.
+curl -H "Authorization: Bearer kvmc_YOUR_TOKEN_HERE" \
+     https://kvm.example.com:8190/api/hosts
 ```
 
 ### kvmctl login
