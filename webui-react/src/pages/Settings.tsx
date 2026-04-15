@@ -12,18 +12,23 @@ import { NotificationsTab } from './settings/NotificationsTab';
 import { TokensTab } from './settings/TokensTab';
 import { MetricsTab } from './settings/MetricsTab';
 
+// Grouped by purpose so related tabs sit next to each other:
+//   1. Platform basics     — General, Database
+//   2. Identity & access   — Users, Groups, Roles, Identity Providers,
+//                            API Tokens, TLS
+//   3. Operations          — Notifications, Metrics, Audit Log
 const TABS = [
   { to: 'general', label: 'General' },
+  { to: 'database', label: 'Database' },
   { to: 'users', label: 'Users' },
   { to: 'groups', label: 'Groups' },
   { to: 'roles', label: 'Roles' },
   { to: 'providers', label: 'Identity Providers' },
-  { to: 'tls', label: 'TLS' },
-  { to: 'database', label: 'Database' },
-  { to: 'audit', label: 'Audit Log' },
-  { to: 'notifications', label: 'Notifications' },
   { to: 'tokens', label: 'API Tokens' },
+  { to: 'tls', label: 'TLS' },
+  { to: 'notifications', label: 'Notifications' },
   { to: 'metrics', label: 'Metrics' },
+  { to: 'audit', label: 'Audit Log' },
 ] as const;
 
 export function Settings() {
