@@ -77,11 +77,14 @@ export function SnapshotPolicies() {
     onError: (e) => toast('error', `Run failed: ${e instanceof Error ? e.message : String(e)}`),
   });
 
-  if (policies.isLoading) return <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading policies…</div>;
-  if (policies.error) return <div className="tone-panel danger" style={{ padding: 12, fontSize: 12 }}>Failed to load: {(policies.error as Error).message}</div>;
-
+  // Hooks must run every render — keep usePagination above any early
+  // return or React throws a "rendered fewer hooks than expected" error
+  // and the page blanks out.
   const list = policies.data ?? [];
   const pg = usePagination(list);
+
+  if (policies.isLoading) return <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading policies…</div>;
+  if (policies.error) return <div className="tone-panel danger" style={{ padding: 12, fontSize: 12 }}>Failed to load: {(policies.error as Error).message}</div>;
 
   return (
     <>
