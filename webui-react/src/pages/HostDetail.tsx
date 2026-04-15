@@ -299,37 +299,6 @@ function SummaryTab({ host }: { host: Host }) {
 
       {/* In-UI sparklines (v5.17) — glance at the last hour. */}
       <HostMetricsGraphs hostID={host.id} />
-
-      {/* Virtual machines on this host */}
-      <div>
-        <div style={sectionHeader}>Virtual machines</div>
-        <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
-          {hostVMs.length === 0 ? (
-            <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-              No VMs reported on this host yet.
-            </div>
-          ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>State</th>
-                  <th>CPUs</th>
-                  <th>Memory</th>
-                  <th>Disk</th>
-                  <th style={{ width: 180 }}>CPU usage</th>
-                  <th style={{ width: 180 }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hostVMs.map((v) => (
-                  <HostVMRow key={v.uuid} vm={v} host={host} />
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
@@ -381,6 +350,9 @@ function HostVMRow({ vm, host }: { vm: VM; host: Host }) {
           </div>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 36 }}>{cpuPct.toFixed(1)}%</span>
         </div>
+      </td>
+      <td style={{ color: vm.guest_agent ? '#3FB950' : 'var(--text-faded)', fontSize: 11 }}>
+        {vm.guest_agent ? (vm.guest_source ?? 'present') : '—'}
       </td>
       <td>
         <div style={{ display: 'flex', gap: 4 }}>
@@ -511,27 +483,21 @@ function VMsTab({ host }: { host: Host }) {
   return (
     <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
       <table className="data-table">
-        <thead><tr><th>Name</th><th>State</th><th>CPUs</th><th>Memory</th><th>Disk</th><th>Guest tools</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>State</th>
+            <th>CPUs</th>
+            <th>Memory</th>
+            <th>Disk</th>
+            <th style={{ width: 160 }}>CPU usage</th>
+            <th>Guest tools</th>
+            <th style={{ width: 180 }}>Actions</th>
+          </tr>
+        </thead>
         <tbody>
           {list.map((v) => (
-            <tr key={v.uuid}>
-              <td>
-                <Link to={`/vms/${encodeURIComponent(v.uuid)}`} style={{ color: 'var(--text-strong)', fontWeight: 500 }}>
-                  {v.name}
-                </Link>
-              </td>
-              <td><span className={`state-pill ${v.state}`}>{v.state}</span></td>
-              <td>{v.cpu_count}</td>
-              <td>
-                {v.mem_total_mb > 0
-                  ? `${(v.mem_usage_mb / 1024).toFixed(1)} / ${(v.mem_total_mb / 1024).toFixed(0)} GB`
-                  : '—'}
-              </td>
-              <td>{v.disk_total_gb > 0 ? `${v.disk_usage_gb.toFixed(1)} / ${v.disk_total_gb.toFixed(0)} GB` : '—'}</td>
-              <td style={{ color: v.guest_agent ? '#3FB950' : 'var(--text-faded)' }}>
-                {v.guest_agent ? (v.guest_source ?? 'present') : '—'}
-              </td>
-            </tr>
+            <HostVMRow key={v.uuid} vm={v} host={host} />
           ))}
         </tbody>
       </table>
