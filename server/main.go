@@ -400,7 +400,10 @@ func main() {
 			// TLS material. Everything else is a browser and should be
 			// on HTTPS — issue a 308 so POST bodies survive.
 			p := r.URL.Path
-			if strings.HasPrefix(p, "/api/") || p == "/health" {
+			// v5.16: /downloads/* must stay plaintext too — install
+			// one-liners and update-agent.sh pull from here before the
+			// host has any way to trust the self-signed cert.
+			if strings.HasPrefix(p, "/api/") || p == "/health" || strings.HasPrefix(p, "/downloads/") {
 				handler.ServeHTTP(w, r)
 				return
 			}
