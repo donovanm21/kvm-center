@@ -201,6 +201,8 @@ func main() {
 			requirePerm(store, "host.manage", http.HandlerFunc(handleMaintenanceEnter(store))).ServeHTTP(w, r)
 		case strings.HasSuffix(r.URL.Path, "/maintenance/exit"):
 			requirePerm(store, "host.manage", http.HandlerFunc(handleMaintenanceExit(store))).ServeHTTP(w, r)
+		case strings.HasSuffix(r.URL.Path, "/metrics"):
+			handleHostMetrics(store).ServeHTTP(w, r)
 		default:
 			handleGetHost(store).ServeHTTP(w, r)
 		}

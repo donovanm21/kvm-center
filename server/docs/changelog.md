@@ -10,6 +10,18 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.17.0
+- **In-UI host sparklines.** Host detail page now shows last-hour
+  CPU / memory / aggregate-storage-% sparklines under the resource
+  utilisation block. Fed by a per-host in-memory ring buffer
+  (120 samples × 30 s) populated alongside the existing Influx
+  emit; memory-only, rebuilds on restart. Grafana + Influx remain
+  the surface for longer windows, per-VM breakdowns, and anything
+  cross-host — the section header links straight to the metrics
+  settings tab.
+- New endpoint: `GET /api/hosts/<id>/metrics` returns the ring in
+  chronological order.
+
 ## v5.16.0
 - **Consolidated build portal into the server.** The standalone
   `kvm-center-build` container (port **8097**) is retired. Agent /
