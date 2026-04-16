@@ -72,8 +72,9 @@ case "$MODE" in
     docker compose build --build-arg GIT_SHA="$GIT_SHA"
     docker compose up -d
     echo ""
-    echo "  Web UI → http://$(hostname -I | awk '{print $1}'):8090"
-    echo "  API    → http://$(hostname -I | awk '{print $1}'):8090/api"
+    IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+    echo "  Web UI → https://${IP:-localhost}:8190"
+    echo "  API    → https://${IP:-localhost}:8190/api"
     ;;
 
   --interactive)
@@ -223,7 +224,9 @@ VM / hypervisor data on your hypervisors is NOT touched. Proceed?"; then
     # Public URL threads into every install snippet on the Deployment
     # page and webhook deep links. Blank is safe — the SPA falls back
     # to window.location. Admins can set/change this later in Settings.
-    HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    # hostname -I is Linux-only; on macOS (operator running --interactive
+    # locally to test) it fails and pipefail would kill the installer.
+    HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
     prompt "Public URL" "Canonical URL clients use to reach this server (blank to skip)" "${HOST_IP:+https://${HOST_IP}:8190}" || { echo aborted; exit 1; }
     PUBLIC_URL="$REPLY"
 
