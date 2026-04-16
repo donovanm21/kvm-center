@@ -59,7 +59,7 @@ one-time token; receives a leaf cert signed by the cluster CA.
 | Boundary | Authentication | Transport |
 |----------|----------------|-----------|
 | Browser / CLI → Server | Session cookie or API token | HTTPS (self-signed or operator-provided cert) |
-| Agent → Server (telemetry) | Host identity via TLS posture + telemetry content | HTTP:8090 plaintext (ok — telemetry is pulled/pushed; no secrets exchanged) |
+| Agent → Server (telemetry) | Host identity via enrolment cert | HTTPS:8190 — trusts self-signed CA via InsecureSkipVerify; a warning is logged on every report until a trusted cert is installed. The legacy plaintext :8090 listener still runs for pre-5.24 agents but nothing in the current stack needs it. |
 | Server → Agent (commands) | None today — agents trust the server because they're on the management network; tightening in a future release | HTTP:8081 |
 | Agent ↔ Agent (migration data) | mTLS with cluster-CA-signed leaf certs + Ed25519-signed per-migration grant | qemu+tls on :16514 + data on 49152-49215 |
 
