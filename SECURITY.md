@@ -54,6 +54,14 @@ a private network, review:
   larger ones.
 - The *Public URL* setting — set this so install snippets and webhook
   deep links resolve to your real hostname, not an arbitrary URL.
-- Network exposure — `:8090` is plaintext (for agent bootstrapping
-  before they trust the self-signed CA); firewall it to your agent
-  subnet. `:8190` is TLS and safe to expose.
+- Network exposure — `:8190` is TLS and is the only port the product
+  advertises since v5.24. The legacy plaintext `:8090` listener still
+  runs for pre-5.24 agents but nothing in the current stack needs it;
+  firewall it off to your agent subnet (or drop it entirely) once all
+  your agents have been re-enrolled against HTTPS.
+- Self-signed certificates — the default cert is trusted by agents
+  via `InsecureSkipVerify` with a warning logged on every report.
+  This is fine for a homelab but is a real man-in-the-middle exposure
+  on untrusted networks; install a trusted certificate via
+  **Settings → TLS** before exposing the server across network
+  boundaries you don't control.

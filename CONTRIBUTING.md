@@ -40,7 +40,8 @@ make check
 
 The web UI lives in `webui-react/` and is built into the server's
 embedded filesystem. `npm run dev` from there gives you a hot-reload
-loop against a backend running on `:8090`.
+loop proxying to a backend on `:8090` (dev-only; production traffic
+is TLS on `:8190`).
 
 ## Pull requests
 

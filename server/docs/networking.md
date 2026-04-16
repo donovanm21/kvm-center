@@ -31,8 +31,9 @@ for bandwidth during migrations.
 ### Guests (kvm-tools)
 
 Outbound only. Guests post telemetry to the control plane on port
-**8190** (TLS) or **8090** (plaintext) — whichever the operator
-configured at install time. Nothing listens inside the guest.
+**8190** (TLS). v5.24+ defaults to HTTPS; the server's legacy
+plaintext `:8090` listener is still up for pre-5.24 agents but new
+installs never touch it. Nothing listens inside the guest.
 
 ## Firewall recipe
 
