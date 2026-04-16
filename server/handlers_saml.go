@@ -153,7 +153,7 @@ func handleSAMLACS(store *Store) http.HandlerFunc {
 			return
 		}
 		setSessionCookie(w, sess)
-		go store.Save()
+		store.AsyncSave()
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
 }

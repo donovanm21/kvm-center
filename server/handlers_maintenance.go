@@ -258,7 +258,7 @@ func (s *Store) SetHostMaintenance(hostID string, on bool, actor, reason string)
 	}
 	s.mu.Unlock()
 	s.hub.Publish(EventInventory, map[string]any{"host_id": hostID})
-	go s.Save()
+	s.AsyncSave()
 	return nil
 }
 

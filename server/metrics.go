@@ -203,7 +203,7 @@ func (s *Store) SetMetricsConfig(cfg *models.MetricsConfig) {
 	s.mu.Lock()
 	s.metrics = cfg
 	s.mu.Unlock()
-	go s.Save()
+	s.AsyncSave()
 }
 
 func (s *Store) recordMetricsResult(err error, count int64) {

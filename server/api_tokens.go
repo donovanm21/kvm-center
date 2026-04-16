@@ -116,7 +116,7 @@ func (s *Store) CreateAPIToken(name, ownerID, kind string, expiresAt time.Time) 
 	}
 	s.apiTokens[id] = t
 	s.mu.Unlock()
-	go s.Save()
+	s.AsyncSave()
 	return full, t, nil
 }
 
@@ -129,7 +129,7 @@ func (s *Store) RevokeAPIToken(id string) error {
 	}
 	t.Revoked = true
 	s.mu.Unlock()
-	go s.Save()
+	s.AsyncSave()
 	return nil
 }
 

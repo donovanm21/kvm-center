@@ -86,7 +86,7 @@ func handleAuthRegister(store *Store) http.HandlerFunc {
 			return
 		}
 		setSessionCookie(w, sess)
-		go store.Save()
+		store.AsyncSave()
 		writeJSON(w, http.StatusOK, map[string]any{
 			"user":        sanitizeUser(u),
 			"permissions": permListFromMap(effectivePermissions(store, u)),
@@ -124,7 +124,7 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 					return
 				}
 				setSessionCookie(w, sess)
-				go store.Save()
+				store.AsyncSave()
 				auditAs(store, r, ldapUser.ID, ldapUser.Username, AuditLogin, "session", map[string]string{"via": "ldap"}, true, "")
 				writeJSON(w, http.StatusOK, map[string]any{
 					"user":        sanitizeUser(ldapUser),
@@ -157,7 +157,7 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 			return
 		}
 		setSessionCookie(w, sess)
-		go store.Save()
+		store.AsyncSave()
 		auditAs(store, r, u.ID, u.Username, AuditLogin, "session", map[string]string{"via": "local"}, true, "")
 		writeJSON(w, http.StatusOK, map[string]any{
 			"user":        sanitizeUser(u),
@@ -273,7 +273,7 @@ func handleTOTPEnable(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		go store.Save()
+		store.AsyncSave()
 		writeJSON(w, http.StatusOK, map[string]bool{"enabled": true})
 	}
 }
@@ -306,7 +306,7 @@ func handleTOTPDisable(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		go store.Save()
+		store.AsyncSave()
 		writeJSON(w, http.StatusOK, map[string]bool{"enabled": false})
 	}
 }

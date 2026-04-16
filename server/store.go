@@ -159,7 +159,7 @@ func (s *Store) SetFeatures(f models.Features) {
 	s.mu.Lock()
 	s.features = f
 	s.mu.Unlock()
-	go s.Save()
+	s.AsyncSave()
 	s.hub.Publish(EventSettings, nil)
 }
 
@@ -1009,4 +1009,16 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(b)
+}
+
+// AsyncSave kicks off a non-blocking Save and registers it with
+// saveWG so tests can wait for persistence to quiesce before
+// tearing down TempDir. Production code fires and forgets; the
+// WaitGroup is inert at runtime.
+func (s *Store) AsyncSave() {
+	s.saveWG.Add(1)
+	go func() {
+		defer s.saveWG.Done()
+		s.Save()
+	}()
 }

@@ -133,7 +133,7 @@ func (s *Store) SetAuditShipping(cfg *models.AuditShipping) {
 	s.mu.Lock()
 	s.auditShipping = cfg
 	s.mu.Unlock()
-	go s.Save()
+	s.AsyncSave()
 }
 
 // recordShipResult is invoked by the worker after every flush so the

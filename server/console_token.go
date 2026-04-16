@@ -50,7 +50,7 @@ func (s *Store) GetOrCreateConsoleSecret() string {
 		panic("console-secret: rand.Read: " + err.Error())
 	}
 	s.consoleSecret = hex.EncodeToString(buf)
-	go s.Save()
+	s.AsyncSave()
 	return s.consoleSecret
 }
 

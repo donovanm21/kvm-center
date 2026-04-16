@@ -124,7 +124,7 @@ func (s *Store) SetNotifications(cfg *models.NotificationConfig) {
 	s.mu.Lock()
 	s.notifications = cfg
 	s.mu.Unlock()
-	go s.Save()
+	s.AsyncSave()
 }
 
 func (s *Store) dispatchNotification(ev *models.NotificationEvent) {
