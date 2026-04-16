@@ -96,6 +96,49 @@ func handleGetHost(store *Store) http.HandlerFunc {
 	}
 }
 
+// DELETE /api/hosts/{id} — remove a hypervisor from the inventory
+// (and its VM + storage rows + enrolment cert). Physical VMs on the
+// host are not affected. Blocked when a migration is in-flight that
+// references the host as source or destination. `host.manage` gated
+// at route registration time.
+func handleDeleteHost(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			writeError(w, http.StatusMethodNotAllowed, "DELETE only")
+			return
+		}
+		id := strings.TrimPrefix(r.URL.Path, "/api/hosts/")
+		h := store.GetHost(id)
+		if h == nil {
+			writeError(w, http.StatusNotFound, "host not found")
+			return
+		}
+		// Safety: refuse while a migration references this host.
+		for _, m := range store.GetMigrations() {
+			if m == nil || m.Status != "running" {
+				continue
+			}
+			if strings.EqualFold(m.SourceHost, id) || strings.EqualFold(m.DestHost, id) {
+				writeError(w, http.StatusConflict,
+					"refusing to delete — migration "+m.ID+" is in flight against this host; cancel it first")
+				return
+			}
+		}
+		vmCount := len(store.GetVMs(id))
+		poolCount := len(store.GetStorage(id))
+		store.DeleteHost(id)
+		audit(store, r, AuditHostDelete, "host/"+id, map[string]string{
+			"vm_rows":      strconv.Itoa(vmCount),
+			"storage_rows": strconv.Itoa(poolCount),
+		}, true, "")
+		writeJSON(w, http.StatusOK, map[string]any{
+			"deleted":      id,
+			"vm_rows":      vmCount,
+			"storage_rows": poolCount,
+		})
+	}
+}
+
 // GET /api/vms[?host=<id>&search=<q>] — list VMs, optionally filtered.
 func handleGetVMs(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

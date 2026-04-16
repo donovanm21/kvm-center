@@ -66,6 +66,7 @@ const (
 	AuditConsoleOpen          = "vm.console"
 	AuditHostMaintEnter       = "host.maintenance.enter"
 	AuditHostMaintExit        = "host.maintenance.exit"
+	AuditHostDelete           = "host.delete"
 	AuditKVMToolsQueue        = "kvm-tools.queue-update"
 	AuditAuditShipping        = "audit.shipping.update"
 )
