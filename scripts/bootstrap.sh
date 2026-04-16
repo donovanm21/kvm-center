@@ -374,7 +374,7 @@ EOF_ENV
     echo ""
     echo "On each hypervisor, run:"
     echo "  scp dist/kvm-center-agent-amd64 dist/install-agent.sh root@<hypervisor>:/tmp/"
-    echo "  ssh root@<hypervisor> 'chmod +x /tmp/kvm-center-agent-amd64 /tmp/install-agent.sh && /tmp/install-agent.sh --server http://<server-ip>:8090'"
+    echo "  ssh root@<hypervisor> 'chmod +x /tmp/kvm-center-agent-amd64 /tmp/install-agent.sh && /tmp/install-agent.sh --server https://<server-ip>:8190'"
     ;;
 
   --help|-h)

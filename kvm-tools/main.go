@@ -82,7 +82,7 @@ type TelemetryReply struct {
 const uuidCacheFile = "/var/lib/kvm-tools/uuid"
 
 func main() {
-	serverURL := flag.String("server", envOr("KVM_TOOLS_SERVER", "http://localhost:8090"), "kvm-center server URL")
+	serverURL := flag.String("server", envOr("KVM_TOOLS_SERVER", "https://localhost:8190"), "kvm-center server URL")
 	uuidOverride := flag.String("uuid", envOr("KVM_TOOLS_UUID", ""), "override VM UUID (use when DMI UUID doesn't match libvirt domain UUID)")
 	interval := flag.Duration("interval", 30*time.Second, "report interval")
 	flag.Parse()

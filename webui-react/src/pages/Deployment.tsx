@@ -24,12 +24,11 @@ export function Deployment() {
       .catch(() => {});
   }, []);
   const serverURL    = publicURL || `${location.protocol}//${location.host}`;
-  // Hypervisors + guests pull install scripts before they have any way
-  // to trust a self-signed cert, so default the installer URLs to the
-  // plaintext :8090 endpoint colocated with the server. The UI still
-  // offers a TLS URL for the verification commands.
-  const plaintextURL = publicURL || `http://${location.hostname}:8090`;
-  const downloads    = `${plaintextURL}/downloads`;
+  // v5.24: TLS everywhere. The default self-signed cert is trusted by
+  // curl -k in the snippets below; agents log an InsecureSkipVerify
+  // warning on each report until a trusted cert is installed.
+  const installURL = publicURL || `https://${location.hostname}:8190`;
+  const downloads  = `${installURL}/downloads`;
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -42,7 +41,7 @@ export function Deployment() {
           <>
             Install inside a guest VM to surface guest OS, hostname, IP addresses, and
             per-mountpoint filesystem usage in the kvm-center UI. Reports to{' '}
-            <code style={inlineCode}>{plaintextURL}</code> every 30 seconds. Once installed, the
+            <code style={inlineCode}>{installURL}</code> every 30 seconds. Once installed, the
             VM's pill in the Summary tab flips to{' '}
             <strong style={{ color: '#3FB950' }}>KVM Tools: running</strong>.
           </>
@@ -52,27 +51,29 @@ export function Deployment() {
             label: 'RHEL / Rocky',
             body:
               `# Run as root on the guest VM (Rocky / RHEL / CentOS / Fedora)
-curl -fsSL ${downloads}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
-curl -fsSL ${downloads}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
+curl -fsSLk ${downloads}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
+curl -fsSLk ${downloads}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
 chmod +x /tmp/install-kvm-tools.sh /tmp/kvm-tools-amd64
-sudo /tmp/install-kvm-tools.sh --server ${plaintextURL}`,
+sudo /tmp/install-kvm-tools.sh --server ${installURL}`,
             footer: 'Installs /opt/kvm-tools/kvm-tools and a systemd unit. Requires root.',
           },
           debian: {
             label: 'Debian / Ubuntu',
             body:
               `# Run as root on the guest VM (Debian / Ubuntu / Mint)
-curl -fsSL ${downloads}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
-curl -fsSL ${downloads}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
+curl -fsSLk ${downloads}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
+curl -fsSLk ${downloads}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
 chmod +x /tmp/install-kvm-tools.sh /tmp/kvm-tools-amd64
-sudo /tmp/install-kvm-tools.sh --server ${plaintextURL}`,
+sudo /tmp/install-kvm-tools.sh --server ${installURL}`,
             footer: 'Installs /opt/kvm-tools/kvm-tools and a systemd unit. Requires root.',
           },
           windows: {
             label: 'Windows (PowerShell)',
             body:
               `# Run from an elevated PowerShell prompt on the guest VM
-$server = '${plaintextURL}'
+$server = '${installURL}'
+# Trust the default self-signed cert — remove this line once a real cert is installed.
+[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 $tmp = Join-Path $env:TEMP 'kvm-tools-install'
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 Invoke-WebRequest -Uri "$server/downloads/kvm-tools-windows-amd64.exe" -OutFile "$tmp\\kvm-tools.exe" -UseBasicParsing
@@ -100,12 +101,12 @@ Set-Location $tmp
             label: 'RHEL / Rocky',
             body:
               `# Run as root on the new KVM hypervisor (Rocky / RHEL / CentOS)
-curl -fsSL ${downloads}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
-curl -fsSL ${downloads}/install-agent.sh       -o /tmp/install-agent.sh
+curl -fsSLk ${downloads}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
+curl -fsSLk ${downloads}/install-agent.sh       -o /tmp/install-agent.sh
 chmod +x /tmp/install-agent.sh /tmp/kvm-center-agent-amd64
 # Open the agent command port (only required if firewalld is active)
 sudo firewall-cmd --add-port=8081/tcp --permanent && sudo firewall-cmd --reload
-sudo /tmp/install-agent.sh --server ${plaintextURL}`,
+sudo /tmp/install-agent.sh --server ${installURL}`,
             footer:
               'Requires libvirtd running and virsh in PATH. The installer writes /etc/systemd/system/kvm-center-agent.service and enables it at boot.',
           },
@@ -113,12 +114,12 @@ sudo /tmp/install-agent.sh --server ${plaintextURL}`,
             label: 'Debian / Ubuntu',
             body:
               `# Run as root on the new KVM hypervisor (Debian / Ubuntu)
-curl -fsSL ${downloads}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
-curl -fsSL ${downloads}/install-agent.sh       -o /tmp/install-agent.sh
+curl -fsSLk ${downloads}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
+curl -fsSLk ${downloads}/install-agent.sh       -o /tmp/install-agent.sh
 chmod +x /tmp/install-agent.sh /tmp/kvm-center-agent-amd64
 # Open the agent command port (only required if ufw is active)
 sudo ufw allow 8081/tcp
-sudo /tmp/install-agent.sh --server ${plaintextURL}`,
+sudo /tmp/install-agent.sh --server ${installURL}`,
             footer:
               'Requires libvirtd running and virsh in PATH. The installer writes /etc/systemd/system/kvm-center-agent.service and enables it at boot.',
           },

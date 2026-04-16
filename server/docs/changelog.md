@@ -10,6 +10,16 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.24.0
+- **TLS everywhere by default.** Agents, kvm-tools, and install
+  snippets now default to `https://<server>:8190`. The plain-HTTP
+  `:8090` listener still runs for backwards-compat, but nothing
+  advertises it. Install commands pass `curl -k` (and, on Windows,
+  a one-line `ServerCertificateValidationCallback`) to tolerate the
+  default self-signed cert; each agent report logs a warning until
+  you install a trusted certificate via Settings → TLS. Firewalls
+  only need 8190/tcp open between hypervisors and the control plane.
+
 ## v5.23.0
 - **Public URL setting** — Settings → General now has a "Public URL"
   field. Set it once to the canonical address clients use to reach the

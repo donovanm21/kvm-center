@@ -15,8 +15,8 @@ token minted from the user menu (personal) or Settings → API Tokens
 ### Linux / macOS (one-shot)
 
 ```sh
-curl -fsSL http://<server>:8090/downloads/install-kvmctl.sh | bash -s -- \
-  --portal http://<server>:8090/downloads
+curl -fsSLk https://<server>:8190/downloads/install-kvmctl.sh | bash -s -- \
+  --portal https://<server>:8190/downloads
 ```
 
 Auto-detects OS + arch, installs to `/usr/local/bin` (falls back to
@@ -26,8 +26,8 @@ Auto-detects OS + arch, installs to `/usr/local/bin` (falls back to
 ### Windows PowerShell
 
 ```powershell
-iwr http://<server>:8090/downloads/install-kvmctl.ps1 -UseBasicParsing -OutFile $env:TEMP\i.ps1
-& $env:TEMP\i.ps1 -Portal http://<server>:8090/downloads
+iwr https://<server>:8190/downloads/install-kvmctl.ps1 -UseBasicParsing -OutFile $env:TEMP\i.ps1
+& $env:TEMP\i.ps1 -Portal https://<server>:8190/downloads
 ```
 
 ### Manual download

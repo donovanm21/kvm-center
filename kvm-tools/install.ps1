@@ -5,10 +5,13 @@
 # telemetry (OS, kernel, IPs, filesystems) to the kvm-center server.
 #
 # Usage (run from an elevated PowerShell prompt):
-#   .\install.ps1 -Server http://kvm-center.example.com:8090
+#   .\install.ps1 -Server https://kvm-center.example.com:8190
 #
 # Or one-shot from the server:
-#   iwr -useb http://kvm-center.example.com:8090/downloads/install-kvm-tools.ps1 | iex
+#   iwr -useb https://kvm-center.example.com:8190/downloads/install-kvm-tools.ps1 | iex
+#
+# TLS note: the default self-signed cert is trusted automatically; kvm-tools
+# logs a warning each report. Install a trusted cert via Settings → TLS.
 # (when invoked that way the script will fetch kvm-tools.exe from the same
 #  /downloads/ path automatically)
 
@@ -19,7 +22,7 @@ param(
     [string]$BinaryUrl = ""
 )
 
-if (-not $Server) { $Server = "http://localhost:8090" }
+if (-not $Server) { $Server = "https://localhost:8190" }
 
 $ErrorActionPreference = "Stop"
 $InstallDir = "C:\Program Files\kvm-tools"
@@ -51,6 +54,10 @@ if (Test-Path $LocalBin) {
         $BinaryUrl = "$($Server.TrimEnd('/'))/downloads/kvm-tools-windows-amd64.exe"
     }
     Write-Info "Downloading $BinaryUrl ..."
+    if ($BinaryUrl -like 'https://*') {
+        Write-Warn "TLS certificate verification disabled for self-signed CA."
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+    }
     $tmp = Join-Path $env:TEMP "kvm-tools.exe"
     try {
         Invoke-WebRequest -Uri $BinaryUrl -OutFile $tmp -UseBasicParsing

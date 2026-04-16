@@ -13,7 +13,7 @@ order: 30
 │  • Cluster CA (ECDSA P-256, 10-year root)                       │
 │  • Ed25519 grant signer                                         │
 │  • MongoDB backend (JSON fallback)                              │
-│  • HTTPS SPA + API on :8190, plain HTTP for agents on :8090     │
+│  • HTTPS SPA + API on :8190 (TLS everywhere, self-signed ok)    │
 │  • Notifications, metrics sink, audit shipping                  │
 └─────────────────────┬───────────────────────────────────────────┘
                       │ HTTPS + bearer tokens / session cookies

@@ -4,11 +4,11 @@
 # into an install directory (default /usr/local/bin), and verifies.
 #
 # Usage:
-#   curl -fsSL http://<server>:8090/downloads/install-kvmctl.sh | bash -s -- --portal http://<server>:8090/downloads
-#   curl -fsSL http://<server>:8090/downloads/install-kvmctl.sh -o /tmp/i && bash /tmp/i --portal http://<server>:8090/downloads --install-dir ~/.local/bin
+#   curl -fsSLk https://<server>:8190/downloads/install-kvmctl.sh | bash -s -- --portal https://<server>:8190/downloads
+#   curl -fsSLk https://<server>:8190/downloads/install-kvmctl.sh -o /tmp/i && bash /tmp/i --portal https://<server>:8190/downloads --install-dir ~/.local/bin
 #
 # Flags:
-#   --portal      http://HOST:8090/downloads base URL (required)
+#   --portal      https://HOST:8190/downloads base URL (required)
 #   --install-dir target directory (default: /usr/local/bin, falls back to ~/.local/bin when /usr/local/bin isn't writable)
 #   --bin-name    installed binary name (default: kvmctl)
 #   --force       overwrite without prompting
@@ -36,7 +36,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -z "$PORTAL" ]] && die "--portal http://HOST:8090/downloads is required"
+[[ -z "$PORTAL" ]] && die "--portal https://HOST:8190/downloads is required"
 PORTAL="${PORTAL%/}"
 
 # ── Detect OS + arch ──────────────────────────────────────────────
