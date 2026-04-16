@@ -218,6 +218,10 @@ type virshDomainXML struct {
 			Type   string `xml:"type,attr"`
 			Path   string `xml:",chardata"`
 		} `xml:"loader"`
+		NVRAM struct {
+			Format string `xml:"format,attr"`
+			Path   string `xml:",chardata"`
+		} `xml:"nvram"`
 		Boot struct {
 			Dev string `xml:"dev,attr"`
 		} `xml:"boot"`
@@ -364,6 +368,18 @@ func buildVM(name, stateStr string) models.VM {
 				}
 			} else {
 				vm.Firmware = "bios"
+			}
+
+			// Internal snapshot pre-flight: libvirt refuses
+			// `virsh snapshot-create` on a pflash-firmware VM unless
+			// the nvram is qcow2. The UI reads this reason to disable
+			// the Take Snapshot button with a clear tooltip instead of
+			// letting the operator hit a cryptic libvirt error.
+			if domXML.OS.Loader.Type == "pflash" {
+				fmtAttr := strings.ToLower(domXML.OS.NVRAM.Format)
+				if fmtAttr != "qcow2" {
+					vm.SnapshotsBlockedReason = "UEFI pflash nvram is raw format — libvirt requires qcow2 nvram for internal snapshots. Convert with `qemu-img convert -O qcow2 <nvram>.fd <nvram>.qcow2`, then edit the domain XML so the <nvram> element uses format=\"qcow2\" and points at the new file."
+				}
 			}
 
 			// TPM.
