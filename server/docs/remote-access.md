@@ -22,7 +22,10 @@ VLAN.
 - **Don't** port-forward 8190 directly to the internet.
 - **Don't** expose 8081 (agent), 16514 (libvirt), 8090 (legacy
   plaintext), or MongoDB (27017) to anything but the management
-  VLAN. None of those should ever route off-LAN.
+  VLAN. None of those should ever route off-LAN. The VM console
+  WebSocket is server-proxied on `:8190`, so publishing `:8081`
+  is never required for consoles — see "VM console access" in
+  [Authentication](authentication.md) for the full control stack.
 
 ## Recommended topologies
 
