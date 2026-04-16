@@ -10,6 +10,32 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.26.0
+- **Remove host from inventory.** New `DELETE /api/hosts/{id}`
+  (gated on `host.manage`) and a **Remove host** button on Host
+  detail, next to the maintenance toggle. Removes the host record,
+  every VM inventory row, storage-pool metadata, the host metrics
+  ring, and the enrolment cert (both short + FQDN keys). Physical
+  VMs on the hypervisor are not touched. Refuses with 409 while a
+  migration references the host as source or destination. Confirm
+  modal makes the operator type the host ID to unlock. Obviates the
+  Mongo-surgery + server-restart dance previously needed to retire
+  a hypervisor.
+- **Snapshot-unsupported badge per VM.** Agent now detects VMs
+  whose UEFI pflash nvram is raw-formatted — libvirt refuses
+  internal snapshots on those and the cryptic error surprised
+  operators. Snapshots Overview shows a yellow "⚠ Snapshots
+  unsupported" pill, disables the Create Snapshot button, and uses
+  the detected reason as the button tooltip (with a conversion
+  recipe). VM detail page surfaces the same in the Snapshots KV
+  row plus an extra "Snapshot block reason" row with the full fix.
+- **Self-serve agent install via `curl | bash`.**
+  `install-agent.sh` now works when piped through stdin: handles
+  the unset `BASH_SOURCE[0]` under `set -u`, and if no binary sits
+  next to the script it `curl -fsSLk`s the arch-specific binary
+  from `$SERVER_URL/downloads/` into `/tmp`. The Deployment page
+  one-liner is now fully self-contained.
+
 ## v5.25.1
 - **Windows kvm-tools install now works end-to-end.** Fixed three
   paper-cuts that all bit the first operator to run the PowerShell
