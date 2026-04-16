@@ -27,7 +27,9 @@ export function Deployment() {
   // v5.24: TLS everywhere. The default self-signed cert is trusted by
   // curl -k in the snippets below; agents log an InsecureSkipVerify
   // warning on each report until a trusted cert is installed.
-  const installURL = publicURL || `https://${location.hostname}:8190`;
+  // Fall back to location.origin (scheme + host + actual port) so the
+  // snippets reflect the URL the admin is browsing on.
+  const installURL = publicURL || location.origin;
   const downloads  = `${installURL}/downloads`;
 
   return (

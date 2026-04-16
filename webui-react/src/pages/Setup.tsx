@@ -134,11 +134,11 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 function HypervisorStep({ onNext }: { onNext: () => void }) {
   const [hostID, setHostID] = useState('');
   const [token, setToken] = useState<string | null>(null);
-  // v5.24: TLS is the only advertised transport. curl -k in the
-  // one-liner tolerates the default self-signed cert; the agent itself
-  // logs a warning on each report until a trusted cert is installed.
-  // Admins can edit the field below if they reverse-proxy the stack.
-  const [serverURL, setServerURL] = useState(() => `https://${location.hostname}:8190`);
+  // Default to whatever URL the admin is using to reach the SPA —
+  // location.origin includes scheme + host + port, so it picks up
+  // reverse-proxy hosts, non-default ports, and the test instance's
+  // :9190 without guessing. Admins can override in the field below.
+  const [serverURL, setServerURL] = useState(() => location.origin);
 
   const state = useQuery({
     queryKey: ['setup-state'],
