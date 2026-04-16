@@ -97,6 +97,65 @@ the Administrator role only.
 Custom roles: Settings → Roles → **New role** — pick any subset of
 the permissions above and assign to users or groups.
 
+## VM console access
+
+Launching the VNC console is the most sensitive day-to-day
+permission — an operator with `vm.console` can read the screen,
+send keystrokes, and move the mouse on a running guest. It is
+protected by a **defence-in-depth stack**, not a single gate.
+
+### Five layers of control
+
+1. **Authentication.** The console HTML page (`/api/console/<host>/<vm>`)
+   and the WebSocket upgrade (`/api/console-ws/<host>/<vm>`) both
+   sit behind the same session middleware as the rest of the API.
+   No cookie / no API token → 401. Sharing a console URL with
+   someone who isn't signed in grants them nothing.
+2. **RBAC.** Both endpoints are wrapped in `requirePerm("vm.console")`.
+   Built-in Operator and Administrator roles include it; Viewer
+   does not. Custom roles can grant or withhold it independently.
+3. **Feature flag.** Settings → General → **Remote console** toggles
+   `disable_console`. When off, the HTML page, the WebSocket
+   upgrade, the `/api/vms/console-token` mint, and the per-VM
+   screenshot endpoint all return 403 with a clear error. A user
+   carrying `vm.console` can't deep-link past it.
+4. **HMAC-signed short-lived tokens.** Before every WebSocket
+   splice the server mints a 5-minute HMAC token bound to
+   `{host, vm, exp, nonce}`. The agent re-validates the signature
+   before it upgrades the socket to VNC. Rationale: pre-v5.0.2 the
+   agent served `/console/<vm>` and `/ws/<vm>` with no auth —
+   anyone on the management network who could type a URL had full
+   console access. The HMAC plugs that hole even if an agent is
+   accidentally exposed beyond the control plane's subnet.
+5. **Audit trail.** Every console open writes a `vm.console` audit
+   event with the acting user, VM name, and host ID. The
+   WebSocket upgrade that follows isn't double-counted — one click,
+   one event. Admins can review at **Settings → Audit** or ship
+   the stream to an external aggregator via Settings → Audit
+   shipping.
+
+### Networking posture
+
+The WebSocket is proxied server-side; the agent's VNC-proxy port
+(default `:8081`) **never needs to be exposed to the browser**.
+All console traffic rides the HTTPS channel on `:8190` along with
+the session cookie. Firewall `:8081` down to the control plane's
+subnet; browsers stay on `:8190`.
+
+### Recommendations for high-trust environments
+
+- Require **TOTP (2FA)** on accounts holding `vm.console` — the
+  user menu shows a per-account toggle.
+- Don't bake `vm.console` into a shared "everyone" role. Use the
+  Operator role for VM custodians only; create a read-only role
+  without it for auditors.
+- Install an **operator-provided TLS cert** so the session cookie
+  isn't tunnelled through a self-signed warning dismissed out of
+  habit. See Settings → TLS.
+- Rotate operator sessions on a schedule (Settings → Sessions) —
+  a long-lived cookie on a lost laptop is the highest-impact
+  credential exposure console access implies.
+
 ## TOTP (2FA)
 
 User menu → Security & 2FA → Start setup. A QR code + manual-entry
