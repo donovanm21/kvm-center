@@ -17,6 +17,9 @@ interface Check {
   ok: boolean;
   label: string;
   detail: string;
+  // warn marks a non-blocking concern — rendered yellow, doesn't gate
+  // the submit button. Used for offline-migration snapshot loss today.
+  warn?: boolean;
 }
 
 interface Props {
@@ -158,6 +161,15 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
         { ok: true, label: 'CPU compatibility', detail: 'Not required for offline migration' },
         { ok: true, label: 'PCI passthrough', detail: 'OK — VM will be shut down during migration' },
         { ok: true, label: 'Disk format', detail: 'qemu-img convert handles all formats including raw' },
+        // Offline migration rebuilds the VM on the destination from the
+        // domain XML + disks. libvirt snapshot chains don't move with it,
+        // so any existing snapshots will be lost. We warn rather than
+        // block — the operator may have already exported or snapshotted
+        // elsewhere and doesn't want the extra roundtrip of deleting
+        // and re-taking snapshots.
+        vm.snapshot_count > 0
+          ? { ok: false, warn: true, label: 'Snapshots will be lost', detail: `${vm.snapshot_count} snapshot(s) — not carried across offline migration` }
+          : { ok: true, label: 'No snapshots to lose', detail: 'None' },
       ];
     }
     // Live
@@ -194,7 +206,9 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
     ];
   }, [mode, target, sourceHost, vm]);
 
-  const allOk = checks.every((c) => c.ok);
+  // A `warn` check is allowed to fail ok (non-blocking). Only hard
+  // failures (ok:false && !warn) gate the submit button.
+  const allOk = checks.every((c) => c.ok || c.warn);
 
   // Block submit if a migration is already in flight on either the source
   // or the selected target host. The server rejects this too (409), but
@@ -563,10 +577,16 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
                 fontSize: 12,
               }}
             >
-              <span style={{ color: c.ok ? '#3FB950' : '#F85149', fontWeight: 600, minWidth: 14 }}>
-                {c.ok ? '✓' : '✕'}
+              <span
+                style={{
+                  color: c.ok ? '#3FB950' : c.warn ? '#D29922' : '#F85149',
+                  fontWeight: 600,
+                  minWidth: 14,
+                }}
+              >
+                {c.ok ? '✓' : c.warn ? '⚠' : '✕'}
               </span>
-              <span style={{ flex: 1, color: c.ok ? 'var(--text-body)' : 'var(--text-strong)' }}>{c.label}</span>
+              <span style={{ flex: 1, color: c.ok ? 'var(--text-body)' : c.warn ? '#D29922' : 'var(--text-strong)' }}>{c.label}</span>
               <span style={{ color: 'var(--text-faded)', fontSize: 11, textAlign: 'right' }}>{c.detail}</span>
             </div>
           ))}
