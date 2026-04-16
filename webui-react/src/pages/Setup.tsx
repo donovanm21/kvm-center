@@ -134,11 +134,11 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 function HypervisorStep({ onNext }: { onNext: () => void }) {
   const [hostID, setHostID] = useState('');
   const [token, setToken] = useState<string | null>(null);
-  // Port 8090 is always plaintext — agents pull install scripts before
-  // they trust the self-signed CA, so forcing http:// here regardless
-  // of what the browser used avoids a TLS-on-plain-port mismatch.
+  // v5.24: TLS is the only advertised transport. curl -k in the
+  // one-liner tolerates the default self-signed cert; the agent itself
+  // logs a warning on each report until a trusted cert is installed.
   // Admins can edit the field below if they reverse-proxy the stack.
-  const [serverURL, setServerURL] = useState(() => `http://${location.hostname}:8090`);
+  const [serverURL, setServerURL] = useState(() => `https://${location.hostname}:8190`);
 
   const state = useQuery({
     queryKey: ['setup-state'],
@@ -186,7 +186,7 @@ function HypervisorStep({ onNext }: { onNext: () => void }) {
       {token && (
         <div style={{ marginTop: 14 }}>
           <div style={fieldLabel}>Run on the hypervisor</div>
-          <pre style={pre}>{`curl -fsSL ${serverURL}/downloads/install-agent.sh | bash -s -- \\
+          <pre style={pre}>{`curl -fsSLk ${serverURL}/downloads/install-agent.sh | bash -s -- \\
   --server ${serverURL} \\
   --host-id ${hostID.trim()} \\
   --enroll-token ${token}`}</pre>

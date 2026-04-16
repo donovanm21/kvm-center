@@ -92,8 +92,8 @@ CA. Two steps:
 2. **Run the installer** on the hypervisor:
 
    ```sh
-   curl -fsSL http://<server>:8090/downloads/install-agent.sh | bash -s -- \
-     --server http://<server>:8090 \
+   curl -fsSLk https://<server>:8190/downloads/install-agent.sh | bash -s -- \
+     --server https://<server>:8190 \
      --host-id hv01.example.com \
      --enroll-token enroll_…
    ```
@@ -110,8 +110,8 @@ on the host detail page confirms the cert is live.
 ## 4. Set up the CLI (optional)
 
 ```sh
-curl -fsSL http://<server>:8090/downloads/install-kvmctl.sh | bash -s -- \
-  --portal http://<server>:8090/downloads
+curl -fsSLk https://<server>:8190/downloads/install-kvmctl.sh | bash -s -- \
+  --portal https://<server>:8190/downloads
 # then mint a token in the user menu → My API tokens
 kvmctl login --server https://<server>:8190 --token kvmc_…
 kvmctl hosts

@@ -5,13 +5,17 @@
 # telemetry (OS, kernel, IPs, filesystems) to the kvm-center server.
 #
 # Usage:
-#   sudo ./install.sh --server http://kvm-center.example.com:8090 [--interval 30s]
+#   sudo ./install.sh --server https://kvm-center.example.com:8190 [--interval 30s]
 #
-# Or set via env: KVM_TOOLS_SERVER=http://... sudo ./install.sh
+# Or set via env: KVM_TOOLS_SERVER=https://... sudo ./install.sh
+#
+# TLS note: kvm-tools trusts self-signed certs by default (InsecureSkipVerify)
+# and logs a warning at each report. Install a trusted cert via Settings → TLS
+# to silence it.
 
 set -euo pipefail
 
-SERVER="${KVM_TOOLS_SERVER:-http://localhost:8090}"
+SERVER="${KVM_TOOLS_SERVER:-https://localhost:8190}"
 INTERVAL="30s"
 INSTALL_DIR="/opt/kvm-tools"
 BIN_NAME="kvm-tools"

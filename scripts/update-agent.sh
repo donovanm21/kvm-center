@@ -9,12 +9,12 @@
 # endpoint to confirm the new binary is alive.
 #
 # Usage (run as root on the hypervisor):
-#   curl -fsSL http://<server>:8090/downloads/update-agent.sh | \
-#     KVM_CENTER_BUILD_URL=http://<server>:8090/downloads bash
+#   curl -fsSLk https://<server>:8190/downloads/update-agent.sh | \
+#     KVM_CENTER_BUILD_URL=https://<server>:8190/downloads bash
 #
 # Or with explicit URL override (handy when the script is bundled
 # alongside binaries in a tarball):
-#   ./update-agent.sh --from http://kvm-center.example.com:8090/downloads
+#   ./update-agent.sh --from https://kvm-center.example.com:8190/downloads
 #
 set -euo pipefail
 
@@ -22,7 +22,7 @@ INSTALL_DIR="/opt/kvm-center"
 BINARY_NAME="kvm-center-agent"
 SERVICE_NAME="kvm-center-agent"
 AGENT_PORT="${AGENT_PORT:-8081}"
-BUILD_URL="${KVM_CENTER_BUILD_URL:-http://localhost:8090/downloads}"
+BUILD_URL="${KVM_CENTER_BUILD_URL:-https://localhost:8190/downloads}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -30,7 +30,7 @@ while [[ $# -gt 0 ]]; do
     --port) AGENT_PORT="$2"; shift 2 ;;
     --help|-h)
       echo "Usage: $0 [--from <build-url>] [--port <agent-port>]"
-      echo "  --from   Downloads base URL (default: \$KVM_CENTER_BUILD_URL or http://localhost:8090/downloads)"
+      echo "  --from   Downloads base URL (default: \$KVM_CENTER_BUILD_URL or https://localhost:8190/downloads)"
       echo "  --port   Local agent port for smoke test (default: 8081)"
       exit 0
       ;;

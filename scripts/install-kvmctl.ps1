@@ -9,7 +9,7 @@
   directory to the user's PATH.
 
 .PARAMETER Portal
-  http://HOST:8090/downloads base URL of the kvm-center build portal. Required.
+  https://HOST:8190/downloads base URL of the kvm-center build portal. Required.
 
 .PARAMETER InstallDir
   Target directory. Defaults to %LOCALAPPDATA%\Programs\kvm-center.
@@ -21,11 +21,11 @@
   Overwrite without prompting.
 
 .EXAMPLE
-  iwr http://kvm-center.example.com:8090/downloads/install-kvmctl.ps1 -UseBasicParsing | iex
+  iwr https://kvm-center.example.com:8190/downloads/install-kvmctl.ps1 -UseBasicParsing | iex
     (then re-open PowerShell for the PATH update)
 
 .EXAMPLE
-  .\install-kvmctl.ps1 -Portal http://kvm-center.example.com:8090/downloads -InstallDir C:\tools
+  .\install-kvmctl.ps1 -Portal https://kvm-center.example.com:8190/downloads -InstallDir C:\tools
 #>
 [CmdletBinding()]
 param(
@@ -65,6 +65,9 @@ if ((Test-Path $target) -and (-not $Force)) {
 }
 
 Info "downloading $url"
+if ($url -like 'https://*') {
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+}
 try {
     Invoke-WebRequest -Uri $url -OutFile $target -UseBasicParsing -TimeoutSec 60
 } catch {

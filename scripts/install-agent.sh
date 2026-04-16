@@ -3,7 +3,10 @@
 # Run as root on each KVM hypervisor.
 #
 # Usage:
-#   sudo ./install-agent.sh --server http://<server-ip>:8090 [--port 8081] [--interval 30s]
+#   sudo ./install-agent.sh --server https://<server-ip>:8190 [--port 8081] [--interval 30s]
+#
+# TLS note: the agent trusts self-signed certs by default and logs a
+# warning each report. Install a trusted cert via Settings → TLS.
 #
 set -euo pipefail
 
@@ -25,7 +28,7 @@ PKI_SERVER=""
 usage() {
   echo "Usage: $0 --server <url> [--port <port>] [--interval <duration>]"
   echo "                      [--enroll-token <token>] [--pki-server <url>] [--host-id <id>]"
-  echo "  --server        Control plane URL (required), e.g. http://kvm-center.example.com:8090"
+  echo "  --server        Control plane URL (required), e.g. https://kvm-center.example.com:8190"
   echo "  --port          Agent command port (default: 8081)"
   echo "  --interval      Telemetry interval (default: 30s)"
   echo "  --enroll-token  One-time token from kvm-center admin — exchanges a CSR for a"
