@@ -118,6 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - name: file CI failure issue

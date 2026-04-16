@@ -25,6 +25,7 @@ import (
 
 func TestSetup_StateBeforeAndAfterComplete(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
 
 	// Initial state — fresh store, no admin registered yet.
 	rr := httptest.NewRecorder()
@@ -69,6 +70,7 @@ func TestSetup_StateBeforeAndAfterComplete(t *testing.T) {
 
 func TestSetup_CompleteIsIdempotent(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
 
 	rr := httptest.NewRecorder()
 	handleSetupComplete(s)(rr, httptest.NewRequest("POST", "/api/setup/complete", nil))
@@ -87,6 +89,7 @@ func TestSetup_CompleteIsIdempotent(t *testing.T) {
 
 func TestSetup_RejectsNonPOST(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
 	for _, m := range []string{"GET", "PUT", "DELETE"} {
 		rr := httptest.NewRecorder()
 		handleSetupComplete(s)(rr, httptest.NewRequest(m, "/api/setup/complete", nil))
@@ -98,6 +101,7 @@ func TestSetup_RejectsNonPOST(t *testing.T) {
 
 func TestBackfill_SkipsFreshInstall(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
 	// No admin user → wizard stays active.
 	backfillSetupComplete(s)
 	if s.GetFeatures().SetupComplete {
@@ -107,6 +111,7 @@ func TestBackfill_SkipsFreshInstall(t *testing.T) {
 
 func TestBackfill_MarksCompleteWhenAdminExists(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
 	// Plant a pre-existing admin user — what an upgrade-path install
 	// looks like from the wizard's perspective.
 	if err := s.CreateUser(&models.User{
@@ -130,6 +135,7 @@ func TestFeaturesUpdate_PreservesSetupComplete(t *testing.T) {
 	// retriggering the wizard. Preservation is handled inside the
 	// handler; this test locks it in.
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
 	f := s.GetFeatures()
 	f.SetupComplete = true
 	s.SetFeatures(f)

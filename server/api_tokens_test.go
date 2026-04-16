@@ -22,6 +22,10 @@ import (
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	s := NewStore(t.TempDir() + "/data.json")
+	// Drain fire-and-forget AsyncSave goroutines before t.TempDir
+	// cleanup — otherwise the rename into a removed dir trips
+	// RemoveAll with "directory not empty".
+	t.Cleanup(func() { s.saveWG.Wait() })
 	// ensureBuiltInRoles already ran in NewStore. Seed a user.
 	s.mu.Lock()
 	s.users["u1"] = &models.User{ID: "u1", Username: "alice", Enabled: true}

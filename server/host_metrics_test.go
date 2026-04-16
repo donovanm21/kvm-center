@@ -23,6 +23,7 @@ import (
 
 func TestHostMetricRing_WrapsAndKeepsOrder(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
 	host := &models.Host{ID: "hv01", LastSeen: time.Now(), VMCount: 1}
 
 	// Push 1.5x capacity so the ring has wrapped at least once.
@@ -56,6 +57,7 @@ func TestHostMetricRing_WrapsAndKeepsOrder(t *testing.T) {
 
 func TestHostMetricRing_StoragePercentIsWeighted(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
 	host := &models.Host{ID: "hv01", LastSeen: time.Now()}
 	pools := []*models.StoragePool{
 		// 100 GB cap / 80 GB used + 100 GB cap / 0 used → 80/200 = 40 %
@@ -74,6 +76,7 @@ func TestHostMetricRing_StoragePercentIsWeighted(t *testing.T) {
 
 func TestHostMetricRing_IgnoresNilHost(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
 	s.AppendHostMetric("hv01", nil, nil) // must not panic
 	if got := s.HostMetricsSnapshot("hv01"); len(got) != 0 {
 		t.Errorf("expected no samples, got %d", len(got))
@@ -82,6 +85,7 @@ func TestHostMetricRing_IgnoresNilHost(t *testing.T) {
 
 func TestHostMetrics_Handler(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
 	host := &models.Host{ID: "hv01", LastSeen: time.Now(), CPUUsage: 25, MemUsage: 40}
 	s.AppendHostMetric("hv01", host, nil)
 
@@ -115,6 +119,7 @@ func TestHostMetrics_Handler(t *testing.T) {
 
 func TestHostMetrics_Handler_405OnPost(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
 	rr := httptest.NewRecorder()
 	handleHostMetrics(s)(rr, httptest.NewRequest("POST", "/api/hosts/hv01/metrics", nil))
 	if rr.Code != 405 {
@@ -124,6 +129,7 @@ func TestHostMetrics_Handler_405OnPost(t *testing.T) {
 
 func TestHostMetrics_Handler_EmptyWhenUnknown(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
 	rr := httptest.NewRecorder()
 	handleHostMetrics(s)(rr, httptest.NewRequest("GET", "/api/hosts/nope/metrics", nil))
 	if rr.Code != 200 {

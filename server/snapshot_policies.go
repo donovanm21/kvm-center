@@ -139,7 +139,7 @@ func (s *Store) runOneSnapshotPolicy(ctx context.Context, p *models.SnapshotPoli
 		stored.LastRunError = strings.Join(errs, "; ")
 	}
 	s.mu.Unlock()
-	go s.Save()
+	s.AsyncSave()
 }
 
 // pruneSnapshots enumerates the agent's snapshots for this VM,
@@ -275,7 +275,7 @@ func (s *Store) CreateSnapshotPolicy(p *models.SnapshotPolicy) error {
 	}
 	s.snapshotPolicies[p.ID] = p
 	s.mu.Unlock()
-	go s.Save()
+	s.AsyncSave()
 	return nil
 }
 
@@ -291,7 +291,7 @@ func (s *Store) UpdateSnapshotPolicy(id string, mutate func(*models.SnapshotPoli
 		return err
 	}
 	s.mu.Unlock()
-	go s.Save()
+	s.AsyncSave()
 	return nil
 }
 
@@ -303,7 +303,7 @@ func (s *Store) DeleteSnapshotPolicy(id string) error {
 	}
 	delete(s.snapshotPolicies, id)
 	s.mu.Unlock()
-	go s.Save()
+	s.AsyncSave()
 	return nil
 }
 

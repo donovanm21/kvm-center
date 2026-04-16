@@ -72,6 +72,7 @@ func TestAuditFilter_SuccessTristate(t *testing.T) {
 
 func TestAddAuditEvent_RingBufferTrim(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
 	for i := 0; i < auditRetentionMax+50; i++ {
 		s.AddAuditEvent(&models.AuditEvent{Action: "test"})
 	}

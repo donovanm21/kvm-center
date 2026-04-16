@@ -145,7 +145,7 @@ func handleOIDCCallback(store *Store) http.HandlerFunc {
 			return
 		}
 		setSessionCookie(w, sess)
-		go store.Save()
+		store.AsyncSave()
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
 }
@@ -278,7 +278,7 @@ func handleIDPsCreate(store *Store) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		go store.Save()
+		store.AsyncSave()
 		audit(store, r, AuditIDPCreate, "idp/"+p.ID, map[string]string{"name": p.Name, "kind": p.Kind}, true, "")
 		writeJSON(w, http.StatusOK, sanitizeIDP(&p))
 	})
@@ -298,7 +298,7 @@ func handleIDPUpdate(store *Store) http.Handler {
 				writeError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			go store.Save()
+			store.AsyncSave()
 			audit(store, r, AuditIDPDelete, "idp/"+id, nil, true, "")
 			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		case http.MethodPost, http.MethodPut, http.MethodPatch:
@@ -391,7 +391,7 @@ func handleIDPUpdate(store *Store) http.Handler {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			go store.Save()
+			store.AsyncSave()
 			audit(store, r, AuditIDPUpdate, "idp/"+id, nil, true, "")
 			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		default:
