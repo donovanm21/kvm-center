@@ -125,6 +125,15 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
     enabled: advancedOpen && mode === 'offline' && !!effectiveTarget,
     staleTime: 15_000,
   });
+  // Reset pool selection whenever the target host changes — a pool
+  // picked for one destination may not exist on another (e.g. hv01
+  // has "images", hv03 only has "default"). Without this, switching
+  // target mid-flow sent a stale pool name and the agent would fail
+  // with "destination pool X not reachable".
+  useEffect(() => {
+    setTargetPool('');
+  }, [effectiveTarget]);
+
   useEffect(() => {
     if (targetPool || !poolsQuery.data || poolsQuery.data.length === 0) return;
     // Prefer "default" when present, else first active pool. Mirrors
