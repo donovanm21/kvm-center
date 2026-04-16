@@ -54,18 +54,20 @@ if (Test-Path $LocalBin) {
         $BinaryUrl = "$($Server.TrimEnd('/'))/downloads/kvm-tools-windows-amd64.exe"
     }
     Write-Info "Downloading $BinaryUrl ..."
-    if ($BinaryUrl -like 'https://*') {
-        Write-Warn "TLS certificate verification disabled for self-signed CA."
-        # Force TLS 1.2 — Windows PowerShell 5.1 defaults to TLS 1.0 which
-        # our server (Go 1.25 crypto/tls) rejects outright.
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-    }
     $tmp = Join-Path $env:TEMP "kvm-tools.exe"
-    try {
-        Invoke-WebRequest -Uri $BinaryUrl -OutFile $tmp -UseBasicParsing
-    } catch {
-        Fail "Could not download kvm-tools.exe from $BinaryUrl : $_"
+    # curl.exe -k bypasses Schannel's cert-chain check entirely, which
+    # .NET's ServerCertificateValidationCallback can't reliably do for
+    # self-signed servers on Windows. Requires Windows 10 1803+.
+    if ($BinaryUrl -like 'https://*') {
+        Write-Warn "TLS certificate verification disabled (self-signed CA tolerated via curl -k)."
+        & curl.exe -fsSLk $BinaryUrl -o $tmp
+        if ($LASTEXITCODE -ne 0) { Fail "curl.exe failed ($LASTEXITCODE) downloading $BinaryUrl" }
+    } else {
+        try {
+            Invoke-WebRequest -Uri $BinaryUrl -OutFile $tmp -UseBasicParsing
+        } catch {
+            Fail "Could not download kvm-tools.exe from $BinaryUrl : $_"
+        }
     }
     $Source = $tmp
 }

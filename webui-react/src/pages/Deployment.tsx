@@ -72,16 +72,15 @@ sudo /tmp/install-kvm-tools.sh --server ${installURL}`,
           windows: {
             label: 'Windows (PowerShell)',
             body:
-              `# Run from an elevated PowerShell prompt on the guest VM
+              `# Run from an elevated PowerShell prompt (Windows 10 1803+ / Server 2019+)
 $server = '${installURL}'
-# Force TLS 1.2 — Windows PowerShell 5.1 defaults to TLS 1.0 which the server rejects.
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-# Trust the default self-signed cert — remove this line once a real cert is installed.
-[Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 $tmp = Join-Path $env:TEMP 'kvm-tools-install'
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-Invoke-WebRequest -Uri "$server/downloads/kvm-tools-windows-amd64.exe" -OutFile "$tmp\\kvm-tools.exe" -UseBasicParsing
-Invoke-WebRequest -Uri "$server/downloads/install-kvm-tools.ps1"       -OutFile "$tmp\\install-kvm-tools.ps1" -UseBasicParsing
+# curl.exe -k tolerates the default self-signed cert. Windows
+# Schannel rejects the cert chain before .NET's callback can
+# intervene, so Invoke-WebRequest isn't reliable for the bootstrap.
+curl.exe -fsSLk "$server/downloads/kvm-tools-windows-amd64.exe" -o "$tmp\\kvm-tools.exe"
+curl.exe -fsSLk "$server/downloads/install-kvm-tools.ps1"       -o "$tmp\\install-kvm-tools.ps1"
 Set-Location $tmp
 .\\install-kvm-tools.ps1 -Server $server`,
             footer: 'Registers a scheduled task running as SYSTEM on next boot.',

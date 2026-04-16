@@ -66,14 +66,17 @@ if ((Test-Path $target) -and (-not $Force)) {
 
 Info "downloading $url"
 if ($url -like 'https://*') {
-    # Force TLS 1.2 — Windows PowerShell 5.1 defaults to TLS 1.0 which the server rejects.
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-}
-try {
-    Invoke-WebRequest -Uri $url -OutFile $target -UseBasicParsing -TimeoutSec 60
-} catch {
-    Die "download failed: $($_.Exception.Message)"
+    # curl.exe -k: Windows Schannel rejects self-signed certs before .NET's
+    # ServerCertificateValidationCallback runs, so use curl.exe (shipped with
+    # Windows 10 1803+ / Server 2019+) which trusts -k directly.
+    & curl.exe -fsSLk $url -o $target --max-time 60
+    if ($LASTEXITCODE -ne 0) { Die "curl.exe failed ($LASTEXITCODE) downloading $url" }
+} else {
+    try {
+        Invoke-WebRequest -Uri $url -OutFile $target -UseBasicParsing -TimeoutSec 60
+    } catch {
+        Die "download failed: $($_.Exception.Message)"
+    }
 }
 if ((Get-Item $target).Length -eq 0) { Die "downloaded file is empty" }
 OK "installed $target"
