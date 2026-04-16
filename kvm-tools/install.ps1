@@ -1,4 +1,4 @@
-# install.ps1 — one-shot installer for kvm-tools on a Windows guest VM.
+# install.ps1 - one-shot installer for kvm-tools on a Windows guest VM.
 #
 # Installs C:\Program Files\kvm-tools\kvm-tools.exe and registers it as a
 # Scheduled Task that runs at boot under the SYSTEM account, reporting guest
@@ -85,7 +85,7 @@ try {
     $uuid = (Get-CimInstance Win32_ComputerSystemProduct).UUID
     Write-Info "Detected VM UUID: $uuid"
 } catch {
-    Write-Warn "Cannot read VM UUID via CIM — kvm-tools may fail to start"
+    Write-Warn "Cannot read VM UUID via CIM - kvm-tools may fail to start"
 }
 
 # Remove any existing task before re-registering
@@ -110,7 +110,7 @@ Register-ScheduledTask -TaskName $TaskName `
     -Trigger $trigger `
     -Principal $principal `
     -Settings $settings `
-    -Description "KVM Center Guest Tools — reports guest telemetry to kvm-center" | Out-Null
+    -Description "KVM Center Guest Tools - reports guest telemetry to kvm-center" | Out-Null
 Write-Info "Scheduled task '$TaskName' registered (runs as SYSTEM at boot)"
 
 Start-ScheduledTask -TaskName $TaskName
@@ -122,5 +122,5 @@ if ($state -eq "Running" -or $lastResult -eq 0 -or $lastResult -eq 267009) {
     Write-Info "kvm-tools is running (state=$state, lastResult=$lastResult)"
     Write-Info "Verify in kvm-center: $Server"
 } else {
-    Write-Warn "kvm-tools task state=$state lastResult=$lastResult — check Task Scheduler for details"
+    Write-Warn "kvm-tools task state=$state lastResult=$lastResult - check Task Scheduler for details"
 }
