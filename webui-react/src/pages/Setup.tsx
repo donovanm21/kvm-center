@@ -134,7 +134,11 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 function HypervisorStep({ onNext }: { onNext: () => void }) {
   const [hostID, setHostID] = useState('');
   const [token, setToken] = useState<string | null>(null);
-  const [serverURL, setServerURL] = useState(() => `${location.protocol}//${location.hostname}:8090`);
+  // Port 8090 is always plaintext — agents pull install scripts before
+  // they trust the self-signed CA, so forcing http:// here regardless
+  // of what the browser used avoids a TLS-on-plain-port mismatch.
+  // Admins can edit the field below if they reverse-proxy the stack.
+  const [serverURL, setServerURL] = useState(() => `http://${location.hostname}:8090`);
 
   const state = useQuery({
     queryKey: ['setup-state'],
