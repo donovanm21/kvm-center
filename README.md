@@ -10,6 +10,8 @@ Inventory, live + offline migrations, snapshots, VNC consoles,
 mTLS between hosts, signed per-migration grants, in-app docs,
 Influx-backed metrics — all in one Go binary and a tiny agent.
 
+<img src="docs/assets/setup-wizard.gif" alt="kvm-center first-boot setup wizard" width="720">
+
 [Quick start](#quick-start) · [Documentation](server/docs/overview.md) · [Architecture](server/docs/architecture.md) · [Changelog](server/docs/changelog.md)
 
 [![CI](https://github.com/donovanm21/kvmcenter/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/donovanm21/kvmcenter/actions/workflows/test.yml)
