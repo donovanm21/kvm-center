@@ -325,6 +325,10 @@ func main() {
 	// needs to read it before the user signs in; /complete requires
 	// user.manage so only admins can close out the wizard.
 	backfillSetupComplete(store)
+	// Clean up migration records stranded by a server restart (bug:
+	// live migrate HTTP response goes to a closed socket across a
+	// restart, so finalizeMigration never runs).
+	go reconcileStrandedMigrations(store)
 	seedPublicURLFromEnv(store)
 	notifyStore = store
 	mux.HandleFunc("/api/setup/state", handleSetupState(store))
