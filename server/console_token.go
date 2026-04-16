@@ -15,23 +15,17 @@ import (
 	"time"
 )
 
-// Console access tokens. Problem being solved: before v5.0.2 the agent
-// served /console/<vm> and /ws/<vm> with no auth — anyone on the LAN
-// who could type a URL had full VM console access. Fix is an HMAC-
-// signed short-lived token minted by the server (which already knows
-// who the user is and can check vm.console permission) and verified
-// by the agent before it ever upgrades the WebSocket to VNC.
+// Console access tokens. The server (which has the user's session
+// and vm.console permission) mints an HMAC-signed short-lived token
+// that the agent verifies before upgrading the WebSocket to VNC —
+// prevents direct LAN access to the agent's :8081 console endpoint.
 //
-// Token shape: base64url(HMAC-SHA256(secret, "host|vm|exp|nonce"))
-// URL carries `token`, `exp` (unix seconds), and `nonce`. Agent has to
-// see a valid signature, exp > now, and a fresh nonce (replay guard).
+// Token shape: base64url(HMAC-SHA256(secret, "host|vm|exp|nonce")).
+// URL carries token+exp (unix seconds)+nonce; agent requires a
+// valid signature, exp > now, and a fresh nonce.
 //
-// Secret distribution: server generates once, persists in the JSON
-// store, and ships to agents inside every telemetry reply. Pre-v5 the
-// telemetry endpoint is already unauthenticated so this doesn't widen
-// the attack surface — but it does mean anyone who can POST telemetry
-// can harvest the secret. That's acceptable for a trusted-LAN homelab
-// and will be tightened when we introduce agent-registration auth.
+// Secret distribution: server generates once, persists in the store,
+// and ships to agents inside telemetry replies.
 
 const consoleTokenTTL = 5 * time.Minute
 

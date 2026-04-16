@@ -1,23 +1,8 @@
 // kvmctl — minimal CLI for kvm-center, authenticated via API token.
-//
-// Config lives at $XDG_CONFIG_HOME/kvm-center/config.json (or
-// ~/.config/kvm-center/config.json). Created by `kvmctl login`.
-//
-// Commands (v5.5):
-//
-//	kvmctl login --server <url> --token <token>
-//	kvmctl hosts
-//	kvmctl vms [--host <id>] [--state running|stopped|...]
-//	kvmctl vm start    <uuid>
-//	kvmctl vm stop     <uuid>
-//	kvmctl vm restart  <uuid>
-//	kvmctl vm forcestop <uuid>
-//	kvmctl vm migrate  <uuid> --to <host_id> [--mode live|offline]
-//	kvmctl snapshot list   <uuid>
-//	kvmctl snapshot create <uuid> --name <name>
-//	kvmctl version
-//
-// Output is human-readable by default; pass --json for machine output.
+// Config at $XDG_CONFIG_HOME/kvm-center/config.json (default
+// ~/.config/kvm-center/config.json), created by `kvmctl login`.
+// Output is human-readable; pass --json for machine output.
+// Run `kvmctl --help` for the command list.
 package main
 
 import (

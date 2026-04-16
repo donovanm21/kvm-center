@@ -1,21 +1,13 @@
 #!/usr/bin/env bash
-# update-agent.sh — In-place update of an already-installed kvm-center agent.
+# update-agent.sh — in-place update of an installed kvm-center agent.
+# Safe to re-run. Fetches the latest binary, swaps it into
+# /opt/kvm-center, runs restorecon (SELinux relabels /tmp → user_tmp_t
+# which systemd won't exec), restarts the unit, and smoke-tests
+# /migrate-status.
 #
-# Designed to be safe to re-run on every deploy. Picks up the latest
-# binary from the build portal, swaps it into /opt/kvm-center, restores
-# the SELinux context (the /tmp staging step gets relabeled to
-# user_tmp_t which systemd refuses to exec — restorecon fixes that),
-# restarts the systemd unit, and smoke-tests the /migrate-status
-# endpoint to confirm the new binary is alive.
-#
-# Usage (run as root on the hypervisor):
+# Usage (as root on the hypervisor):
 #   curl -fsSLk https://<server>:8190/downloads/update-agent.sh | \
 #     KVM_CENTER_BUILD_URL=https://<server>:8190/downloads bash
-#
-# Or with explicit URL override (handy when the script is bundled
-# alongside binaries in a tarball):
-#   ./update-agent.sh --from https://kvm-center.example.com:8190/downloads
-#
 set -euo pipefail
 
 INSTALL_DIR="/opt/kvm-center"
