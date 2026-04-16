@@ -143,8 +143,8 @@ function HypervisorStep({ onNext }: { onNext: () => void }) {
   });
 
   const mint = useMutation({
-    mutationFn: () => apiPost<{ token: string }>('/api/ca/enroll', { host_id: hostID.trim() }),
-    onSuccess: (r) => setToken(r.token),
+    mutationFn: () => apiPost<{ enroll_token: string }>('/api/ca/enroll', { host_id: hostID.trim() }),
+    onSuccess: (r) => setToken(r.enroll_token),
   });
 
   return (
