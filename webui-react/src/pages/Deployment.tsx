@@ -81,6 +81,9 @@ New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 # intervene, so Invoke-WebRequest isn't reliable for the bootstrap.
 curl.exe -fsSLk "$server/downloads/kvm-tools-windows-amd64.exe" -o "$tmp\\kvm-tools.exe"
 curl.exe -fsSLk "$server/downloads/install-kvm-tools.ps1"       -o "$tmp\\install-kvm-tools.ps1"
+# Bypass execution policy for this process only — the downloaded .ps1
+# is unsigned. Doesn't touch the system-wide policy.
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 Set-Location $tmp
 .\\install-kvm-tools.ps1 -Server $server`,
             footer: 'Registers a scheduled task running as SYSTEM on next boot.',
