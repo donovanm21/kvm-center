@@ -1,6 +1,5 @@
-# Full stack: server + nginx web UI
+# Full stack: server + Mongo
 # Usage: docker compose up -d
-version: "3.8"
 
 services:
   # MongoDB — v5.1 primary persistence tier. SCRAM auth from first boot;
