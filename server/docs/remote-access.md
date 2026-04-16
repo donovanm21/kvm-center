@@ -91,8 +91,8 @@ operation — everything routes through the control plane. For the
 rare break-glass case:
 
 - Put hypervisors behind the same bastion as the control plane.
-- Use key-based auth (`~/.ssh/homelab` pattern if you use this
-  project's bastion aliases).
+- Use key-based auth and a dedicated identity file routed through
+  a bastion `ProxyJump` in your `~/.ssh/config`.
 - Disable password auth on every hv* box once enrollment is done.
 - Never publish 8081, 16514, or 49152-49215 off the management
   VLAN. They speak mTLS, but the attack surface of libvirtd and
