@@ -18,7 +18,11 @@ const serverConsoleHTML = `<!DOCTYPE html>
 <title>{{.VMName}} — console</title>
 <style>
   html, body { margin: 0; height: 100%; background: #0B0E13; color: #C9D1D9; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif; font-size: 13px; }
-  #screen { width: 100vw; height: 100vh; background: #000; overflow: hidden; position: relative; }
+  /* overflow: auto so the operator can scroll when the guest framebuffer
+     doesn't respond to RFB resize (common on installer boot screens —
+     Ubuntu's subiquity TUI is fixed-size and runs off the bottom
+     without this, hiding the [Done] row). */
+  #screen { width: 100vw; height: 100vh; background: #000; overflow: auto; position: relative; }
   #overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; background: rgba(11,14,19,0.92); z-index: 10; text-align: center; padding: 24px; }
   #overlay h1 { margin: 0 0 8px 0; font-size: 17px; color: #F0F6FC; font-weight: 600; }
   #overlay p { margin: 0; max-width: 520px; color: #8B949E; line-height: 1.55; }
@@ -78,6 +82,12 @@ const serverConsoleHTML = `<!DOCTYPE html>
       return;
     }
     rfb.viewOnly = false;
+    // clipViewport+scaleViewport: scale the framebuffer to fit the
+    // container while preserving aspect ratio. Without clipViewport,
+    // noVNC can render the canvas at native resolution regardless of
+    // container size, leaving the bottom of taller guest displays off
+    // screen when resizeSession doesn't take effect.
+    rfb.clipViewport = true;
     rfb.scaleViewport = true;
     rfb.resizeSession = true;
     rfb.showDotCursor = true;
