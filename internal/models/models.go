@@ -270,21 +270,21 @@ type VM struct {
 	SnapshotCount int         `json:"snapshot_count"`
 
 	// Hardware config from virsh dumpxml + dominfo.
-	DiskType    string        `json:"disk_type,omitempty"`    // "qcow2", "raw"
-	Firmware    string        `json:"firmware,omitempty"`     // "bios", "efi", "efi+secureboot"
+	DiskType string `json:"disk_type,omitempty"` // "qcow2", "raw"
+	Firmware string `json:"firmware,omitempty"`  // "bios", "efi", "efi+secureboot"
 	// SnapshotsBlockedReason is non-empty when the agent detects the VM
 	// is incompatible with `virsh snapshot-create` (e.g. pflash+raw nvram).
 	// UI reads this to disable Take Snapshot and surface the cause.
-	SnapshotsBlockedReason string `json:"snapshots_blocked_reason,omitempty"`
-	MachineType string        `json:"machine_type,omitempty"` // "pc-q35-rhel9.6.0"
-	CPUMode     string        `json:"cpu_mode,omitempty"`     // "host-passthrough", "custom"
-	Autostart   bool          `json:"autostart"`
-	HasTPM      bool          `json:"has_tpm"`
-	TPMVersion  string        `json:"tpm_version,omitempty"`
-	VideoModel  string        `json:"video_model,omitempty"`
-	BootDev     string        `json:"boot_dev,omitempty"`
-	AllDisks    []VMDisk      `json:"all_disks,omitempty"`
-	PCIDevices  []VMPCIDevice `json:"pci_devices,omitempty"`
+	SnapshotsBlockedReason string        `json:"snapshots_blocked_reason,omitempty"`
+	MachineType            string        `json:"machine_type,omitempty"` // "pc-q35-rhel9.6.0"
+	CPUMode                string        `json:"cpu_mode,omitempty"`     // "host-passthrough", "custom"
+	Autostart              bool          `json:"autostart"`
+	HasTPM                 bool          `json:"has_tpm"`
+	TPMVersion             string        `json:"tpm_version,omitempty"`
+	VideoModel             string        `json:"video_model,omitempty"`
+	BootDev                string        `json:"boot_dev,omitempty"`
+	AllDisks               []VMDisk      `json:"all_disks,omitempty"`
+	PCIDevices             []VMPCIDevice `json:"pci_devices,omitempty"`
 
 	// Guest-side fields. Populated by qemu-guest-agent (via hypervisor) or
 	// kvm-tools daemon (via POST /api/guest-telemetry). Empty when no agent.
