@@ -256,8 +256,21 @@ VM / hypervisor data on your hypervisors is NOT touched. Proceed?"; then
     if ask_yesno "kvm-center" "Build and deploy the stack now?"; then
       "$REPO_DIR/scripts/bootstrap.sh" --deploy
       echo
+      # Build the best URL we can for the completion message:
+      # 1. PUBLIC_URL if the operator configured one (respects custom scheme + port)
+      # 2. https://<host-ip>:<port> if we could discover a LAN IP
+      # 3. https://<fqdn>:<port> if hostname reports one
+      # 4. https://localhost:<port> last-resort fallback
+      if [[ -n "$PUBLIC_URL" ]]; then
+        OPEN_URL="$PUBLIC_URL"
+      elif [[ -n "$HOST_IP" ]]; then
+        OPEN_URL="https://${HOST_IP}:${HTTPS_PORT}"
+      else
+        FQDN=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo localhost)
+        OPEN_URL="https://${FQDN}:${HTTPS_PORT}"
+      fi
       echo "=============================================================="
-      echo "  kvm-center is up. Open https://${HOST_IP:-localhost}:${HTTPS_PORT}/"
+      echo "  kvm-center is up. Open ${OPEN_URL}/"
       echo "  On first load you'll create the admin account and step"
       echo "  through the setup wizard — every step is skippable."
       echo "=============================================================="
