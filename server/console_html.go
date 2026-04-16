@@ -23,6 +23,14 @@ const serverConsoleHTML = `<!DOCTYPE html>
      Ubuntu's subiquity TUI is fixed-size and runs off the bottom
      without this, hiding the [Done] row). */
   #screen { width: 100vw; height: 100vh; background: #000; overflow: auto; position: relative; }
+  /* Force the noVNC canvas to respect the container — some VM guests
+     emit a framebuffer larger than the browser viewport (Ubuntu
+     installer at 1920×1080 on a 1366 laptop), and without this the
+     canvas paints at native size and the bottom of the guest is
+     clipped beneath the viewport. */
+  #screen canvas { max-width: 100% !important; max-height: 100% !important; height: auto !important; display: block; }
+  #fit-btn { position: fixed; right: 12px; bottom: 12px; z-index: 20; padding: 6px 10px; font-size: 11px; font-family: inherit; background: rgba(15,18,25,0.88); color: #C9D1D9; border: 1px solid #30363D; border-radius: 4px; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+  #screen:hover ~ #fit-btn, #fit-btn:hover { opacity: 1; }
   #overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; background: rgba(11,14,19,0.92); z-index: 10; text-align: center; padding: 24px; }
   #overlay h1 { margin: 0 0 8px 0; font-size: 17px; color: #F0F6FC; font-weight: 600; }
   #overlay p { margin: 0; max-width: 520px; color: #8B949E; line-height: 1.55; }
@@ -34,6 +42,7 @@ const serverConsoleHTML = `<!DOCTYPE html>
 </head>
 <body>
 <div id="screen"></div>
+<button id="fit-btn" type="button" title="Re-fit VM display to window">Fit to window</button>
 <div id="overlay">
   <h1>{{.VMName}}</h1>
   <p>Connecting through the kvm-center server. If sharing this URL doesn't give someone else access, it's working: every request re-validates your session.</p>
@@ -104,6 +113,17 @@ const serverConsoleHTML = `<!DOCTYPE html>
         errBox.textContent = ev?.detail?.reason || 'session closed — check that your kvm-center session is still active, then reload.';
       }
     });
+    // Re-fit the framebuffer on window resize — scaleViewport's
+    // initial calc happens once at connect. Without this, resizing
+    // the window leaves the canvas at the original size and the
+    // guest's bottom rows can fall out of view.
+    const refit = () => {
+      if (!rfb) return;
+      rfb.scaleViewport = false;
+      rfb.scaleViewport = true;
+    };
+    window.addEventListener('resize', refit);
+    document.getElementById('fit-btn').addEventListener('click', refit);
     rfb.addEventListener('credentialsrequired', () => {
       rfb.sendCredentials({ password: '' });
     });
