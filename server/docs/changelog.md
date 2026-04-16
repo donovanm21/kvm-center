@@ -10,6 +10,40 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.25.0
+- **Operator role expanded.** The built-in Operator role now includes
+  `vm.create`, `vm.delete`, `vm.migrate`, and `storage.delete` — day-to-day
+  VM work no longer falls back to admin escalation for basic provisioning
+  and cleanup. Platform-admin permissions (`host.manage`, `user.manage`,
+  `tls.manage`, `audit.view`) intentionally stay Administrator-only.
+  Existing Operator users pick up the additions automatically on next
+  server boot.
+- **Complete RBAC permission reference.** Settings → Authentication docs
+  now enumerate every permission with what it grants, plus the built-in
+  role table. Previously 7 of the 16 non-wildcard permissions were
+  undocumented.
+- **Grafana dashboard redesign.** The bundled dashboard at
+  `/api/grafana/dashboard.json` is now dense and single-import-friendly:
+  header with the kvm-center logo, fleet overview tiles (running VMs,
+  hosts online, CPU/RAM gauges, free/total RAM), per-host CPU + memory
+  trends with clean host-id legends, a scrollable host table with
+  gradient-gauge cells, VM state donut, VMs-per-host bargauge, top CPU
+  + memory consumers timeseries, and a snapshot breakdown row.
+  `bucket` + `prefix` are now textbox variables so Grafana prompts you
+  on import instead of silently binding a constant to the wrong value.
+- **Interactive installer improvements.**
+  - New **HTTPS port prompt** — default 8190, picked port threads into
+    docker-compose's port mapping (`KVM_CENTER_HTTPS_PORT` env) and the
+    Public URL default in the next prompt.
+  - Cross-platform LAN-IP discovery for the completion URL
+    (`hostname -I` → `ip route` → `ipconfig getifaddr` → `localhost`),
+    so running `--interactive` on macOS no longer silently aborts on
+    the cluster-domain prompt or prints a useless machine hostname.
+- **Operator documentation updates.** Networking, architecture,
+  SECURITY, and remote-access docs rewritten to reflect the v5.24
+  TLS-only posture — `:8090` now appears only as a clearly labelled
+  backwards-compat listener. Firewall recipe drops 8090/tcp.
+
 ## v5.24.0
 - **TLS everywhere by default.** Agents, kvm-tools, and install
   snippets now default to `https://<server>:8190`. The plain-HTTP
