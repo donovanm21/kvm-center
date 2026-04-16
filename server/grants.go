@@ -17,23 +17,12 @@ import (
 	"kvm-center/internal/models"
 )
 
-// Migration grants (v5.11). The control plane owns an Ed25519 key
-// pair. Before every mTLS migration the server mints a signed grant
-// bound to {source, dest, vm, TTL}; the destination agent validates
-// the signature offline against the cached public key and refuses
-// the migration if the token doesn't match.
-//
-// Scope in v5.11.0:
-//   - Grant minting + signing on the server
-//   - Grant forwarding source→dest inside the agent
-//   - Signature + TTL + binding validation on the destination
-//   - In-memory single-use (v5.11.1 adds a durable grants log and a
-//     libvirt /etc/libvirt/hooks/qemu hook that rejects out-of-band
-//     migrations missing a valid grant)
-//
-// The key lives next to the cluster CA on disk. Rotating the key
-// invalidates every outstanding grant — a feature, not a bug, since
-// grants have a ~5-minute TTL anyway.
+// Migration grants. Control plane owns an Ed25519 key pair; before
+// every mTLS migration the server mints a signed grant bound to
+// {source, dest, vm, TTL}, and the destination agent validates it
+// offline against the cached public key. The key lives next to the
+// cluster CA on disk — rotating it invalidates outstanding grants,
+// which is safe because TTL is ~5 minutes.
 
 const grantTTL = 5 * time.Minute
 

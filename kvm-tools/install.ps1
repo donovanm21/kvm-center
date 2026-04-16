@@ -1,19 +1,11 @@
 # install.ps1 - one-shot installer for kvm-tools on a Windows guest VM.
+# Installs C:\Program Files\kvm-tools\kvm-tools.exe as a Scheduled Task
+# running as SYSTEM at boot.
 #
-# Installs C:\Program Files\kvm-tools\kvm-tools.exe and registers it as a
-# Scheduled Task that runs at boot under the SYSTEM account, reporting guest
-# telemetry (OS, kernel, IPs, filesystems) to the kvm-center server.
-#
-# Usage (run from an elevated PowerShell prompt):
+# Usage (elevated PowerShell):
 #   .\install.ps1 -Server https://kvm-center.example.com:8190
-#
-# Or one-shot from the server:
-#   iwr -useb https://kvm-center.example.com:8190/downloads/install-kvm-tools.ps1 | iex
-#
-# TLS note: the default self-signed cert is trusted automatically; kvm-tools
-# logs a warning each report. Install a trusted cert via Settings → TLS.
-# (when invoked that way the script will fetch kvm-tools.exe from the same
-#  /downloads/ path automatically)
+# Self-signed certs are trusted; install a real cert via Settings → TLS
+# to silence the per-report warning.
 
 [CmdletBinding()]
 param(
