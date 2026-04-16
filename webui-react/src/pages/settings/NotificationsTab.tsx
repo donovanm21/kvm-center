@@ -342,8 +342,10 @@ function ChannelSubscription({
                 checked={!!ch.event_types?.[t]}
                 onChange={(e) => onToggle(t, e.target.checked)}
               />
-              <span>{EVENT_LABELS[t] || t}</span>
-              <span style={{ color: 'var(--text-faded)', fontSize: 10, marginLeft: 'auto' }}>{t}</span>
+              <span>
+                {EVENT_LABELS[t] || t}{' '}
+                <span style={{ color: 'var(--text-faded)', fontSize: 10 }}>({t})</span>
+              </span>
             </label>
           ))}
         </div>
