@@ -66,7 +66,9 @@ if ((Test-Path $target) -and (-not $Force)) {
 
 Info "downloading $url"
 if ($url -like 'https://*') {
-    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+    # Force TLS 1.2 — Windows PowerShell 5.1 defaults to TLS 1.0 which the server rejects.
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 }
 try {
     Invoke-WebRequest -Uri $url -OutFile $target -UseBasicParsing -TimeoutSec 60

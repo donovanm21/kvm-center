@@ -74,8 +74,10 @@ sudo /tmp/install-kvm-tools.sh --server ${installURL}`,
             body:
               `# Run from an elevated PowerShell prompt on the guest VM
 $server = '${installURL}'
+# Force TLS 1.2 — Windows PowerShell 5.1 defaults to TLS 1.0 which the server rejects.
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 # Trust the default self-signed cert — remove this line once a real cert is installed.
-[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+[Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 $tmp = Join-Path $env:TEMP 'kvm-tools-install'
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 Invoke-WebRequest -Uri "$server/downloads/kvm-tools-windows-amd64.exe" -OutFile "$tmp\\kvm-tools.exe" -UseBasicParsing
