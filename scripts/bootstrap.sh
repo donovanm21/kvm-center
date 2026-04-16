@@ -221,13 +221,20 @@ VM / hypervisor data on your hypervisors is NOT touched. Proceed?"; then
     prompt "Cluster" "Cluster DNS domain (used as a hypervisor cert SAN)" "cluster.local" || { echo aborted; exit 1; }
     CLUSTER_DOMAIN="$REPLY"
 
+    # HTTPS port threads into docker-compose's host-side mapping plus
+    # the Public URL default below. Internal container port stays 8190,
+    # so agents/SPA code keep working regardless of what the operator
+    # exposes on the host.
+    prompt "Port" "HTTPS port on the host (container stays on 8190)" "8190" || { echo aborted; exit 1; }
+    HTTPS_PORT="${REPLY:-8190}"
+
     # Public URL threads into every install snippet on the Deployment
     # page and webhook deep links. Blank is safe — the SPA falls back
     # to window.location. Admins can set/change this later in Settings.
     # hostname -I is Linux-only; on macOS (operator running --interactive
     # locally to test) it fails and pipefail would kill the installer.
     HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
-    prompt "Public URL" "Canonical URL clients use to reach this server (blank to skip)" "${HOST_IP:+https://${HOST_IP}:8190}" || { echo aborted; exit 1; }
+    prompt "Public URL" "Canonical URL clients use to reach this server (blank to skip)" "${HOST_IP:+https://${HOST_IP}:${HTTPS_PORT}}" || { echo aborted; exit 1; }
     PUBLIC_URL="$REPLY"
 
     umask 077
@@ -237,6 +244,7 @@ VM / hypervisor data on your hypervisors is NOT touched. Proceed?"; then
       echo "KVM_MONGO_USER=${MONGO_USER}"
       echo "KVM_MONGO_PASSWORD=${MONGO_PW}"
       echo "KVM_CENTER_CLUSTER_DOMAIN=${CLUSTER_DOMAIN}"
+      [[ "$HTTPS_PORT" != "8190" ]] && echo "KVM_CENTER_HTTPS_PORT=${HTTPS_PORT}"
       [[ -n "$PUBLIC_URL" ]] && echo "KVM_CENTER_PUBLIC_URL=${PUBLIC_URL}"
     } > .env
     chmod 0600 .env
@@ -249,7 +257,7 @@ VM / hypervisor data on your hypervisors is NOT touched. Proceed?"; then
       "$REPO_DIR/scripts/bootstrap.sh" --deploy
       echo
       echo "=============================================================="
-      echo "  kvm-center is up. Open https://$(hostname -I 2>/dev/null | awk '{print $1}'):8190/"
+      echo "  kvm-center is up. Open https://${HOST_IP:-localhost}:${HTTPS_PORT}/"
       echo "  On first load you'll create the admin account and step"
       echo "  through the setup wizard — every step is skippable."
       echo "=============================================================="
