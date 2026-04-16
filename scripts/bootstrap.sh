@@ -231,9 +231,17 @@ VM / hypervisor data on your hypervisors is NOT touched. Proceed?"; then
     # Public URL threads into every install snippet on the Deployment
     # page and webhook deep links. Blank is safe — the SPA falls back
     # to window.location. Admins can set/change this later in Settings.
-    # hostname -I is Linux-only; on macOS (operator running --interactive
-    # locally to test) it fails and pipefail would kill the installer.
-    HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+    # Discover a LAN IP across platforms. hostname -I is Linux-only
+    # and a bare hostname often resolves to a useless machine name
+    # (MacBook-Foo.local), so we try a few concrete sources instead.
+    HOST_IP=""
+    if out=$(hostname -I 2>/dev/null); then HOST_IP=$(echo "$out" | awk '{print $1}'); fi
+    if [[ -z "$HOST_IP" ]] && command -v ip >/dev/null 2>&1; then
+      HOST_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
+    fi
+    if [[ -z "$HOST_IP" ]] && command -v ipconfig >/dev/null 2>&1; then
+      HOST_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)
+    fi
     prompt "Public URL" "Canonical URL clients use to reach this server (blank to skip)" "${HOST_IP:+https://${HOST_IP}:${HTTPS_PORT}}" || { echo aborted; exit 1; }
     PUBLIC_URL="$REPLY"
 
@@ -256,18 +264,15 @@ VM / hypervisor data on your hypervisors is NOT touched. Proceed?"; then
     if ask_yesno "kvm-center" "Build and deploy the stack now?"; then
       "$REPO_DIR/scripts/bootstrap.sh" --deploy
       echo
-      # Build the best URL we can for the completion message:
-      # 1. PUBLIC_URL if the operator configured one (respects custom scheme + port)
-      # 2. https://<host-ip>:<port> if we could discover a LAN IP
-      # 3. https://<fqdn>:<port> if hostname reports one
-      # 4. https://localhost:<port> last-resort fallback
+      # Completion URL: PUBLIC_URL (operator configured) > discovered LAN IP > localhost.
+      # We deliberately skip the hostname/FQDN fallback — machine names
+      # like "MacBook-Foo" aren't useful as reachable URLs.
       if [[ -n "$PUBLIC_URL" ]]; then
         OPEN_URL="$PUBLIC_URL"
       elif [[ -n "$HOST_IP" ]]; then
         OPEN_URL="https://${HOST_IP}:${HTTPS_PORT}"
       else
-        FQDN=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo localhost)
-        OPEN_URL="https://${FQDN}:${HTTPS_PORT}"
+        OPEN_URL="https://localhost:${HTTPS_PORT}"
       fi
       echo "=============================================================="
       echo "  kvm-center is up. Open ${OPEN_URL}/"
