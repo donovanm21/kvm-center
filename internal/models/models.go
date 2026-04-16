@@ -272,6 +272,10 @@ type VM struct {
 	// Hardware config from virsh dumpxml + dominfo.
 	DiskType    string        `json:"disk_type,omitempty"`    // "qcow2", "raw"
 	Firmware    string        `json:"firmware,omitempty"`     // "bios", "efi", "efi+secureboot"
+	// SnapshotsBlockedReason is non-empty when the agent detects the VM
+	// is incompatible with `virsh snapshot-create` (e.g. pflash+raw nvram).
+	// UI reads this to disable Take Snapshot and surface the cause.
+	SnapshotsBlockedReason string `json:"snapshots_blocked_reason,omitempty"`
 	MachineType string        `json:"machine_type,omitempty"` // "pc-q35-rhel9.6.0"
 	CPUMode     string        `json:"cpu_mode,omitempty"`     // "host-passthrough", "custom"
 	Autostart   bool          `json:"autostart"`

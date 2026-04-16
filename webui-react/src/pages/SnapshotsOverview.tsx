@@ -131,7 +131,17 @@ function SnapshotDetail({ vm }: { vm: VM }) {
   const features = useFeatures();
   const nav = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
-  const canSnap = hasPerm('vm.snapshot') && !features.data?.disable_snapshots;
+  const hasPermSnap = hasPerm('vm.snapshot') && !features.data?.disable_snapshots;
+  // Agent-detected libvirt incompatibility (e.g. UEFI + raw nvram) —
+  // we can't even try to take a snapshot, so disable the button and
+  // surface the reason.
+  const blocked = vm.snapshots_blocked_reason || '';
+  const canSnap = hasPermSnap && !blocked;
+  const createTitle = blocked
+    ? blocked
+    : !hasPermSnap
+      ? 'Requires vm.snapshot or feature disabled'
+      : 'Create a new snapshot of this VM';
 
   return (
     <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
@@ -147,8 +157,17 @@ function SnapshotDetail({ vm }: { vm: VM }) {
       >
         <div>
           <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-strong)' }}>{vm.name}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-faded)', marginTop: 2 }}>
-            {vm.host_id} · <span className={`state-pill ${vm.state}`}>{vm.state}</span>
+          <div style={{ fontSize: 11, color: 'var(--text-faded)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span>{vm.host_id} · <span className={`state-pill ${vm.state}`}>{vm.state}</span></span>
+            {blocked && (
+              <span
+                className="tone-pill warn"
+                style={{ fontSize: 10 }}
+                title={blocked}
+              >
+                ⚠ Snapshots unsupported
+              </span>
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -157,7 +176,7 @@ function SnapshotDetail({ vm }: { vm: VM }) {
             className="btn-primary-sm"
             onClick={() => setCreateOpen(true)}
             disabled={!canSnap}
-            title={!canSnap ? 'Requires vm.snapshot or feature disabled' : 'Create a new snapshot of this VM'}
+            title={createTitle}
           >
             📷 Create Snapshot
           </button>

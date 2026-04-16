@@ -507,7 +507,20 @@ function RelatedObjects({ vm, host }: { vm: VM; host: Host | undefined }) {
           </Link>
         }
       />
-      <KV label="Snapshots" value={`${vm.snapshot_count}`} />
+      {vm.snapshots_blocked_reason ? (
+        <>
+          <KV
+            label="Snapshots"
+            valueNode={<span title={vm.snapshots_blocked_reason} style={{ color: '#D29922' }}>⚠ unsupported ({vm.snapshot_count})</span>}
+          />
+          <KV
+            label="Snapshot block reason"
+            valueNode={<span style={{ fontSize: 11, lineHeight: 1.4, color: 'var(--text-faded)' }}>{vm.snapshots_blocked_reason}</span>}
+          />
+        </>
+      ) : (
+        <KV label="Snapshots" value={`${vm.snapshot_count}`} />
+      )}
       <KV label="VM disks" value={`${(vm.all_disks ?? []).length}`} />
       <KV label="PCI devices" value={`${(vm.pci_devices ?? []).length}`} />
     </div>

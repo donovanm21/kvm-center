@@ -102,6 +102,7 @@ export interface VM {
   disk_usage_gb: number;
   disk_total_gb: number;
   snapshot_count: number;
+  snapshots_blocked_reason?: string;
   guest_agent: boolean;
   guest_source?: string;
   guest_os?: string;
