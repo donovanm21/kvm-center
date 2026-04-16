@@ -56,7 +56,10 @@ if (Test-Path $LocalBin) {
     Write-Info "Downloading $BinaryUrl ..."
     if ($BinaryUrl -like 'https://*') {
         Write-Warn "TLS certificate verification disabled for self-signed CA."
-        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+        # Force TLS 1.2 — Windows PowerShell 5.1 defaults to TLS 1.0 which
+        # our server (Go 1.25 crypto/tls) rejects outright.
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
     }
     $tmp = Join-Path $env:TEMP "kvm-tools.exe"
     try {
