@@ -16,8 +16,8 @@ for bandwidth during migrations.
 
 | Port  | Protocol | Consumer             | Scope            | Notes |
 |-------|----------|----------------------|------------------|-------|
-| 8190  | HTTPS    | Operators + kvmctl   | LAN / trusted    | Primary UI + API. Terminate behind a reverse proxy for WAN exposure. |
-| 8090  | HTTP     | Agents + install one-liners | Management VLAN | Plaintext API + `/downloads/*` for agent / kvm-tools / kvmctl binaries. Agents trust this during bootstrap before they've pinned the server cert. |
+| 8190  | HTTPS    | Operators + agents + kvmctl | LAN / trusted | Primary endpoint for everything — UI, API, `/downloads/*`, agent telemetry. Install scripts use `curl -k` to tolerate the default self-signed cert; trust is tightened once an operator-provided cert is installed. Terminate behind a reverse proxy for WAN exposure. |
+| 8090  | HTTP     | Legacy pre-v5.24 agents only | Management VLAN | Plaintext listener kept for backwards-compat. New installs never advertise it; firewall it off (or drop from docker-compose) once all agents have been re-enrolled against HTTPS. |
 
 ### Hypervisors
 
@@ -49,16 +49,14 @@ firewall-cmd --reload
 
 # control plane
 firewall-cmd --permanent --add-port=8190/tcp
-firewall-cmd --permanent --add-port=8090/tcp
 firewall-cmd --reload
 ```
 
 Traffic directions to permit between nodes:
 
 - **Control plane → hypervisors**: 8081/tcp.
-- **Hypervisors → control plane**: 8190/tcp (telemetry + CA enroll)
-  and 8090/tcp (binary pulls during `update-agent.sh`, via
-  `/downloads/*`).
+- **Hypervisors → control plane**: 8190/tcp (telemetry + CA enrol +
+  `/downloads/*` binary pulls for `update-agent.sh`, all over TLS).
 - **Hypervisor ↔ hypervisor**: 16514/tcp and 49152-49215/tcp.
   East-west only — never exposed beyond the management VLAN.
 - **Operators → control plane**: 8190/tcp. If users hit the UI via
@@ -120,8 +118,8 @@ follow it across.
 
 ## Hardening checklist
 
-- Expose **8190** to operators. 8090 (agents + download one-liners)
-  stays management-VLAN-only.
+- Expose **8190** to operators and agents — it's the single port
+  everything speaks. 8090 (legacy plaintext) can stay firewalled off.
 - Put the server behind a reverse proxy if operators come in over
   WAN. HSTS + a real cert beats the self-signed bundle.
 - Lock 16514 + the QEMU range to the hypervisor subnet.

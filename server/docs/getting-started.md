@@ -57,8 +57,8 @@ Ports:
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| 8090 | HTTP     | Agent telemetry + API + `/downloads/*` (binaries + install scripts, reachable before an agent trusts the cluster CA) |
-| 8190 | HTTPS    | Web UI + API (operator-facing) |
+| 8190 | HTTPS    | Everything — UI, API, agent telemetry, `/downloads/*` install bundles (install scripts use `curl -k` for the default self-signed cert) |
+| 8090 | HTTP     | Legacy plaintext listener kept for pre-v5.24 agents only; firewall off or drop from compose once all agents are on HTTPS |
 
 ## 2. Create the admin account and run the setup wizard
 
