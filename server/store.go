@@ -701,6 +701,38 @@ func (s *Store) GetHosts() []*models.Host {
 	return out
 }
 
+// DeleteHost removes the host record along with every associated VM,
+// storage pool, host-metrics ring, and enrolment cert. Physical VMs
+// on the hypervisor are not touched — this just drops the server's
+// inventory entries so the host can be cleanly re-enrolled (or walked
+// away from). Returns true if a record was removed. Uses short+FQDN
+// matching because certs are keyed by both.
+func (s *Store) DeleteHost(id string) bool {
+	s.mu.Lock()
+	removed := false
+	if _, ok := s.hosts[id]; ok {
+		delete(s.hosts, id)
+		removed = true
+	}
+	delete(s.vms, id)
+	delete(s.storage, id)
+	delete(s.hostMetrics, id)
+	// Remove both short + FQDN cert entries — we've historically
+	// issued under both shapes depending on how an agent registered.
+	short := strings.SplitN(strings.ToLower(id), ".", 2)[0]
+	for cid := range s.hypervisorCerts {
+		low := strings.ToLower(cid)
+		if low == strings.ToLower(id) || low == short || strings.HasPrefix(low, short+".") {
+			delete(s.hypervisorCerts, cid)
+		}
+	}
+	s.mu.Unlock()
+	if removed {
+		s.AsyncSave()
+	}
+	return removed
+}
+
 // hypervisorHasActiveCert — caller holds s.mu (read lock ok).
 //
 // Caveat: time.Time zero round-tripped through Mongo comes back as

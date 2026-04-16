@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, NavLink, useMatch, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { apiPost } from '@/api/client';
+import { apiDelete, apiPost } from '@/api/client';
 import { HostMetricsGraphs } from '@/components/HostMetricsGraphs';
 import { KVMToolsPill } from '@/components/KVMToolsPill';
 import { Modal } from '@/components/Modal';
@@ -116,6 +116,101 @@ function MaintenanceToggle({ host }: { host: Host }) {
               Migrations run sequentially in the background — watch progress in Migrations.
             </div>
           )}
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+/**
+ * DeleteHostButton removes the hypervisor from the inventory — host
+ * record, VM rows, storage metadata, and enrolment cert. Physical
+ * VMs on the hypervisor are untouched. Requires host.manage; the
+ * server refuses while a migration references this host.
+ */
+function DeleteHostButton({ host }: { host: Host }) {
+  const { hasPerm } = useAuth();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [asking, setAsking] = useState(false);
+  const [confirmName, setConfirmName] = useState('');
+  const canManage = hasPerm('host.manage');
+
+  const del = useMutation({
+    mutationFn: () => apiDelete(`/api/hosts/${encodeURIComponent(host.id)}`),
+    onSuccess: () => {
+      toast('success', `Removed ${host.id} from inventory`);
+      qc.invalidateQueries({ queryKey: ['hosts'] });
+      qc.invalidateQueries({ queryKey: ['vms'] });
+      setAsking(false);
+      setConfirmName('');
+      // Bounce back to the Hosts list since this page no longer has a subject.
+      window.location.assign('/hosts');
+    },
+    onError: (e) => toast('error', `Failed: ${e instanceof Error ? e.message : String(e)}`),
+  });
+
+  const close = () => { setAsking(false); setConfirmName(''); };
+  const canSubmit = confirmName.trim() === host.id && !del.isPending;
+
+  return (
+    <>
+      <button
+        type="button"
+        className="btn-secondary-sm"
+        style={{ color: '#F85149', borderColor: '#F8514940' }}
+        disabled={!canManage}
+        title={!canManage ? 'Requires host.manage' : 'Remove this host from the inventory (physical VMs on the host are untouched)'}
+        onClick={() => setAsking(true)}
+      >
+        Remove host
+      </button>
+      <Modal
+        open={asking}
+        onClose={close}
+        title={`Remove ${host.id}`}
+        footer={
+          <>
+            <button type="button" className="btn-secondary-sm" onClick={close}>Cancel</button>
+            <button
+              type="button"
+              className="btn-primary-sm"
+              style={{ background: '#F85149', borderColor: '#F85149' }}
+              disabled={!canSubmit}
+              onClick={() => del.mutate()}
+            >
+              {del.isPending ? 'Removing…' : 'Remove host'}
+            </button>
+          </>
+        }
+      >
+        <div style={{ display: 'grid', gap: 12, fontSize: 12, color: 'var(--text-body)' }}>
+          <div>
+            This drops <strong>{host.id}</strong> from the inventory along with every VM,
+            storage pool, and enrolment cert the server has associated with it. Physical
+            VMs on the hypervisor are <strong>not</strong> touched.
+          </div>
+          <div style={{ color: 'var(--text-faded)' }}>
+            To re-enrol, mint a fresh token on the Deployment page and run
+            <code> install-agent.sh</code> on the host.
+          </div>
+          <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--text-muted)' }}>
+            Type <code style={{ color: 'var(--text-strong)' }}>{host.id}</code> to confirm
+            <input
+              type="text"
+              autoFocus
+              value={confirmName}
+              onChange={(e) => setConfirmName(e.target.value)}
+              style={{
+                padding: '6px 10px',
+                fontSize: 13,
+                background: 'var(--surface-2)',
+                color: 'var(--text-strong)',
+                border: '1px solid var(--border)',
+                borderRadius: 4,
+              }}
+            />
+          </label>
         </div>
       </Modal>
     </>
@@ -245,6 +340,7 @@ function SummaryTab({ host }: { host: Host }) {
           )}
           <div style={{ flex: 1 }} />
           <MaintenanceToggle host={host} />
+          <DeleteHostButton host={host} />
         </div>
         <div
           style={{
