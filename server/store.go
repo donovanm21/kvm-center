@@ -215,10 +215,14 @@ func (s *Store) ensureBuiltInRoles() {
 	}{
 		{"role_admin", "Administrator", "Full access to all resources and admin functions.",
 			[]string{models.PermAdmin}},
-		{"role_operator", "Operator", "Manage VM lifecycle, snapshots, and console access.",
-			[]string{models.PermVMView, models.PermVMLifecycle, models.PermVMSnapshot,
-				models.PermVMConsole, models.PermVMEdit, models.PermHostView,
-				models.PermStorageView, models.PermStorageUpload}},
+		{"role_operator", "Operator", "Full VM lifecycle + storage management. No platform admin (users, TLS, host maintenance, audit log).",
+			[]string{
+				models.PermVMView, models.PermVMLifecycle, models.PermVMCreate,
+				models.PermVMDelete, models.PermVMMigrate, models.PermVMSnapshot,
+				models.PermVMConsole, models.PermVMEdit,
+				models.PermHostView,
+				models.PermStorageView, models.PermStorageUpload, models.PermStorageDelete,
+			}},
 		{"role_viewer", "Viewer", "Read-only access to the inventory.",
 			[]string{models.PermVMView, models.PermHostView, models.PermStorageView}},
 	}

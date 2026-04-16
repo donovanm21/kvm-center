@@ -55,16 +55,47 @@ the audit event. The Audit Log's **Via** column distinguishes:
 
 ## RBAC
 
-Every API endpoint is gated on a permission string. Built-in roles:
+Every API endpoint is gated on a permission string. Permissions are
+enforced by the server — the SPA just uses them to grey out buttons.
+
+### Permission reference
+
+| Permission | Grants |
+|------------|--------|
+| `admin` | Wildcard — implies every other permission, including ones added in future releases. Use sparingly. |
+| `vm.view` | Read the VM inventory, per-VM detail pages, and telemetry. |
+| `vm.lifecycle` | Start / stop / reboot / force-off a running VM. |
+| `vm.create` | Provision new VMs through the Create VM wizard. |
+| `vm.delete` | Undefine (permanently destroy) a VM domain and its disks. |
+| `vm.migrate` | Live or offline-migrate a VM between hypervisors. |
+| `vm.snapshot` | Create, revert, and delete libvirt domain snapshots + manage snapshot policies. |
+| `vm.console` | Open the VNC console and view per-VM screenshots / thumbnails. |
+| `vm.edit` | Edit VM notes and hardware (CPU / RAM / NICs). |
+| `host.view` | Read the hypervisor inventory and per-host detail pages. |
+| `host.manage` | Toggle maintenance mode, re-enrol, or remove a hypervisor. |
+| `storage.view` | Browse storage pools and the per-pool file list. |
+| `storage.upload` | Upload ISOs and disk images into a pool. |
+| `storage.delete` | Delete files from a pool through the UI. |
+| `user.manage` | Create / update / disable users, groups, and custom roles. |
+| `tls.manage` | Upload / regenerate / download the server TLS cert and the cluster CA material. |
+| `audit.view` | Read the audit log (Settings → Audit). |
+
+### Built-in roles
 
 | Role | Permissions |
 |------|-------------|
-| Administrator | `admin` (wildcard) |
-| Operator | `vm.view`, `vm.lifecycle`, `vm.snapshot`, `vm.console`, `vm.edit`, `host.view`, `storage.view`, `storage.upload` |
-| Viewer | `vm.view`, `host.view`, `storage.view` |
+| **Administrator** | `admin` (wildcard) |
+| **Operator** | `vm.view`, `vm.lifecycle`, `vm.create`, `vm.delete`, `vm.migrate`, `vm.snapshot`, `vm.console`, `vm.edit`, `host.view`, `storage.view`, `storage.upload`, `storage.delete` |
+| **Viewer** | `vm.view`, `host.view`, `storage.view` |
 
-Custom roles are persisted — built-ins are managed and can't be
-deleted or have their permissions edited.
+Built-in roles are managed — they can't be deleted or edited. The
+Operator role covers every VM and storage action a day-to-day
+operator needs; platform-admin permissions (`host.manage`,
+`user.manage`, `tls.manage`, `audit.view`) intentionally stay on
+the Administrator role only.
+
+Custom roles: Settings → Roles → **New role** — pick any subset of
+the permissions above and assign to users or groups.
 
 ## TOTP (2FA)
 
