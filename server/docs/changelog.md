@@ -10,6 +10,45 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.25.1
+- **Windows kvm-tools install now works end-to-end.** Fixed three
+  paper-cuts that all bit the first operator to run the PowerShell
+  one-liner against a stock Windows guest:
+  - `curl.exe -fsSLk` replaces `Invoke-WebRequest` for the
+    bootstrap download. Windows Schannel rejected our self-signed
+    cert during handshake before .NET's
+    `ServerCertificateValidationCallback` could intervene; curl.exe
+    bypasses Schannel entirely. Requires Windows 10 1803+ /
+    Server 2019+.
+  - Snippet now runs
+    `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force`
+    before invoking the downloaded `.ps1`, so Windows' default
+    Restricted/RemoteSigned policy doesn't block it. Process-scope
+    only — no system-wide change.
+  - Stripped Unicode em-dashes (U+2014) from `install.ps1` and
+    `install-kvmctl.ps1`. Windows PowerShell 5.1 reads .ps1 as
+    Windows-1252 without a BOM, so em-dashes broke the parser.
+- **Boot-time migration reconciler.** A server restart mid-migration
+  (deploy, crash) no longer leaves records flashing "running"
+  forever. On boot the server waits 60 s for telemetry, then for
+  each still-running record either marks it complete (if the VM is
+  on the destination host) or failed (if older than the 90 min
+  in-flight timeout). Fresh in-flight records are left alone.
+- **Offline migration snapshot-loss warning.** Offline migration
+  rebuilds the VM on the destination from the domain XML + disks;
+  libvirt snapshot chains don't follow. The MigrateModal now shows
+  a yellow ⚠ row when the VM has snapshots — non-blocking, so an
+  operator who captured state elsewhere can proceed. Live migration
+  still hard-blocks on snapshots (libvirt refuses).
+- **Console viewport fit.** Fixed the noVNC console clipping tall
+  guest displays (Ubuntu subiquity installer, etc.). The canvas is
+  now CSS-capped to the browser viewport, and a hover-revealed
+  "Fit to window" button re-runs `scaleViewport` for operators who
+  resize their window mid-session.
+- **Event-routing labels.** Per-channel event checkboxes now match
+  the general events list (`Display Label (event.code)` instead of
+  the code pushed to the right edge of the cell).
+
 ## v5.25.0
 - **Operator role expanded.** The built-in Operator role now includes
   `vm.create`, `vm.delete`, `vm.migrate`, and `storage.delete` — day-to-day
