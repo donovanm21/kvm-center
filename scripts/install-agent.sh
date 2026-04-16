@@ -71,24 +71,39 @@ case "$ARCH" in
 esac
 
 # ── Find binary ────────────────────────────────────────────────────────────────
-# Look for arch-specific binary first, then plain name in the same directory.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# When the script was fetched via `curl | bash`, BASH_SOURCE[0] is
+# unset — set -u then barfs. Treat that as "no local dir" and fall
+# through to the download step.
+if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+  SCRIPT_DIR=""
+fi
 BINARY=""
 for candidate in \
-  "${SCRIPT_DIR}/${BINARY_NAME}-${ARCH_SUFFIX}" \
-  "${SCRIPT_DIR}/${BINARY_NAME}" \
+  "${SCRIPT_DIR:+${SCRIPT_DIR}/${BINARY_NAME}-${ARCH_SUFFIX}}" \
+  "${SCRIPT_DIR:+${SCRIPT_DIR}/${BINARY_NAME}}" \
   "./${BINARY_NAME}-${ARCH_SUFFIX}" \
   "./${BINARY_NAME}"; do
-  if [[ -f "$candidate" ]]; then
+  if [[ -n "$candidate" && -f "$candidate" ]]; then
     BINARY="$candidate"
     break
   fi
 done
 
+# curl|bash path: no local binary beside the script, so pull it from
+# /downloads/ on the control plane. -k tolerates the default
+# self-signed cert, matching the install snippet the SPA generates.
 if [[ -z "$BINARY" ]]; then
-  echo "ERROR: Could not find agent binary. Expected: ${BINARY_NAME} or ${BINARY_NAME}-${ARCH_SUFFIX}"
-  echo "Download from your build server or run: make dist"
-  exit 1
+  DL_URL="${SERVER_URL%/}/downloads/${BINARY_NAME}-${ARCH_SUFFIX}"
+  BINARY="/tmp/${BINARY_NAME}-${ARCH_SUFFIX}"
+  echo "Downloading agent binary: $DL_URL"
+  if ! curl -fsSLk "$DL_URL" -o "$BINARY"; then
+    echo "ERROR: Could not fetch agent binary from $DL_URL"
+    echo "Verify the control plane is reachable and /downloads/ is serving arch $ARCH_SUFFIX."
+    exit 1
+  fi
+  chmod +x "$BINARY"
 fi
 
 echo "Installing kvm-center agent..."
@@ -286,7 +301,7 @@ print("  Issued cert valid until", d.get("not_after","?"))
     # were authorised by kvm-center. Installed idempotently; the hook
     # fails open if the agent is unreachable so migrations aren't
     # gated on agent liveness.
-    HOOK_SRC="${SCRIPT_DIR}/libvirt-hooks-qemu.sh"
+    HOOK_SRC="${SCRIPT_DIR:+${SCRIPT_DIR}/libvirt-hooks-qemu.sh}"
     HOOK_DST="/etc/libvirt/hooks/qemu"
     # Fall back to the build portal when the hook isn't colocated with
     # this installer (curl | bash style).
