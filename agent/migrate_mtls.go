@@ -94,7 +94,7 @@ func offlineMigrateMTLS(ctx context.Context, vmName, dest string, opts MTLSOptio
 	// ── 1. Pool sanity check ───────────────────────────────────
 	setMigStatus("prepare", 2, "Verifying destination storage pool")
 	if out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "pool-info", pool).CombinedOutput(); err != nil {
-		return fmt.Errorf("destination pool %q not reachable via %s: %s — install-agent.sh enrolled the host but the 'default' pool is missing. Falling back requires reissuing with transport=ssh", pool, uri, strings.TrimSpace(string(out)))
+		return fmt.Errorf("destination pool %q not reachable via %s: %s — verify the pool exists and is active on the destination (virsh pool-list), or pick a different pool in the Advanced modal", pool, uri, strings.TrimSpace(string(out)))
 	}
 
 	// ── 2. Current VM state ───────────────────────────────────
