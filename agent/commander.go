@@ -240,21 +240,37 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			memErr := applyEdit("mem_mb", m, []string{"setmem", vmTarget, kib})
 			if memErr != nil {
 				if strings.Contains(memErr.Error(), "cannot set memory higher than max memory") {
-					// Target > current max cap.
-					if isRunning {
-						respond(w, false, "cannot raise the VM's memory cap while it's running. Shut the VM down first, then retry — the agent will raise the cap (setmaxmem --config) and apply your memory target in the same call.")
-						return
-					}
-					// Shut off: raise cap first.
+					// Target exceeds config maxMemory. Raise the cap first
+					// via `setmaxmem --config` — this works on both
+					// running and shut-off VMs (only --live maxmem is
+					// restricted). Then retry setmem.
 					if o, e := exec.Command("virsh", "setmaxmem", vmTarget, kib, "--config").CombinedOutput(); e != nil {
 						respond(w, false, "setmaxmem failed: "+strings.TrimSpace(string(o)))
 						return
 					}
-					if o2, e2 := exec.Command("virsh", "setmem", vmTarget, kib, "--config").CombinedOutput(); e2 != nil {
-						respond(w, false, "setmem (after raising max) failed: "+strings.TrimSpace(string(o2)))
-						return
+					// On a running VM, setmem --live can still succeed
+					// if the live maxMemory slot allows it (libvirt
+					// sometimes reserves headroom). If not, fall back
+					// to --config only so the cap raise persists for
+					// next boot.
+					if isRunning {
+						if _, e := exec.Command("virsh", "setmem", vmTarget, kib, "--config", "--live").CombinedOutput(); e == nil {
+							msgs = append(msgs, "mem_mb="+m+" (cap raised, live + config)")
+						} else {
+							if _, e2 := exec.Command("virsh", "setmem", vmTarget, kib, "--config").CombinedOutput(); e2 != nil {
+								respond(w, false, "setmem (after raising max) failed: "+strings.TrimSpace(e2.Error()))
+								return
+							}
+							msgs = append(msgs, "mem_mb="+m+" (cap raised + config; reboot to apply new balloon)")
+							requiresReboot = true
+						}
+					} else {
+						if o2, e2 := exec.Command("virsh", "setmem", vmTarget, kib, "--config").CombinedOutput(); e2 != nil {
+							respond(w, false, "setmem (after raising max) failed: "+strings.TrimSpace(string(o2)))
+							return
+						}
+						msgs = append(msgs, "mem_mb="+m+" (cap raised + config; applies on next boot)")
 					}
-					msgs = append(msgs, "mem_mb="+m+" (cap raised + config; applies on next boot)")
 				} else {
 					respond(w, false, memErr.Error())
 					return
