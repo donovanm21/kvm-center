@@ -45,6 +45,7 @@ func main() {
 	mongoDB := flag.String("mongo-db", envOrDefault("KVM_CENTER_MONGO_DB", "kvm-center"), "MongoDB database name (used when -mongo-url is set)")
 	addr := flag.String("addr", envOrDefault("KVM_CENTER_ADDR", ":8090"), "HTTP listen address (plain HTTP, used when TLS is off or as the HTTPS-redirect port)")
 	tlsAddr := flag.String("tls-addr", envOrDefault("KVM_CENTER_TLS_ADDR", ":8443"), "HTTPS listen address (used when -cert/-key are set or auto-generated)")
+	grpcAddr := flag.String("grpc-addr", envOrDefault("KVM_CENTER_GRPC_ADDR", ":8095"), "gRPC agent-service listen address (streaming: migration progress, live VM metrics, console signalling). Empty disables the listener.")
 	tlsCert := flag.String("cert", envOrDefault("KVM_CENTER_TLS_CERT", ""), "PEM-encoded TLS certificate (if blank, a self-signed cert is auto-generated)")
 	tlsKey := flag.String("key", envOrDefault("KVM_CENTER_TLS_KEY", ""), "PEM-encoded private key for -cert (must be set if -cert is set, and vice-versa)")
 	tlsDir := flag.String("tls-dir", envOrDefault("KVM_CENTER_TLS_DIR", "/var/lib/kvm-center/tls"), "directory for the auto-generated self-signed cert when -cert/-key are blank")
@@ -378,6 +379,19 @@ func main() {
 	mux.Handle("/v4/", http.RedirectHandler("/", http.StatusPermanentRedirect))
 
 	handler := corsMiddleware(loggingMiddleware(authMiddleware(store, mux)))
+
+	// gRPC agent service (v5.27). Plaintext for now — when reloader
+	// is configured, the HTTPS cert can also front gRPC via its own
+	// listener, but that's a separate task. Disable by setting
+	// KVM_CENTER_GRPC_ADDR= (empty).
+	if *grpcAddr != "" {
+		stop, err := startGRPCServer(*grpcAddr, store, nil)
+		if err != nil {
+			log.Printf("grpc: disabled (%v)", err)
+		} else {
+			defer stop()
+		}
+	}
 
 	if reloader == nil {
 		log.Printf("kvm-center server listening on %s (plain HTTP, TLS disabled)", *addr)
