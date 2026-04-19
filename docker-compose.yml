@@ -68,6 +68,16 @@ services:
       # Dedicated volume for the cert/key so TLS material survives image
       # rebuilds and is easy to back up separately from the JSON store.
       - kvm-center-tls:/var/lib/kvm-center/tls
+    # Healthcheck hits the internal plaintext port (no TLS tooling
+    # needed inside the Alpine runtime container). Compose uses this
+    # to detect readiness; Docker restarts the container on sustained
+    # failure because restart:unless-stopped is set above.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       kvm-center-mongo:
         condition: service_healthy
