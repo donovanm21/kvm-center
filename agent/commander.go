@@ -234,15 +234,42 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			}
 			kib := fmt.Sprintf("%d", mbN*1024)
 			if err := applyEdit("mem_mb", m, []string{"setmem", vmTarget, kib}); err != nil {
-				respond(w, false, err.Error())
-				return
+				// Same cap-raise pattern as vCPUs: if libvirt rejects
+				// because the target exceeds maxMemory, auto-run
+				// `setmaxmem --config` first (requires VM shut off),
+				// then the regular setmem.
+				if strings.Contains(err.Error(), "cannot set memory higher than max memory") {
+					if isRunning {
+						respond(w, false, "cannot raise the VM's memory cap while it's running. Shut the VM down first, then retry — the agent will raise the cap (setmaxmem --config) and apply your memory target in the same call.")
+					} else {
+						if o, e := exec.Command("virsh", "setmaxmem", vmTarget, kib, "--config").CombinedOutput(); e != nil {
+							respond(w, false, "setmaxmem failed: "+strings.TrimSpace(string(o)))
+							return
+						}
+						if o2, e2 := exec.Command("virsh", "setmem", vmTarget, kib, "--config").CombinedOutput(); e2 != nil {
+							respond(w, false, "setmem (after raising max) failed: "+strings.TrimSpace(string(o2)))
+							return
+						}
+						msgs = append(msgs, "mem_mb="+m+" (cap raised + config; applies on next boot)")
+					}
+					if isRunning {
+						return
+					}
+				} else {
+					respond(w, false, err.Error())
+					return
+				}
 			}
 		}
 		if len(msgs) == 0 {
 			respond(w, false, "EDIT_VM requires at least one of params.vcpus, params.mem_mb")
 			return
 		}
-		respondWithFlags(w, true, "EDIT_VM: "+strings.Join(msgs, ", "), requiresReboot)
+		// v5.27.7: build updated_fields from the post-edit dumpxml so
+		// the server refreshes its cache immediately instead of
+		// waiting for the next telemetry tick.
+		updated := collectPostEditFields(vmTarget, req.Params)
+		respondWithFlagsAndFields(w, true, "EDIT_VM: "+strings.Join(msgs, ", "), requiresReboot, updated)
 		return
 	case "CHANGE_MEDIA":
 		// Live ISO swap on a CDROM target. Params:
@@ -483,6 +510,12 @@ func respond(w http.ResponseWriter, success bool, message string) {
 // the operator doesn't stare at a "success" toast while wondering
 // why nothing changed.
 func respondWithFlags(w http.ResponseWriter, success bool, message string, requiresReboot bool) {
+	respondWithFlagsAndFields(w, success, message, requiresReboot, nil)
+}
+
+// respondWithFlagsAndFields adds the UpdatedFields map for commands
+// that want the server to refresh its cached VM record immediately.
+func respondWithFlagsAndFields(w http.ResponseWriter, success bool, message string, requiresReboot bool, updated map[string]any) {
 	w.Header().Set("Content-Type", "application/json")
 	if !success {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -491,6 +524,7 @@ func respondWithFlags(w http.ResponseWriter, success bool, message string, requi
 		Success:        success,
 		Message:        message,
 		RequiresReboot: requiresReboot,
+		UpdatedFields:  updated,
 	})
 }
 
