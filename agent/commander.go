@@ -187,6 +187,45 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		// Autostart: works live regardless of VM state — virsh autostart
+		// doesn't touch running QEMU; it just updates libvirt's
+		// per-domain metadata.
+		if as := strings.TrimSpace(req.Params["autostart"]); as != "" {
+			args := []string{"autostart", vmTarget}
+			if as == "false" || as == "0" || as == "off" {
+				args = append(args, "--disable")
+			}
+			if o, e := exec.Command("virsh", args...).CombinedOutput(); e != nil {
+				respond(w, false, "autostart failed: "+strings.TrimSpace(string(o)))
+				return
+			}
+			msgs = append(msgs, "autostart="+as)
+		}
+
+		// XML-only fields (cpu_mode, video_model, boot_dev) require the
+		// VM to be shut off — they live in the domain XML and libvirt
+		// will block a live reload. Collect them here; apply after the
+		// standalone vcpus/mem_mb steps so error ordering is sensible.
+		xmlEdits := map[string]string{}
+		for _, key := range []string{"cpu_mode", "video_model", "boot_dev"} {
+			if v := strings.TrimSpace(req.Params[key]); v != "" {
+				xmlEdits[key] = v
+			}
+		}
+		if len(xmlEdits) > 0 && isRunning {
+			respond(w, false, "cpu_mode / video_model / boot_dev can only be changed while the VM is shut off — stop the VM and retry, or leave those fields unchanged.")
+			return
+		}
+		if len(xmlEdits) > 0 {
+			if err := applyXMLEdits(vmTarget, xmlEdits); err != nil {
+				respond(w, false, err.Error())
+				return
+			}
+			for k, v := range xmlEdits {
+				msgs = append(msgs, k+"="+v+" (config; applies on next boot)")
+			}
+		}
+
 		if m := strings.TrimSpace(req.Params["mem_mb"]); m != "" {
 			mbN, convErr := strconv.Atoi(m)
 			if convErr != nil {
