@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+// kvm-center agent ↔ server gRPC (v5.27). Foundation cut: migration
+// progress streaming + placeholders for the rest of the roadmap.
+// The HTTP REST API remains authoritative for telemetry, setup,
+// inventory CRUD, and anything the SPA consumes; gRPC is only used
+// where the streaming shape delivers real value (push vs poll).
+
+package kvmcenter.agent.v1;
+
+option go_package = "kvm-center/gen/agentpb;agentpb";
+
+// AgentService is implemented by the kvm-center control-plane server.
+// Hypervisor agents dial in (usually over the same :8190 TLS cert)
+// and open streaming RPCs to push real-time signals the old 30 s
+// telemetry tick couldn't carry.
+service AgentService {
+  // StreamMigrationProgress: agent opens one stream per in-flight
+  // migration and pushes frames as `virsh migrate` reports progress.
+  // Server updates MigrationRecord.Progress/Phase in real time
+  // instead of waiting for the synchronous HTTP response that's
+  // been known to strand records across server restarts (v5.25.1
+  // reconciler lives precisely because of that gap).
+  rpc StreamMigrationProgress(stream MigrationProgress) returns (Ack);
+
+  // StreamVMMetrics (stub, reserved): high-frequency per-VM CPU/mem
+  // while an operator has the detail page open. Not implemented in
+  // v5.27 — the 30 s telemetry tick covers the common case.
+  rpc StreamVMMetrics(stream VMMetricSample) returns (Ack);
+
+  // OpenConsoleSession (stub, reserved): session-lifecycle + HMAC
+  // token exchange for the VNC proxy. Wire data stays WebSocket
+  // since noVNC requires it; this RPC handles the handshake.
+  rpc OpenConsoleSession(ConsoleRequest) returns (ConsoleResponse);
+}
+
+message MigrationProgress {
+  string migration_id = 1;  // matches server's MigrationRecord.ID
+  string vm_name      = 2;
+  string source_host  = 3;
+  string dest_host    = 4;
+  // Phase strings match the existing MigrationRecord.Phase values:
+  // "starting", "prepare", "shutdown", "transfer", "define",
+  // "start", "cleanup", "complete", "failed".
+  string phase        = 5;
+  int32  progress_pct = 6;  // 0..100
+  string detail       = 7;  // free-text status line the SPA can show
+  string error        = 8;  // non-empty when phase == "failed"
+  int64  reported_at  = 9;  // unix seconds (optional — server clocks if 0)
+}
+
+message VMMetricSample {
+  string vm_uuid     = 1;
+  string host_id     = 2;
+  double cpu_usage   = 3;
+  int64  mem_usage_mb = 4;
+  int64  reported_at = 5;
+}
+
+message ConsoleRequest {
+  string host_id  = 1;
+  string vm_name  = 2;
+  string actor_id = 3;
+}
+
+message ConsoleResponse {
+  string ws_url     = 1;
+  string token      = 2;
+  int64  expires_at = 3;
+  string nonce      = 4;
+}
+
+message Ack {
+  // Server-side summary the client logs when the stream closes.
+  int32  frames_accepted = 1;
+  string last_error      = 2;
+}
