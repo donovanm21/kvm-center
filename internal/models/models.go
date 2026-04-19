@@ -716,6 +716,10 @@ type CommandRequest struct {
 type CommandResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
+	// RequiresReboot flags commands (EDIT_VM today) that were
+	// accepted but couldn't be applied live. The UI reads this to
+	// prompt the operator to shut down + restart the VM.
+	RequiresReboot bool `json:"requires_reboot,omitempty"`
 }
 
 // APICommandRequest is sent by the web UI to POST /api/command on the server.

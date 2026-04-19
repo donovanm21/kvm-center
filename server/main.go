@@ -204,6 +204,8 @@ func main() {
 			handleHostMetrics(store).ServeHTTP(w, r)
 		case r.Method == http.MethodDelete:
 			requirePerm(store, "host.manage", http.HandlerFunc(handleDeleteHost(store))).ServeHTTP(w, r)
+		case strings.HasSuffix(r.URL.Path, "/update-agent"):
+			requirePerm(store, "host.manage", http.HandlerFunc(handleUpdateAgent(store))).ServeHTTP(w, r)
 		default:
 			handleGetHost(store).ServeHTTP(w, r)
 		}
