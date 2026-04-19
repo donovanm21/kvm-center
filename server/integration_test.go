@@ -119,6 +119,9 @@ func buildTestMux(s *Store) *http.ServeMux {
 	mux.Handle("/api/users/new", requirePerm(s, "user.manage", handleUsersCreate(s)))
 	mux.Handle("/api/users/", requirePerm(s, "user.manage", handleUserUpdate(s)))
 
+	// Admin ops.
+	mux.Handle("/api/admin/backup", requirePerm(s, "user.manage", handleBackup(s)))
+
 	// Health.
 	mux.HandleFunc("/health", handleHealth)
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {

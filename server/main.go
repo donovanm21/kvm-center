@@ -336,6 +336,10 @@ func main() {
 	mux.HandleFunc("/api/setup/state", handleSetupState(store))
 	mux.Handle("/api/settings/public-url", requirePerm(store, "user.manage", handlePublicURL(store)))
 	mux.Handle("/api/setup/complete", requirePerm(store, "user.manage", http.HandlerFunc(handleSetupComplete(store))))
+	// Backup (v5.27): admin-only snapshot export. Restore lives in
+	// scripts/bootstrap.sh --restore because replacing live state
+	// in-process is hazardous.
+	mux.Handle("/api/admin/backup", requirePerm(store, "user.manage", handleBackup(store)))
 	// Database backend status + migration (v5.1+). Gated on user.manage;
 	// considered a platform-ops operation alongside TLS management.
 	mux.Handle("/api/settings/database", requirePerm(store, "user.manage", handleDatabaseStatus(store)))
