@@ -783,6 +783,10 @@ function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
   const [open, setOpen] = useState(false);
   const [vcpus, setVcpus] = useState<number>(vm.cpu_count || 1);
   const [memMB, setMemMB] = useState<number>(vm.mem_total_mb || 1024);
+  // rebootPrompt: the agent accepted the edit but couldn't apply it
+  // live (virsh --live rejected). Operator can restart the VM now
+  // to pick up the new values or dismiss and restart on their schedule.
+  const [rebootPrompt, setRebootPrompt] = useState<string | null>(null);
   const cmd = useVMCommand();
 
   // Reset fields when the modal reopens so a cancelled edit doesn't
@@ -805,7 +809,25 @@ function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
       vm_name: vm.name,
       action: 'EDIT_VM',
       params,
-    }, { onSuccess: () => setOpen(false) });
+    }, {
+      onSuccess: (data: any) => {
+        setOpen(false);
+        // Agent signals requires_reboot when --live is rejected but
+        // --config took. Prompt the operator to restart.
+        if (data?.requires_reboot) {
+          setRebootPrompt(data?.message || 'The change was saved to the VM config but requires a restart to take effect.');
+        }
+      },
+    });
+  };
+
+  const restartNow = () => {
+    cmd.mutate({
+      host_id: vm.host_id,
+      vm_uuid: vm.uuid,
+      vm_name: vm.name,
+      action: 'RESTART',
+    }, { onSuccess: () => setRebootPrompt(null) });
   };
 
   return (
@@ -849,9 +871,35 @@ function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
             libvirt applies vCPU + memory changes live when the guest's
             topology permits. Operations that can't be done live (e.g.
             raising maxMemory) are saved to the domain XML and take effect
-            on the next reboot — the response below will tell you which
-            branch was taken.
+            on the next reboot — the toast will tell you which branch was
+            taken, and you'll be prompted to restart if a reboot is needed.
           </div>
+        </div>
+      </Modal>
+      {/* Follow-up modal: surfaces requires_reboot from the agent. */}
+      <Modal
+        open={rebootPrompt !== null}
+        onClose={() => setRebootPrompt(null)}
+        title={`Restart ${vm.name} to apply changes?`}
+        footer={
+          <>
+            <button type="button" className="btn-secondary-sm" onClick={() => setRebootPrompt(null)}>
+              Later
+            </button>
+            <button type="button" className="btn-primary-sm" onClick={restartNow} disabled={cmd.isPending}>
+              {cmd.isPending ? 'Restarting…' : 'Restart now'}
+            </button>
+          </>
+        }
+      >
+        <div style={{ fontSize: 12, lineHeight: 1.55, color: 'var(--text-body)' }}>
+          {rebootPrompt}
+          <br /><br />
+          <span style={{ color: 'var(--text-faded)' }}>
+            Restarting sends <code>virsh reboot</code> (graceful guest shutdown
+            then auto-start). The VM will be unavailable for the duration of
+            its own reboot cycle.
+          </span>
         </div>
       </Modal>
     </>

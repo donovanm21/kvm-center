@@ -41,7 +41,14 @@ export function useVMCommand() {
         toast('error', `${input.action} failed: ${data.message || 'unknown error'}`);
         return;
       }
-      toast('success', `${input.action} sent to ${input.vm_name}`);
+      // Prefer the agent's own message when it carries useful detail
+      // (e.g. EDIT_VM saying "vcpus=4 (config-only, reboot to apply)").
+      // Fall back to the terse "action sent" summary for commands
+      // whose agent response is a generic "ok".
+      const detail = data?.message && !/^(ok|done|success)$/i.test(data.message.trim())
+        ? `${input.action}: ${data.message}`
+        : `${input.action} sent to ${input.vm_name}`;
+      toast('success', detail);
       // The SSE event will also land in a few ms — belt and suspenders.
       qc.invalidateQueries({ queryKey: ['vms'] });
       qc.invalidateQueries({ queryKey: ['hosts'] });
