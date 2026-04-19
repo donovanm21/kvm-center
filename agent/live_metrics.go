@@ -13,13 +13,16 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
+	"net"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 
 	agentpb "kvm-center/gen/agentpb"
 	"kvm-center/internal/models"
@@ -60,7 +63,12 @@ func startLiveMetricsStreamer(ctx context.Context, serverURL string) {
 }
 
 func runOneLiveMetricsStream(ctx context.Context, grpcAddr, hostID string) error {
-	conn, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Server multiplexes gRPC on its TLS port (:8190) — same self-signed
+	// cert that makes the HTTP client run with InsecureSkipVerify. Match
+	// that trust model here; operator upgrades to a trusted cert via
+	// Settings → TLS when they're ready.
+	creds := credentials.NewTLS(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec // homelab trust model, see agent/main.go
+	conn, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return err
 	}
@@ -106,20 +114,32 @@ func sendLiveMetricsFrame(stream agentpb.AgentService_StreamVMMetricsClient, hos
 	return nil
 }
 
-// deriveGRPCAddr turns the HTTPS server URL the agent already talks
-// to ("https://kvm-center:8190") into a host:port for gRPC. The
-// server multiplexes gRPC on the same port as HTTPS via content-type
-// dispatch, so we strip the scheme + keep the host:port.
+// deriveGRPCAddr picks the host:port the agent should dial for gRPC.
+// Explicit override via KVM_CENTER_GRPC_ADDR wins. Otherwise: the
+// server multiplexes gRPC on its TLS port (:8190) regardless of
+// whether the agent's HTTP telemetry goes to :8090 (plain) or :8190
+// (TLS). We strip scheme+path from serverURL and rewrite the port
+// to the multiplex port.
 func deriveGRPCAddr(serverURL string) string {
+	if v := os.Getenv("KVM_CENTER_GRPC_ADDR"); v != "" {
+		return v
+	}
 	if serverURL == "" {
 		return ""
 	}
 	u, err := url.Parse(serverURL)
-	if err != nil || u.Host == "" {
-		// Fallback: strip scheme manually in case the URL is malformed.
+	host := ""
+	if err == nil && u.Host != "" {
+		host = u.Host
+	} else {
 		s := strings.TrimPrefix(serverURL, "https://")
 		s = strings.TrimPrefix(s, "http://")
-		return strings.TrimRight(s, "/")
+		host = strings.TrimRight(s, "/")
 	}
-	return u.Host
+	// Strip whatever port the HTTP telemetry URL carries and pin to the
+	// multiplex port. host:port → host; bare host stays bare.
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return host + ":8190"
 }
