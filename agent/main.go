@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"flag"
@@ -72,6 +73,13 @@ func main() {
 	// Must match whatever collector.go's hostname() reports as HostID —
 	// the server signs tokens against that exact string.
 	SetHostIDForToken(hostname())
+
+	// v5.28.0: open a persistent gRPC stream that pushes per-running-VM
+	// CPU/mem samples every ~3 s so the SPA's inventory reflects live
+	// numbers without waiting for the 15 s HTTP telemetry tick.
+	liveCtx, liveCancel := context.WithCancel(context.Background())
+	defer liveCancel()
+	go startLiveMetricsStreamer(liveCtx, *serverURL)
 
 	// Collect and send telemetry immediately, then on interval.
 	sendTelemetry(*serverURL, *cmdPort)
