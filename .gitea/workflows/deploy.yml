@@ -26,16 +26,24 @@ on:
     workflows: [test]
     types: [completed]
     branches: [main]
+  # Manual override so an operator can (re)deploy without pushing a
+  # fresh commit — handy after a secret rotation or host reboot.
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # Only fire when the upstream `test` workflow actually passed on a
-    # push to main. PR runs never satisfy both conditions.
+    # Fires only when (a) the upstream test workflow passed on a main
+    # push that *opted in* via "[deploy]" in its commit message, OR
+    # (b) an operator manually triggered the workflow. The commit-
+    # message gate was added in v5.27 so dev RCs can flow onto main
+    # for E2E testing without auto-redeploying prod.
     if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main'
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       contains(github.event.workflow_run.head_commit.message, '[deploy]'))
     concurrency:
       # Serialise deploys — the host's docker compose + agent-push
       # loop isn't safe against two concurrent runs, and queueing
