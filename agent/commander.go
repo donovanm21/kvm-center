@@ -155,8 +155,36 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 
 		if v := strings.TrimSpace(req.Params["vcpus"]); v != "" {
 			if err := applyEdit("vcpus", v, []string{"setvcpus", vmTarget, v}); err != nil {
-				respond(w, false, err.Error())
-				return
+				// v5.27.3: the common libvirt failure here is "requested
+				// vcpus is greater than max allowable vcpus". Libvirt's
+				// `setvcpus --maximum` can raise the cap, but only when
+				// the VM is shut off and only with --config. Translate
+				// the error into a clearer message so the SPA can
+				// surface a "shut down + increase vCPU max?" prompt.
+				if strings.Contains(err.Error(), "greater than max allowable") {
+					if isRunning {
+						respond(w, false, "cannot raise the VM's vCPU cap while it's running. Shut the VM down first, then retry the edit — the agent will raise the cap (setvcpus --maximum --config) and apply your vCPU count in the same call.")
+					} else {
+						// Shut off — try to raise the cap + apply.
+						if o, e := exec.Command("virsh", "setvcpus", vmTarget, v, "--maximum", "--config").CombinedOutput(); e != nil {
+							respond(w, false, "setvcpus --maximum failed: "+strings.TrimSpace(string(o)))
+							return
+						}
+						if o2, e2 := exec.Command("virsh", "setvcpus", vmTarget, v, "--config").CombinedOutput(); e2 != nil {
+							respond(w, false, "setvcpus (after raising max) failed: "+strings.TrimSpace(string(o2)))
+							return
+						}
+						msgs = append(msgs, "vcpus="+v+" (cap raised + config; applies on next boot)")
+					}
+					if !isRunning {
+						// Fall through — we've already appended a message.
+					} else {
+						return
+					}
+				} else {
+					respond(w, false, err.Error())
+					return
+				}
 			}
 		}
 		if m := strings.TrimSpace(req.Params["mem_mb"]); m != "" {
