@@ -14,11 +14,21 @@ import (
 )
 
 // postEditDomain subset of dumpxml used only for the readback.
+//
+// Vcpu is the domain's max vCPU count (element text). VcpuCurrent
+// is the `current='...'` attribute — the number of vCPUs actually
+// presented to the guest, which can be lower than the max. The
+// telemetry collector tracks `current` as vm.cpu_count, so we
+// mirror that here to avoid the UI jumping to max before settling
+// on current at the next tick.
 type postEditDomain struct {
 	Memory        int64 `xml:"memory"`
 	CurrentMemory int64 `xml:"currentMemory"`
-	Vcpu          int   `xml:"vcpu"`
-	OS            struct {
+	Vcpu          struct {
+		Value   int `xml:",chardata"`
+		Current int `xml:"current,attr"`
+	} `xml:"vcpu"`
+	OS struct {
 		Boot struct {
 			Dev string `xml:"dev,attr"`
 		} `xml:"boot"`
@@ -57,7 +67,16 @@ func collectPostEditFields(vmTarget string, params map[string]string) map[string
 	// Only surface fields the operator actually asked us to touch —
 	// keeps the wire response small and signals intent.
 	if _, ok := params["vcpus"]; ok {
-		fields["cpu_count"] = d.Vcpu
+		// Prefer the `current='X'` attribute (active vCPUs exposed to
+		// the guest) over the element text (max cap) so the value
+		// we report matches what the telemetry collector will emit
+		// on the next tick. Without this the SPA flashes the max
+		// value for ~30 s before snapping back to current.
+		if d.Vcpu.Current > 0 {
+			fields["cpu_count"] = d.Vcpu.Current
+		} else {
+			fields["cpu_count"] = d.Vcpu.Value
+		}
 	}
 	if _, ok := params["mem_mb"]; ok {
 		// XML reports KiB; VM.mem_total_mb is MB.
