@@ -830,6 +830,41 @@ func (s *Store) ApplyVMFieldUpdates(hostID, vmUUID, vmName string, fields map[st
 		break
 	}
 	s.AsyncSave()
+	if s.hub != nil {
+		s.hub.Publish(EventInventory, map[string]any{"host_id": hostID})
+	}
+}
+
+// ApplyVMMetricSample merges a live gRPC metric frame into the VM record
+// so the SPA's inventory cache reflects CPU/mem within ~3 s instead of
+// waiting for the 15 s telemetry tick. Stopped VMs are skipped — a
+// metrics frame for a non-running VM is stale by definition and would
+// resurrect the phantom-usage bug fixed in v5.27.10.
+func (s *Store) ApplyVMMetricSample(hostID, vmUUID string, cpu float64, memMB int64) {
+	if vmUUID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vms, ok := s.vms[hostID]
+	if !ok {
+		return
+	}
+	for _, v := range vms {
+		if v == nil || !strings.EqualFold(v.UUID, vmUUID) {
+			continue
+		}
+		if v.State != models.VMRunning {
+			return
+		}
+		if cpu >= 0 {
+			v.CPUUsage = cpu
+		}
+		if memMB > 0 {
+			v.MemUsageMB = uint64(memMB)
+		}
+		return
+	}
 }
 
 // toInt / toInt64: JSON numbers decode as float64 when the target

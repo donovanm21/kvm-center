@@ -119,8 +119,56 @@ func (s *agentGRPCServer) applyProgressFrame(f *agentpb.MigrationProgress) error
 			rec.Detail = d
 		}
 		s.store.AddMigration(rec)
+		// v5.28: fan out via SSE so open browser sessions see the
+		// progress bar move without waiting for their next poll.
+		if s.store.hub != nil {
+			s.store.hub.Publish(EventMigration, map[string]any{
+				"id":       rec.ID,
+				"phase":    rec.Phase,
+				"progress": rec.Progress,
+				"status":   rec.Status,
+			})
+		}
+		return nil
 	}
+	// Terminal finalize path already publishes via AddMigration's SSE hook.
 	return nil
+}
+
+// StreamVMMetrics (v5.28.0): agent streams per-VM CPU + memory samples
+// at a faster cadence than the 15 s telemetry tick. Server updates
+// VM.CPUUsage / VM.MemUsageMB and fans out an `inventory` SSE event
+// so the SPA's query cache invalidates and shows live numbers.
+// Stream is unidirectional client→server; the agent never waits on
+// an ack other than the final Ack on Close.
+func (s *agentGRPCServer) StreamVMMetrics(stream agentpb.AgentService_StreamVMMetricsServer) error {
+	var frames int32
+	var lastErr string
+	var lastPublish time.Time
+	const publishDebounce = 2 * time.Second
+	for {
+		sample, err := stream.Recv()
+		if err == io.EOF {
+			return stream.SendAndClose(&agentpb.Ack{FramesAccepted: frames, LastError: lastErr})
+		}
+		if err != nil {
+			return err
+		}
+		frames++
+		if sample.GetVmUuid() == "" {
+			continue
+		}
+		s.store.ApplyVMMetricSample(sample.GetHostId(), sample.GetVmUuid(),
+			sample.GetCpuUsage(), sample.GetMemUsageMb())
+		// Debounce SSE fanout — one inventory event per ~2 s is
+		// plenty for the SPA's live sparklines; flooding hundreds
+		// of ['vms'] invalidations per minute would thrash React
+		// Query.
+		if s.store.hub != nil && time.Since(lastPublish) >= publishDebounce {
+			s.store.hub.Publish(EventInventory, map[string]any{"host_id": sample.GetHostId()})
+			lastPublish = time.Now()
+		}
+	}
 }
 
 // buildGRPCServer constructs the *grpc.Server with AgentService
