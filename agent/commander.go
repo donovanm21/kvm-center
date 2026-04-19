@@ -15,6 +15,22 @@ import (
 )
 
 // StartCommandServer listens for POST /command from the control plane.
+// selfUpdateServerURL + selfUpdateBinaryPath are set by the caller
+// so the /self-update handler knows where to pull the new binary
+// from and where its own executable lives on disk. Wired in
+// agent/main.go's StartCommandServer call site.
+var (
+	selfUpdateServerURL  string
+	selfUpdateBinaryPath string
+)
+
+// SetSelfUpdateConfig seeds the /self-update endpoint's dependencies.
+// Called from main() after the server URL + binary path are resolved.
+func SetSelfUpdateConfig(serverURL, binaryPath string) {
+	selfUpdateServerURL = serverURL
+	selfUpdateBinaryPath = binaryPath
+}
+
 func StartCommandServer(addr string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/command", handleCommand)
@@ -31,6 +47,7 @@ func StartCommandServer(addr string) {
 	// migration the dest is about to accept was actually authorised.
 	mux.HandleFunc("/grant-active", handleGrantActive)
 	mux.HandleFunc("/cancel-migrate", handleCancelMigrate)
+	mux.HandleFunc("/self-update", handleSelfUpdate)
 	mux.HandleFunc("/storage-browse", handleStorageBrowse)
 	mux.HandleFunc("/storage-upload", handleStorageUpload)
 	mux.HandleFunc("/storage-file", handleStorageDelete)
@@ -98,52 +115,67 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		}
 		out, err = exec.Command("virsh", "snapshot-revert", vmTarget, snapName, "--force").CombinedOutput()
 	case "EDIT_VM":
-		// Live hardware edit — vcpus + memory. Params:
-		//   vcpus   = target integer (optional)
-		//   mem_mb  = target integer MB (optional; balloon)
-		// --config persists; --live attempts hot-apply. Errors from
-		// virsh (e.g. "cannot change maxMemory live") bubble back up.
+		// Hardware edit. Params (at least one required):
+		//   vcpus   = target integer
+		//   mem_mb  = target integer MB (balloon target)
+		// Flow: check if VM is running. If running, try --live --config.
+		// If --live fails OR VM is stopped, fall back to --config.
+		// Response carries requires_reboot=true when the change didn't
+		// apply live — SPA surfaces a "shut down to apply?" prompt.
+		stateOut, _ := exec.Command("virsh", "domstate", vmTarget).Output()
+		isRunning := strings.TrimSpace(string(stateOut)) == "running"
+
 		var msgs []string
-		if v := strings.TrimSpace(req.Params["vcpus"]); v != "" {
-			o, e := exec.Command("virsh", "setvcpus", vmTarget, v, "--config", "--live").CombinedOutput()
-			if e != nil {
-				// Live may be rejected; retry --config only so the
-				// change at least lands on next boot.
-				o2, e2 := exec.Command("virsh", "setvcpus", vmTarget, v, "--config").CombinedOutput()
-				if e2 != nil {
-					respond(w, false, fmt.Sprintf("setvcpus failed: %s / %s", strings.TrimSpace(string(o)), strings.TrimSpace(string(o2))))
-					return
+		requiresReboot := false
+		applyEdit := func(kind, val string, virshArgs []string) error {
+			liveArgs := append(append([]string{}, virshArgs...), "--config", "--live")
+			confArgs := append(append([]string{}, virshArgs...), "--config")
+			if isRunning {
+				if o, e := exec.Command("virsh", liveArgs...).CombinedOutput(); e == nil {
+					msgs = append(msgs, kind+"="+val+" (live + config)")
+					return nil
+				} else {
+					// Live rejected — save to config so it applies on reboot.
+					if o2, e2 := exec.Command("virsh", confArgs...).CombinedOutput(); e2 != nil {
+						return fmt.Errorf("%s failed: live=%s config=%s",
+							kind, strings.TrimSpace(string(o)), strings.TrimSpace(string(o2)))
+					}
+					msgs = append(msgs, kind+"="+val+" (config saved — reboot required to apply)")
+					requiresReboot = true
+					return nil
 				}
-				msgs = append(msgs, "vcpus="+v+" (config-only, reboot to apply)")
-			} else {
-				msgs = append(msgs, "vcpus="+v+" (live+config)")
+			}
+			// VM not running — config-only.
+			if o, e := exec.Command("virsh", confArgs...).CombinedOutput(); e != nil {
+				return fmt.Errorf("%s failed: %s", kind, strings.TrimSpace(string(o)))
+			}
+			msgs = append(msgs, kind+"="+val+" (config; applies on next boot)")
+			return nil
+		}
+
+		if v := strings.TrimSpace(req.Params["vcpus"]); v != "" {
+			if err := applyEdit("vcpus", v, []string{"setvcpus", vmTarget, v}); err != nil {
+				respond(w, false, err.Error())
+				return
 			}
 		}
 		if m := strings.TrimSpace(req.Params["mem_mb"]); m != "" {
-			// virsh setmem takes KiB. Parse MiB → KiB.
 			mbN, convErr := strconv.Atoi(m)
 			if convErr != nil {
 				respond(w, false, "mem_mb must be an integer: "+convErr.Error())
 				return
 			}
 			kib := fmt.Sprintf("%d", mbN*1024)
-			o, e := exec.Command("virsh", "setmem", vmTarget, kib, "--config", "--live").CombinedOutput()
-			if e != nil {
-				o2, e2 := exec.Command("virsh", "setmem", vmTarget, kib, "--config").CombinedOutput()
-				if e2 != nil {
-					respond(w, false, fmt.Sprintf("setmem failed: %s / %s", strings.TrimSpace(string(o)), strings.TrimSpace(string(o2))))
-					return
-				}
-				msgs = append(msgs, "mem="+m+"MB (config-only, reboot to apply)")
-			} else {
-				msgs = append(msgs, "mem="+m+"MB (live+config)")
+			if err := applyEdit("mem_mb", m, []string{"setmem", vmTarget, kib}); err != nil {
+				respond(w, false, err.Error())
+				return
 			}
 		}
 		if len(msgs) == 0 {
 			respond(w, false, "EDIT_VM requires at least one of params.vcpus, params.mem_mb")
 			return
 		}
-		respond(w, true, "EDIT_VM: "+strings.Join(msgs, ", "))
+		respondWithFlags(w, true, "EDIT_VM: "+strings.Join(msgs, ", "), requiresReboot)
 		return
 	case "CHANGE_MEDIA":
 		// Live ISO swap on a CDROM target. Params:
@@ -375,13 +407,23 @@ func removeDiskFile(path string) error {
 }
 
 func respond(w http.ResponseWriter, success bool, message string) {
+	respondWithFlags(w, success, message, false)
+}
+
+// respondWithFlags is the fuller variant that can carry the
+// RequiresReboot signal. EDIT_VM uses this when live-apply fails but
+// --config worked: the SPA surfaces a shutdown + reboot prompt so
+// the operator doesn't stare at a "success" toast while wondering
+// why nothing changed.
+func respondWithFlags(w http.ResponseWriter, success bool, message string, requiresReboot bool) {
 	w.Header().Set("Content-Type", "application/json")
 	if !success {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 	json.NewEncoder(w).Encode(models.CommandResponse{
-		Success: success,
-		Message: message,
+		Success:        success,
+		Message:        message,
+		RequiresReboot: requiresReboot,
 	})
 }
 

@@ -123,6 +123,71 @@ function MaintenanceToggle({ host }: { host: Host }) {
 }
 
 /**
+ * UpdateAgentButton pushes the latest agent binary to this specific
+ * hypervisor. Server proxies to the agent's /self-update endpoint,
+ * which downloads from /downloads/kvm-center-agent-<arch>, replaces
+ * its own binary on disk, and exits so systemd restarts it. Requires
+ * host.manage.
+ */
+function UpdateAgentButton({ host }: { host: Host }) {
+  const { hasPerm } = useAuth();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [asking, setAsking] = useState(false);
+  const canManage = hasPerm('host.manage');
+
+  const mut = useMutation({
+    mutationFn: () => apiPost(`/api/hosts/${encodeURIComponent(host.id)}/update-agent`),
+    onSuccess: (data: any) => {
+      toast('success', data?.message || `Agent update requested on ${host.id}`);
+      setAsking(false);
+      // Telemetry from the fresh binary lands 30s later; invalidate
+      // hosts now + again after a short delay so the UI refresh
+      // reflects any new agent-reported fields.
+      qc.invalidateQueries({ queryKey: ['hosts'] });
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['hosts'] }), 10_000);
+    },
+    onError: (e) => toast('error', `Update failed: ${e instanceof Error ? e.message : String(e)}`),
+  });
+
+  return (
+    <>
+      <button
+        type="button"
+        className="btn-secondary-sm"
+        disabled={!canManage || mut.isPending}
+        title={!canManage ? 'Requires host.manage' : 'Download the latest agent binary and restart the host agent (needs systemd)'}
+        onClick={() => setAsking(true)}
+      >
+        {mut.isPending ? 'Updating…' : 'Update agent'}
+      </button>
+      <Modal
+        open={asking}
+        onClose={() => setAsking(false)}
+        title={`Update agent on ${host.id}`}
+        footer={
+          <>
+            <button type="button" className="btn-secondary-sm" onClick={() => setAsking(false)}>Cancel</button>
+            <button type="button" className="btn-primary-sm" onClick={() => mut.mutate()} disabled={mut.isPending}>
+              {mut.isPending ? 'Updating…' : 'Update agent'}
+            </button>
+          </>
+        }
+      >
+        <div style={{ fontSize: 12, lineHeight: 1.55, color: 'var(--text-body)' }}>
+          The host agent will download the latest binary from this server's
+          <code style={{ margin: '0 4px' }}>/downloads/</code> endpoint, replace
+          its own executable on disk, and exit so systemd restarts it.
+          Expected downtime is &lt;10 seconds during which this host's telemetry
+          stops and VMs on it can't be started/stopped. Running VMs are not
+          affected.
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+/**
  * DeleteHostButton removes the hypervisor from the inventory — host
  * record, VM rows, storage metadata, and enrolment cert. Physical
  * VMs on the hypervisor are untouched. Requires host.manage; the
@@ -339,6 +404,7 @@ function SummaryTab({ host }: { host: Host }) {
             </span>
           )}
           <div style={{ flex: 1 }} />
+          <UpdateAgentButton host={host} />
           <MaintenanceToggle host={host} />
           <DeleteHostButton host={host} />
         </div>
