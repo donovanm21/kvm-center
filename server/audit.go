@@ -67,6 +67,7 @@ const (
 	AuditHostMaintEnter       = "host.maintenance.enter"
 	AuditHostMaintExit        = "host.maintenance.exit"
 	AuditHostDelete           = "host.delete"
+	AuditBackupExport         = "backup.export"
 	AuditKVMToolsQueue        = "kvm-tools.queue-update"
 	AuditAuditShipping        = "audit.shipping.update"
 )
