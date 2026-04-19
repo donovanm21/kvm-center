@@ -34,6 +34,16 @@ func main() {
 
 	cmdAddr := fmt.Sprintf(":%d", *cmdPort)
 
+	// Wire the /self-update handler with where to pull new binaries
+	// from + where on disk to replace. Best-effort — os.Executable()
+	// can fail on exotic FS setups; we just log and leave
+	// self-update disabled in that case.
+	if self, err := os.Executable(); err == nil {
+		SetSelfUpdateConfig(*serverURL, self)
+	} else {
+		log.Printf("self-update disabled: os.Executable: %v", err)
+	}
+
 	// Start the command server in the background.
 	go StartCommandServer(cmdAddr)
 
