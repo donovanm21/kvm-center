@@ -7,7 +7,11 @@ export type VMAction =
   | 'START' | 'STOP' | 'FORCESTOP' | 'RESTART'
   | 'SNAPSHOT' | 'REVERT_SNAPSHOT' | 'DELETE_SNAPSHOT'
   | 'MIGRATE' | 'OFFLINE_MIGRATE'
-  | 'DELETE_VM';
+  | 'DELETE_VM'
+  // v5.27: hardware edits (EDIT_VM takes vcpus + mem_mb),
+  // live ISO swap on CDROM targets (CHANGE_MEDIA).
+  | 'EDIT_VM'
+  | 'CHANGE_MEDIA';
 
 export interface CommandInput {
   host_id: string;
