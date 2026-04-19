@@ -3,7 +3,7 @@
 # Run as root on each KVM hypervisor.
 #
 # Usage:
-#   sudo ./install-agent.sh --server https://<server-ip>:8190 [--port 8081] [--interval 30s]
+#   sudo ./install-agent.sh --server https://<server-ip>:8190 [--port 8081] [--interval 15s]
 #
 # TLS note: the agent trusts self-signed certs by default and logs a
 # warning each report. Install a trusted cert via Settings → TLS.
@@ -18,7 +18,7 @@ LOG_FILE="/var/log/kvm-center-agent.log"
 # Defaults
 SERVER_URL=""
 AGENT_PORT=8081
-INTERVAL="30s"
+INTERVAL="15s"
 ARCH="$(uname -m)"
 ENROLL_TOKEN=""
 TLS_DIR="/etc/kvm-center/tls"
@@ -30,7 +30,7 @@ usage() {
   echo "                      [--enroll-token <token>] [--pki-server <url>] [--host-id <id>]"
   echo "  --server        Control plane URL (required), e.g. https://kvm-center.example.com:8190"
   echo "  --port          Agent command port (default: 8081)"
-  echo "  --interval      Telemetry interval (default: 30s)"
+  echo "  --interval      Telemetry interval (default: 15s)"
   echo "  --enroll-token  One-time token from kvm-center admin — exchanges a CSR for a"
   echo "                  signed leaf cert stored under $TLS_DIR (v5.10.0+)"
   echo "  --pki-server    Override the server URL for /api/ca/sign (defaults to --server)"
