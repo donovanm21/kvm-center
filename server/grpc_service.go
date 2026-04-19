@@ -123,31 +123,31 @@ func (s *agentGRPCServer) applyProgressFrame(f *agentpb.MigrationProgress) error
 	return nil
 }
 
-// startGRPCServer spins up the agent-facing gRPC listener. Returns a
-// closer for graceful shutdown. TLS creds are optional — when nil,
-// the server listens in plaintext (only safe on the management VLAN;
-// prod wires the same TLS cert the HTTPS endpoint uses).
-func startGRPCServer(addr string, store *Store, tlsCreds credentials.TransportCredentials) (stop func(), err error) {
+// buildGRPCServer constructs the *grpc.Server with AgentService
+// registered. Keeps the registration in one place so both the
+// multiplexed-on-8190 path and the optional dedicated-port path
+// expose the same handlers.
+func buildGRPCServer(store *Store) *grpc.Server {
+	srv := grpc.NewServer()
+	agentpb.RegisterAgentServiceServer(srv, &agentGRPCServer{store: store})
+	return srv
+}
+
+// startGRPCServerOn binds an already-built grpc.Server to its own
+// TCP listener. Used when the operator wants a dedicated gRPC port
+// alongside the multiplexed-on-8190 path.
+func startGRPCServerOn(addr string, srv *grpc.Server) (stop func(), err error) {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
-	var opts []grpc.ServerOption
-	if tlsCreds != nil {
-		opts = append(opts, grpc.Creds(tlsCreds))
-	}
-	srv := grpc.NewServer(opts...)
-	agentpb.RegisterAgentServiceServer(srv, &agentGRPCServer{store: store})
-
 	go func() {
-		log.Printf("grpc agent service listening on %s (tls=%v)", addr, tlsCreds != nil)
+		log.Printf("grpc agent service listening on %s (dedicated port)", addr)
 		if err := srv.Serve(lis); err != nil {
 			log.Printf("grpc: serve exited: %v", err)
 		}
 	}()
-
 	stop = func() {
-		// GracefulStop drains in-flight RPCs with a timeout.
 		done := make(chan struct{})
 		go func() { srv.GracefulStop(); close(done) }()
 		select {
@@ -158,4 +158,18 @@ func startGRPCServer(addr string, store *Store, tlsCreds credentials.TransportCr
 		_ = lis.Close()
 	}
 	return stop, nil
+}
+
+// startGRPCServer is the legacy single-port helper kept for the
+// integration test harness (spins up a throw-away gRPC server on
+// an ephemeral port). Production code uses buildGRPCServer +
+// multiplexing instead.
+func startGRPCServer(addr string, store *Store, tlsCreds credentials.TransportCredentials) (stop func(), err error) {
+	srv := buildGRPCServer(store)
+	if tlsCreds != nil {
+		// Legacy path — not used in prod. Rebuild with creds.
+		srv = grpc.NewServer(grpc.Creds(tlsCreds))
+		agentpb.RegisterAgentServiceServer(srv, &agentGRPCServer{store: store})
+	}
+	return startGRPCServerOn(addr, srv)
 }

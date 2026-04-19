@@ -689,10 +689,15 @@ function ResourceBar({ pct, tone, width }: { pct: number; tone: 'ok' | 'warn' | 
 
 /* ── Hardware ────────────────────────────────────────────── */
 function HardwareTab({ vm }: { vm: VM }) {
+  const { hasPerm } = useAuth();
+  const canEdit = hasPerm('vm.edit');
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div className="panel">
-        <h2>System configuration</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0 }}>System configuration</h2>
+          <EditResourcesButton vm={vm} canEdit={canEdit} />
+        </div>
         <KV label="Firmware" value={vm.firmware ?? '—'} />
         <KV label="Machine type" value={vm.machine_type ?? '—'} mono />
         <KV label="CPU mode" value={vm.cpu_mode ?? '—'} />
@@ -710,7 +715,7 @@ function HardwareTab({ vm }: { vm: VM }) {
         ) : (
           <table className="data-table">
             <thead>
-              <tr><th>Target</th><th>Device</th><th>Format</th><th>Bus</th><th>Path</th><th>Capacity</th><th>Allocated</th></tr>
+              <tr><th>Target</th><th>Device</th><th>Format</th><th>Bus</th><th>Path</th><th>Capacity</th><th>Allocated</th><th style={{ width: 120 }}></th></tr>
             </thead>
             <tbody>
               {vm.all_disks!.map((d: VMDisk) => (
@@ -735,6 +740,9 @@ function HardwareTab({ vm }: { vm: VM }) {
                   </td>
                   <td>{d.capacity_gb > 0 ? `${d.capacity_gb.toFixed(1)} GB` : '—'}</td>
                   <td>{d.alloc_gb > 0 ? `${d.alloc_gb.toFixed(1)} GB` : '—'}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {d.device === 'cdrom' && <CDROMActions vm={vm} disk={d} canEdit={canEdit} />}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -763,6 +771,174 @@ function HardwareTab({ vm }: { vm: VM }) {
     </div>
   );
 }
+
+/**
+ * EditResourcesButton opens a modal to mutate RAM + vCPU count via
+ * the EDIT_VM agent command. libvirt honours --live + --config for
+ * setmem/setvcpus when the guest balloon driver / CPU topology
+ * permit; otherwise the agent falls back to --config-only and the
+ * response reports "reboot to apply" so the operator knows.
+ */
+function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [vcpus, setVcpus] = useState<number>(vm.cpu_count || 1);
+  const [memMB, setMemMB] = useState<number>(vm.mem_total_mb || 1024);
+  const cmd = useVMCommand();
+
+  // Reset fields when the modal reopens so a cancelled edit doesn't
+  // leave stale values in the form.
+  useEffect(() => {
+    if (open) {
+      setVcpus(vm.cpu_count || 1);
+      setMemMB(vm.mem_total_mb || 1024);
+    }
+  }, [open, vm.cpu_count, vm.mem_total_mb]);
+
+  const submit = () => {
+    const params: Record<string, string> = {};
+    if (vcpus !== vm.cpu_count) params.vcpus = String(vcpus);
+    if (memMB !== vm.mem_total_mb) params.mem_mb = String(memMB);
+    if (Object.keys(params).length === 0) { setOpen(false); return; }
+    cmd.mutate({
+      host_id: vm.host_id,
+      vm_uuid: vm.uuid,
+      vm_name: vm.name,
+      action: 'EDIT_VM',
+      params,
+    }, { onSuccess: () => setOpen(false) });
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        className="btn-secondary-sm"
+        disabled={!canEdit}
+        title={canEdit ? 'Edit vCPU + memory (live if libvirt permits, else config + reboot)' : 'Requires vm.edit permission'}
+        onClick={() => setOpen(true)}
+      >
+        Edit resources
+      </button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={`Edit resources — ${vm.name}`}
+        footer={
+          <>
+            <button type="button" className="btn-secondary-sm" onClick={() => setOpen(false)}>Cancel</button>
+            <button type="button" className="btn-primary-sm" onClick={submit} disabled={cmd.isPending}>
+              {cmd.isPending ? 'Applying…' : 'Apply'}
+            </button>
+          </>
+        }
+      >
+        <div style={{ display: 'grid', gap: 12, fontSize: 12 }}>
+          <label style={{ display: 'grid', gap: 4 }}>
+            <span style={{ color: 'var(--text-muted)' }}>vCPUs</span>
+            <input type="number" min={1} max={128} value={vcpus}
+              onChange={(e) => setVcpus(parseInt(e.target.value) || 1)}
+              style={resourceInput} />
+          </label>
+          <label style={{ display: 'grid', gap: 4 }}>
+            <span style={{ color: 'var(--text-muted)' }}>Memory (MB)</span>
+            <input type="number" min={128} step={128} value={memMB}
+              onChange={(e) => setMemMB(parseInt(e.target.value) || 128)}
+              style={resourceInput} />
+          </label>
+          <div style={{ color: 'var(--text-faded)', fontSize: 11, lineHeight: 1.5 }}>
+            libvirt applies vCPU + memory changes live when the guest's
+            topology permits. Operations that can't be done live (e.g.
+            raising maxMemory) are saved to the domain XML and take effect
+            on the next reboot — the response below will tell you which
+            branch was taken.
+          </div>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+/**
+ * CDROMActions exposes Eject (if the drive is currently loaded) and
+ * Insert (pick an ISO from any pool) via the CHANGE_MEDIA command.
+ * Shown only when vm.edit is carried; shown only for device="cdrom"
+ * rows in the disks table.
+ */
+function CDROMActions({ vm, disk, canEdit }: { vm: VM; disk: VMDisk; canEdit: boolean }) {
+  const cmd = useVMCommand();
+  const [insertOpen, setInsertOpen] = useState(false);
+  const [isoPath, setIsoPath] = useState('');
+
+  const eject = () => {
+    if (!confirm(`Eject ISO from ${disk.target} on ${vm.name}?`)) return;
+    cmd.mutate({
+      host_id: vm.host_id, vm_uuid: vm.uuid, vm_name: vm.name,
+      action: 'CHANGE_MEDIA',
+      params: { media_action: 'eject', target: disk.target },
+    });
+  };
+  const insert = () => {
+    if (!isoPath.trim()) return;
+    cmd.mutate({
+      host_id: vm.host_id, vm_uuid: vm.uuid, vm_name: vm.name,
+      action: 'CHANGE_MEDIA',
+      params: { media_action: 'insert', target: disk.target, path: isoPath.trim() },
+    }, { onSuccess: () => { setInsertOpen(false); setIsoPath(''); } });
+  };
+
+  const loaded = !!disk.path;
+  return (
+    <div style={{ display: 'inline-flex', gap: 4, justifyContent: 'flex-end' }}>
+      {loaded ? (
+        <button type="button" className="btn-secondary-sm" disabled={!canEdit || cmd.isPending}
+          title={canEdit ? 'Eject current ISO (live)' : 'Requires vm.edit'}
+          onClick={eject}>Eject</button>
+      ) : (
+        <button type="button" className="btn-secondary-sm" disabled={!canEdit || cmd.isPending}
+          title={canEdit ? 'Insert an ISO (live)' : 'Requires vm.edit'}
+          onClick={() => setInsertOpen(true)}>Insert</button>
+      )}
+      <Modal
+        open={insertOpen}
+        onClose={() => { setInsertOpen(false); setIsoPath(''); }}
+        title={`Insert ISO — ${vm.name} (${disk.target})`}
+        footer={
+          <>
+            <button type="button" className="btn-secondary-sm" onClick={() => { setInsertOpen(false); setIsoPath(''); }}>Cancel</button>
+            <button type="button" className="btn-primary-sm" onClick={insert} disabled={cmd.isPending || !isoPath.trim()}>
+              {cmd.isPending ? 'Inserting…' : 'Insert'}
+            </button>
+          </>
+        }
+      >
+        <div style={{ display: 'grid', gap: 8, fontSize: 12 }}>
+          <div style={{ color: 'var(--text-muted)' }}>
+            Full path to the ISO file on the hypervisor. Must be reachable
+            by libvirt (usually inside a pool, e.g.
+            <code style={{ margin: '0 4px', color: 'var(--text-strong)' }}>
+              /var/lib/libvirt/images/ubuntu-24.04.iso
+            </code>).
+          </div>
+          <input type="text"
+            placeholder="/var/lib/libvirt/images/..."
+            value={isoPath}
+            onChange={(e) => setIsoPath(e.target.value)}
+            autoFocus
+            style={{ ...resourceInput, fontFamily: "'SF Mono', monospace" }} />
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+const resourceInput: React.CSSProperties = {
+  padding: '6px 10px',
+  fontSize: 13,
+  background: 'var(--surface-2)',
+  color: 'var(--text-strong)',
+  border: '1px solid var(--border)',
+  borderRadius: 4,
+};
 
 function FormatPill({ value }: { value: string }) {
   const highlight = value === 'qcow2';
