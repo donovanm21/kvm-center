@@ -15,6 +15,33 @@ import (
 )
 
 // StartCommandServer listens for POST /command from the control plane.
+// currentMaxMemKiB returns the persisted <memory> cap for vmTarget
+// in KiB. Used by EDIT_VM's mem_mb path to decide setmem/setmaxmem
+// ordering when crossing the current cap. Returns 0 on any failure.
+func currentMaxMemKiB(vmTarget string) int64 {
+	out, err := exec.Command("virsh", "dumpxml", "--inactive", vmTarget).Output()
+	if err != nil {
+		return 0
+	}
+	// Grep first `<memory unit='KiB'>N</memory>` block.
+	s := string(out)
+	i := strings.Index(s, "<memory")
+	if i < 0 {
+		return 0
+	}
+	j := strings.Index(s[i:], ">")
+	if j < 0 {
+		return 0
+	}
+	k := strings.Index(s[i+j:], "</memory>")
+	if k < 0 {
+		return 0
+	}
+	raw := strings.TrimSpace(s[i+j+1 : i+j+k])
+	n, _ := strconv.ParseInt(raw, 10, 64)
+	return n
+}
+
 // selfUpdateServerURL + selfUpdateBinaryPath are set by the caller
 // so the /self-update handler knows where to pull the new binary
 // from and where its own executable lives on disk. Wired in
@@ -233,62 +260,65 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			kib := fmt.Sprintf("%d", mbN*1024)
-			// For mem, operators think of a single "RAM" value. libvirt
+
+			// Operators think of "RAM" as a single value; libvirt
 			// splits it into <memory> (max cap) + <currentMemory>
-			// (balloon target). Always keep both in sync so the UI
-			// shows what's persisted regardless of live/config split.
-			memErr := applyEdit("mem_mb", m, []string{"setmem", vmTarget, kib})
-			if memErr != nil {
-				if strings.Contains(memErr.Error(), "cannot set memory higher than max memory") {
-					// Target exceeds config maxMemory. Raise the cap first
-					// via `setmaxmem --config` — this works on both
-					// running and shut-off VMs (only --live maxmem is
-					// restricted). Then retry setmem.
-					if o, e := exec.Command("virsh", "setmaxmem", vmTarget, kib, "--config").CombinedOutput(); e != nil {
-						respond(w, false, "setmaxmem failed: "+strings.TrimSpace(string(o)))
-						return
-					}
-					// On a running VM, setmem --live can still succeed
-					// if the live maxMemory slot allows it (libvirt
-					// sometimes reserves headroom). If not, fall back
-					// to --config only so the cap raise persists for
-					// next boot.
-					if isRunning {
-						if _, e := exec.Command("virsh", "setmem", vmTarget, kib, "--config", "--live").CombinedOutput(); e == nil {
-							msgs = append(msgs, "mem_mb="+m+" (cap raised, live + config)")
-						} else {
-							if _, e2 := exec.Command("virsh", "setmem", vmTarget, kib, "--config").CombinedOutput(); e2 != nil {
-								respond(w, false, "setmem (after raising max) failed: "+strings.TrimSpace(e2.Error()))
-								return
-							}
-							msgs = append(msgs, "mem_mb="+m+" (cap raised + config; reboot to apply new balloon)")
-							requiresReboot = true
-						}
-					} else {
-						if o2, e2 := exec.Command("virsh", "setmem", vmTarget, kib, "--config").CombinedOutput(); e2 != nil {
-							respond(w, false, "setmem (after raising max) failed: "+strings.TrimSpace(string(o2)))
-							return
-						}
-						msgs = append(msgs, "mem_mb="+m+" (cap raised + config; applies on next boot)")
-					}
-				} else {
-					respond(w, false, memErr.Error())
+			// (balloon target). Always set BOTH --config — this keeps
+			// the persisted config clean regardless of direction and
+			// matches what the UI displays (persisted max).
+			//
+			// Order matters when crossing the current cap:
+			//   raising → setmaxmem first, then setmem
+			//   lowering → setmem first, then setmaxmem
+			// Using "try setmaxmem, then setmem, fall back if either
+			// fails" is brittle; instead we inspect the current max
+			// and branch.
+			curMaxKiB := currentMaxMemKiB(vmTarget)
+			targetKiB := int64(mbN) * 1024
+			if targetKiB > curMaxKiB {
+				// Raising above current cap: setmaxmem first.
+				if o, e := exec.Command("virsh", "setmaxmem", vmTarget, kib, "--config").CombinedOutput(); e != nil {
+					respond(w, false, "setmaxmem failed: "+strings.TrimSpace(string(o)))
+					return
+				}
+			}
+			// Apply setmem (balloon target) — live when running, config
+			// when stopped. Record whether --live took effect so we can
+			// flag requires_reboot for the half that didn't.
+			liveTook := false
+			if isRunning {
+				if _, e := exec.Command("virsh", "setmem", vmTarget, kib, "--config", "--live").CombinedOutput(); e == nil {
+					liveTook = true
+				} else if _, e2 := exec.Command("virsh", "setmem", vmTarget, kib, "--config").CombinedOutput(); e2 != nil {
+					respond(w, false, "setmem --config failed: "+strings.TrimSpace(e2.Error()))
 					return
 				}
 			} else {
-				// setmem succeeded. For a running VM we also need to
-				// align maxMemory with the new value so the UI (and
-				// any future reboot) reflects the operator's intent.
-				// setmaxmem --live is rejected by most libvirt builds;
-				// fall back to --config so the change persists on the
-				// next boot. Not a failure if --config errors — the
-				// balloon/setmem above already gave the operator the
-				// live change they asked for.
-				if isRunning {
-					if _, e := exec.Command("virsh", "setmaxmem", vmTarget, kib, "--config").CombinedOutput(); e == nil {
-						requiresReboot = true
-					}
+				if o, e := exec.Command("virsh", "setmem", vmTarget, kib, "--config").CombinedOutput(); e != nil {
+					respond(w, false, "setmem failed: "+strings.TrimSpace(string(o)))
+					return
 				}
+			}
+			if targetKiB < curMaxKiB {
+				// Lowering: shrink the cap now that the balloon is at
+				// or below it.
+				if o, e := exec.Command("virsh", "setmaxmem", vmTarget, kib, "--config").CombinedOutput(); e != nil {
+					respond(w, false, "setmaxmem (lower) failed: "+strings.TrimSpace(string(o)))
+					return
+				}
+			}
+			// Messaging: distinguish live+config (full apply now) from
+			// config-only (reboot to apply cap change).
+			switch {
+			case !isRunning:
+				msgs = append(msgs, "mem_mb="+m+" (config; applies on next boot)")
+			case liveTook && targetKiB <= curMaxKiB:
+				msgs = append(msgs, "mem_mb="+m+" (live + config)")
+			case liveTook && targetKiB > curMaxKiB:
+				msgs = append(msgs, "mem_mb="+m+" (cap raised + live)")
+			default:
+				msgs = append(msgs, "mem_mb="+m+" (config; reboot to apply)")
+				requiresReboot = true
 			}
 		}
 		if len(msgs) == 0 {
