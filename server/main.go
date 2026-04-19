@@ -45,7 +45,7 @@ func main() {
 	mongoDB := flag.String("mongo-db", envOrDefault("KVM_CENTER_MONGO_DB", "kvm-center"), "MongoDB database name (used when -mongo-url is set)")
 	addr := flag.String("addr", envOrDefault("KVM_CENTER_ADDR", ":8090"), "HTTP listen address (plain HTTP, used when TLS is off or as the HTTPS-redirect port)")
 	tlsAddr := flag.String("tls-addr", envOrDefault("KVM_CENTER_TLS_ADDR", ":8443"), "HTTPS listen address (used when -cert/-key are set or auto-generated)")
-	grpcAddr := flag.String("grpc-addr", envOrDefault("KVM_CENTER_GRPC_ADDR", ":8095"), "gRPC agent-service listen address (streaming: migration progress, live VM metrics, console signalling). Empty disables the listener.")
+	grpcAddr := flag.String("grpc-addr", envOrDefault("KVM_CENTER_GRPC_ADDR", ""), "Optional dedicated gRPC listen address. Leave empty (default) to multiplex gRPC on the TLS port (:8190) via content-type dispatch; set to e.g. :8095 if the operator wants a separate port for firewall or audit reasons.")
 	tlsCert := flag.String("cert", envOrDefault("KVM_CENTER_TLS_CERT", ""), "PEM-encoded TLS certificate (if blank, a self-signed cert is auto-generated)")
 	tlsKey := flag.String("key", envOrDefault("KVM_CENTER_TLS_KEY", ""), "PEM-encoded private key for -cert (must be set if -cert is set, and vice-versa)")
 	tlsDir := flag.String("tls-dir", envOrDefault("KVM_CENTER_TLS_DIR", "/var/lib/kvm-center/tls"), "directory for the auto-generated self-signed cert when -cert/-key are blank")
@@ -380,14 +380,18 @@ func main() {
 
 	handler := corsMiddleware(loggingMiddleware(authMiddleware(store, mux)))
 
-	// gRPC agent service (v5.27). Plaintext for now — when reloader
-	// is configured, the HTTPS cert can also front gRPC via its own
-	// listener, but that's a separate task. Disable by setting
-	// KVM_CENTER_GRPC_ADDR= (empty).
+	// gRPC agent service (v5.27+). The in-process gRPC server rides
+	// the same :8190 TLS listener as the HTTP API via content-type
+	// dispatch (see tlsServer.Handler below). A standalone :8095
+	// listener is still supported for the rare operator who wants a
+	// dedicated port + different firewall rules — set
+	// KVM_CENTER_GRPC_ADDR=0.0.0.0:8095 to enable. Default is the
+	// multiplex (empty → no separate listener).
+	grpcSrv := buildGRPCServer(store)
 	if *grpcAddr != "" {
-		stop, err := startGRPCServer(*grpcAddr, store, nil)
+		stop, err := startGRPCServerOn(*grpcAddr, grpcSrv)
 		if err != nil {
-			log.Printf("grpc: disabled (%v)", err)
+			log.Printf("grpc: dedicated listener disabled (%v)", err)
 		} else {
 			defer stop()
 		}
@@ -406,12 +410,27 @@ func main() {
 	// (which don't carry our self-signed CA) can keep posting telemetry
 	// without TLS changes on their side; anything that smells like a
 	// browser landing page (non-/api/ GET) is 308'd to the HTTPS URL.
+	//
+	// gRPC multiplex (v5.27+): a request with Content-Type
+	// application/grpc (HTTP/2 only) fans out to the in-process
+	// gRPC server; everything else goes through the REST handler.
+	// Sharing the port means one TLS cert, one firewall rule, one
+	// listen address in the agent's config.
+	muxedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			grpcSrv.ServeHTTP(w, r)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
 	tlsServer := &http.Server{
 		Addr:    *tlsAddr,
-		Handler: handler,
+		Handler: muxedHandler,
 		TLSConfig: &tls.Config{
 			GetCertificate: reloader.GetCertificate,
 			MinVersion:     tls.VersionTLS12,
+			// HTTP/2 is required for gRPC — advertise h2 in ALPN.
+			NextProtos: []string{"h2", "http/1.1"},
 		},
 	}
 	go func() {
