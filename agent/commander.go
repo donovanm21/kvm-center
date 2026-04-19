@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -96,6 +97,79 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out, err = exec.Command("virsh", "snapshot-revert", vmTarget, snapName, "--force").CombinedOutput()
+	case "EDIT_VM":
+		// Live hardware edit — vcpus + memory. Params:
+		//   vcpus   = target integer (optional)
+		//   mem_mb  = target integer MB (optional; balloon)
+		// --config persists; --live attempts hot-apply. Errors from
+		// virsh (e.g. "cannot change maxMemory live") bubble back up.
+		var msgs []string
+		if v := strings.TrimSpace(req.Params["vcpus"]); v != "" {
+			o, e := exec.Command("virsh", "setvcpus", vmTarget, v, "--config", "--live").CombinedOutput()
+			if e != nil {
+				// Live may be rejected; retry --config only so the
+				// change at least lands on next boot.
+				o2, e2 := exec.Command("virsh", "setvcpus", vmTarget, v, "--config").CombinedOutput()
+				if e2 != nil {
+					respond(w, false, fmt.Sprintf("setvcpus failed: %s / %s", strings.TrimSpace(string(o)), strings.TrimSpace(string(o2))))
+					return
+				}
+				msgs = append(msgs, "vcpus="+v+" (config-only, reboot to apply)")
+			} else {
+				msgs = append(msgs, "vcpus="+v+" (live+config)")
+			}
+		}
+		if m := strings.TrimSpace(req.Params["mem_mb"]); m != "" {
+			// virsh setmem takes KiB. Parse MiB → KiB.
+			mbN, convErr := strconv.Atoi(m)
+			if convErr != nil {
+				respond(w, false, "mem_mb must be an integer: "+convErr.Error())
+				return
+			}
+			kib := fmt.Sprintf("%d", mbN*1024)
+			o, e := exec.Command("virsh", "setmem", vmTarget, kib, "--config", "--live").CombinedOutput()
+			if e != nil {
+				o2, e2 := exec.Command("virsh", "setmem", vmTarget, kib, "--config").CombinedOutput()
+				if e2 != nil {
+					respond(w, false, fmt.Sprintf("setmem failed: %s / %s", strings.TrimSpace(string(o)), strings.TrimSpace(string(o2))))
+					return
+				}
+				msgs = append(msgs, "mem="+m+"MB (config-only, reboot to apply)")
+			} else {
+				msgs = append(msgs, "mem="+m+"MB (live+config)")
+			}
+		}
+		if len(msgs) == 0 {
+			respond(w, false, "EDIT_VM requires at least one of params.vcpus, params.mem_mb")
+			return
+		}
+		respond(w, true, "EDIT_VM: "+strings.Join(msgs, ", "))
+		return
+	case "CHANGE_MEDIA":
+		// Live ISO swap on a CDROM target. Params:
+		//   media_action = "insert" | "eject"
+		//   target       = libvirt device name (e.g. "hda", "sdb")
+		//   path         = pool-resident ISO path (insert only)
+		action := strings.ToLower(strings.TrimSpace(req.Params["media_action"]))
+		target := strings.TrimSpace(req.Params["target"])
+		if target == "" {
+			respond(w, false, "CHANGE_MEDIA requires params.target (CDROM device name)")
+			return
+		}
+		switch action {
+		case "eject":
+			out, err = exec.Command("virsh", "change-media", vmTarget, target, "--eject", "--live", "--config").CombinedOutput()
+		case "insert":
+			path := strings.TrimSpace(req.Params["path"])
+			if path == "" {
+				respond(w, false, "CHANGE_MEDIA insert requires params.path")
+				return
+			}
+			out, err = exec.Command("virsh", "change-media", vmTarget, target, path, "--insert", "--live", "--config").CombinedOutput()
+		default:
+			respond(w, false, "CHANGE_MEDIA requires params.media_action=insert|eject")
+			return
+		}
 	case "DELETE_SNAPSHOT":
 		snapName := req.Params["name"]
 		if snapName == "" {

@@ -214,6 +214,20 @@ func handleCommand(store *Store) http.HandlerFunc {
 				audit(store, r, AuditVMAction, resource, detail, true, "")
 			case "SNAPSHOT":
 				audit(store, r, AuditVMSnapshot, resource, detail, true, "")
+			case "CHANGE_MEDIA":
+				for k, v := range req.Params {
+					if k == "media_action" || k == "target" || k == "path" {
+						detail[k] = v
+					}
+				}
+				audit(store, r, AuditVMAction, resource, detail, true, "")
+			case "EDIT_VM":
+				for k, v := range req.Params {
+					if k == "vcpus" || k == "mem_mb" {
+						detail[k] = v
+					}
+				}
+				audit(store, r, AuditVMAction, resource, detail, true, "")
 			case "REVERT_SNAPSHOT":
 				audit(store, r, AuditVMRevert, resource, detail, true, "")
 			case "DELETE_SNAPSHOT":
@@ -234,6 +248,10 @@ func handleCommand(store *Store) http.HandlerFunc {
 			needPerm = models.PermVMMigrate
 		case "DELETE_VM":
 			needPerm = models.PermVMDelete
+		case "CHANGE_MEDIA", "EDIT_VM":
+			// CDROM eject / insert + hardware edits (vcpus, memory) —
+			// all covered under vm.edit (Operator role bundle).
+			needPerm = models.PermVMEdit
 		default:
 			writeError(w, http.StatusBadRequest, "unknown action: "+req.Action)
 			return
