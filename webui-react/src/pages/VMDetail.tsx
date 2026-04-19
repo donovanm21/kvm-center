@@ -783,23 +783,37 @@ function HardwareTab({ vm }: { vm: VM }) {
 // surface in dropdowns. Keeping them short + documented is better
 // than letting operators type arbitrary strings — libvirt's error
 // paths for typos are cryptic. Each value is documented in tooltip.
+// Short labels fit the dropdown cleanly; fuller context moves to a
+// helper line under each control so nothing gets truncated.
 const BOOT_DEVICES = [
-  { value: 'hd',      label: 'Hard disk (hd)' },
-  { value: 'cdrom',   label: 'CD-ROM (cdrom)' },
-  { value: 'network', label: 'PXE / network' },
+  { value: 'hd',      label: 'Hard disk' },
+  { value: 'cdrom',   label: 'CD-ROM' },
+  { value: 'network', label: 'Network (PXE)' },
 ];
 const CPU_MODES = [
-  { value: 'host-passthrough', label: 'host-passthrough (best perf, blocks migration to mismatched CPUs)' },
-  { value: 'host-model',       label: 'host-model (portable across similar CPUs)' },
-  { value: 'custom',           label: 'custom (explicit CPU definition)' },
+  { value: 'host-passthrough', label: 'host-passthrough' },
+  { value: 'host-model',       label: 'host-model' },
+  { value: 'custom',           label: 'custom' },
 ];
+const CPU_MODE_HELP: Record<string, string> = {
+  'host-passthrough': 'Best performance — blocks migration to hosts with a different CPU.',
+  'host-model':       'Portable across similar CPUs.',
+  'custom':           'Explicit CPU definition.',
+};
 const VIDEO_MODELS = [
-  { value: 'virtio', label: 'virtio (best 3D + resize, Linux/Windows guest drivers)' },
-  { value: 'qxl',    label: 'qxl (SPICE, legacy default)' },
-  { value: 'vga',    label: 'vga (low-compat fallback)' },
-  { value: 'cirrus', label: 'cirrus (ancient guests only)' },
-  { value: 'none',   label: 'none (serial / no graphical output)' },
+  { value: 'virtio', label: 'virtio' },
+  { value: 'qxl',    label: 'qxl' },
+  { value: 'vga',    label: 'vga' },
+  { value: 'cirrus', label: 'cirrus' },
+  { value: 'none',   label: 'none' },
 ];
+const VIDEO_MODEL_HELP: Record<string, string> = {
+  virtio: 'Best 3D + resize; Linux + Windows have guest drivers.',
+  qxl:    'SPICE — legacy default.',
+  vga:    'Low-compat fallback.',
+  cirrus: 'Ancient guests only.',
+  none:   'Serial only / no graphical output.',
+};
 
 function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
   const hostsQ = useHosts();
@@ -819,11 +833,8 @@ function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
 
   const isRunning = vm.state === 'running';
   // XML-edited fields require the VM to be stopped — agent refuses
-  // the edit otherwise. Disable them in the form with a tooltip.
+  // the edit otherwise. Disable them in the form with helper text.
   const offlineOnlyDisabled = isRunning;
-  const offlineOnlyReason = isRunning
-    ? 'Stop the VM to change this field — libvirt blocks live XML edits for it.'
-    : '';
 
   // Reset fields when the modal reopens so a cancelled edit doesn't
   // leave stale values in the form.
@@ -896,79 +907,86 @@ function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
           </>
         }
       >
-        <div style={{ display: 'grid', gap: 12, fontSize: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <label style={{ display: 'grid', gap: 4 }}>
-              <span style={{ color: 'var(--text-muted)' }}>
-                vCPUs <span style={{ color: 'var(--text-faded)', fontSize: 10 }}>(host has {hostMaxVcpu})</span>
-              </span>
-              <select value={vcpus}
-                onChange={(e) => setVcpus(parseInt(e.target.value) || 1)}
-                style={resourceInput}>
-                {Array.from({ length: hostMaxVcpu }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>{n}{n === 1 ? ' vCPU' : ' vCPUs'}</option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: 'grid', gap: 4 }}>
-              <span style={{ color: 'var(--text-muted)' }}>
-                Memory (MB) <span style={{ color: 'var(--text-faded)', fontSize: 10 }}>(host has {hostMaxMemMB} MB)</span>
-              </span>
-              <input type="number" min={128} step={128} max={hostMaxMemMB} value={memMB}
-                onChange={(e) => setMemMB(Math.min(parseInt(e.target.value) || 128, hostMaxMemMB))}
-                style={resourceInput} />
-              <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
-                {[1024, 2048, 4096, 8192, 16384].filter((n) => n <= hostMaxMemMB).map((n) => (
-                  <button key={n} type="button" onClick={() => setMemMB(n)}
-                    className="btn-secondary-sm"
-                    style={{ fontSize: 10, padding: '2px 6px' }}>
-                    {n >= 1024 ? `${n / 1024}G` : `${n}M`}
-                  </button>
-                ))}
-              </div>
-            </label>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <label style={{ display: 'grid', gap: 4 }} title={offlineOnlyReason}>
-              <span style={{ color: 'var(--text-muted)' }}>
-                Boot device{offlineOnlyDisabled && ' (VM must be off)'}
-              </span>
-              <select value={bootDev} onChange={(e) => setBootDev(e.target.value)}
-                disabled={offlineOnlyDisabled} style={resourceInput}>
-                {BOOT_DEVICES.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
-              </select>
-            </label>
-            <label style={{ display: 'grid', gap: 4 }} title={offlineOnlyReason}>
-              <span style={{ color: 'var(--text-muted)' }}>
-                CPU mode{offlineOnlyDisabled && ' (VM must be off)'}
-              </span>
-              <select value={cpuMode} onChange={(e) => setCpuMode(e.target.value)}
-                disabled={offlineOnlyDisabled} style={resourceInput}>
-                {CPU_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
-            </label>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'end' }}>
-            <label style={{ display: 'grid', gap: 4 }} title={offlineOnlyReason}>
-              <span style={{ color: 'var(--text-muted)' }}>
-                Video adapter{offlineOnlyDisabled && ' (VM must be off)'}
-              </span>
-              <select value={videoModel} onChange={(e) => setVideoModel(e.target.value)}
-                disabled={offlineOnlyDisabled} style={resourceInput}>
-                {VIDEO_MODELS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
-              </select>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 0' }}>
-              <input type="checkbox" checked={autostart} onChange={(e) => setAutostart(e.target.checked)} />
-              <span style={{ color: 'var(--text-body)' }}>Auto-start on hypervisor boot</span>
-            </label>
-          </div>
-          <div style={{ color: 'var(--text-faded)', fontSize: 11, lineHeight: 1.5 }}>
-            Fields not shown (firmware, machine type, vTPM) need VM
-            re-creation and aren't exposed here. vCPU + memory + autostart
-            apply live where possible; boot device / CPU mode / video adapter
-            require the VM to be stopped. Config-only changes trigger a
-            restart prompt after Apply.
+        <div style={{ display: 'grid', gap: 14, fontSize: 12 }}>
+          <EditRow
+            label="vCPUs"
+            meta={`host has ${hostMaxVcpu} logical CPUs`}
+          >
+            <select value={vcpus}
+              onChange={(e) => setVcpus(parseInt(e.target.value) || 1)}
+              style={resourceInput}>
+              {Array.from({ length: hostMaxVcpu }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>{n}{n === 1 ? ' vCPU' : ' vCPUs'}</option>
+              ))}
+            </select>
+          </EditRow>
+
+          <EditRow
+            label="Memory (MB)"
+            meta={`host has ${hostMaxMemMB.toLocaleString()} MB`}
+          >
+            <input type="number" min={128} step={128} max={hostMaxMemMB} value={memMB}
+              onChange={(e) => setMemMB(Math.min(parseInt(e.target.value) || 128, hostMaxMemMB))}
+              style={resourceInput} />
+            <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+              {[1024, 2048, 4096, 8192, 16384].filter((n) => n <= hostMaxMemMB).map((n) => (
+                <button key={n} type="button" onClick={() => setMemMB(n)}
+                  className="btn-secondary-sm"
+                  style={{ fontSize: 10, padding: '2px 8px' }}>
+                  {n >= 1024 ? `${n / 1024}G` : `${n}M`}
+                </button>
+              ))}
+            </div>
+          </EditRow>
+
+          <EditRow
+            label="Boot device"
+            help={offlineOnlyDisabled ? 'VM must be shut off to change the boot device.' : undefined}
+            disabled={offlineOnlyDisabled}
+          >
+            <select value={bootDev} onChange={(e) => setBootDev(e.target.value)}
+              disabled={offlineOnlyDisabled} style={resourceInput}>
+              {BOOT_DEVICES.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
+            </select>
+          </EditRow>
+
+          <EditRow
+            label="CPU mode"
+            help={offlineOnlyDisabled
+              ? 'VM must be shut off to change the CPU mode.'
+              : CPU_MODE_HELP[cpuMode]}
+            disabled={offlineOnlyDisabled}
+          >
+            <select value={cpuMode} onChange={(e) => setCpuMode(e.target.value)}
+              disabled={offlineOnlyDisabled} style={resourceInput}>
+              {CPU_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </EditRow>
+
+          <EditRow
+            label="Video adapter"
+            help={offlineOnlyDisabled
+              ? 'VM must be shut off to change the video adapter.'
+              : VIDEO_MODEL_HELP[videoModel]}
+            disabled={offlineOnlyDisabled}
+          >
+            <select value={videoModel} onChange={(e) => setVideoModel(e.target.value)}
+              disabled={offlineOnlyDisabled} style={resourceInput}>
+              {VIDEO_MODELS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+            </select>
+          </EditRow>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer' }}>
+            <input type="checkbox" checked={autostart} onChange={(e) => setAutostart(e.target.checked)} />
+            <span style={{ color: 'var(--text-body)' }}>Auto-start on hypervisor boot</span>
+          </label>
+
+          <div style={{ color: 'var(--text-faded)', fontSize: 11, lineHeight: 1.6, marginTop: 4, paddingTop: 10, borderTop: '1px solid var(--border-subtle)' }}>
+            Firmware, machine type, and vTPM require VM re-creation and
+            aren't exposed here. vCPU / memory / autostart apply live when
+            possible; boot device / CPU mode / video adapter require the
+            VM to be stopped. Config-only changes trigger a restart prompt
+            after Apply.
           </div>
         </div>
       </Modal>
@@ -1082,7 +1100,42 @@ const resourceInput: React.CSSProperties = {
   color: 'var(--text-strong)',
   border: '1px solid var(--border)',
   borderRadius: 4,
+  width: '100%',
+  boxSizing: 'border-box',
 };
+
+/**
+ * EditRow is the shared row layout for the Edit Resources modal —
+ * one label + one control + optional helper text, all stacked
+ * vertically for a consistent look that doesn't truncate on
+ * narrow modal widths. A disabled row dims the control + label.
+ */
+function EditRow({
+  label, meta, help, disabled, children,
+}: {
+  label: string;
+  meta?: string;
+  help?: string;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ display: 'grid', gap: 4, opacity: disabled ? 0.55 : 1 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, color: 'var(--text-muted)' }}>
+        <span style={{ fontWeight: 500 }}>{label}</span>
+        {meta && (
+          <span style={{ color: 'var(--text-faded)', fontSize: 10 }}>{meta}</span>
+        )}
+      </div>
+      {children}
+      {help && (
+        <div style={{ color: 'var(--text-faded)', fontSize: 11, lineHeight: 1.4 }}>
+          {help}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function FormatPill({ value }: { value: string }) {
   const highlight = value === 'qcow2';
