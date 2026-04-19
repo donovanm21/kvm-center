@@ -773,6 +773,92 @@ func (s *Store) GetHost(id string) *models.Host {
 	return &cp
 }
 
+// ApplyVMFieldUpdates merges agent-supplied post-edit field values
+// into the in-memory VM record so the SPA sees them immediately
+// after an EDIT_VM / CHANGE_MEDIA command — no waiting for the
+// 30 s telemetry tick. Keys recognised: cpu_count, mem_total_mb,
+// boot_dev, cpu_mode, video_model, autostart. Unknown keys
+// ignored. Match by UUID preferred; falls back to name on the
+// same host.
+func (s *Store) ApplyVMFieldUpdates(hostID, vmUUID, vmName string, fields map[string]any) {
+	if len(fields) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vms, ok := s.vms[hostID]
+	if !ok {
+		return
+	}
+	for _, v := range vms {
+		if v == nil {
+			continue
+		}
+		match := (vmUUID != "" && strings.EqualFold(v.UUID, vmUUID)) ||
+			(vmUUID == "" && v.Name == vmName)
+		if !match {
+			continue
+		}
+		for k, raw := range fields {
+			switch k {
+			case "cpu_count":
+				if n, ok := toInt(raw); ok {
+					v.CPUCount = n
+				}
+			case "mem_total_mb":
+				if n, ok := toInt64(raw); ok {
+					v.MemTotalMB = uint64(n)
+				}
+			case "boot_dev":
+				if s, ok := raw.(string); ok {
+					v.BootDev = s
+				}
+			case "cpu_mode":
+				if s, ok := raw.(string); ok {
+					v.CPUMode = s
+				}
+			case "video_model":
+				if s, ok := raw.(string); ok {
+					v.VideoModel = s
+				}
+			case "autostart":
+				if b, ok := raw.(bool); ok {
+					v.Autostart = b
+				}
+			}
+		}
+		break
+	}
+	s.AsyncSave()
+}
+
+// toInt / toInt64: JSON numbers decode as float64 when the target
+// is `any`. Convert carefully so we don't lose precision or silently
+// accept strings.
+func toInt(v any) (int, bool) {
+	switch t := v.(type) {
+	case float64:
+		return int(t), true
+	case int:
+		return t, true
+	case int64:
+		return int(t), true
+	}
+	return 0, false
+}
+
+func toInt64(v any) (int64, bool) {
+	switch t := v.(type) {
+	case float64:
+		return int64(t), true
+	case int:
+		return int64(t), true
+	case int64:
+		return t, true
+	}
+	return 0, false
+}
+
 // GetVMs returns all VMs. Pass hostID="" for all hosts.
 func (s *Store) GetVMs(hostID string) []*models.VM {
 	s.mu.RLock()

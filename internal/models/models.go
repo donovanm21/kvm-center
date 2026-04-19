@@ -720,6 +720,13 @@ type CommandResponse struct {
 	// accepted but couldn't be applied live. The UI reads this to
 	// prompt the operator to shut down + restart the VM.
 	RequiresReboot bool `json:"requires_reboot,omitempty"`
+	// UpdatedFields carries the VM's post-edit field values so the
+	// server can refresh its in-memory cache without waiting for
+	// the next 30 s telemetry tick. EDIT_VM populates this; other
+	// actions leave it empty. Keys match the lowercase JSON field
+	// names on VM (cpu_count, mem_total_mb, boot_dev, cpu_mode,
+	// video_model, autostart).
+	UpdatedFields map[string]any `json:"updated_fields,omitempty"`
 }
 
 // APICommandRequest is sent by the web UI to POST /api/command on the server.

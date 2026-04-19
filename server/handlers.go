@@ -448,6 +448,18 @@ func handleCommand(store *Store) http.HandlerFunc {
 				finalizeMigration(store, migRec, "complete", "live migration finished")
 			}
 		}
+		// v5.27.7: EDIT_VM + CHANGE_MEDIA return UpdatedFields in the
+		// response body. Apply them to the in-memory VM record now so
+		// the SPA's query-invalidation picks up fresh state instead of
+		// waiting 30 s for the next telemetry tick.
+		if resp.StatusCode < 400 && (action == "EDIT_VM" || action == "CHANGE_MEDIA") {
+			var parsed struct {
+				UpdatedFields map[string]any `json:"updated_fields"`
+			}
+			if err := json.Unmarshal(respBody, &parsed); err == nil && len(parsed.UpdatedFields) > 0 {
+				store.ApplyVMFieldUpdates(req.HostID, req.VMUUID, req.VMName, parsed.UpdatedFields)
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
 		w.Write(respBody)
