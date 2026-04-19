@@ -36,9 +36,14 @@ func patchDomainXML(in string, edits map[string]string) (string, error) {
 	for key, val := range edits {
 		switch key {
 		case "cpu_mode":
-			// <cpu mode='X'> may also carry match='...' or check='...'.
-			// Only touch the mode attribute; leave siblings intact.
-			newOut, err := replaceTagAttr(out, "cpu", "mode", val)
+			// Swap the <cpu mode='...'> opening tag to the new mode AND
+			// strip incompatible sibling attributes:
+			//   - `migratable` is valid only for host-passthrough / maximum
+			//   - `check='full'` is valid only for custom mode
+			// libvirt rejects `virsh define` otherwise, so we normalise
+			// to a minimal `<cpu mode='X' check='partial'>` and let
+			// libvirt add its defaults on next start.
+			newOut, err := rewriteCPUMode(out, val)
 			if err != nil {
 				return "", fmt.Errorf("cpu_mode patch: %w", err)
 			}
@@ -139,6 +144,47 @@ func replaceOneAttr(attrs, attr, val string) (string, bool) {
 		return attrs[:i+len(needle)] + val + attrs[i+len(needle)+endQ:], true
 	}
 	return attrs, false
+}
+
+// rewriteCPUMode swaps the <cpu ...> opening tag to a minimal
+// libvirt-accepting form for the target mode. Preserves everything
+// after the opening tag (CPU topology, feature flags, cache config)
+// untouched.
+func rewriteCPUMode(in, newMode string) (string, error) {
+	idx := strings.Index(in, "<cpu")
+	if idx < 0 {
+		return in, fmt.Errorf("no <cpu> element in domain XML")
+	}
+	// Guard against matching <cputune> / <cpuidle> etc.
+	if len(in) > idx+4 {
+		next := in[idx+4]
+		if next != ' ' && next != '\t' && next != '\n' && next != '>' && next != '/' {
+			return in, fmt.Errorf("no <cpu> element in domain XML (saw <%s…>)", in[idx+1:idx+6])
+		}
+	}
+	close := strings.IndexAny(in[idx:], ">")
+	if close < 0 {
+		return in, fmt.Errorf("malformed <cpu> tag")
+	}
+	endTag := idx + close
+	// Detect self-closing <cpu/>.
+	selfClose := in[endTag-1] == '/'
+	var newTag string
+	switch newMode {
+	case "host-passthrough", "maximum":
+		newTag = fmt.Sprintf("<cpu mode='%s' check='none' migratable='on'", newMode)
+	case "custom":
+		// `check='partial'` is libvirt's default; safe for custom.
+		newTag = "<cpu mode='custom' match='exact' check='partial'"
+	default: // host-model and anything else
+		newTag = fmt.Sprintf("<cpu mode='%s' check='partial'", newMode)
+	}
+	if selfClose {
+		newTag += "/>"
+	} else {
+		newTag += ">"
+	}
+	return in[:idx] + newTag + in[endTag+1:], nil
 }
 
 // replaceVideoModel rewrites the first <model type='...'/> found
