@@ -85,6 +85,9 @@ func buildTestMux(s *Store) *http.ServeMux {
 	mux.HandleFunc("/api/settings", handleFeaturesGet(s))
 	mux.Handle("/api/settings/update", requirePerm(s, "user.manage", handleFeaturesUpdate(s)))
 
+	// Command proxy (no top-level perm — individual cases gate internally).
+	mux.HandleFunc("/api/command", handleCommand(s))
+
 	// Hosts + VMs + telemetry. DELETE on /api/hosts/{id} matches v5.26.0.
 	mux.HandleFunc("/api/telemetry", handleTelemetry(s))
 	mux.HandleFunc("/api/hosts", handleGetHosts(s))
