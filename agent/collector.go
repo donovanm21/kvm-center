@@ -334,12 +334,23 @@ func buildVM(name, stateStr string) models.VM {
 		vm.UUID = info["uuid"]
 		vm.CPUCount, _ = strconv.Atoi(info["cpu(s)"])
 		vm.MemTotalMB = parseKiBToMB(info["max memory"])
-		vm.MemUsageMB = parseKiBToMB(info["used memory"]) // fallback: allocated
 		vm.Autostart = strings.TrimSpace(info["autostart"]) == "enable"
 	}
-	// Prefer dommemstat for actual guest-side memory usage (requires virtio-balloon).
-	if usedMB, ok := virshDomMemUsed(name); ok {
-		vm.MemUsageMB = usedMB
+	// Only report runtime memory usage for VMs that are actually
+	// running — dominfo's "used memory" returns the persisted
+	// allocation for stopped VMs, which would appear in the UI as
+	// "using 100% of RAM" for every shut-off domain. dommemstat only
+	// works on running VMs anyway, so gate the balloon usage read
+	// on state=running. Stopped VMs report MemUsageMB = 0.
+	if vm.State == models.VMRunning {
+		if usedMB, ok := virshDomMemUsed(name); ok {
+			vm.MemUsageMB = usedMB
+		} else if info := virshDomInfo(name); info != nil {
+			// Fallback for running VMs without virtio-balloon guest
+			// driver: dommemstat isn't available, fall back to
+			// the allocated value dominfo reports.
+			vm.MemUsageMB = parseKiBToMB(info["used memory"])
+		}
 	}
 	if vm.UUID == "" {
 		vm.UUID = name // fallback
