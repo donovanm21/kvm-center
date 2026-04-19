@@ -779,15 +779,51 @@ function HardwareTab({ vm }: { vm: VM }) {
  * permit; otherwise the agent falls back to --config-only and the
  * response reports "reboot to apply" so the operator knows.
  */
+// BOOT_DEVICES / CPU_MODES / VIDEO_MODELS are the curated set we
+// surface in dropdowns. Keeping them short + documented is better
+// than letting operators type arbitrary strings — libvirt's error
+// paths for typos are cryptic. Each value is documented in tooltip.
+const BOOT_DEVICES = [
+  { value: 'hd',      label: 'Hard disk (hd)' },
+  { value: 'cdrom',   label: 'CD-ROM (cdrom)' },
+  { value: 'network', label: 'PXE / network' },
+];
+const CPU_MODES = [
+  { value: 'host-passthrough', label: 'host-passthrough (best perf, blocks migration to mismatched CPUs)' },
+  { value: 'host-model',       label: 'host-model (portable across similar CPUs)' },
+  { value: 'custom',           label: 'custom (explicit CPU definition)' },
+];
+const VIDEO_MODELS = [
+  { value: 'virtio', label: 'virtio (best 3D + resize, Linux/Windows guest drivers)' },
+  { value: 'qxl',    label: 'qxl (SPICE, legacy default)' },
+  { value: 'vga',    label: 'vga (low-compat fallback)' },
+  { value: 'cirrus', label: 'cirrus (ancient guests only)' },
+  { value: 'none',   label: 'none (serial / no graphical output)' },
+];
+
 function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
+  const hostsQ = useHosts();
+  const host = hostsQ.data?.find((h) => h.id === vm.host_id);
+  const hostMaxVcpu = host?.cpu_count || 32;
+  const hostMaxMemMB = host?.mem_total_mb || 65536;
+
   const [open, setOpen] = useState(false);
   const [vcpus, setVcpus] = useState<number>(vm.cpu_count || 1);
   const [memMB, setMemMB] = useState<number>(vm.mem_total_mb || 1024);
-  // rebootPrompt: the agent accepted the edit but couldn't apply it
-  // live (virsh --live rejected). Operator can restart the VM now
-  // to pick up the new values or dismiss and restart on their schedule.
+  const [bootDev, setBootDev] = useState<string>(vm.boot_dev || '');
+  const [cpuMode, setCpuMode] = useState<string>(vm.cpu_mode || '');
+  const [videoModel, setVideoModel] = useState<string>(vm.video_model || '');
+  const [autostart, setAutostart] = useState<boolean>(!!vm.autostart);
   const [rebootPrompt, setRebootPrompt] = useState<string | null>(null);
   const cmd = useVMCommand();
+
+  const isRunning = vm.state === 'running';
+  // XML-edited fields require the VM to be stopped — agent refuses
+  // the edit otherwise. Disable them in the form with a tooltip.
+  const offlineOnlyDisabled = isRunning;
+  const offlineOnlyReason = isRunning
+    ? 'Stop the VM to change this field — libvirt blocks live XML edits for it.'
+    : '';
 
   // Reset fields when the modal reopens so a cancelled edit doesn't
   // leave stale values in the form.
@@ -795,13 +831,21 @@ function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
     if (open) {
       setVcpus(vm.cpu_count || 1);
       setMemMB(vm.mem_total_mb || 1024);
+      setBootDev(vm.boot_dev || '');
+      setCpuMode(vm.cpu_mode || '');
+      setVideoModel(vm.video_model || '');
+      setAutostart(!!vm.autostart);
     }
-  }, [open, vm.cpu_count, vm.mem_total_mb]);
+  }, [open, vm.cpu_count, vm.mem_total_mb, vm.boot_dev, vm.cpu_mode, vm.video_model, vm.autostart]);
 
   const submit = () => {
     const params: Record<string, string> = {};
     if (vcpus !== vm.cpu_count) params.vcpus = String(vcpus);
     if (memMB !== vm.mem_total_mb) params.mem_mb = String(memMB);
+    if (bootDev && bootDev !== vm.boot_dev) params.boot_dev = bootDev;
+    if (cpuMode && cpuMode !== vm.cpu_mode) params.cpu_mode = cpuMode;
+    if (videoModel && videoModel !== vm.video_model) params.video_model = videoModel;
+    if (autostart !== !!vm.autostart) params.autostart = autostart ? 'true' : 'false';
     if (Object.keys(params).length === 0) { setOpen(false); return; }
     cmd.mutate({
       host_id: vm.host_id,
@@ -812,8 +856,6 @@ function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
     }, {
       onSuccess: (data: any) => {
         setOpen(false);
-        // Agent signals requires_reboot when --live is rejected but
-        // --config took. Prompt the operator to restart.
         if (data?.requires_reboot) {
           setRebootPrompt(data?.message || 'The change was saved to the VM config but requires a restart to take effect.');
         }
@@ -855,24 +897,78 @@ function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
         }
       >
         <div style={{ display: 'grid', gap: 12, fontSize: 12 }}>
-          <label style={{ display: 'grid', gap: 4 }}>
-            <span style={{ color: 'var(--text-muted)' }}>vCPUs</span>
-            <input type="number" min={1} max={128} value={vcpus}
-              onChange={(e) => setVcpus(parseInt(e.target.value) || 1)}
-              style={resourceInput} />
-          </label>
-          <label style={{ display: 'grid', gap: 4 }}>
-            <span style={{ color: 'var(--text-muted)' }}>Memory (MB)</span>
-            <input type="number" min={128} step={128} value={memMB}
-              onChange={(e) => setMemMB(parseInt(e.target.value) || 128)}
-              style={resourceInput} />
-          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ color: 'var(--text-muted)' }}>
+                vCPUs <span style={{ color: 'var(--text-faded)', fontSize: 10 }}>(host has {hostMaxVcpu})</span>
+              </span>
+              <select value={vcpus}
+                onChange={(e) => setVcpus(parseInt(e.target.value) || 1)}
+                style={resourceInput}>
+                {Array.from({ length: hostMaxVcpu }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>{n}{n === 1 ? ' vCPU' : ' vCPUs'}</option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ color: 'var(--text-muted)' }}>
+                Memory (MB) <span style={{ color: 'var(--text-faded)', fontSize: 10 }}>(host has {hostMaxMemMB} MB)</span>
+              </span>
+              <input type="number" min={128} step={128} max={hostMaxMemMB} value={memMB}
+                onChange={(e) => setMemMB(Math.min(parseInt(e.target.value) || 128, hostMaxMemMB))}
+                style={resourceInput} />
+              <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
+                {[1024, 2048, 4096, 8192, 16384].filter((n) => n <= hostMaxMemMB).map((n) => (
+                  <button key={n} type="button" onClick={() => setMemMB(n)}
+                    className="btn-secondary-sm"
+                    style={{ fontSize: 10, padding: '2px 6px' }}>
+                    {n >= 1024 ? `${n / 1024}G` : `${n}M`}
+                  </button>
+                ))}
+              </div>
+            </label>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <label style={{ display: 'grid', gap: 4 }} title={offlineOnlyReason}>
+              <span style={{ color: 'var(--text-muted)' }}>
+                Boot device{offlineOnlyDisabled && ' (VM must be off)'}
+              </span>
+              <select value={bootDev} onChange={(e) => setBootDev(e.target.value)}
+                disabled={offlineOnlyDisabled} style={resourceInput}>
+                {BOOT_DEVICES.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
+              </select>
+            </label>
+            <label style={{ display: 'grid', gap: 4 }} title={offlineOnlyReason}>
+              <span style={{ color: 'var(--text-muted)' }}>
+                CPU mode{offlineOnlyDisabled && ' (VM must be off)'}
+              </span>
+              <select value={cpuMode} onChange={(e) => setCpuMode(e.target.value)}
+                disabled={offlineOnlyDisabled} style={resourceInput}>
+                {CPU_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+            </label>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'end' }}>
+            <label style={{ display: 'grid', gap: 4 }} title={offlineOnlyReason}>
+              <span style={{ color: 'var(--text-muted)' }}>
+                Video adapter{offlineOnlyDisabled && ' (VM must be off)'}
+              </span>
+              <select value={videoModel} onChange={(e) => setVideoModel(e.target.value)}
+                disabled={offlineOnlyDisabled} style={resourceInput}>
+                {VIDEO_MODELS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+              </select>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 0' }}>
+              <input type="checkbox" checked={autostart} onChange={(e) => setAutostart(e.target.checked)} />
+              <span style={{ color: 'var(--text-body)' }}>Auto-start on hypervisor boot</span>
+            </label>
+          </div>
           <div style={{ color: 'var(--text-faded)', fontSize: 11, lineHeight: 1.5 }}>
-            libvirt applies vCPU + memory changes live when the guest's
-            topology permits. Operations that can't be done live (e.g.
-            raising maxMemory) are saved to the domain XML and take effect
-            on the next reboot — the toast will tell you which branch was
-            taken, and you'll be prompted to restart if a reboot is needed.
+            Fields not shown (firmware, machine type, vTPM) need VM
+            re-creation and aren't exposed here. vCPU + memory + autostart
+            apply live where possible; boot device / CPU mode / video adapter
+            require the VM to be stopped. Config-only changes trigger a
+            restart prompt after Apply.
           </div>
         </div>
       </Modal>
