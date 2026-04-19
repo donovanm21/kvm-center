@@ -233,31 +233,45 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			kib := fmt.Sprintf("%d", mbN*1024)
-			if err := applyEdit("mem_mb", m, []string{"setmem", vmTarget, kib}); err != nil {
-				// Same cap-raise pattern as vCPUs: if libvirt rejects
-				// because the target exceeds maxMemory, auto-run
-				// `setmaxmem --config` first (requires VM shut off),
-				// then the regular setmem.
-				if strings.Contains(err.Error(), "cannot set memory higher than max memory") {
+			// For mem, operators think of a single "RAM" value. libvirt
+			// splits it into <memory> (max cap) + <currentMemory>
+			// (balloon target). Always keep both in sync so the UI
+			// shows what's persisted regardless of live/config split.
+			memErr := applyEdit("mem_mb", m, []string{"setmem", vmTarget, kib})
+			if memErr != nil {
+				if strings.Contains(memErr.Error(), "cannot set memory higher than max memory") {
+					// Target > current max cap.
 					if isRunning {
 						respond(w, false, "cannot raise the VM's memory cap while it's running. Shut the VM down first, then retry — the agent will raise the cap (setmaxmem --config) and apply your memory target in the same call.")
-					} else {
-						if o, e := exec.Command("virsh", "setmaxmem", vmTarget, kib, "--config").CombinedOutput(); e != nil {
-							respond(w, false, "setmaxmem failed: "+strings.TrimSpace(string(o)))
-							return
-						}
-						if o2, e2 := exec.Command("virsh", "setmem", vmTarget, kib, "--config").CombinedOutput(); e2 != nil {
-							respond(w, false, "setmem (after raising max) failed: "+strings.TrimSpace(string(o2)))
-							return
-						}
-						msgs = append(msgs, "mem_mb="+m+" (cap raised + config; applies on next boot)")
-					}
-					if isRunning {
 						return
 					}
+					// Shut off: raise cap first.
+					if o, e := exec.Command("virsh", "setmaxmem", vmTarget, kib, "--config").CombinedOutput(); e != nil {
+						respond(w, false, "setmaxmem failed: "+strings.TrimSpace(string(o)))
+						return
+					}
+					if o2, e2 := exec.Command("virsh", "setmem", vmTarget, kib, "--config").CombinedOutput(); e2 != nil {
+						respond(w, false, "setmem (after raising max) failed: "+strings.TrimSpace(string(o2)))
+						return
+					}
+					msgs = append(msgs, "mem_mb="+m+" (cap raised + config; applies on next boot)")
 				} else {
-					respond(w, false, err.Error())
+					respond(w, false, memErr.Error())
 					return
+				}
+			} else {
+				// setmem succeeded. For a running VM we also need to
+				// align maxMemory with the new value so the UI (and
+				// any future reboot) reflects the operator's intent.
+				// setmaxmem --live is rejected by most libvirt builds;
+				// fall back to --config so the change persists on the
+				// next boot. Not a failure if --config errors — the
+				// balloon/setmem above already gave the operator the
+				// live change they asked for.
+				if isRunning {
+					if _, e := exec.Command("virsh", "setmaxmem", vmTarget, kib, "--config").CombinedOutput(); e == nil {
+						requiresReboot = true
+					}
 				}
 			}
 		}
