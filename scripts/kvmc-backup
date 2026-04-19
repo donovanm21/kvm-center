@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# kvmc-backup — one-shot operator helper that captures a full
+# disaster-recovery bundle: the API store export, plus the on-disk
+# TLS + CA material, plus .env. Runs on the docker host.
+#
+# Usage:
+#   KVMCTL_TOKEN=<api-token> ./kvmc-backup [--out /path/out-dir]
+#
+# The output directory is created if missing; default is /var/backups/kvm-center.
+# Generated filename: kvm-center-backup-YYYYMMDD-HHMMSS.tar.gz
+#
+# Requires: docker, curl, tar. Intended to run as root on the
+# kvm-center docker host (needs to read the container volumes).
+
+set -euo pipefail
+
+OUT_DIR="/var/backups/kvm-center"
+SERVER_URL="${KVMCTL_SERVER:-https://localhost:8190}"
+COMPOSE_PROJECT="${KVMC_COMPOSE_PROJECT:-kvm-center}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --out) OUT_DIR="$2"; shift 2 ;;
+    --server) SERVER_URL="$2"; shift 2 ;;
+    -h|--help)
+      sed -n '3,16p' "$0"; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -z "${KVMCTL_TOKEN:-}" ]]; then
+  echo "KVMCTL_TOKEN is required (mint one at Settings → API tokens)." >&2
+  exit 1
+fi
+
+TS="$(date -u +%Y%m%d-%H%M%S)"
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT
+mkdir -p "$OUT_DIR"
+
+echo "==> API store export"
+curl -fsSLk -o "$STAGE/store.tar.gz" \
+  -H "Authorization: Bearer $KVMCTL_TOKEN" \
+  "$SERVER_URL/api/admin/backup"
+
+echo "==> TLS + CA material"
+# docker cp needs a container name; the compose service name is
+# kvm-center-server in the stock compose file.
+docker cp kvm-center-server:/var/lib/kvm-center/tls "$STAGE/tls" 2>/dev/null || true
+docker cp kvm-center-server:/var/lib/kvm-center/ca  "$STAGE/ca"  2>/dev/null || true
+
+echo "==> .env"
+if [[ -f /opt/kvm-center/.env ]]; then
+  cp /opt/kvm-center/.env "$STAGE/env"
+  chmod 0600 "$STAGE/env"
+fi
+
+OUT="$OUT_DIR/kvm-center-backup-$TS.tar.gz"
+tar czf "$OUT" -C "$STAGE" .
+chmod 0600 "$OUT"
+echo "==> wrote $OUT ($(du -h "$OUT" | cut -f1))"
+echo "   contents:"
+tar tzf "$OUT" | sed 's/^/     /'

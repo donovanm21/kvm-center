@@ -10,6 +10,49 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.27.0
+- **End-to-end integration test suite.** 24 new flow tests under
+  `server/integration_*_test.go` exercise the full handler stack
+  (auth middleware + RBAC + feature-flag gating + Mongo/JSON
+  persistence) as a real client would. Covers register/login/me,
+  API token mint-use-revoke, feature-flag preservation on
+  `/settings/update`, host delete + its migration-in-flight guard,
+  setup wizard public/state, migration reconciler, telemetry
+  upsert, backup export round-trip, gRPC migration-progress stream,
+  and EDIT_VM / CHANGE_MEDIA permission gates. Regressions in any
+  of these land as a CI failure now instead of a user bug report.
+- **Backup export API.** `POST /api/admin/backup` (admin-gated)
+  streams a `tar.gz` with `manifest.json` + `store.json` — the full
+  persistence snapshot. Matches JSONBackend's on-disk format so a
+  dump is a drop-in restore source. Full workflow (including TLS +
+  CA material) documented in Operations → Backup and restore.
+- **gRPC agent channel (foundation).** New `:8095` listener runs
+  the `AgentService` gRPC service alongside the HTTP API. The
+  `StreamMigrationProgress` RPC lets agents push `virsh migrate`
+  progress frames in real time; the control plane updates
+  `MigrationRecord` as each frame arrives instead of waiting for
+  the synchronous HTTP reply that v5.25.1 had to reconcile. The
+  `StreamVMMetrics` and `OpenConsoleSession` RPCs are defined in
+  the `.proto` and will be wired in follow-up releases. Disabled
+  by setting `KVM_CENTER_GRPC_ADDR=` (empty). See the new
+  Reference → Agent gRPC channel doc.
+- **Live hardware edits + CD/DVD swap.** Two new agent commands
+  (gated on `vm.edit`):
+  - `EDIT_VM` — `virsh setvcpus` / `setmem` with `--config --live`,
+    falling back to `--config`-only when libvirt refuses live-apply.
+    Response reports which changes took effect vs need a reboot.
+  - `CHANGE_MEDIA` — `virsh change-media` for live ISO eject /
+    insert against a named CDROM target. Takes `media_action`
+    (`eject` | `insert`), `target` (libvirt device name like `hda`),
+    and `path` (pool-resident ISO, insert only).
+  UI surfacing for both deferred to a follow-up release; the API +
+  agent paths are live and auditable in v5.27.0.
+- **CD safety gate.** `.gitea/workflows/deploy.yml` now only fires
+  when the main-branch commit message contains `[deploy]` or an
+  operator triggers the workflow manually. Lets dev RCs flow onto
+  main for end-to-end testing without auto-redeploying the running
+  stack. Promoting to prod is now an explicit operator action.
+
 ## v5.26.0
 - **Remove host from inventory.** New `DELETE /api/hosts/{id}`
   (gated on `host.manage`) and a **Remove host** button on Host
