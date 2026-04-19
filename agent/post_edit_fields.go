@@ -36,7 +36,11 @@ type postEditDomain struct {
 }
 
 func collectPostEditFields(vmTarget string, params map[string]string) map[string]any {
-	out := exec.Command("virsh", "dumpxml", vmTarget)
+	// --inactive reads the persisted config, not the live snapshot.
+	// That matches what the operator will see on next boot, and
+	// crucially aligns with the SPA's mem_total_mb field (which
+	// maps to <memory> = max cap, not the live currentMemory).
+	out := exec.Command("virsh", "dumpxml", "--inactive", vmTarget)
 	data, err := out.Output()
 	if err != nil {
 		return nil
