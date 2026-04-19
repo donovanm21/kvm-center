@@ -375,7 +375,13 @@ func randomLocalMAC() string {
 // Preference: "default" > first active pool. Empty string when
 // nothing matches (caller turns that into a surfaced error).
 func pickDestinationPool(ctx context.Context, uri string) string {
-	out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "pool-list", "--name", "--state-running").Output()
+	// v5.27.3: `--state-running` was added in libvirt 4.0 but some
+	// EL9 hosts still ship a virsh that rejects it ("doesn't support
+	// option --state-running"). Plain `pool-list --name` already
+	// returns active pools only; if an operator has inactive pools
+	// they want to target, they pass them explicitly via the
+	// Advanced modal.
+	out, err := exec.CommandContext(ctx, "virsh", "-c", uri, "pool-list", "--name").Output()
 	if err != nil {
 		return ""
 	}
