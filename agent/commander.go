@@ -600,7 +600,19 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		// them and push matching phase/progress frames to the server.
 		// HTTP response is still the single terminal signal (success +
 		// stdout); gRPC just makes the progress bar move mid-flight.
+		//
+		// v5.32.9: mark the shared MigrationStatus.Active=true so that
+		// /self-update + bootstrap.sh --update-agents refuse to restart
+		// this agent mid-flight. Without this, a deploy that happens
+		// while a live migration is in progress kills the virsh
+		// subprocess, libvirt rolls back atomically (VM survives on
+		// source), and the server is left with a stranded "running"
+		// record. v5.29.1's guard only covered offline migrations which
+		// set Active themselves; live piggybacked off the synchronous
+		// HTTP call.
+		setLiveMigrateActive(req.Params["migration_id"], vmTarget, dest, true)
 		out, err = runLiveMigrateWithProgress(args, req.Params["migration_id"], vmTarget, dest)
+		setLiveMigrateActive(req.Params["migration_id"], vmTarget, dest, false)
 	case "DELETE_VM":
 		// Multi-stage destruction: force-off if still running, undefine with
 		// NVRAM + managed save + snapshot metadata, optionally remove the
