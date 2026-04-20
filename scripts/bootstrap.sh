@@ -340,7 +340,10 @@ EOF_ENV
         echo "WARN: could not derive LAN IP for agent downloads; defaulting to localhost (will fail on remote hvnodes). Set KVM_CENTER_BUILD_URL." >&2
         LAN_IP="localhost"
       fi
-      BUILD_URL="http://${LAN_IP}:8090/downloads"
+      # v5.32.0: TLS port is now the only path; plain HTTP :8090 is
+      # retired. update-agent.sh uses curl -k to tolerate the server's
+      # self-signed cert.
+      BUILD_URL="https://${LAN_IP}:8190/downloads"
     else
       BUILD_URL="$KVM_CENTER_BUILD_URL"
     fi
@@ -404,7 +407,7 @@ EOF_ENV
         continue
       fi
       SSH_CMD=(ssh "${SSH_PROBE_OPTS[@]}" "$SSH_USER@$ip"
-        "curl -fsSL ${BUILD_URL}/update-agent.sh | KVM_CENTER_BUILD_URL=${BUILD_URL} bash")
+        "curl -fsSLk ${BUILD_URL}/update-agent.sh | KVM_CENTER_BUILD_URL=${BUILD_URL} bash")
       if [[ -n "${KVM_HVNODE_SSH_PASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
         sshpass -p "$KVM_HVNODE_SSH_PASS" "${SSH_CMD[@]}" || echo "  ✕ failed on $ip"
       else

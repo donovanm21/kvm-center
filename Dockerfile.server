@@ -27,17 +27,19 @@ RUN go mod tidy
 ARG GIT_SHA=dev
 RUN echo "artifacts stage @ $GIT_SHA"
 
-RUN mkdir -p /dist && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o /dist/kvm-center-agent-amd64 ./agent && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o /dist/kvm-center-agent-arm64 ./agent && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o /dist/kvm-tools-linux-amd64 ./kvm-tools && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o /dist/kvm-tools-linux-arm64 ./kvm-tools && \
-    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o /dist/kvm-tools-windows-amd64.exe ./kvm-tools && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o /dist/kvmctl-linux-amd64       ./cmd/kvmctl && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o /dist/kvmctl-linux-arm64       ./cmd/kvmctl && \
-    CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o /dist/kvmctl-darwin-amd64      ./cmd/kvmctl && \
-    CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o /dist/kvmctl-darwin-arm64      ./cmd/kvmctl && \
-    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o /dist/kvmctl-windows-amd64.exe ./cmd/kvmctl && \
+RUN VERSION=$(cat /src/server/VERSION) && \
+    LDF="-s -w -X main.Version=$VERSION" && \
+    mkdir -p /dist && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvm-center-agent-amd64 ./agent && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$LDF" -o /dist/kvm-center-agent-arm64 ./agent && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvm-tools-linux-amd64 ./kvm-tools && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$LDF" -o /dist/kvm-tools-linux-arm64 ./kvm-tools && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvm-tools-windows-amd64.exe ./kvm-tools && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvmctl-linux-amd64       ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$LDF" -o /dist/kvmctl-linux-arm64       ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvmctl-darwin-amd64      ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="$LDF" -o /dist/kvmctl-darwin-arm64      ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvmctl-windows-amd64.exe ./cmd/kvmctl && \
     cp /src/scripts/install-agent.sh      /dist/ && \
     cp /src/scripts/update-agent.sh       /dist/ && \
     cp /src/kvm-tools/install.sh          /dist/install-kvm-tools.sh && \
@@ -62,9 +64,10 @@ RUN rm -rf server/staticv4/dist
 COPY --from=webui /webui/dist ./server/staticv4/dist
 
 RUN go mod tidy
-RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w" \
-    -o /out/kvm-center-server ./server
+RUN VERSION=$(cat /src/server/VERSION) && \
+    CGO_ENABLED=0 GOOS=linux go build \
+      -ldflags="-s -w -X main.Version=$VERSION" \
+      -o /out/kvm-center-server ./server
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM alpine:latest
