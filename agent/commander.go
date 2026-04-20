@@ -682,6 +682,15 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		respond(w, false, msg)
 		return
 	}
+	// For live MIGRATE the combined output is a flood of `Migration:
+	// [ N %]` progress lines from virsh --verbose. Useful for the log
+	// but noisy as a toast/SPA response — collapse to a clean summary.
+	// The already-streamed gRPC frames carry the granular progress.
+	if strings.ToUpper(req.Action) == "MIGRATE" {
+		log.Printf("command ok: MIGRATE vm=%s (virsh progress lines suppressed in response)", vmTarget)
+		respond(w, true, "live migration completed")
+		return
+	}
 	log.Printf("command ok: %s vm=%s: %s", req.Action, vmTarget, msg)
 	respond(w, true, msg)
 }
