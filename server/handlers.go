@@ -240,7 +240,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 		}()
 		var needPerm string
 		switch action {
-		case "START", "STOP", "FORCESTOP", "RESTART":
+		case "START", "STOP", "FORCESTOP", "RESTART", "POWER_CYCLE":
 			needPerm = models.PermVMLifecycle
 		case "SNAPSHOT", "REVERT_SNAPSHOT", "DELETE_SNAPSHOT":
 			needPerm = models.PermVMSnapshot
