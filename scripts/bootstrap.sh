@@ -378,8 +378,8 @@ EOF_ENV
       fi
     fi
     if [[ -z "$HOSTS" ]] && command -v jq >/dev/null 2>&1; then
-      SERVER_API="${KVM_CENTER_API:-http://localhost:8090}"
-      HOSTS=$(curl -fsS "$SERVER_API/api/hosts" 2>/dev/null | jq -r '.[].ip' 2>/dev/null || true)
+      SERVER_API="${KVM_CENTER_API:-https://localhost:8190}"
+      HOSTS=$(curl -fsSk "$SERVER_API/api/hosts" 2>/dev/null | jq -r '.[].ip' 2>/dev/null || true)
     fi
     if [[ -z "$HOSTS" ]]; then
       echo "No hosts to update. Set KVM_HVNODE_IPS=\"ip1 ip2 …\" or run from the docker host." >&2
