@@ -68,7 +68,13 @@ const (
 // (agent retries on first actual validation).
 func loadGrantPubKey(serverURL string) {
 	url := strings.TrimRight(serverURL, "/") + "/api/migrations/grant-pubkey"
-	resp, err := (&http.Client{Timeout: 5 * time.Second}).Get(url)
+	// Use the shared httpClient so the InsecureSkipVerify trust model
+	// (applied by initHTTPClient when the server URL is https://) is
+	// honoured. Prior fresh client failed TLS verify against the
+	// server's self-signed cert when the agent is pointed at the
+	// hostname, not the cert's localhost/container-ID SAN, which
+	// turned grant-authorised migrations into HTTP 503 on the dest.
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		log.Printf("grants: pubkey fetch deferred (%v) — will retry on first grant", err)
 		return
