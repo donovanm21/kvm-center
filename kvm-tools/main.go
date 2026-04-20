@@ -20,7 +20,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -262,12 +264,57 @@ func selfUpdate(url string) error {
 		os.Remove(dir)
 		return fmt.Errorf("rename: %w", err)
 	}
+	// v5.32.3: migrate any legacy systemd unit still pointing at the
+	// plain-HTTP :8090 listener over to TLS :8190. The binary updates
+	// in place but ExecStart baked the URL at install time, so without
+	// this step a fleet rotation leaves the guests reporting on :8090
+	// forever. Best-effort; skip on non-Linux and tolerate missing unit.
+	rewriteKVMToolsUnit()
 	log.Printf("kvm-tools: replaced %s — exiting so systemd restarts on the new binary", exe)
 	// Exit cleanly so systemd's Restart=always kicks in. Sleep briefly
 	// so the log line lands before the process dies.
 	time.Sleep(200 * time.Millisecond)
 	os.Exit(0)
 	return nil
+}
+
+// rewriteKVMToolsUnit edits /etc/systemd/system/kvm-tools.service in
+// place, swapping the server URL's http://…:8090 for https://…:8190
+// if it's still on the legacy path, and runs daemon-reload so the
+// next systemd restart picks up the new ExecStart. No-op on non-Linux
+// or when the unit doesn't exist (e.g. Windows guests, manual runs).
+func rewriteKVMToolsUnit() {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	path := "/etc/systemd/system/kvm-tools.service"
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	re := regexp.MustCompile(`http://([^\s/]+):8090`)
+	rewritten := re.ReplaceAll(data, []byte("https://$1:8190"))
+	if bytesEqual(rewritten, data) {
+		return // nothing to do
+	}
+	if err := os.WriteFile(path, rewritten, 0o644); err != nil {
+		log.Printf("kvm-tools: unit rewrite failed (%v) — next restart will keep legacy URL", err)
+		return
+	}
+	_ = exec.Command("systemctl", "daemon-reload").Run()
+	log.Printf("kvm-tools: systemd unit rewritten from :8090/http → :8190/https")
+}
+
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func collect(uuid string) GuestTelemetryPayload {
