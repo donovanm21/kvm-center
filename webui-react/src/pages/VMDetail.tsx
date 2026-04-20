@@ -829,6 +829,7 @@ function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
   const [videoModel, setVideoModel] = useState<string>(vm.video_model || '');
   const [autostart, setAutostart] = useState<boolean>(!!vm.autostart);
   const [rebootPrompt, setRebootPrompt] = useState<string | null>(null);
+  const [capRaisePrompt, setCapRaisePrompt] = useState<Record<string, string> | null>(null);
   const cmd = useVMCommand();
 
   const isRunning = vm.state === 'running';
@@ -867,11 +868,31 @@ function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
     }, {
       onSuccess: (data: any) => {
         setOpen(false);
+        // Agent signals that raising the vCPU cap needs a shutdown. Offer
+        // a one-click "shutdown + apply + start" retry with
+        // allow_shutdown=true so the operator doesn't have to manually
+        // stop the VM.
+        const msg: string = data?.message || data?.error || '';
+        if (!data?.success && msg.includes("vCPU cap while it's running")) {
+          setCapRaisePrompt(params);
+          return;
+        }
         if (data?.requires_reboot) {
           setRebootPrompt(data?.message || 'The change was saved to the VM config but requires a restart to take effect.');
         }
       },
     });
+  };
+
+  const capRaiseWithShutdown = () => {
+    if (!capRaisePrompt) return;
+    cmd.mutate({
+      host_id: vm.host_id,
+      vm_uuid: vm.uuid,
+      vm_name: vm.name,
+      action: 'EDIT_VM',
+      params: { ...capRaisePrompt, allow_shutdown: 'true' },
+    }, { onSuccess: () => setCapRaisePrompt(null) });
   };
 
   const restartNow = () => {
@@ -1015,10 +1036,35 @@ function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
           {rebootPrompt}
           <br /><br />
           <span style={{ color: 'var(--text-faded)' }}>
-            Restarting sends <code>virsh reboot</code> (graceful guest shutdown
-            then auto-start). The VM will be unavailable for the duration of
-            its own reboot cycle.
+            "Restart now" fully power-cycles the VM (shutdown → start) so the
+            fresh qemu process picks up the new memory cap / vCPU max. The
+            VM is unavailable during this cycle.
           </span>
+        </div>
+      </Modal>
+      {/* Follow-up modal: raising vCPU cap requires the VM to be shut off. */}
+      <Modal
+        open={capRaisePrompt !== null}
+        onClose={() => setCapRaisePrompt(null)}
+        title={`Raise vCPU cap on ${vm.name}?`}
+        footer={
+          <>
+            <button type="button" className="btn-secondary-sm" onClick={() => setCapRaisePrompt(null)}>
+              Cancel
+            </button>
+            <button type="button" className="btn-primary-sm" onClick={capRaiseWithShutdown} disabled={cmd.isPending}>
+              {cmd.isPending ? 'Working…' : 'Shut down, raise cap, restart'}
+            </button>
+          </>
+        }
+      >
+        <div style={{ fontSize: 12, lineHeight: 1.55, color: 'var(--text-body)' }}>
+          Raising the vCPU count above the VM's current cap requires the VM
+          to be shut off (libvirt constraint — <code>setvcpus --maximum</code>
+          only works with <code>--config</code> on a stopped domain).
+          <br /><br />
+          The agent can do it in one step: graceful shutdown → raise cap →
+          apply count → start. Expect ~10–30&nbsp;s of downtime.
         </div>
       </Modal>
     </>
