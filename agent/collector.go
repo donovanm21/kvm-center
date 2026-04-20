@@ -669,8 +669,8 @@ func virshDomMemUsed(name string) (uint64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	var available, unused, lastUpdate uint64
-	var hasAvail, hasUnused bool
+	var actual, available, unused, diskCaches, lastUpdate uint64
+	var hasActual, hasAvail, hasUnused, hasDiskCaches bool
 	for _, line := range strings.Split(string(out), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 2 {
@@ -678,12 +678,18 @@ func virshDomMemUsed(name string) (uint64, bool) {
 		}
 		val, _ := strconv.ParseUint(fields[1], 10, 64)
 		switch fields[0] {
+		case "actual":
+			actual = val
+			hasActual = true
 		case "available":
 			available = val
 			hasAvail = true
 		case "unused":
 			unused = val
 			hasUnused = true
+		case "disk_caches":
+			diskCaches = val
+			hasDiskCaches = true
 		case "last_update":
 			lastUpdate = val
 		}
@@ -694,6 +700,17 @@ func virshDomMemUsed(name string) (uint64, bool) {
 	if lastUpdate > 0 && time.Since(time.Unix(int64(lastUpdate), 0)) > 5*time.Minute {
 		return 0, false
 	}
+	// Preferred formula: active (non-cache) usage — matches what
+	// monitoring dashboards and `free -h | awk '{used-buff/cache}'`
+	// show. The previous (available - unused) double-counted page
+	// cache: ark-srv01 with 18 GB of reclaimable cache reported 45%
+	// usage when the real working set was ~20%.
+	if hasActual && hasUnused && hasDiskCaches && actual >= unused+diskCaches {
+		return (actual - unused - diskCaches) / 1024, true
+	}
+	// Fallback for guests whose balloon driver doesn't publish
+	// disk_caches (older virtio-balloon, non-Linux guests, etc).
+	// Keep the prior formula so we don't regress to zero.
 	if hasAvail && hasUnused && available >= unused {
 		return (available - unused) / 1024, true
 	}
