@@ -482,9 +482,26 @@ function HostVMRow({ vm, host, latestKVMTools }: { vm: VM; host: Host; latestKVM
     cmd.mutate({ host_id: vm.host_id, vm_uuid: vm.uuid, vm_name: vm.name, action });
 
   const openConsole = () => {
-    if (!canConsole || !host.ip) return;
-    const url = `http://${host.ip}:${host.agent_port || 8081}/console/${encodeURIComponent(vm.name)}`;
+    if (!canConsole) return;
+    // Same pattern as VMDetail.tsx: server-proxied console keyed by
+    // session cookie. The previous direct-to-agent URL
+    // (http://<hv-ip>:8081/console/<vm>) bypassed server auth + ran
+    // into mixed-content blocking on https deployments, so the button
+    // silently did nothing.
+    const url = `/api/console/${encodeURIComponent(vm.host_id)}/${encodeURIComponent(vm.name)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const takeSnapshot = () => {
+    if (!canSnap) return;
+    const name = `manual-${vm.name}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
+    cmd.mutate({
+      host_id: vm.host_id,
+      vm_uuid: vm.uuid,
+      vm_name: vm.name,
+      action: 'SNAPSHOT',
+      params: { name },
+    });
   };
 
   const cpuPct = Math.min(vm.cpu_usage || 0, 100);
@@ -523,7 +540,7 @@ function HostVMRow({ vm, host, latestKVMTools }: { vm: VM; host: Host; latestKVM
           <IconAction title="Start" tone="primary" disabled={!stopped || !canLife} onClick={run('START')} icon="▶" />
           <IconAction title="Shutdown" tone="warn"    disabled={!running || !canLife} onClick={run('STOP')}    icon="■" />
           <IconAction title="Restart"  tone="ghost"   disabled={!running || !canLife} onClick={run('RESTART')} icon="↺" />
-          <IconAction title="Snapshot" tone="ghost"   disabled={!canSnap} onClick={() => {/* modal lives in VM detail */}} icon="📷" />
+          <IconAction title="Take snapshot" tone="ghost" disabled={!canSnap || !running} onClick={takeSnapshot} icon="📷" />
           <IconAction title="Console"  tone="ghost"   disabled={!running || !canConsole} onClick={openConsole} icon="🖥" />
         </div>
       </td>
