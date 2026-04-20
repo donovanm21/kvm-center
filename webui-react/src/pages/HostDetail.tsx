@@ -467,7 +467,7 @@ function SummaryTab({ host }: { host: Host }) {
   );
 }
 
-function HostVMRow({ vm, host, latestKVMTools }: { vm: VM; host: Host; latestKVMTools: string }) {
+function HostVMRow({ vm, latestKVMTools }: { vm: VM; host: Host; latestKVMTools: string }) {
   const { hasPerm } = useAuth();
   const features = useFeatures();
   const cmd = useVMCommand();
