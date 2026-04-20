@@ -8,12 +8,13 @@ import { KVMToolsPill } from '@/components/KVMToolsPill';
 import { Modal } from '@/components/Modal';
 import { PaginationBar, usePagination } from '@/components/Pagination';
 import { useAuth } from '@/hooks/useAuth';
-import { useFeatures, useHosts, useKVMToolsLatest, useStorage, useVMs } from '@/hooks/useInventory';
+import { useFeatures, useHosts, useKVMToolsLatest, useMigrations, useStorage, useVMs } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
 import { useVMCommand } from '@/hooks/useVMCommand';
 import type { Host, HostPCIDevice, StoragePool, VM } from '@/types';
 import { CreateSnapshotModal } from '@/pages/VMDetail';
 import { SortableTH, useSort } from '@/components/SortableTH';
+import { LockBadge, PHASES_PAST_DEFINE, lockKey, type LockReason } from '@/pages/VMs';
 
 /**
  * MaintenanceToggle flips a host between operational and "draining"
@@ -469,14 +470,23 @@ function SummaryTab({ host }: { host: Host }) {
   );
 }
 
-function HostVMRow({ vm, latestKVMTools }: { vm: VM; host: Host; latestKVMTools: string }) {
+function HostVMRow({
+  vm, latestKVMTools, lock,
+}: { vm: VM; host: Host; latestKVMTools: string; lock?: LockReason }) {
   const { hasPerm } = useAuth();
   const features = useFeatures();
   const cmd = useVMCommand();
 
-  const canLife = hasPerm('vm.lifecycle');
-  const canSnap = hasPerm('vm.snapshot') && !features.data?.disable_snapshots;
-  const canConsole = hasPerm('vm.console') && !features.data?.disable_console;
+  const locked = !!lock;
+  const lockTitle = lock === 'migrating'
+    ? 'Migration in progress — actions are disabled until it finishes'
+    : lock === 'rolled-back'
+      ? 'Migration rolled back — destination may have partial artifacts. Investigate before acting.'
+      : '';
+
+  const canLife = hasPerm('vm.lifecycle') && !locked;
+  const canSnap = hasPerm('vm.snapshot') && !features.data?.disable_snapshots && !locked;
+  const canConsole = hasPerm('vm.console') && !features.data?.disable_console && !locked;
 
   const running = vm.state === 'running';
   const stopped = vm.state === 'stopped';
@@ -498,16 +508,25 @@ function HostVMRow({ vm, latestKVMTools }: { vm: VM; host: Host; latestKVMTools:
 
   const cpuPct = Math.min(vm.cpu_usage || 0, 100);
 
+  const rowStyle: React.CSSProperties = locked
+    ? { opacity: 0.45, cursor: 'not-allowed', background: 'var(--surface-2)' }
+    : {};
+
   return (
     <>
-    <tr>
+    <tr style={rowStyle} title={lockTitle}>
       <td>
-        <Link
-          to={`/vms/${encodeURIComponent(vm.uuid)}`}
-          style={{ color: 'var(--text-strong)', fontWeight: 500 }}
-        >
-          {vm.name}
-        </Link>
+        {locked ? (
+          <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{vm.name}</span>
+        ) : (
+          <Link
+            to={`/vms/${encodeURIComponent(vm.uuid)}`}
+            style={{ color: 'var(--text-strong)', fontWeight: 500 }}
+          >
+            {vm.name}
+          </Link>
+        )}
+        {lock && <LockBadge reason={lock} />}
       </td>
       <td><span className={`state-pill ${vm.state}`}>{vm.state}</span></td>
       <td>{vm.cpu_count}</td>
@@ -652,7 +671,23 @@ type VMSortKey = 'name' | 'state' | 'cpu_count' | 'mem_total_mb' | 'disk_total_g
 function VMsTab({ host }: { host: Host }) {
   const vms = useVMs();
   const latest = useKVMToolsLatest();
+  const migrations = useMigrations();
   const { sort, onToggle, compare } = useSort<VMSortKey>('name');
+  // Same lock logic the top-level VMs page uses — source row gets the
+  // "migrating" badge while in flight, destination row gets a
+  // "rolled-back" badge if the migration failed after defining. Prevents
+  // double-starts, accidental edits, etc.
+  const locks = useMemo(() => {
+    const m = new Map<string, LockReason>();
+    for (const r of migrations.data ?? []) {
+      if (r.status === 'running' && r.source_host && r.vm_name) {
+        m.set(lockKey(r.source_host, r.vm_name), 'migrating');
+      } else if (r.status === 'failed' && r.dest_host && r.vm_name && PHASES_PAST_DEFINE.has(r.phase ?? '')) {
+        m.set(lockKey(r.dest_host, r.vm_name), 'rolled-back');
+      }
+    }
+    return m;
+  }, [migrations.data]);
   const filtered = useMemo(
     () => (vms.data ?? []).filter((v: VM) => v.host_id === host.id),
     [vms.data, host.id],
@@ -683,7 +718,13 @@ function VMsTab({ host }: { host: Host }) {
           </thead>
           <tbody>
             {pg.items.map((v) => (
-              <HostVMRow key={v.uuid} vm={v} host={host} latestKVMTools={latest.data?.version ?? ''} />
+              <HostVMRow
+                key={v.uuid}
+                vm={v}
+                host={host}
+                latestKVMTools={latest.data?.version ?? ''}
+                lock={locks.get(lockKey(v.host_id, v.name))}
+              />
             ))}
           </tbody>
         </table>
