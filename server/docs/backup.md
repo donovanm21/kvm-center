@@ -47,7 +47,7 @@ material, pair the API export with a filesystem copy of the server's
 data volume:
 
 ```sh
-ssh docker.example.lan '
+ssh <your-docker-host> '
   mkdir -p /tmp/kvmc-dr
   # 1. API export (catches the full store snapshot)
   curl -fsSLk -o /tmp/kvmc-dr/store.tar.gz \
