@@ -382,9 +382,28 @@ EOF_ENV
       echo "No hosts to update. Set KVM_HVNODE_IPS=\"ip1 ip2 …\" or run from the docker host." >&2
       exit 0
     fi
+    # v5.29.1: before restarting an agent, confirm it isn't mid-migration.
+    # A restart mid-scp orphans the transfer + strands the server record
+    # as "running" forever because no terminal signal ever arrives — the
+    # v5.29.0 deploy hit exactly that case (VM2, hv03→hv02).
+    SSH_PROBE_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=8)
+    ssh_probe() {
+      local _ip="$1" _cmd="$2"
+      if [[ -n "${KVM_HVNODE_SSH_PASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
+        sshpass -p "$KVM_HVNODE_SSH_PASS" ssh "${SSH_PROBE_OPTS[@]}" "$SSH_USER@$_ip" "$_cmd"
+      else
+        ssh "${SSH_PROBE_OPTS[@]}" "$SSH_USER@$_ip" "$_cmd"
+      fi
+    }
+    FORCE="${KVM_CENTER_AGENT_UPDATE_FORCE:-0}"
     for ip in $HOSTS; do
       echo "── $ip ───────────────────────────"
-      SSH_CMD=(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 "$SSH_USER@$ip"
+      active=$(ssh_probe "$ip" 'curl -fsS http://localhost:8081/migrate-status 2>/dev/null | grep -oE "\"active\":[[:space:]]*true" || true')
+      if [[ -n "$active" && "$FORCE" != "1" ]]; then
+        echo "  ⚠ agent reports an active migration; skipping update. Re-run with KVM_CENTER_AGENT_UPDATE_FORCE=1 to override (NOT recommended — will orphan the transfer)."
+        continue
+      fi
+      SSH_CMD=(ssh "${SSH_PROBE_OPTS[@]}" "$SSH_USER@$ip"
         "curl -fsSL ${BUILD_URL}/update-agent.sh | KVM_CENTER_BUILD_URL=${BUILD_URL} bash")
       if [[ -n "${KVM_HVNODE_SSH_PASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
         sshpass -p "$KVM_HVNODE_SSH_PASS" "${SSH_CMD[@]}" || echo "  ✕ failed on $ip"
