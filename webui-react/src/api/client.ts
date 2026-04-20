@@ -35,7 +35,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     let msg = r.statusText;
     try {
       const d = await r.json();
+      // Support both {error:"..."} (server writeError) and
+      // {success:false,message:"..."} (agent respond). Without the
+      // latter, EDIT_VM business rejections (e.g. "cannot raise vCPU
+      // cap while running") surfaced as useless "Internal Server Error".
       if (d?.error) msg = d.error;
+      else if (d?.message) msg = d.message;
     } catch {
       // swallow — fall back to statusText
     }
