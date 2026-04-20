@@ -19,13 +19,13 @@ func TestParseMigrationProgress(t *testing.T) {
 		{"Migration: [ 1.04 %]", 1, true},
 		{"Migration: [50.00 %]", 50, true},
 		{"Migration: [100.00 %]", 100, true},
-		{"Migration: [  7 %]", 7, true},        // no fractional, extra ws
-		{"Migration: [12.34 %]", 12, true},     // mid-range
-		{"random noise", 0, false},             // not a progress line
-		{"Migration: complete", 0, false},      // missing brackets
-		{"[ 50.00 %]", 0, false},               // missing Migration: prefix
-		{"Migration: [ -1.00 %]", 0, false},    // negative rejected
-		{"Migration: [.5 %]", 0, false},        // no integer part
+		{"Migration: [  7 %]", 7, true},     // no fractional, extra ws
+		{"Migration: [12.34 %]", 12, true},  // mid-range
+		{"random noise", 0, false},          // not a progress line
+		{"Migration: complete", 0, false},   // missing brackets
+		{"[ 50.00 %]", 0, false},            // missing Migration: prefix
+		{"Migration: [ -1.00 %]", 0, false}, // negative rejected
+		{"Migration: [.5 %]", 0, false},     // no integer part
 	}
 	for _, c := range cases {
 		got, ok := parseMigrationProgress(c.in)
