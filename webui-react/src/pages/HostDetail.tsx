@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/useToast';
 import { useVMCommand } from '@/hooks/useVMCommand';
 import type { Host, HostPCIDevice, StoragePool, VM } from '@/types';
 import { CreateSnapshotModal } from '@/pages/VMDetail';
-import { SortTh, useSortable } from '@/components/SortableTable';
+import { SortableTH, useSort } from '@/components/SortableTH';
 
 /**
  * MaintenanceToggle flips a host between operational and "draining"
@@ -647,15 +647,20 @@ const sectionHeader: React.CSSProperties = {
 };
 
 /* ── VMs on this host ────────────────────────────────────── */
+type VMSortKey = 'name' | 'state' | 'cpu_count' | 'mem_total_mb' | 'disk_total_gb' | 'cpu_usage';
+
 function VMsTab({ host }: { host: Host }) {
   const vms = useVMs();
   const latest = useKVMToolsLatest();
-  const sort = useSortable<VM>('name');
+  const { sort, onToggle, compare } = useSort<VMSortKey>('name');
   const filtered = useMemo(
     () => (vms.data ?? []).filter((v: VM) => v.host_id === host.id),
     [vms.data, host.id],
   );
-  const list = useMemo(() => sort.apply(filtered), [filtered, sort]);
+  const list = useMemo(
+    () => [...filtered].sort((a, b) => compare((a as any)[sort.key], (b as any)[sort.key])),
+    [filtered, sort, compare],
+  );
   const pg = usePagination(list);
   if (filtered.length === 0) {
     return <div className="panel" style={{ color: 'var(--text-muted)', fontSize: 12 }}>No VMs on this host.</div>;
@@ -666,12 +671,12 @@ function VMsTab({ host }: { host: Host }) {
         <table className="data-table">
           <thead>
             <tr>
-              <SortTh sort={sort} k="name">Name</SortTh>
-              <SortTh sort={sort} k="state">State</SortTh>
-              <SortTh sort={sort} k="cpu_count">CPUs</SortTh>
-              <SortTh sort={sort} k="mem_total_mb">Memory</SortTh>
-              <SortTh sort={sort} k="disk_total_gb">Disk</SortTh>
-              <SortTh sort={sort} k="cpu_usage" width={160}>CPU usage</SortTh>
+              <SortableTH colKey="name"          label="Name"      sort={sort} onToggle={onToggle} />
+              <SortableTH colKey="state"         label="State"     sort={sort} onToggle={onToggle} />
+              <SortableTH colKey="cpu_count"     label="CPUs"      sort={sort} onToggle={onToggle} />
+              <SortableTH colKey="mem_total_mb"  label="Memory"    sort={sort} onToggle={onToggle} />
+              <SortableTH colKey="disk_total_gb" label="Disk"      sort={sort} onToggle={onToggle} />
+              <SortableTH colKey="cpu_usage"     label="CPU usage" sort={sort} onToggle={onToggle} style={{ width: 160 }} />
               <th>Guest tools</th>
               <th style={{ width: 180 }}>Actions</th>
             </tr>
@@ -689,14 +694,19 @@ function VMsTab({ host }: { host: Host }) {
 }
 
 /* ── Storage pools on this host ─────────────────────────── */
+type PoolSortKey = 'name' | 'pool_type' | 'state' | 'capacity_gb' | 'allocation_gb' | 'available_gb' | 'path';
+
 function StorageTab({ host }: { host: Host }) {
   const storage = useStorage();
-  const sort = useSortable<StoragePool>('name');
+  const { sort, onToggle, compare } = useSort<PoolSortKey>('name');
   const filtered = useMemo(
     () => (storage.data ?? []).filter((p: StoragePool) => p.host_id === host.id),
     [storage.data, host.id],
   );
-  const pools = useMemo(() => sort.apply(filtered), [filtered, sort]);
+  const pools = useMemo(
+    () => [...filtered].sort((a, b) => compare((a as any)[sort.key], (b as any)[sort.key])),
+    [filtered, sort, compare],
+  );
   if (pools.length === 0) {
     return <div className="panel" style={{ color: 'var(--text-muted)', fontSize: 12 }}>No storage pools reported.</div>;
   }
@@ -706,14 +716,14 @@ function StorageTab({ host }: { host: Host }) {
       <table className="data-table">
         <thead>
           <tr>
-            <SortTh sort={sort} k="name">Pool</SortTh>
-            <SortTh sort={sort} k="pool_type">Type</SortTh>
-            <SortTh sort={sort} k="state">State</SortTh>
-            <SortTh sort={sort} k="capacity_gb">Capacity</SortTh>
-            <SortTh sort={sort} k="allocation_gb">Used</SortTh>
-            <SortTh sort={sort} k="available_gb">Available</SortTh>
+            <SortableTH colKey="name"          label="Pool"      sort={sort} onToggle={onToggle} />
+            <SortableTH colKey="pool_type"     label="Type"      sort={sort} onToggle={onToggle} />
+            <SortableTH colKey="state"         label="State"     sort={sort} onToggle={onToggle} />
+            <SortableTH colKey="capacity_gb"   label="Capacity"  sort={sort} onToggle={onToggle} />
+            <SortableTH colKey="allocation_gb" label="Used"      sort={sort} onToggle={onToggle} />
+            <SortableTH colKey="available_gb"  label="Available" sort={sort} onToggle={onToggle} />
             <th style={{ width: 180 }}>Utilisation</th>
-            <SortTh sort={sort} k="path">Path</SortTh>
+            <SortableTH colKey="path"          label="Path"      sort={sort} onToggle={onToggle} />
           </tr>
         </thead>
         <tbody>
