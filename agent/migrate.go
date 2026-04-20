@@ -21,15 +21,16 @@ const imageDir = "/var/lib/libvirt/images"
 
 // MigrationStatus tracks the progress of an in-flight offline migration.
 type MigrationStatus struct {
-	Active    bool   `json:"active"`
-	VMName    string `json:"vm_name,omitempty"`
-	Dest      string `json:"dest,omitempty"`
-	Phase     string `json:"phase"`
-	Progress  int    `json:"progress"`
-	Detail    string `json:"detail"`
-	StartedAt int64  `json:"started_at,omitempty"`
-	Elapsed   int64  `json:"elapsed_s,omitempty"`
-	Error     string `json:"error,omitempty"`
+	Active      bool   `json:"active"`
+	MigrationID string `json:"migration_id,omitempty"`
+	VMName      string `json:"vm_name,omitempty"`
+	Dest        string `json:"dest,omitempty"`
+	Phase       string `json:"phase"`
+	Progress    int    `json:"progress"`
+	Detail      string `json:"detail"`
+	StartedAt   int64  `json:"started_at,omitempty"`
+	Elapsed     int64  `json:"elapsed_s,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 var (
@@ -41,6 +42,12 @@ var (
 	// source VM is restored. Set when a migration starts; cleared when
 	// it finishes (or is cancelled).
 	migCancel context.CancelFunc
+	// migReporter pushes progress frames to the server via gRPC so the
+	// SPA's progress bar doesn't have to wait on /migrate-status polling.
+	// Set on startOfflineMigrate, closed when the goroutine exits. nil
+	// when the reporter couldn't open (e.g. server has no gRPC listener
+	// yet) — setMigStatus skips silently in that case.
+	migReporter *MigrationProgressReporter
 )
 
 // errCancelled is returned from offlineMigrate steps that observed a
@@ -49,12 +56,26 @@ var errCancelled = errors.New("migration cancelled by operator")
 
 func setMigStatus(phase string, progress int, detail string) {
 	migStatusMu.Lock()
-	defer migStatusMu.Unlock()
 	migStatus.Phase = phase
 	migStatus.Progress = progress
 	migStatus.Detail = detail
 	if migStatus.StartedAt > 0 {
 		migStatus.Elapsed = time.Now().Unix() - migStatus.StartedAt
+	}
+	reporter := migReporter
+	frame := ProgressFrame{
+		MigrationID: migStatus.MigrationID,
+		VMName:      migStatus.VMName,
+		DestHost:    migStatus.Dest,
+		Phase:       phase,
+		ProgressPct: int32(progress),
+		Detail:      detail,
+	}
+	migStatusMu.Unlock()
+	if reporter != nil && frame.MigrationID != "" {
+		// Best-effort; stream errors aren't fatal — HTTP /migrate-status
+		// polling still covers correctness, this is just the fast path.
+		_ = reporter.Send(frame)
 	}
 }
 
@@ -130,7 +151,7 @@ type MTLSOptions struct {
 	RegenerateMAC bool   // rewrite every <mac/> in domain XML to a fresh random local MAC
 }
 
-func startOfflineMigrate(vmName, dest string, keepRaw bool, transport string, mtlsOptions MTLSOptions) {
+func startOfflineMigrate(vmName, dest, migrationID string, keepRaw bool, transport string, mtlsOptions MTLSOptions) {
 	migStatusMu.Lock()
 	if migStatus.Active {
 		migStatusMu.Unlock()
@@ -139,13 +160,27 @@ func startOfflineMigrate(vmName, dest string, keepRaw bool, transport string, mt
 	ctx, cancel := context.WithCancel(context.Background())
 	migCancel = cancel
 	migStatus = MigrationStatus{
-		Active:    true,
-		VMName:    vmName,
-		Dest:      dest,
-		Phase:     "starting",
-		Progress:  0,
-		Detail:    "Initialising offline migration",
-		StartedAt: time.Now().Unix(),
+		Active:      true,
+		MigrationID: migrationID,
+		VMName:      vmName,
+		Dest:        dest,
+		Phase:       "starting",
+		Progress:    0,
+		Detail:      "Initialising offline migration",
+		StartedAt:   time.Now().Unix(),
+	}
+	// Open the server-push stream. Best-effort: if the server doesn't
+	// have the gRPC listener yet (old deploy), reporter stays nil and
+	// progress continues to flow via HTTP /migrate-status polling.
+	if migrationID != "" && telemetryServerURL != "" {
+		grpcAddr := deriveGRPCAddr(telemetryServerURL)
+		if grpcAddr != "" {
+			if rep, err := OpenMigrationProgressReporter(ctx, grpcAddr); err == nil {
+				migReporter = rep
+			} else {
+				log.Printf("migrate: gRPC progress reporter disabled (%v) — HTTP polling still covers", err)
+			}
+		}
 	}
 	migStatusMu.Unlock()
 
@@ -180,6 +215,21 @@ func startOfflineMigrate(vmName, dest string, keepRaw bool, transport string, mt
 			migStatus.Elapsed = time.Now().Unix() - migStatus.StartedAt
 		}
 		migCancel = nil
+		// Flush one terminal frame so the SPA sees phase=complete/failed
+		// without waiting on the next poll, then close the stream.
+		if migReporter != nil {
+			_ = migReporter.Send(ProgressFrame{
+				MigrationID: migStatus.MigrationID,
+				VMName:      migStatus.VMName,
+				DestHost:    migStatus.Dest,
+				Phase:       migStatus.Phase,
+				ProgressPct: int32(migStatus.Progress),
+				Detail:      migStatus.Detail,
+				Error:       migStatus.Error,
+			})
+			_, _, _ = migReporter.Close()
+			migReporter = nil
+		}
 		migStatusMu.Unlock()
 	}()
 }

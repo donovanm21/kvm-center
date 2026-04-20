@@ -14,11 +14,12 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 
 	agentpb "kvm-center/gen/agentpb"
 )
@@ -56,7 +57,13 @@ func OpenMigrationProgressReporter(parent context.Context, grpcAddr string) (*Mi
 	if grpcAddr == "" {
 		return nil, fmt.Errorf("grpc-addr empty — migration-progress reporter disabled")
 	}
-	conn, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Same TLS trust model as the HTTP client + live metrics stream:
+	// server multiplexes gRPC on its TLS port (:8190) under the
+	// auto-generated self-signed cert. InsecureSkipVerify matches
+	// the homelab pairing story; operator swaps to a trusted cert
+	// via Settings → TLS when ready.
+	tlsCreds := credentials.NewTLS(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec // see agent/main.go
+	conn, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(tlsCreds))
 	if err != nil {
 		return nil, fmt.Errorf("grpc dial %s: %w", grpcAddr, err)
 	}
