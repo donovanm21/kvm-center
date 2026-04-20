@@ -1,14 +1,13 @@
 name: deploy
 
-# Continuous deployment to the operator's docker host (10.10.100.8
-# by default) on every green main-branch push. Fires AFTER the
-# `test` workflow finishes so a failing gate (gofmt, vet, tests,
-# govulncheck, npm audit, gitleaks) keeps a broken change off the
-# deployed stack.
+# Continuous deployment to the operator's docker host on every green
+# main-branch push. Fires AFTER the `test` workflow finishes so a
+# failing gate (gofmt, vet, tests, govulncheck, npm audit, gitleaks)
+# keeps a broken change off the deployed stack.
 #
 # Secrets expected at the repo level (Settings -> Actions -> Secrets):
 #
-#   DEPLOY_HOST       — e.g. 10.10.100.8
+#   DEPLOY_HOST       — the docker host's reachable address
 #   DEPLOY_USER       — e.g. root (or a sudoers-scoped deploy user)
 #   DEPLOY_SSH_KEY    — full ed25519 private key PEM; pubkey authorized
 #                       for DEPLOY_USER@DEPLOY_HOST
