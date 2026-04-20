@@ -9,15 +9,15 @@ import { useVMs, useFeatures, useKVMToolsLatest, useMigrations } from '@/hooks/u
 import { useAuth } from '@/hooks/useAuth';
 import type { VM } from '@/types';
 
-type LockReason = 'migrating' | 'rolled-back';
+export type LockReason = 'migrating' | 'rolled-back';
 
 // Phases that mean the destination already had the VM defined when the
 // migration failed. The agent's rollback path tries to undefine + delete
 // transferred files, but partial state can survive a failed rollback —
 // keep the destination row gated until an operator clears it.
-const PHASES_PAST_DEFINE = new Set(['define', 'start', 'verify', 'cleanup']);
+export const PHASES_PAST_DEFINE = new Set(['define', 'start', 'verify', 'cleanup']);
 
-function lockKey(hostID: string, vmName: string): string {
+export function lockKey(hostID: string, vmName: string): string {
   return `${hostID}|${vmName}`;
 }
 
@@ -174,7 +174,7 @@ function VMRow({ vm, lock, latestKVMTools }: { vm: VM; lock?: LockReason; latest
   );
 }
 
-function LockBadge({ reason }: { reason: LockReason }) {
+export function LockBadge({ reason }: { reason: LockReason }) {
   const isRollback = reason === 'rolled-back';
   return (
     <span className={`lock-pill ${isRollback ? 'danger' : 'warn'}`}>
