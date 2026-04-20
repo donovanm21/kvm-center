@@ -210,7 +210,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 			detail := map[string]string{"action": action, "host_id": req.HostID}
 			resource := "vm/" + req.VMUUID
 			switch action {
-			case "START", "STOP", "FORCESTOP", "RESTART":
+			case "START", "STOP", "FORCESTOP", "RESTART", "POWER_CYCLE":
 				audit(store, r, AuditVMAction, resource, detail, true, "")
 			case "SNAPSHOT":
 				audit(store, r, AuditVMSnapshot, resource, detail, true, "")

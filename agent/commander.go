@@ -14,6 +14,34 @@ import (
 	"kvm-center/internal/models"
 )
 
+// powerCycleVM performs a graceful shutdown → wait → start sequence so
+// qemu is re-spawned and picks up any --config-only EDIT_VM changes
+// (memory cap, vCPU max, etc). Graceful shutdown is attempted first via
+// ACPI; after 60 s of waiting we fall back to `virsh destroy` so the
+// operator isn't stuck behind a wedged guest. Returns combined stdout+
+// stderr from the start command for caller logging.
+func powerCycleVM(vmTarget string) ([]byte, error) {
+	// If already off, just start.
+	if state, _ := exec.Command("virsh", "domstate", vmTarget).Output(); strings.TrimSpace(string(state)) != "shut off" {
+		_, _ = exec.Command("virsh", "shutdown", vmTarget).CombinedOutput()
+		shutOff := false
+		for i := 0; i < 30; i++ {
+			time.Sleep(2 * time.Second)
+			s, _ := exec.Command("virsh", "domstate", vmTarget).Output()
+			if strings.TrimSpace(string(s)) == "shut off" {
+				shutOff = true
+				break
+			}
+		}
+		if !shutOff {
+			// Guest ignored ACPI (no agent, BSOD, etc). Force.
+			_, _ = exec.Command("virsh", "destroy", vmTarget).CombinedOutput()
+			time.Sleep(1 * time.Second)
+		}
+	}
+	return exec.Command("virsh", "start", vmTarget).CombinedOutput()
+}
+
 // StartCommandServer listens for POST /command from the control plane.
 // currentMaxMemKiB returns the persisted <memory> cap for vmTarget
 // in KiB. Used by EDIT_VM's mem_mb path to decide setmem/setmaxmem
@@ -128,6 +156,13 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		out, err = exec.Command("virsh", "destroy", vmTarget).CombinedOutput()
 	case "RESTART":
 		out, err = exec.Command("virsh", "reboot", vmTarget).CombinedOutput()
+	case "POWER_CYCLE":
+		// v5.30.0: full power-cycle — shutdown + wait + start. Unlike
+		// `virsh reboot` (RESTART) this actually re-spawns qemu so
+		// EDIT_VM config changes like the memory cap and vCPU max take
+		// effect. RESTART maps to an in-guest ACPI reboot which keeps
+		// the same qemu process, so setmaxmem/--config never applied.
+		out, err = powerCycleVM(vmTarget)
 	case "SNAPSHOT":
 		snapName := req.Params["name"]
 		if snapName == "" {

@@ -875,11 +875,16 @@ function EditResourcesButton({ vm, canEdit }: { vm: VM; canEdit: boolean }) {
   };
 
   const restartNow = () => {
+    // POWER_CYCLE (shutdown + start) instead of RESTART (ACPI reboot)
+    // so qemu is re-spawned and the config-only EDIT_VM changes like
+    // setmaxmem / setvcpus --maximum actually take effect. RESTART left
+    // qemu running with the old caps, which is why setting RAM to 4 GB
+    // would revert to 2 GB after the "reboot" prompt.
     cmd.mutate({
       host_id: vm.host_id,
       vm_uuid: vm.uuid,
       vm_name: vm.name,
-      action: 'RESTART',
+      action: 'POWER_CYCLE',
     }, { onSuccess: () => setRebootPrompt(null) });
   };
 
