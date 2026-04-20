@@ -12,6 +12,7 @@ import { useFeatures, useHosts, useKVMToolsLatest, useStorage, useVMs } from '@/
 import { useToast } from '@/hooks/useToast';
 import { useVMCommand } from '@/hooks/useVMCommand';
 import type { Host, HostPCIDevice, StoragePool, VM } from '@/types';
+import { CreateSnapshotModal } from '@/pages/VMDetail';
 
 /**
  * MaintenanceToggle flips a host between operational and "draining"
@@ -492,21 +493,12 @@ function HostVMRow({ vm, latestKVMTools }: { vm: VM; host: Host; latestKVMTools:
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const takeSnapshot = () => {
-    if (!canSnap) return;
-    const name = `manual-${vm.name}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
-    cmd.mutate({
-      host_id: vm.host_id,
-      vm_uuid: vm.uuid,
-      vm_name: vm.name,
-      action: 'SNAPSHOT',
-      params: { name },
-    });
-  };
+  const [snapOpen, setSnapOpen] = useState(false);
 
   const cpuPct = Math.min(vm.cpu_usage || 0, 100);
 
   return (
+    <>
     <tr>
       <td>
         <Link
@@ -540,11 +532,13 @@ function HostVMRow({ vm, latestKVMTools }: { vm: VM; host: Host; latestKVMTools:
           <IconAction title="Start" tone="primary" disabled={!stopped || !canLife} onClick={run('START')} icon="▶" />
           <IconAction title="Shutdown" tone="warn"    disabled={!running || !canLife} onClick={run('STOP')}    icon="■" />
           <IconAction title="Restart"  tone="ghost"   disabled={!running || !canLife} onClick={run('RESTART')} icon="↺" />
-          <IconAction title="Take snapshot" tone="ghost" disabled={!canSnap || !running} onClick={takeSnapshot} icon="📷" />
+          <IconAction title="Take snapshot" tone="ghost" disabled={!canSnap || !running} onClick={() => setSnapOpen(true)} icon="📷" />
           <IconAction title="Console"  tone="ghost"   disabled={!running || !canConsole} onClick={openConsole} icon="🖥" />
         </div>
       </td>
     </tr>
+    <CreateSnapshotModal vm={vm} open={snapOpen} onClose={() => setSnapOpen(false)} />
+    </>
   );
 }
 
@@ -652,15 +646,47 @@ const sectionHeader: React.CSSProperties = {
 };
 
 /* ── VMs on this host ────────────────────────────────────── */
+type SortKey = 'name' | 'state' | 'cpu_count' | 'mem_total_mb' | 'disk_total_gb' | 'cpu_usage';
+type SortDir = 'asc' | 'desc';
+
 function VMsTab({ host }: { host: Host }) {
   const vms = useVMs();
   const latest = useKVMToolsLatest();
-  const list = useMemo(
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const filtered = useMemo(
     () => (vms.data ?? []).filter((v: VM) => v.host_id === host.id),
     [vms.data, host.id],
   );
+  const list = useMemo(() => {
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      const av = (a as any)[sortKey];
+      const bv = (b as any)[sortKey];
+      let cmp = 0;
+      if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
+      else cmp = String(av ?? '').localeCompare(String(bv ?? ''));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [filtered, sortKey, sortDir]);
   const pg = usePagination(list);
-  if (list.length === 0) {
+  const onHeader = (key: SortKey) => () => {
+    if (sortKey === key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+  const SortHeader = ({ k, label, width }: { k: SortKey; label: string; width?: number }) => {
+    const active = sortKey === k;
+    return (
+      <th style={{ cursor: 'pointer', userSelect: 'none', ...(width ? { width } : {}) }} onClick={onHeader(k)}>
+        {label}
+        <span style={{ marginLeft: 6, color: active ? 'var(--text-strong)' : 'var(--text-faded)', fontSize: 10 }}>
+          {active ? (sortDir === 'asc' ? '▲' : '▼') : '▲▼'}
+        </span>
+      </th>
+    );
+  };
+  if (filtered.length === 0) {
     return <div className="panel" style={{ color: 'var(--text-muted)', fontSize: 12 }}>No VMs on this host.</div>;
   }
   return (
@@ -669,12 +695,12 @@ function VMsTab({ host }: { host: Host }) {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>State</th>
-              <th>CPUs</th>
-              <th>Memory</th>
-              <th>Disk</th>
-              <th style={{ width: 160 }}>CPU usage</th>
+              <SortHeader k="name" label="Name" />
+              <SortHeader k="state" label="State" />
+              <SortHeader k="cpu_count" label="CPUs" />
+              <SortHeader k="mem_total_mb" label="Memory" />
+              <SortHeader k="disk_total_gb" label="Disk" />
+              <SortHeader k="cpu_usage" label="CPU usage" width={160} />
               <th>Guest tools</th>
               <th style={{ width: 180 }}>Actions</th>
             </tr>

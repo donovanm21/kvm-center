@@ -1516,7 +1516,7 @@ function SnapshotsTab({ vm }: { vm: VM }) {
 }
 
 /* ── Create Snapshot modal ──────────────────────────────── */
-function CreateSnapshotModal({ vm, open, onClose }: { vm: VM; open: boolean; onClose: () => void }) {
+export function CreateSnapshotModal({ vm, open, onClose }: { vm: VM; open: boolean; onClose: () => void }) {
   const [name, setName] = useState(() => defaultSnapshotName());
   const create = useCreateSnapshot();
   const submit = async () => {
