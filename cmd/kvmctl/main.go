@@ -19,7 +19,10 @@ import (
 	"time"
 )
 
-const cliVersion = "v5.5.0"
+// cliVersion is injected at build time via -ldflags "-X main.cliVersion=...".
+// Default ("dev") is what you get from `go build` without the release
+// makefile/Dockerfile, which centralise the injection on server/VERSION.
+var cliVersion = "dev"
 
 type Config struct {
 	Server string `json:"server"`

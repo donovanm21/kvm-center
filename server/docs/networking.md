@@ -16,8 +16,8 @@ for bandwidth during migrations.
 
 | Port  | Protocol | Consumer             | Scope            | Notes |
 |-------|----------|----------------------|------------------|-------|
-| 8190  | HTTPS    | Operators + agents + kvmctl | LAN / trusted | Primary endpoint for everything — UI, API, `/downloads/*`, agent telemetry. Install scripts use `curl -k` to tolerate the default self-signed cert; trust is tightened once an operator-provided cert is installed. Terminate behind a reverse proxy for WAN exposure. |
-| 8090  | HTTP     | Legacy pre-v5.24 agents only | Management VLAN | Plaintext listener kept for backwards-compat. New installs never advertise it; firewall it off (or drop from docker-compose) once all agents have been re-enrolled against HTTPS. |
+| 8190  | HTTPS    | Operators + agents + kvmctl + kvm-tools | LAN / trusted | Primary (and only) endpoint since v5.32.5. UI, API, `/downloads/*`, agent telemetry, gRPC multiplex — all terminate here. Install scripts use `curl -k` to tolerate the default self-signed cert; trust is tightened once an operator-provided cert is installed. Terminate behind a reverse proxy for WAN exposure. |
+| 8090  | HTTP     | — retired — | — | Previously the plain-HTTP fallback for pre-v5.24 agents. Retired in v5.32.5 after a fleet-wide rotation onto TLS. Re-enable via `KVM_CENTER_DISABLE_HTTP=0` + restore the compose port mapping if you ever need it back. |
 
 ### Hypervisors
 
@@ -31,9 +31,10 @@ for bandwidth during migrations.
 ### Guests (kvm-tools)
 
 Outbound only. Guests post telemetry to the control plane on port
-**8190** (TLS). v5.24+ defaults to HTTPS; the server's legacy
-plaintext `:8090` listener is still up for pre-5.24 agents but new
-installs never touch it. Nothing listens inside the guest.
+**8190** (TLS). v5.32.4+ kvm-tools auto-migrates any legacy `:8090`
+config in its own systemd unit on the first boot after self-update.
+The server's `:8090` listener was retired in v5.32.5 — fleet is
+fully TLS. Nothing listens inside the guest.
 
 ## Firewall recipe
 
@@ -119,7 +120,8 @@ follow it across.
 ## Hardening checklist
 
 - Expose **8190** to operators and agents — it's the single port
-  everything speaks. 8090 (legacy plaintext) can stay firewalled off.
+  everything speaks. `:8090` was retired in v5.32.5; nothing listens
+  on it by default.
 - Put the server behind a reverse proxy if operators come in over
   WAN. HSTS + a real cert beats the self-signed bundle.
 - Lock 16514 + the QEMU range to the hypervisor subnet.
