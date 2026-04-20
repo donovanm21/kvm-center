@@ -40,8 +40,8 @@ make check
 
 The web UI lives in `webui-react/` and is built into the server's
 embedded filesystem. `npm run dev` from there gives you a hot-reload
-loop proxying to a backend on `:8090` (dev-only; production traffic
-is TLS on `:8190`).
+loop; the Vite proxy is configured for `:8190` (TLS) — production is
+also TLS-only since v5.32.5.
 
 ## Pull requests
 
