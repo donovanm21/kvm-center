@@ -435,32 +435,33 @@ func main() {
 			NextProtos: []string{"h2", "http/1.1"},
 		},
 	}
-	go func() {
-		plain := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// /api/*, /health: pass through on plain HTTP for agents +
-			// any other machine client that doesn't want to wrangle our
-			// TLS material. Everything else is a browser and should be
-			// on HTTPS — issue a 308 so POST bodies survive.
-			p := r.URL.Path
-			// v5.16: /downloads/* must stay plaintext too — install
-			// one-liners and update-agent.sh pull from here before the
-			// host has any way to trust the self-signed cert.
-			if strings.HasPrefix(p, "/api/") || p == "/health" || strings.HasPrefix(p, "/downloads/") {
-				handler.ServeHTTP(w, r)
-				return
+	// v5.32.1: the plain-HTTP listener is retired. All agent traffic
+	// moved to TLS (:8190) in v5.32.0; operators who still need it for
+	// legacy tooling can set KVM_CENTER_KEEP_HTTP=1 during the rollout
+	// to keep the old :8090 listener alive. Default OFF.
+	if os.Getenv("KVM_CENTER_KEEP_HTTP") == "1" {
+		go func() {
+			plain := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				p := r.URL.Path
+				if strings.HasPrefix(p, "/api/") || p == "/health" || strings.HasPrefix(p, "/downloads/") {
+					handler.ServeHTTP(w, r)
+					return
+				}
+				host := r.Host
+				if i := strings.Index(host, ":"); i > 0 {
+					host = host[:i]
+				}
+				target := "https://" + host + *tlsAddr + r.URL.RequestURI()
+				http.Redirect(w, r, target, http.StatusPermanentRedirect)
+			})
+			log.Printf("kvm-center server plain-HTTP (legacy, KVM_CENTER_KEEP_HTTP=1) on %s", *addr)
+			if err := http.ListenAndServe(*addr, plain); err != nil {
+				log.Printf("server: http listener exited: %v", err)
 			}
-			host := r.Host
-			if i := strings.Index(host, ":"); i > 0 {
-				host = host[:i]
-			}
-			target := "https://" + host + *tlsAddr + r.URL.RequestURI()
-			http.Redirect(w, r, target, http.StatusPermanentRedirect)
-		})
-		log.Printf("kvm-center server plain-HTTP (agent + redirect) on %s", *addr)
-		if err := http.ListenAndServe(*addr, plain); err != nil {
-			log.Fatalf("server: http: %v", err)
-		}
-	}()
+		}()
+	} else {
+		log.Printf("kvm-center server plain-HTTP listener DISABLED (v5.32.1 retirement). Set KVM_CENTER_KEEP_HTTP=1 to re-enable.")
+	}
 	log.Printf("kvm-center server listening on %s (TLS)", *tlsAddr)
 	if err := tlsServer.ListenAndServeTLS("", ""); err != nil {
 		log.Fatalf("server: tls: %v", err)

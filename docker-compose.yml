@@ -41,9 +41,11 @@ services:
     container_name: kvm-center-server
     restart: unless-stopped
     ports:
-      # Host-side ports are operator-configurable via .env; container-side
-      # stays fixed so internal binds + healthchecks don't have to move.
-      - "${KVM_CENTER_HTTP_PORT:-8090}:8090"   # Plain HTTP — legacy v<5.24 agents.
+      # v5.32.1: plain HTTP :8090 retired. All agent + UI traffic is
+      # TLS-only now. Re-enable by uncommenting the 8090 mapping below
+      # AND setting KVM_CENTER_KEEP_HTTP=1 if you have legacy tooling
+      # that can't be reconfigured.
+      # - "${KVM_CENTER_HTTP_PORT:-8090}:8090"
       - "${KVM_CENTER_HTTPS_PORT:-8190}:8190"  # HTTPS — primary UI + agent telemetry.
     environment:
       - KVM_CENTER_ADDR=:8090
@@ -73,7 +75,10 @@ services:
     # to detect readiness; Docker restarts the container on sustained
     # failure because restart:unless-stopped is set above.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      # TLS port is the only listener after v5.32.1. `--no-check-certificate`
+      # tolerates the auto-generated self-signed cert — we just want to
+      # know the process is accepting connections, not validate chain.
+      test: ["CMD", "wget", "--no-check-certificate", "-qO-", "https://localhost:8190/health"]
       interval: 15s
       timeout: 5s
       retries: 5
