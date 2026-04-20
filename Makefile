@@ -2,6 +2,9 @@ BINARY_SERVER = kvm-center-server
 BINARY_AGENT  = kvm-center-agent
 DIST_DIR      = dist
 
+VERSION := $(shell cat server/VERSION | tr -d '[:space:]')
+LDFLAGS := -s -w -X main.Version=$(VERSION)
+
 .PHONY: all build build-server build-agent clean docker-build docker-up docker-down \
         dist linux-amd64 linux-arm64
 
@@ -12,13 +15,13 @@ all: build
 build: build-server build-agent build-cli
 
 build-server:
-	go build -ldflags="-s -w" -o $(BINARY_SERVER) ./server
+	go build -ldflags="$(LDFLAGS)" -o $(BINARY_SERVER) ./server
 
 build-agent:
-	go build -ldflags="-s -w" -o $(BINARY_AGENT) ./agent
+	go build -ldflags="$(LDFLAGS)" -o $(BINARY_AGENT) ./agent
 
 build-cli:
-	go build -ldflags="-s -w" -o kvmctl ./cmd/kvmctl
+	go build -ldflags="$(LDFLAGS)" -o kvmctl ./cmd/kvmctl
 
 # ── Cross-compiled distribution binaries ──────────────────────────────────────
 
@@ -28,16 +31,16 @@ dist: linux-amd64 linux-arm64
 linux-amd64:
 	@mkdir -p $(DIST_DIR)
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-	  go build -ldflags="-s -w" -o $(DIST_DIR)/$(BINARY_SERVER)-linux-amd64 ./server
+	  go build -ldflags="$(LDFLAGS)" -o $(DIST_DIR)/$(BINARY_SERVER)-linux-amd64 ./server
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-	  go build -ldflags="-s -w" -o $(DIST_DIR)/$(BINARY_AGENT)-linux-amd64 ./agent
+	  go build -ldflags="$(LDFLAGS)" -o $(DIST_DIR)/$(BINARY_AGENT)-linux-amd64 ./agent
 
 linux-arm64:
 	@mkdir -p $(DIST_DIR)
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
-	  go build -ldflags="-s -w" -o $(DIST_DIR)/$(BINARY_SERVER)-linux-arm64 ./server
+	  go build -ldflags="$(LDFLAGS)" -o $(DIST_DIR)/$(BINARY_SERVER)-linux-arm64 ./server
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
-	  go build -ldflags="-s -w" -o $(DIST_DIR)/$(BINARY_AGENT)-linux-arm64 ./agent
+	  go build -ldflags="$(LDFLAGS)" -o $(DIST_DIR)/$(BINARY_AGENT)-linux-arm64 ./agent
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 
