@@ -649,13 +649,27 @@ func virshDomInfo(name string) map[string]string {
 }
 
 // virshDomMemUsed returns actual guest-side memory usage in MB via dommemstat.
-// Returns (0, false) when the balloon driver isn't reporting stats.
+// Returns (0, false) when the balloon driver isn't reporting stats or
+// its cache is stale.
+//
+// Before reading, we set --period 5 on the domain so the virtio-balloon
+// driver refreshes its stats every 5 s. Without this, `dommemstat` can
+// return cache values many DAYS old (ark-srv01 was reading 137 MB on a
+// 10 GB-used VM because the last_update was 6 days in the past).
+// Setting period is idempotent and cheap; calling it every telemetry
+// tick is fine.
 func virshDomMemUsed(name string) (uint64, bool) {
+	// Enable periodic balloon stat refresh. --live applies to the
+	// running domain only; ignored if not supported (old libvirt,
+	// non-virtio-balloon models). Errors here are non-fatal — we
+	// still try to read whatever the current stats are.
+	_, _ = exec.Command("virsh", "dommemstat", name, "--period", "5", "--live").CombinedOutput()
+
 	out, err := exec.Command("virsh", "dommemstat", name).Output()
 	if err != nil {
 		return 0, false
 	}
-	var available, unused uint64
+	var available, unused, lastUpdate uint64
 	var hasAvail, hasUnused bool
 	for _, line := range strings.Split(string(out), "\n") {
 		fields := strings.Fields(line)
@@ -670,7 +684,15 @@ func virshDomMemUsed(name string) (uint64, bool) {
 		case "unused":
 			unused = val
 			hasUnused = true
+		case "last_update":
+			lastUpdate = val
 		}
+	}
+	// Reject obviously stale stats — the balloon driver can hold a
+	// week-old reading if period was never set. 5 minutes is a
+	// generous threshold; a healthy driver refreshes every 5 s.
+	if lastUpdate > 0 && time.Since(time.Unix(int64(lastUpdate), 0)) > 5*time.Minute {
+		return 0, false
 	}
 	if hasAvail && hasUnused && available >= unused {
 		return (available - unused) / 1024, true
