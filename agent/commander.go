@@ -14,6 +14,26 @@ import (
 	"kvm-center/internal/models"
 )
 
+// powerCycleForEdit shuts the VM down (ACPI with destroy fallback) and
+// returns without restarting. Used by EDIT_VM's allow_shutdown=true
+// path — caller runs the config change against the shut-off VM and
+// then restarts explicitly. Returns combined output + error from the
+// final wait state for caller logging.
+func powerCycleForEdit(vmTarget string) ([]byte, error) {
+	_, _ = exec.Command("virsh", "shutdown", vmTarget).CombinedOutput()
+	for i := 0; i < 30; i++ {
+		time.Sleep(2 * time.Second)
+		s, _ := exec.Command("virsh", "domstate", vmTarget).Output()
+		if strings.TrimSpace(string(s)) == "shut off" {
+			return nil, nil
+		}
+	}
+	// Guest ignored ACPI — force off.
+	out, err := exec.Command("virsh", "destroy", vmTarget).CombinedOutput()
+	time.Sleep(1 * time.Second)
+	return out, err
+}
+
 // powerCycleVM performs a graceful shutdown → wait → start sequence so
 // qemu is re-spawned and picks up any --config-only EDIT_VM changes
 // (memory cap, vCPU max, etc). Graceful shutdown is attempted first via
@@ -224,8 +244,36 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 				// the error into a clearer message so the SPA can
 				// surface a "shut down + increase vCPU max?" prompt.
 				if strings.Contains(err.Error(), "greater than max allowable") {
-					if isRunning {
-						respond(w, false, "cannot raise the VM's vCPU cap while it's running. Shut the VM down first, then retry the edit — the agent will raise the cap (setvcpus --maximum --config) and apply your vCPU count in the same call.")
+					// v5.31.0: if the operator opted in via
+					// allow_shutdown=true, shut the VM down ourselves,
+					// raise the cap, apply the count, then power back
+					// on. One click from their side.
+					if isRunning && req.Params["allow_shutdown"] == "true" {
+						log.Printf("edit_vm: allow_shutdown=true — power-cycling %s to raise vCPU cap to %s", vmTarget, v)
+						if _, pcErr := powerCycleForEdit(vmTarget); pcErr != nil {
+							respond(w, false, "shutdown for vCPU cap raise failed: "+pcErr.Error())
+							return
+						}
+						// VM is now shut off — raise cap + apply count.
+						if o, e := exec.Command("virsh", "setvcpus", vmTarget, v, "--maximum", "--config").CombinedOutput(); e != nil {
+							// Best-effort: bring the VM back up before reporting.
+							_, _ = exec.Command("virsh", "start", vmTarget).CombinedOutput()
+							respond(w, false, "setvcpus --maximum failed: "+strings.TrimSpace(string(o)))
+							return
+						}
+						if o2, e2 := exec.Command("virsh", "setvcpus", vmTarget, v, "--config").CombinedOutput(); e2 != nil {
+							_, _ = exec.Command("virsh", "start", vmTarget).CombinedOutput()
+							respond(w, false, "setvcpus (after raising max) failed: "+strings.TrimSpace(string(o2)))
+							return
+						}
+						if o3, e3 := exec.Command("virsh", "start", vmTarget).CombinedOutput(); e3 != nil {
+							respond(w, false, "VM failed to restart after cap raise: "+strings.TrimSpace(string(o3)))
+							return
+						}
+						msgs = append(msgs, "vcpus="+v+" (cap raised via shutdown+start)")
+						isRunning = true // VM is back up; keeps subsequent mem_mb path correct.
+					} else if isRunning {
+						respond(w, false, "cannot raise the VM's vCPU cap while it's running. Shut the VM down first, or re-submit with allow_shutdown=true so the agent does it for you (shutdown → raise cap → apply count → restart).")
 					} else {
 						// Shut off — try to raise the cap + apply.
 						if o, e := exec.Command("virsh", "setvcpus", vmTarget, v, "--maximum", "--config").CombinedOutput(); e != nil {
@@ -238,11 +286,11 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 						}
 						msgs = append(msgs, "vcpus="+v+" (cap raised + config; applies on next boot)")
 					}
-					if !isRunning {
-						// Fall through — we've already appended a message.
-					} else {
-						return
-					}
+					// Fall through so any mem_mb / autostart / boot_dev
+					// edits in the same request still apply. The
+					// running-without-allow_shutdown branch above
+					// already returned; everything else either handled
+					// the cap raise or was shut off to begin with.
 				} else {
 					respond(w, false, err.Error())
 					return
