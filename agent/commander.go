@@ -274,6 +274,7 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 						isRunning = true // VM is back up; keeps subsequent mem_mb path correct.
 					} else if isRunning {
 						respond(w, false, "cannot raise the VM's vCPU cap while it's running. Shut the VM down first, or re-submit with allow_shutdown=true so the agent does it for you (shutdown → raise cap → apply count → restart).")
+						return
 					} else {
 						// Shut off — try to raise the cap + apply.
 						if o, e := exec.Command("virsh", "setvcpus", vmTarget, v, "--maximum", "--config").CombinedOutput(); e != nil {
