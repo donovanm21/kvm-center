@@ -21,7 +21,7 @@ import (
 var Version = "dev"
 
 func main() {
-	serverURL := flag.String("server", envOrDefault("KVM_CENTER_SERVER", "https://localhost:8190"), "control plane URL")
+	serverURL := flag.String("server", envOrDefault("KVM_CENTER_SERVER", "https://kvm-center:8190"), "control plane URL (TLS-only since v5.32.0)")
 	cmdPort := flag.Int("port", intEnvOrDefault("KVM_CENTER_AGENT_PORT", 8081), "command server port")
 	interval := flag.Duration("interval", 15*time.Second, "telemetry interval")
 	showVersion := flag.Bool("version", false, "print version and exit")
