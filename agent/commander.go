@@ -473,7 +473,7 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("command: offline-migrate vm=%s → %s keep_raw=%v transport=%s pool=%q rename=%q regen_mac=%v (async)",
 			vmTarget, dest, keepRaw, req.Params["migration_transport"], opts.TargetPool, opts.NewVMName, opts.RegenerateMAC)
-		startOfflineMigrate(vmTarget, dest, keepRaw, req.Params["migration_transport"], opts)
+		startOfflineMigrate(vmTarget, dest, req.Params["migration_id"], keepRaw, req.Params["migration_transport"], opts)
 		respond(w, true, "offline migration started — poll /migrate-status for progress")
 		return
 	default:

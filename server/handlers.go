@@ -413,6 +413,12 @@ func handleCommand(store *Store) http.HandlerFunc {
 				Progress:   0,
 			}
 			store.AddMigration(migRec)
+			// v5.29.0: hand the agent the server-generated migration_id so
+			// it can open a gRPC StreamMigrationProgress stream and push
+			// phase/progress frames in real time. Without this the agent
+			// has no way to correlate frames back to the server's record.
+			agentCmd.Params["migration_id"] = migRec.ID
+			body, _ = json.Marshal(agentCmd)
 			if action == "OFFLINE_MIGRATE" {
 				// Offline migrations run async on the agent; mirror the
 				// /migrate-status feed onto the record until terminal.
