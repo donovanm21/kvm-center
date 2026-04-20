@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"kvm-center/internal/models"
@@ -23,10 +24,18 @@ type cpuSnapshot struct {
 }
 
 var prevCPU cpuSnapshot
-var prevVMCPU = make(map[string]struct {
-	cpuNs uint64
-	ts    time.Time
-})
+
+// prevVMCPU must be guarded — v5.28+ has three goroutines that can
+// call vmCPUUsage concurrently: telemetry tick, live-metrics gRPC
+// streamer, and lifecycle watcher. A fresh "fatal error: concurrent
+// map writes" from v5.31.0 prod confirmed the race. Mutex it.
+var (
+	prevVMCPUMu sync.Mutex
+	prevVMCPU   = make(map[string]struct {
+		cpuNs uint64
+		ts    time.Time
+	})
+)
 
 // CollectTelemetry gathers host and VM metrics using /proc and virsh.
 func CollectTelemetry(agentPort int) models.TelemetryPayload {
@@ -686,11 +695,13 @@ func vmCPUUsage(name string, cpuCount int) float64 {
 	}
 
 	now := time.Now()
+	prevVMCPUMu.Lock()
 	prev, hasPrev := prevVMCPU[name]
 	prevVMCPU[name] = struct {
 		cpuNs uint64
 		ts    time.Time
 	}{cpuNs, now}
+	prevVMCPUMu.Unlock()
 
 	if !hasPrev || cpuNs == 0 {
 		return 0
