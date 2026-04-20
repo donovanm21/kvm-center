@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -58,12 +61,57 @@ func reconcileStrandedMigrations(store *Store) {
 			fixed++
 			continue
 		}
-		// Still within the in-flight window; a live agent may still
-		// be working. Leave as-is.
+		// Within the 90-min window but ask the source agent whether it
+		// actually has work in flight. If the agent says active=false,
+		// the migration was killed (most commonly by an agent restart
+		// during a deploy — v5.29.0 hit this). Mark failed so the UI
+		// stops showing a stuck progress bar.
+		if agentReportsNoActiveMigration(store, rec.SourceHost) {
+			finalizeMigration(store, rec, "failed",
+				"Source agent reports no active migration — transfer was interrupted (agent restart?). Disk/record cleanup may be needed.")
+			log.Printf("migrations: reconciled %s as failed (agent idle, vm=%s src=%s)",
+				rec.ID, rec.VMName, rec.SourceHost)
+			fixed++
+			continue
+		}
+		// Agent says active=true OR agent unreachable — leave as-is.
+		// The next boot of the reconciler (or the sync HTTP completion)
+		// will finish the job.
 	}
 	if fixed > 0 {
 		log.Printf("migrations: reconciler resolved %d stranded record(s) at boot", fixed)
 	}
+}
+
+// agentReportsNoActiveMigration hits the source agent's /migrate-status
+// endpoint. Returns true only when the response clearly says no
+// migration is in flight — a network error or unexpected response
+// returns false so we don't fail a live migration on a flaky probe.
+func agentReportsNoActiveMigration(store *Store, sourceHost string) bool {
+	if sourceHost == "" {
+		return false
+	}
+	addr := store.GetHostAgentAddr(sourceHost)
+	if addr == "" {
+		return false
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	url := fmt.Sprintf("http://%s/migrate-status", addr)
+	resp, err := client.Get(url)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	var body struct {
+		Active bool `json:"active"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return false
+	}
+	return !body.Active
 }
 
 // vmIsOnHost checks the in-memory telemetry cache for the given VM on
