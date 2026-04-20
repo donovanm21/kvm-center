@@ -81,6 +81,11 @@ func main() {
 	defer liveCancel()
 	go startLiveMetricsStreamer(liveCtx, *serverURL)
 
+	// v5.29.0: watch VM power-state transitions and fire an immediate
+	// telemetry POST when anything flips, so the SPA reflects a VM
+	// going running↔shutoff within ~2 s instead of up to 15 s.
+	go startLifecycleWatcher(liveCtx, *serverURL, *cmdPort)
+
 	// Collect and send telemetry immediately, then on interval.
 	sendTelemetry(*serverURL, *cmdPort)
 

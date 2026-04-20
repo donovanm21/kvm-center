@@ -327,7 +327,23 @@ EOF_ENV
     #   2. data.json inside the kvm-center-server container (no auth needed)
     #   3. /api/hosts (requires the server to allow unauth read; usually fails)
     # SSH auth: passwordless preferred, or sshpass + KVM_HVNODE_SSH_PASS.
-    BUILD_URL="${KVM_CENTER_BUILD_URL:-http://localhost:8090/downloads}"
+    # Default derives the docker host's primary LAN IP so the curl
+    # inside update-agent.sh (which runs on each hvnode) can reach
+    # back to this server. `localhost` resolved to the hvnode itself,
+    # which is always wrong — bit us on every --deploy until v5.29.0.
+    if [[ -z "${KVM_CENTER_BUILD_URL:-}" ]]; then
+      LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+      if [[ -z "$LAN_IP" ]]; then
+        LAN_IP=$(ip -4 -o route get 1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="src") print $(i+1)}')
+      fi
+      if [[ -z "$LAN_IP" ]]; then
+        echo "WARN: could not derive LAN IP for agent downloads; defaulting to localhost (will fail on remote hvnodes). Set KVM_CENTER_BUILD_URL." >&2
+        LAN_IP="localhost"
+      fi
+      BUILD_URL="http://${LAN_IP}:8090/downloads"
+    else
+      BUILD_URL="$KVM_CENTER_BUILD_URL"
+    fi
     SSH_USER="${KVM_HVNODE_SSH_USER:-root}"
     if ! command -v curl >/dev/null 2>&1; then
       echo "ERROR: --update-agents needs curl" >&2
