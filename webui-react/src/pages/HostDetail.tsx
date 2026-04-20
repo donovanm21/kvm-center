@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/useToast';
 import { useVMCommand } from '@/hooks/useVMCommand';
 import type { Host, HostPCIDevice, StoragePool, VM } from '@/types';
 import { CreateSnapshotModal } from '@/pages/VMDetail';
+import { SortTh, useSortable } from '@/components/SortableTable';
 
 /**
  * MaintenanceToggle flips a host between operational and "draining"
@@ -646,46 +647,16 @@ const sectionHeader: React.CSSProperties = {
 };
 
 /* ── VMs on this host ────────────────────────────────────── */
-type SortKey = 'name' | 'state' | 'cpu_count' | 'mem_total_mb' | 'disk_total_gb' | 'cpu_usage';
-type SortDir = 'asc' | 'desc';
-
 function VMsTab({ host }: { host: Host }) {
   const vms = useVMs();
   const latest = useKVMToolsLatest();
-  const [sortKey, setSortKey] = useState<SortKey>('name');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const sort = useSortable<VM>('name');
   const filtered = useMemo(
     () => (vms.data ?? []).filter((v: VM) => v.host_id === host.id),
     [vms.data, host.id],
   );
-  const list = useMemo(() => {
-    const sorted = [...filtered];
-    sorted.sort((a, b) => {
-      const av = (a as any)[sortKey];
-      const bv = (b as any)[sortKey];
-      let cmp = 0;
-      if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
-      else cmp = String(av ?? '').localeCompare(String(bv ?? ''));
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-    return sorted;
-  }, [filtered, sortKey, sortDir]);
+  const list = useMemo(() => sort.apply(filtered), [filtered, sort]);
   const pg = usePagination(list);
-  const onHeader = (key: SortKey) => () => {
-    if (sortKey === key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(key); setSortDir('asc'); }
-  };
-  const SortHeader = ({ k, label, width }: { k: SortKey; label: string; width?: number }) => {
-    const active = sortKey === k;
-    return (
-      <th style={{ cursor: 'pointer', userSelect: 'none', ...(width ? { width } : {}) }} onClick={onHeader(k)}>
-        {label}
-        <span style={{ marginLeft: 6, color: active ? 'var(--text-strong)' : 'var(--text-faded)', fontSize: 10 }}>
-          {active ? (sortDir === 'asc' ? '▲' : '▼') : '▲▼'}
-        </span>
-      </th>
-    );
-  };
   if (filtered.length === 0) {
     return <div className="panel" style={{ color: 'var(--text-muted)', fontSize: 12 }}>No VMs on this host.</div>;
   }
@@ -695,12 +666,12 @@ function VMsTab({ host }: { host: Host }) {
         <table className="data-table">
           <thead>
             <tr>
-              <SortHeader k="name" label="Name" />
-              <SortHeader k="state" label="State" />
-              <SortHeader k="cpu_count" label="CPUs" />
-              <SortHeader k="mem_total_mb" label="Memory" />
-              <SortHeader k="disk_total_gb" label="Disk" />
-              <SortHeader k="cpu_usage" label="CPU usage" width={160} />
+              <SortTh sort={sort} k="name">Name</SortTh>
+              <SortTh sort={sort} k="state">State</SortTh>
+              <SortTh sort={sort} k="cpu_count">CPUs</SortTh>
+              <SortTh sort={sort} k="mem_total_mb">Memory</SortTh>
+              <SortTh sort={sort} k="disk_total_gb">Disk</SortTh>
+              <SortTh sort={sort} k="cpu_usage" width={160}>CPU usage</SortTh>
               <th>Guest tools</th>
               <th style={{ width: 180 }}>Actions</th>
             </tr>
@@ -720,10 +691,12 @@ function VMsTab({ host }: { host: Host }) {
 /* ── Storage pools on this host ─────────────────────────── */
 function StorageTab({ host }: { host: Host }) {
   const storage = useStorage();
-  const pools = useMemo(
+  const sort = useSortable<StoragePool>('name');
+  const filtered = useMemo(
     () => (storage.data ?? []).filter((p: StoragePool) => p.host_id === host.id),
     [storage.data, host.id],
   );
+  const pools = useMemo(() => sort.apply(filtered), [filtered, sort]);
   if (pools.length === 0) {
     return <div className="panel" style={{ color: 'var(--text-muted)', fontSize: 12 }}>No storage pools reported.</div>;
   }
@@ -733,8 +706,14 @@ function StorageTab({ host }: { host: Host }) {
       <table className="data-table">
         <thead>
           <tr>
-            <th>Pool</th><th>Type</th><th>State</th><th>Capacity</th><th>Used</th><th>Available</th>
-            <th style={{ width: 180 }}>Utilisation</th><th>Path</th>
+            <SortTh sort={sort} k="name">Pool</SortTh>
+            <SortTh sort={sort} k="pool_type">Type</SortTh>
+            <SortTh sort={sort} k="state">State</SortTh>
+            <SortTh sort={sort} k="capacity_gb">Capacity</SortTh>
+            <SortTh sort={sort} k="allocation_gb">Used</SortTh>
+            <SortTh sort={sort} k="available_gb">Available</SortTh>
+            <th style={{ width: 180 }}>Utilisation</th>
+            <SortTh sort={sort} k="path">Path</SortTh>
           </tr>
         </thead>
         <tbody>
