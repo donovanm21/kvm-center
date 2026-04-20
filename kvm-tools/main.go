@@ -89,6 +89,20 @@ func main() {
 	interval := flag.Duration("interval", 30*time.Second, "report interval")
 	flag.Parse()
 
+	// v5.32.4: on-boot migration of legacy http://<host>:8090 URLs to
+	// https://<host>:8190. The prior release shipped the unit-rewrite
+	// logic in selfUpdate(), but the code that RAN selfUpdate was the
+	// older binary — it never called rewriteKVMToolsUnit. So new
+	// binaries boot with the old URL still in their argv. Fix it at
+	// startup: swap the runtime URL and rewrite the systemd unit so
+	// the next restart also picks up the change.
+	if re := regexp.MustCompile(`^http://([^/]+):8090(.*)$`); re.MatchString(*serverURL) {
+		new := re.ReplaceAllString(*serverURL, "https://$1:8190$2")
+		log.Printf("kvm-tools: migrating legacy server URL %s → %s (one-time)", *serverURL, new)
+		*serverURL = new
+		rewriteKVMToolsUnit()
+	}
+
 	// UUID resolution order:
 	//   1. -uuid / $KVM_TOOLS_UUID override (operator escape hatch)
 	//   2. /var/lib/kvm-tools/uuid cache (written by a previous server
