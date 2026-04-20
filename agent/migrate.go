@@ -79,6 +79,38 @@ func setMigStatus(phase string, progress int, detail string) {
 	}
 }
 
+// setLiveMigrateActive toggles MigrationStatus.Active for a live
+// (synchronous virsh migrate) run so the standard self-update +
+// deploy guards refuse to restart the agent mid-flight. v5.29.1's
+// guard keyed off this exact flag but only the offline flow set it.
+// Called from commander.go's MIGRATE branch wrapping virsh.
+func setLiveMigrateActive(migrationID, vmName, dest string, on bool) {
+	migStatusMu.Lock()
+	defer migStatusMu.Unlock()
+	if on {
+		// Don't clobber an in-flight offline migration. Offline sets
+		// Active=true first; a concurrent MIGRATE would be a server
+		// bug but we defend anyway.
+		if migStatus.Active && migStatus.Phase != "" {
+			return
+		}
+		migStatus = MigrationStatus{
+			Active:      true,
+			MigrationID: migrationID,
+			VMName:      vmName,
+			Dest:        dest,
+			Phase:       "live-migrate",
+			Progress:    0,
+			StartedAt:   time.Now().Unix(),
+		}
+		return
+	}
+	// Clearing — only clear if THIS migration owns the slot.
+	if migStatus.MigrationID == migrationID || migStatus.VMName == vmName {
+		migStatus = MigrationStatus{}
+	}
+}
+
 func getMigStatus() MigrationStatus {
 	migStatusMu.RLock()
 	defer migStatusMu.RUnlock()
