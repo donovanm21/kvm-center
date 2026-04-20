@@ -51,7 +51,10 @@ func runLiveMigrateWithProgress(args []string, migrationID, vmName, dest string)
 
 	var mu sync.Mutex
 	var combined []byte
-	progressRe := regexp.MustCompile(`Migration:\s*\[\s*(\d+)\s*%\]`)
+	// virsh --verbose emits decimal percentages like "Migration: [ 0.08 %]"
+	// or "Migration: [100.00 %]". Accept optional fractional part so we
+	// don't drop every sub-1% tick.
+	progressRe := regexp.MustCompile(`Migration:\s*\[\s*(\d+)(?:\.\d+)?\s*%\]`)
 
 	collect := func(r io.Reader, isStderr bool) {
 		scanner := bufio.NewScanner(r)
