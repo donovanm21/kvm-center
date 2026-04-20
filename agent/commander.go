@@ -52,33 +52,8 @@ func runLiveMigrateWithProgress(args []string, migrationID, vmName, dest string)
 
 	var mu sync.Mutex
 	var combined []byte
-	// virsh --verbose emits decimal percentages like "Migration: [ 0.08 %]"
-	// or "Migration: [100.00 %]". Accept optional fractional part so we
-	// don't drop every sub-1% tick.
-	progressRe := regexp.MustCompile(`Migration:\s*\[\s*(\d+)(?:\.\d+)?\s*%\]`)
-
 	collect := func(r io.Reader, isStderr bool) {
-		scanner := bufio.NewScanner(r)
-		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-		// v5.32.10: virsh --verbose emits progress updates separated by
-		// \r (carriage return), NOT \n — they're meant to overwrite the
-		// same terminal line. The default Scanner splitter only breaks
-		// on \n so every progress line between migration start and
-		// finish landed in a single giant "line" the scanner wouldn't
-		// yield until the process exited. Split on either to get
-		// per-percentage ticks.
-		scanner.Split(func(data []byte, atEOF bool) (int, []byte, error) {
-			if atEOF && len(data) == 0 {
-				return 0, nil, nil
-			}
-			if i := bytes.IndexAny(data, "\r\n"); i >= 0 {
-				return i + 1, data[:i], nil
-			}
-			if atEOF {
-				return len(data), data, nil
-			}
-			return 0, nil, nil
-		})
+		scanner := newMigrateProgressScanner(r)
 		for scanner.Scan() {
 			line := scanner.Text()
 			mu.Lock()
@@ -88,17 +63,15 @@ func runLiveMigrateWithProgress(args []string, migrationID, vmName, dest string)
 			if !isStderr || rep == nil {
 				continue
 			}
-			if m := progressRe.FindStringSubmatch(line); m != nil {
-				if pct, err := strconv.Atoi(m[1]); err == nil {
-					_ = rep.Send(ProgressFrame{
-						MigrationID: migrationID,
-						VMName:      vmName,
-						DestHost:    dest,
-						Phase:       "transfer",
-						ProgressPct: int32(pct),
-						Detail:      line,
-					})
-				}
+			if pct, ok := parseMigrationProgress(line); ok {
+				_ = rep.Send(ProgressFrame{
+					MigrationID: migrationID,
+					VMName:      vmName,
+					DestHost:    dest,
+					Phase:       "transfer",
+					ProgressPct: int32(pct),
+					Detail:      line,
+				})
 			}
 		}
 	}
@@ -132,6 +105,48 @@ func runLiveMigrateWithProgress(args []string, migrationID, vmName, dest string)
 		_, _, _ = rep.Close()
 	}
 	return combined, err
+}
+
+// migrateProgressRe captures the integer part of virsh --verbose's
+// migration progress ticks. The fractional tail is optional because
+// virsh emits decimals ("Migration: [ 0.08 %]", "[100.00 %]").
+var migrateProgressRe = regexp.MustCompile(`Migration:\s*\[\s*(\d+)(?:\.\d+)?\s*%\]`)
+
+// parseMigrationProgress returns the integer percentage carried by a
+// virsh "Migration: [N %]" line. Second return is false if the line
+// isn't a progress tick.
+func parseMigrationProgress(line string) (int, bool) {
+	m := migrateProgressRe.FindStringSubmatch(line)
+	if m == nil {
+		return 0, false
+	}
+	pct, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0, false
+	}
+	return pct, true
+}
+
+// newMigrateProgressScanner wraps bufio.Scanner with a split function
+// that yields on either \n or \r. virsh --verbose separates progress
+// ticks with \r so they overwrite the same terminal line; the default
+// splitter would buffer every tick until the process exited.
+func newMigrateProgressScanner(r io.Reader) *bufio.Scanner {
+	s := bufio.NewScanner(r)
+	s.Buffer(make([]byte, 64*1024), 1024*1024)
+	s.Split(func(data []byte, atEOF bool) (int, []byte, error) {
+		if atEOF && len(data) == 0 {
+			return 0, nil, nil
+		}
+		if i := bytes.IndexAny(data, "\r\n"); i >= 0 {
+			return i + 1, data[:i], nil
+		}
+		if atEOF {
+			return len(data), data, nil
+		}
+		return 0, nil, nil
+	})
+	return s
 }
 
 // powerCycleForEdit shuts the VM down (ACPI with destroy fallback) and
