@@ -41,15 +41,15 @@ services:
     container_name: kvm-center-server
     restart: unless-stopped
     ports:
-      # v5.32.2: :8090 is kept alive for legacy kvm-tools inside guests
-      # (they can't self-rotate their config without server reach).
-      # Once the guest fleet is on v5.32+ tools pointing at :8190, set
-      # KVM_CENTER_DISABLE_HTTP=1 on the server and remove this mapping.
-      - "${KVM_CENTER_HTTP_PORT:-8090}:8090"
+      # v5.32.5: plain-HTTP :8090 fully retired after the guest fleet
+      # rotated onto v5.32.4 (all kvm-tools instances now dial
+      # https://<host>:8190). Server refuses to start the listener
+      # because of KVM_CENTER_DISABLE_HTTP=1 below.
       - "${KVM_CENTER_HTTPS_PORT:-8190}:8190"  # HTTPS — primary UI + agent telemetry.
     environment:
       - KVM_CENTER_ADDR=:8090
       - KVM_CENTER_TLS_ADDR=:8190
+      - KVM_CENTER_DISABLE_HTTP=1
       - KVM_CENTER_TLS_DIR=/var/lib/kvm-center/tls
       - KVM_CENTER_CA_DIR=/var/lib/kvm-center/ca
       # Optional cluster DNS domain — hypervisor certs get a SAN at
