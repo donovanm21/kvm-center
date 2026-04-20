@@ -75,6 +75,16 @@ jobs:
         working-directory: webui-react
         run: npm ci --no-audit --no-fund --loglevel=error
 
+      # v5.32.11 gate: fail the build early on TypeScript or Vite
+      # errors. v5.30.0 and v5.31.6 each shipped with tsc errors that
+      # only surfaced at docker-build time on the deploy host, which
+      # meant broken release tags could merge to main first. `npm run
+      # build` invokes `tsc -b --noEmit && vite build`, the same
+      # pipeline the Dockerfile.webui stage runs.
+      - name: webui build (tsc + vite)
+        working-directory: webui-react
+        run: npm run build
+
       # Blocking gate — only CRITICAL vulns fail the build. Upgrading
       # to match a high-severity finding still happens (see the warn
       # step below) but it won't block a Monday-morning merge.
