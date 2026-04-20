@@ -435,11 +435,16 @@ func main() {
 			NextProtos: []string{"h2", "http/1.1"},
 		},
 	}
-	// v5.32.1: the plain-HTTP listener is retired. All agent traffic
-	// moved to TLS (:8190) in v5.32.0; operators who still need it for
-	// legacy tooling can set KVM_CENTER_KEEP_HTTP=1 during the rollout
-	// to keep the old :8090 listener alive. Default OFF.
-	if os.Getenv("KVM_CENTER_KEEP_HTTP") == "1" {
+	// v5.32.2: plain-HTTP :8090 kept alive for legacy kvm-tools running
+	// inside guest VMs. Those were installed pre-v5.32 with
+	// http://…:8090 in their config and can't self-rotate without server
+	// reachability — a chicken-and-egg we broke in v5.32.1. The HV-side
+	// agent wire path has fully migrated to TLS (:8190) regardless.
+	// Set KVM_CENTER_DISABLE_HTTP=1 to force TLS-only (useful once the
+	// guest fleet is fully rotated).
+	if os.Getenv("KVM_CENTER_DISABLE_HTTP") == "1" {
+		log.Printf("kvm-center server plain-HTTP listener DISABLED (KVM_CENTER_DISABLE_HTTP=1). Legacy kvm-tools will stop reporting.")
+	} else {
 		go func() {
 			plain := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				p := r.URL.Path
@@ -454,13 +459,11 @@ func main() {
 				target := "https://" + host + *tlsAddr + r.URL.RequestURI()
 				http.Redirect(w, r, target, http.StatusPermanentRedirect)
 			})
-			log.Printf("kvm-center server plain-HTTP (legacy, KVM_CENTER_KEEP_HTTP=1) on %s", *addr)
+			log.Printf("kvm-center server plain-HTTP on %s (legacy guests; retire via KVM_CENTER_DISABLE_HTTP=1 after fleet rotation)", *addr)
 			if err := http.ListenAndServe(*addr, plain); err != nil {
 				log.Printf("server: http listener exited: %v", err)
 			}
 		}()
-	} else {
-		log.Printf("kvm-center server plain-HTTP listener DISABLED (v5.32.1 retirement). Set KVM_CENTER_KEEP_HTTP=1 to re-enable.")
 	}
 	log.Printf("kvm-center server listening on %s (TLS)", *tlsAddr)
 	if err := tlsServer.ListenAndServeTLS("", ""); err != nil {
