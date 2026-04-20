@@ -73,6 +73,17 @@ mv "$TMP" "$INSTALL_DIR/$BINARY_NAME"
 chown root:root "$INSTALL_DIR/$BINARY_NAME"
 chmod 0755 "$INSTALL_DIR/$BINARY_NAME"
 
+# v5.32.0: migrate any legacy systemd unit still pointing at the plain
+# HTTP port (http://...:8090) over to the TLS port (https://...:8190).
+# The server's 8090 listener is retired; agents that don't get rewritten
+# here will silently stop reporting telemetry after the server upgrade.
+UNIT_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+if [[ -f "$UNIT_FILE" ]] && grep -qE 'http://[^[:space:]]*:8090' "$UNIT_FILE"; then
+  echo "Rewriting systemd unit: http://…:8090 → https://…:8190"
+  sed -i -E 's|http://([^[:space:]/]+):8090|https://\1:8190|g' "$UNIT_FILE"
+  systemctl daemon-reload
+fi
+
 # SELinux: a binary moved in from /tmp inherits user_tmp_t which systemd
 # refuses to exec. restorecon resets to the parent dir's context (usr_t
 # under default policy). Tolerate non-SELinux systems gracefully.

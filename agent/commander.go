@@ -1,18 +1,115 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"kvm-center/internal/models"
 )
+
+// runLiveMigrateWithProgress wraps `virsh migrate --verbose` and streams
+// progress to the server over the existing StreamMigrationProgress
+// gRPC handler. Parses "Migration: [ N %]" lines on stderr as they
+// arrive — virsh emits them every ~1 s while dirty pages are being
+// copied. Returns the combined stdout+stderr + exit error just like
+// exec.CombinedOutput() so the caller's terminal-state logic is
+// unchanged. If migration_id is empty (e.g. tests or legacy callers)
+// or the server has no gRPC listener, progress streaming is skipped
+// silently and only the terminal HTTP response carries the outcome.
+func runLiveMigrateWithProgress(args []string, migrationID, vmName, dest string) ([]byte, error) {
+	cmd := exec.Command("virsh", args...)
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	// Optional progress reporter. Best-effort; failure to open means
+	// the server will still get the terminal HTTP response at the end.
+	var rep *MigrationProgressReporter
+	if migrationID != "" && telemetryServerURL != "" {
+		if grpcAddr := deriveGRPCAddr(telemetryServerURL); grpcAddr != "" {
+			if r, err := OpenMigrationProgressReporter(context.Background(), grpcAddr); err == nil {
+				rep = r
+			} else {
+				log.Printf("live-migrate: gRPC progress reporter disabled (%v)", err)
+			}
+		}
+	}
+
+	var mu sync.Mutex
+	var combined []byte
+	progressRe := regexp.MustCompile(`Migration:\s*\[\s*(\d+)\s*%\]`)
+
+	collect := func(r io.Reader, isStderr bool) {
+		scanner := bufio.NewScanner(r)
+		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+		for scanner.Scan() {
+			line := scanner.Text()
+			mu.Lock()
+			combined = append(combined, line...)
+			combined = append(combined, '\n')
+			mu.Unlock()
+			if !isStderr || rep == nil {
+				continue
+			}
+			if m := progressRe.FindStringSubmatch(line); m != nil {
+				if pct, err := strconv.Atoi(m[1]); err == nil {
+					_ = rep.Send(ProgressFrame{
+						MigrationID: migrationID,
+						VMName:      vmName,
+						DestHost:    dest,
+						Phase:       "transfer",
+						ProgressPct: int32(pct),
+						Detail:      line,
+					})
+				}
+			}
+		}
+	}
+
+	done := make(chan struct{}, 2)
+	go func() { collect(stdout, false); done <- struct{}{} }()
+	go func() { collect(stderr, true); done <- struct{}{} }()
+	<-done
+	<-done
+	err := cmd.Wait()
+
+	if rep != nil {
+		// Flush a terminal frame so the SPA sees 100%/failed without
+		// waiting on the next /migrate-status poll, then close.
+		phase := "complete"
+		pct := int32(100)
+		errMsg := ""
+		if err != nil {
+			phase = "failed"
+			pct = 0
+			errMsg = err.Error()
+		}
+		_ = rep.Send(ProgressFrame{
+			MigrationID: migrationID,
+			VMName:      vmName,
+			DestHost:    dest,
+			Phase:       phase,
+			ProgressPct: pct,
+			Error:       errMsg,
+		})
+		_, _, _ = rep.Close()
+	}
+	return combined, err
+}
 
 // powerCycleForEdit shuts the VM down (ACPI with destroy fallback) and
 // returns without restarting. Used by EDIT_VM's allow_shutdown=true
@@ -495,7 +592,12 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			args = append(args, "--copy-storage-all")
 		}
 		args = append(args, vmTarget, uri)
-		out, err = exec.Command("virsh", args...).CombinedOutput()
+		// v5.32.0: stream progress frames via gRPC while virsh runs.
+		// --verbose writes "Migration: [ N %]" lines to stderr; we tail
+		// them and push matching phase/progress frames to the server.
+		// HTTP response is still the single terminal signal (success +
+		// stdout); gRPC just makes the progress bar move mid-flight.
+		out, err = runLiveMigrateWithProgress(args, req.Params["migration_id"], vmTarget, dest)
 	case "DELETE_VM":
 		// Multi-stage destruction: force-off if still running, undefine with
 		// NVRAM + managed save + snapshot metadata, optionally remove the
