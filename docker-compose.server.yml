@@ -11,13 +11,17 @@ services:
     container_name: kvm-center-server
     restart: unless-stopped
     ports:
-      - "8090:8090"
+      - "8190:8190"
     environment:
-      - KVM_CENTER_ADDR=:8090
+      - KVM_CENTER_TLS_ADDR=:8190
+      - KVM_CENTER_DISABLE_HTTP=1
       - KVM_CENTER_DATA=/var/lib/kvm-center/data.json
     volumes:
       - kvm-center-data:/var/lib/kvm-center
+      - kvm-center-tls:/var/lib/kvm-center/tls
 
 volumes:
   kvm-center-data:
+    driver: local
+  kvm-center-tls:
     driver: local

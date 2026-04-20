@@ -10,6 +10,37 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.32.0 → v5.32.5 — TLS-only wire + live-migration gRPC + version ldflag
+
+- **Plain-HTTP `:8090` listener retired.** All control-plane traffic
+  (UI, hypervisor agents, in-guest `kvm-tools`, `kvmctl`, SSE) now
+  goes over the TLS listener on `:8190`. The migration was staged:
+  v5.32.0 moved HV agents, v5.32.2–v5.32.4 rotated every guest's
+  `kvm-tools` onto `https://…:8190` (self-update path now rewrites
+  the installed systemd unit), v5.32.5 flipped
+  `KVM_CENTER_DISABLE_HTTP=1` so the server refuses to bind
+  `:8090`. Rollback: set `KVM_CENTER_DISABLE_HTTP=0` in `.env`
+  and restore the port mapping in `docker-compose.yml`.
+- **Live migration progress via gRPC.** `virsh migrate --live
+  --verbose` stderr is now tailed for `Migration: [N %]` frames
+  and pushed on the existing `StreamMigrationProgress` RPC. SPA
+  progress bars update while the migration is in flight instead
+  of jumping from 0 to 100 on completion. The offline path, which
+  already streamed progress since v5.29, is unchanged.
+- **Version ldflag on every binary.** `-X main.Version=$(VERSION)`
+  (and `-X main.cliVersion=$(VERSION)` for `kvmctl`) is injected
+  at build time by the Dockerfile and Makefile. `kvm-center-agent
+  -version` + `kvmctl version` now print the release tag instead
+  of `dev`.
+- **bootstrap.sh `--update-agents` guard-rails.** Skips any host
+  whose `/migrate-status` shows an active migration to avoid
+  orphaning a `scp` mid-transfer (the VM2 incident that motivated
+  the reconciler probe path in v5.29.2). Override with
+  `KVM_CENTER_AGENT_UPDATE_FORCE=1`.
+- **Agent `/self-update` guard.** Matches the bootstrap-side guard:
+  refuses when `getMigStatus().Active` is `true`; returns HTTP 409
+  with the in-flight VM and phase. Override with `?force=1`.
+
 ## v5.27.0
 - **End-to-end integration test suite.** 24 new flow tests under
   `server/integration_*_test.go` exercise the full handler stack

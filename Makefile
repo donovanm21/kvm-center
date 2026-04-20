@@ -4,6 +4,10 @@ DIST_DIR      = dist
 
 VERSION := $(shell cat server/VERSION | tr -d '[:space:]')
 LDFLAGS := -s -w -X main.Version=$(VERSION)
+# kvmctl's version var is named cliVersion, not Version — the two are
+# separate because the CLI has its own release cadence conceptually,
+# even though we currently pin them together.
+KVMCTL_LDFLAGS := -s -w -X main.cliVersion=$(VERSION)
 
 .PHONY: all build build-server build-agent clean docker-build docker-up docker-down \
         dist linux-amd64 linux-arm64
@@ -21,7 +25,7 @@ build-agent:
 	go build -ldflags="$(LDFLAGS)" -o $(BINARY_AGENT) ./agent
 
 build-cli:
-	go build -ldflags="$(LDFLAGS)" -o kvmctl ./cmd/kvmctl
+	go build -ldflags="$(KVMCTL_LDFLAGS)" -o kvmctl ./cmd/kvmctl
 
 # ── Cross-compiled distribution binaries ──────────────────────────────────────
 
