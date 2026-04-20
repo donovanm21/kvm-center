@@ -10,6 +10,55 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.32.11 — CI hardens against the bugs this week exposed
+- **SPA build gate.** Gitea + GitHub test workflows now run
+  `npm run build` (tsc + vite) on every push. v5.30.0 and v5.31.6
+  shipped with TypeScript errors that only surfaced at docker-build
+  time on the deploy host; now the gate fails before a release tag
+  can merge.
+- **Migration progress parser test.** `agent/commander_test.go`
+  exercises the virsh `Migration: [N %]` scanner end-to-end:
+  `\r`-separated input, decimal percentages, pathological single-
+  chunk reads. Regression-locks the three bugs from v5.32.8 /
+  v5.32.9 / v5.32.10.
+
+## v5.32.10 — live-migration progress scanner splits on `\r`
+- virsh `--verbose` separates progress ticks with `\r` (carriage
+  return), not `\n`. bufio.Scanner's default split waited on `\n`,
+  so every tick between start and finish coalesced into one giant
+  "line" and only the first was ever parsed. Custom split on
+  `\r`-or-`\n` yields each tick as it's emitted. Combined with
+  the v5.32.8 decimal-aware regex, live migrations now stream at
+  ~2–10 Hz.
+
+## v5.32.9 — live MIGRATE sets MigrationStatus.Active
+- v5.29.1's bootstrap deploy guard and v5.30.0's `/self-update`
+  guard both keyed off `MigrationStatus.Active`; only the offline
+  flow ever set it. Live MIGRATE ran virsh inline without touching
+  the shared status, so an `--update-agents` pass killed any
+  in-flight live migration. Source VM survived via libvirt's atomic
+  rollback but the server record stranded as `running`. Live now
+  owns the status slot for its duration.
+
+## v5.32.8 — live-migration progress regex accepts decimals
+- Regex was `\[\s*(\d+)\s*%\]`; virsh emits `[ 0.08 %]`, `[ 1.04 %]`,
+  `[100.00 %]` with fractional parts. Zero frames matched until this
+  fix, so the gRPC stream was silent for every live migration run
+  on v5.32.0–v5.32.7.
+
+## v5.32.7 — live-MIGRATE toast + migrations cache invalidation
+- Agent returned the full `virsh migrate --verbose` output as its
+  HTTP response body. Server forwarded it to the SPA which showed
+  the 5 KB in a success toast. Now respond with a clean "live
+  migration completed" summary; granular progress still arrives
+  via the gRPC stream.
+- `useVMCommand` invalidates the `['migrations']` query on MIGRATE
+  and OFFLINE_MIGRATE, so the /migrations page and VMDetail pill
+  pick up the new record immediately instead of waiting on the
+  60 s refetch.
+- Backfilled v5.28.x → v5.31.x changelog entries (the doc jumped
+  from v5.27 straight to v5.32.0, missing a dozen releases).
+
 ## v5.32.6 — kvmctl ldflag + doc sweep
 - `kvmctl version` now reports the release tag (was hard-coded `v5.5.0`).
 - Architecture, networking, security docs updated to reflect the `:8090` retirement.
