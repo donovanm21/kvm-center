@@ -46,6 +46,21 @@ func handleSelfUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "agent self-update not configured (SetSelfUpdateConfig was not called at boot)", http.StatusPreconditionFailed)
 		return
 	}
+	// v5.30.0: refuse while a migration is in flight. Killing the agent
+	// mid-scp orphans the transfer + strands the server record because
+	// no terminal signal ever arrives. The v5.29.0 deploy hit this
+	// exact case on VM2; the VM1 migration the user retried later had
+	// the agent self-update mid-flight too. Operator can override by
+	// stopping the migration first.
+	if r.URL.Query().Get("force") != "1" {
+		if status := getMigStatus(); status.Active {
+			http.Error(w, fmt.Sprintf(
+				"refusing self-update: a migration is in flight (vm=%s, phase=%s, %d%%). Cancel it first or retry with ?force=1.",
+				status.VMName, status.Phase, status.Progress),
+				http.StatusConflict)
+			return
+		}
+	}
 	server := selfUpdateServerURL
 	var body struct {
 		Server string `json:"server"`

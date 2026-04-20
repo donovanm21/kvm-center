@@ -4,12 +4,15 @@ import { apiPost } from '@/api/client';
 import { useToast } from './useToast';
 
 export type VMAction =
-  | 'START' | 'STOP' | 'FORCESTOP' | 'RESTART'
+  | 'START' | 'STOP' | 'FORCESTOP' | 'RESTART' | 'POWER_CYCLE'
   | 'SNAPSHOT' | 'REVERT_SNAPSHOT' | 'DELETE_SNAPSHOT'
   | 'MIGRATE' | 'OFFLINE_MIGRATE'
   | 'DELETE_VM'
   // v5.27: hardware edits (EDIT_VM takes vcpus + mem_mb),
   // live ISO swap on CDROM targets (CHANGE_MEDIA).
+  // v5.30: POWER_CYCLE = proper shutdown+start (config changes
+  // like memory cap only apply on a fresh qemu process); RESTART
+  // remains an in-guest ACPI reboot.
   | 'EDIT_VM'
   | 'CHANGE_MEDIA';
 
