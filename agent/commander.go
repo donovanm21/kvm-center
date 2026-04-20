@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -59,6 +60,25 @@ func runLiveMigrateWithProgress(args []string, migrationID, vmName, dest string)
 	collect := func(r io.Reader, isStderr bool) {
 		scanner := bufio.NewScanner(r)
 		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+		// v5.32.10: virsh --verbose emits progress updates separated by
+		// \r (carriage return), NOT \n — they're meant to overwrite the
+		// same terminal line. The default Scanner splitter only breaks
+		// on \n so every progress line between migration start and
+		// finish landed in a single giant "line" the scanner wouldn't
+		// yield until the process exited. Split on either to get
+		// per-percentage ticks.
+		scanner.Split(func(data []byte, atEOF bool) (int, []byte, error) {
+			if atEOF && len(data) == 0 {
+				return 0, nil, nil
+			}
+			if i := bytes.IndexAny(data, "\r\n"); i >= 0 {
+				return i + 1, data[:i], nil
+			}
+			if atEOF {
+				return len(data), data, nil
+			}
+			return 0, nil, nil
+		})
 		for scanner.Scan() {
 			line := scanner.Text()
 			mu.Lock()
