@@ -55,10 +55,10 @@ a private network, review:
 - The *Public URL* setting — set this so install snippets and webhook
   deep links resolve to your real hostname, not an arbitrary URL.
 - Network exposure — `:8190` is TLS and is the only port the product
-  advertises since v5.24. The legacy plaintext `:8090` listener still
-  runs for pre-5.24 agents but nothing in the current stack needs it;
-  firewall it off to your agent subnet (or drop it entirely) once all
-  your agents have been re-enrolled against HTTPS.
+  listens on since v5.32.5. The previous plaintext `:8090` fallback
+  was retired after a fleet-wide rotation onto HTTPS; the server
+  refuses to bind it unless `KVM_CENTER_DISABLE_HTTP=0` is set as
+  an explicit rollback.
 - Self-signed certificates — the default cert is trusted by agents
   via `InsecureSkipVerify` with a warning logged on every report.
   This is fine for a homelab but is a real man-in-the-middle exposure

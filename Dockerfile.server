@@ -29,17 +29,18 @@ RUN echo "artifacts stage @ $GIT_SHA"
 
 RUN VERSION=$(cat /src/server/VERSION) && \
     LDF="-s -w -X main.Version=$VERSION" && \
+    KVMCTL_LDF="-s -w -X main.cliVersion=$VERSION" && \
     mkdir -p /dist && \
     CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvm-center-agent-amd64 ./agent && \
     CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$LDF" -o /dist/kvm-center-agent-arm64 ./agent && \
     CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvm-tools-linux-amd64 ./kvm-tools && \
     CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$LDF" -o /dist/kvm-tools-linux-arm64 ./kvm-tools && \
     CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvm-tools-windows-amd64.exe ./kvm-tools && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvmctl-linux-amd64       ./cmd/kvmctl && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$LDF" -o /dist/kvmctl-linux-arm64       ./cmd/kvmctl && \
-    CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvmctl-darwin-amd64      ./cmd/kvmctl && \
-    CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="$LDF" -o /dist/kvmctl-darwin-arm64      ./cmd/kvmctl && \
-    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvmctl-windows-amd64.exe ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-linux-amd64       ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-linux-arm64       ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-darwin-amd64      ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-darwin-arm64      ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-windows-amd64.exe ./cmd/kvmctl && \
     cp /src/scripts/install-agent.sh      /dist/ && \
     cp /src/scripts/update-agent.sh       /dist/ && \
     cp /src/kvm-tools/install.sh          /dist/install-kvm-tools.sh && \
