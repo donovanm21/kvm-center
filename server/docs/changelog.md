@@ -10,6 +10,11 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.32.6 — kvmctl ldflag + doc sweep
+- `kvmctl version` now reports the release tag (was hard-coded `v5.5.0`).
+- Architecture, networking, security docs updated to reflect the `:8090` retirement.
+- `docker-compose.server.yml` dropped the legacy HTTP mapping; TLS-only.
+
 ## v5.32.0 → v5.32.5 — TLS-only wire + live-migration gRPC + version ldflag
 
 - **Plain-HTTP `:8090` listener retired.** All control-plane traffic
@@ -40,6 +45,88 @@ omitted.
 - **Agent `/self-update` guard.** Matches the bootstrap-side guard:
   refuses when `getMigStatus().Active` is `true`; returns HTTP 409
   with the in-flight VM and phase. Override with `?force=1`.
+
+## v5.31.x — polish + operator UX
+- **Balloon-stat freshness (v5.31.4).** kvm-center now calls `virsh
+  dommemstat --period 5 --live` before reading so the cache refreshes
+  every 5 s. Prior behaviour returned week-stale numbers (ark-srv01
+  reported 137 MB used while the guest was at 10 GB because the
+  `last_update` field was 6 days old).
+- **Memory formula (v5.31.5).** VM "used memory" = `actual − unused −
+  disk_caches` instead of `available − unused`, which double-counted
+  page cache. Old formula showed 45% on a VM really using 20%.
+- **Cap-raise modal (v5.31.0).** When the operator tries to raise a
+  running VM's vCPU count beyond its `<vcpu>` cap, libvirt's
+  refusal now surfaces as a follow-up dialog: "Shut down, raise cap,
+  restart" does the whole dance in one click. Opt-in via the modal;
+  the raw error is unchanged for anyone scripting against the API.
+- **Concurrent-map crash (v5.31.1).** `prevVMCPU` in the collector was
+  unguarded; v5.28/v5.29 added two more goroutines hitting it (live
+  metrics streamer + lifecycle watcher) which produced a reliable
+  "fatal error: concurrent map writes" under load. Mutex added.
+- **Grant pubkey TLS (v5.31.3).** `loadGrantPubKey` used a fresh
+  http.Client without InsecureSkipVerify, so agents pointed at the
+  server by hostname (not the cert's localhost SAN) failed validation
+  and the destination agent returned 503 on `/prepare-grant`. Now
+  uses the shared `httpClient` which honours the homelab trust model.
+- **Host VM list polish (v5.31.6–v5.31.10).** Snapshot button opens
+  the name-confirmation modal instead of taking an auto-named
+  snapshot; console button routes through `/api/console/<host>/<vm>`
+  like VMDetail (was dialling the agent direct, breaking mixed-
+  content on HTTPS); sortable headers via the existing
+  `components/SortableTH` primitive so the look matches `/storage`;
+  rows lock + show the "migrating" pill mid-migration just like the
+  top-level `/vms` page.
+
+## v5.30.x — POWER_CYCLE + self-update guard
+- **POWER_CYCLE action (v5.30.0).** Post-EDIT_VM "Restart now" used
+  to send `RESTART` which maps to `virsh reboot` (in-guest ACPI
+  reboot) — the qemu process stays alive so `setmaxmem --config` /
+  `setvcpus --maximum --config` never applied. New `POWER_CYCLE`
+  action does a graceful shutdown → start, re-spawning qemu. `RESTART`
+  is unchanged for anyone wanting a plain guest reboot.
+- **Self-update guard (v5.30.0).** Agent's `/self-update` endpoint
+  refuses while `migStatus.Active`; returns HTTP 409 with the
+  in-flight VM + phase. Matches the bootstrap.sh guard shipped in
+  v5.29.1 — closes the remaining way to orphan a migration.
+
+## v5.29.x — migration reconciler + lifecycle watcher + /dist safety
+- **Migration gRPC (offline path, v5.29.0).** Server hands the agent
+  the generated `migration_id` in the command params; agent opens a
+  `StreamMigrationProgress` stream on `startOfflineMigrate` and
+  pushes a frame on every `setMigStatus` call. SPA sees
+  phase/progress without polling.
+- **Lifecycle watcher (v5.29.0).** Agent polls `virsh list --all`
+  every 2 s; on any VM state transition it fires an immediate
+  telemetry POST so the SPA reflects state flips in ~2 s instead of
+  up to 15 s.
+- **/dist safety (v5.29.0).** SPA catch-all now returns HTTP 404 for
+  paths under `/dist/`, `/downloads/`, `/api/`, `/health`, or with a
+  known binary extension (`.amd64`, `.arm64`, `.exe`, `.qcow2`, …).
+  Previously a curl-for-binary that got back index.html as HTML
+  overwrote the agent on disk during a bad rollout, killing the fleet
+  with systemd `Exec format error`.
+- **update-agent.sh guard (v5.29.1).** `bootstrap.sh
+  --update-agents` probes each hvnode's `/migrate-status` before
+  restarting; skips any host with `active=true`. Override with
+  `KVM_CENTER_AGENT_UPDATE_FORCE=1`.
+- **Reconciler probes source agent (v5.29.2).** Stranded migration
+  records that are younger than the 90-min in-flight timeout but
+  whose source agent reports `active=false` are now marked failed
+  at boot instead of lingering in `running` until the timeout
+  expires. Auto-heals the class of bug the v5.29.0 rollout exposed.
+
+## v5.28.x — live VM metrics via gRPC + :8190 multiplex fix
+- **Live VM metrics gRPC (v5.28.0).** Each agent opens a persistent
+  client-stream over `:8190` (content-type-multiplexed with REST)
+  and pushes per-running-VM CPU/mem every ~3 s. Server applies the
+  samples to its in-memory VM record and fans out an `inventory` SSE
+  (debounced 2 s) so the SPA's React Query cache reflects live
+  numbers without waiting for the 15 s HTTP tick.
+- **Agent gRPC dial fix (v5.28.1).** `deriveGRPCAddr` pinned the
+  port to `:8190` (TLS multiplex) regardless of the agent's
+  HTTP serverURL port; v5.28.0 shipped with the live-metrics stream
+  dialling the plain-HTTP port where no gRPC listener existed.
 
 ## v5.27.0
 - **End-to-end integration test suite.** 24 new flow tests under

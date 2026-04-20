@@ -55,6 +55,13 @@ export function useVMCommand() {
       // The SSE event will also land in a few ms — belt and suspenders.
       qc.invalidateQueries({ queryKey: ['vms'] });
       qc.invalidateQueries({ queryKey: ['hosts'] });
+      // Migration actions create a record server-side the moment the
+      // command fires. Invalidate so the /migrations page + the
+      // MigrationPill on VMDetail pick it up without waiting on the
+      // 60 s refetch or an SSE round-trip.
+      if (input.action === 'MIGRATE' || input.action === 'OFFLINE_MIGRATE') {
+        qc.invalidateQueries({ queryKey: ['migrations'] });
+      }
     },
     onError: (err, input) => {
       const msg = err instanceof Error ? err.message : String(err);
