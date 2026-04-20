@@ -273,7 +273,16 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 						msgs = append(msgs, "vcpus="+v+" (cap raised via shutdown+start)")
 						isRunning = true // VM is back up; keeps subsequent mem_mb path correct.
 					} else if isRunning {
-						respond(w, false, "cannot raise the VM's vCPU cap while it's running. Shut the VM down first, or re-submit with allow_shutdown=true so the agent does it for you (shutdown → raise cap → apply count → restart).")
+						// HTTP 200 (not 500) so the SPA's mutation sees
+						// the body via onSuccess and can show the
+						// "Shut down, raise cap, restart" follow-up
+						// modal. The business rejection is carried in
+						// success:false, not the status code.
+						w.Header().Set("Content-Type", "application/json")
+						_ = json.NewEncoder(w).Encode(models.CommandResponse{
+							Success: false,
+							Message: "cannot raise the VM's vCPU cap while it's running. Shut the VM down first, or re-submit with allow_shutdown=true so the agent does it for you (shutdown → raise cap → apply count → restart).",
+						})
 						return
 					} else {
 						// Shut off — try to raise the cap + apply.
