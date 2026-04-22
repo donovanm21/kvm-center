@@ -40,20 +40,21 @@ var (
 // CollectTelemetry gathers host and VM metrics using /proc and virsh.
 func CollectTelemetry(agentPort int) models.TelemetryPayload {
 	p := models.TelemetryPayload{
-		HostID:     hostname(),
-		AgentPort:  agentPort,
-		OS:         osRelease(),
-		KernelVer:  kernelVersion(),
-		LibvirtVer: libvirtVersion(),
-		CPUUsage:   cpuUsage(),
-		CPUCount:   runtime.NumCPU(),
-		MemUsage:   memUsage(),
-		MemTotalMB: memTotalMB(),
-		MemFreeMB:  memFreeMB(),
-		Uptime:     uptime(),
-		VMs:        listVMs(),
-		Storage:    listStoragePools(),
-		Timestamp:  time.Now(),
+		HostID:       hostname(),
+		AgentPort:    agentPort,
+		OS:           osRelease(),
+		KernelVer:    kernelVersion(),
+		LibvirtVer:   libvirtVersion(),
+		CPUUsage:     cpuUsage(),
+		CPUCount:     runtime.NumCPU(),
+		MemUsage:     memUsage(),
+		MemTotalMB:   memTotalMB(),
+		MemFreeMB:    memFreeMB(),
+		Uptime:       uptime(),
+		AgentVersion: Version,
+		VMs:          listVMs(),
+		Storage:      listStoragePools(),
+		Timestamp:    time.Now(),
 	}
 	collectHostHardware(&p)
 	return p

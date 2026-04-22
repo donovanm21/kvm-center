@@ -38,6 +38,11 @@ type Host struct {
 	KernelVer  string     `json:"kernel_ver"`
 	LibvirtVer string     `json:"libvirt_ver"`
 	Uptime     string     `json:"uptime"`
+	// AgentVersion (v5.33.0) is the hypervisor-agent binary version
+	// reported in every telemetry tick. Used by the system-health
+	// page to flag agents that haven't been refreshed after a
+	// control-plane upgrade.
+	AgentVersion string `json:"agent_version,omitempty"`
 
 	// Hardware details collected from virsh nodeinfo, lspci, /sys/kernel/iommu_groups/.
 	CPUModel       string          `json:"cpu_model,omitempty"`
@@ -389,21 +394,22 @@ type StoragePool struct {
 
 // TelemetryPayload is the JSON body sent by an agent to POST /api/telemetry.
 type TelemetryPayload struct {
-	HostID     string        `json:"host_id"`
-	IP         string        `json:"ip"`
-	AgentPort  int           `json:"agent_port"`
-	OS         string        `json:"os"`
-	KernelVer  string        `json:"kernel_ver"`
-	LibvirtVer string        `json:"libvirt_ver"`
-	CPUUsage   float64       `json:"cpu_usage"`
-	CPUCount   int           `json:"cpu_count"`
-	MemUsage   float64       `json:"mem_usage"`
-	MemTotalMB uint64        `json:"mem_total_mb"`
-	MemFreeMB  uint64        `json:"mem_free_mb"`
-	Uptime     string        `json:"uptime"`
-	VMs        []VM          `json:"vms"`
-	Storage    []StoragePool `json:"storage"`
-	Timestamp  time.Time     `json:"timestamp"`
+	HostID       string        `json:"host_id"`
+	IP           string        `json:"ip"`
+	AgentPort    int           `json:"agent_port"`
+	OS           string        `json:"os"`
+	KernelVer    string        `json:"kernel_ver"`
+	LibvirtVer   string        `json:"libvirt_ver"`
+	CPUUsage     float64       `json:"cpu_usage"`
+	CPUCount     int           `json:"cpu_count"`
+	MemUsage     float64       `json:"mem_usage"`
+	MemTotalMB   uint64        `json:"mem_total_mb"`
+	MemFreeMB    uint64        `json:"mem_free_mb"`
+	Uptime       string        `json:"uptime"`
+	AgentVersion string        `json:"agent_version,omitempty"`
+	VMs          []VM          `json:"vms"`
+	Storage      []StoragePool `json:"storage"`
+	Timestamp    time.Time     `json:"timestamp"`
 
 	// Host hardware (collected once or on change).
 	CPUModel       string          `json:"cpu_model,omitempty"`
