@@ -55,7 +55,7 @@ export function Dashboard() {
 
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
         <Summary
           label="Hypervisors"
           value={hostList.length}
@@ -136,7 +136,7 @@ function HostCard({ host, vms, pools }: { host: Host; vms: VM[]; pools: StorageP
   const ramGB = (host.mem_total_mb / 1024).toFixed(1);
   return (
     <div className="panel" style={cardStyle}>
-      <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr auto', gap: 16, alignItems: 'start' }}>
+      <div className="host-card-grid" style={{ display: 'grid', gridTemplateColumns: '72px 1fr auto', gap: 16, alignItems: 'start' }}>
         <div style={hostIconStyle} aria-hidden>
           <HostChipIcon />
         </div>

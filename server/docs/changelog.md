@@ -10,6 +10,64 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.33.4 — mobile UI polish
+
+Targeted fixes for the issues reported against the v5.33.0 mobile
+breakpoints.
+
+### Table reflow — label above value, not right-aligned
+
+v5.33.0's `table.data-table` mobile rule used `space-between` so
+every cell's value got shoved to the right edge of the card. On
+rows with long text or inline bars this scrunched content into
+an unreadable column.
+
+Now each cell stacks: a small uppercase label row above,
+left-aligned value below. Inline bars span the full card width
+instead of competing for space. Tables that don't use
+`data-label` (VMs list) reflow without the label strip.
+
+### Settings tabs — horizontal scroll instead of clip
+
+The Database / Users / Groups / Roles / Identity Providers tab
+bar was overflowing the viewport and clipping tabs off the right
+edge. Added `.settings-tabs` to the tab container with
+`overflow-x: auto` + flex-shrink: 0 children so the strip
+scrolls horizontally on narrow screens while staying snug on
+desktop.
+
+### System Health — lightweight mobile view
+
+The dashboard layout from v5.33.1 is great on a laptop but too
+much for a phone. On ≤ 640 px viewports, the gauges, CPU/memory
+area charts, running-VMs counter, and host breakdown table are
+hidden. What remains: the big status tiles, the four subsystem
+cards, and the problems feed — a quick-check view similar to
+the original v5.33.0 layout.
+
+### Deployment hidden on mobile
+
+Install/download flows aren't phone-friendly. The admin nav
+entry now carries `hideMobile: true` and disappears below 640 px
+so the drawer is less cluttered for on-call use.
+
+### Multi-column layouts break to single column
+
+Pages that assumed desktop width — VMDetail header (thumbnail +
+guest card + usage), Docs (sidebar + content), SnapshotsOverview
+(VM list + detail), Dashboard stats bar, per-host card with
+Manage + Connected pill — now collapse to single column via a
+shared `.mobile-stack` class. Dashboard host card specifically
+gets a `.host-card-grid` rule that drops the right column onto
+its own row so the Manage link is reachable instead of clipped.
+
+### Horizontal-bleed guardrails
+
+Global `overflow-x: hidden` on body + `.main` + `.panel`, with
+`overflow-wrap: anywhere` on code-like strings (UUIDs, migration
+IDs, breadcrumbs). Prevents any remaining long string from
+pushing the viewport wider than the screen.
+
 ## v5.33.3 — fix: gauge sweep direction + orange accent palette
 
 ### Gauge sweep — correct fix

@@ -15,6 +15,8 @@ interface NavEntry {
   icon: ReactNode;
   /** permission key; entry is hidden when the user lacks it */
   requires?: string;
+  /** hide this entry on phone-sized viewports (≤ 640px) */
+  hideMobile?: boolean;
 }
 
 const NAV_MAIN: NavEntry[] = [
@@ -28,7 +30,7 @@ const NAV_MAIN: NavEntry[] = [
 ];
 
 const NAV_ADMIN: NavEntry[] = [
-  { to: '/deployment', label: 'Deployment', icon: <DeployIcon /> },
+  { to: '/deployment', label: 'Deployment', icon: <DeployIcon />, hideMobile: true },
   { to: '/system-health', label: 'System Health', icon: <PulseIcon />, requires: 'user.manage' },
   { to: '/settings', label: 'Settings', icon: <GearIcon />, requires: 'user.manage' },
 ];
@@ -58,7 +60,9 @@ export function Layout({ children }: { children: ReactNode }) {
               key={e.to}
               to={e.to}
               end={e.to === '/'}
-              className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
+              className={({ isActive }) =>
+                'nav-item' + (isActive ? ' active' : '') + (e.hideMobile ? ' nav-hide-mobile' : '')
+              }
             >
               {e.icon}
               <span>{e.label}</span>
@@ -71,7 +75,9 @@ export function Layout({ children }: { children: ReactNode }) {
                 <NavLink
                   key={e.to}
                   to={e.to}
-                  className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
+                  className={({ isActive }) =>
+                'nav-item' + (isActive ? ' active' : '') + (e.hideMobile ? ' nav-hide-mobile' : '')
+              }
                 >
                   {e.icon}
                   <span>{e.label}</span>

@@ -69,7 +69,7 @@ export function Docs() {
   }, [navigate, page.data]);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, alignItems: 'flex-start', minHeight: '100%' }}>
+    <div className="mobile-stack" style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, alignItems: 'flex-start', minHeight: '100%' }}>
       <aside style={sidebarStyle}>
         <div style={{ fontSize: 11, color: 'var(--text-faded)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
           Documentation
