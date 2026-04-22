@@ -116,8 +116,10 @@ export function SystemHealth() {
         <BigTile label="Hypervisors"  sub={h.hypervisors.status} status={h.hypervisors.status} />
       </div>
 
-      {/* Row 2: Gauges + line charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 12 }}>
+      {/* Row 2: Gauges + line charts — hidden on phone; the top
+           tiles + subsystem cards + problems feed are plenty for
+           a mobile quick-check. */}
+      <div className="mobile-health-hide" style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 12 }}>
         <div style={panelStyle}>
           <div style={panelTitleStyle}>CPU utilization: Fleet</div>
           <Gauge value={a.fleet_cpu_pct} />
@@ -133,7 +135,7 @@ export function SystemHealth() {
           />
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 12 }}>
+      <div className="mobile-health-hide" style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 12 }}>
         <div style={panelStyle}>
           <div style={panelTitleStyle}>Memory utilization: Fleet</div>
           <Gauge value={a.fleet_mem_pct} />
@@ -150,9 +152,11 @@ export function SystemHealth() {
         </div>
       </div>
 
-      {/* Row 3: VM counts + subsystem cards grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 12 }}>
-        <div style={panelStyle}>
+      {/* Row 3: VM counts + subsystem cards grid. On mobile, the
+           left (VMs + sparkline) is hidden — the subsystem cards
+           flow full-width. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 12 }} className="mobile-stack">
+        <div style={panelStyle} className="mobile-health-hide">
           <div style={panelTitleStyle}>Running VMs: Fleet</div>
           <BigNumber number={a.fleet_vm_running} sub={`of ${a.fleet_vm_count} total`} color="var(--accent)" />
           <VMTrendSparkline series={a.series.t.map((t, i) => ({ t, v: a.series.vms[i] ?? 0 }))} />
@@ -161,7 +165,7 @@ export function SystemHealth() {
             {a.snapshot_blocked > 0 && <> · {a.snapshot_blocked} snapshot-blocked VM{a.snapshot_blocked === 1 ? '' : 's'}</>}
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
           <SubsystemCard name="Guest kvm-tools" sub={h.guest_tools} />
           <SubsystemCard name="Migrations"       sub={h.migrations}  />
           <SubsystemCard name="Snapshots"        sub={h.snapshots}   />
@@ -169,8 +173,8 @@ export function SystemHealth() {
         </div>
       </div>
 
-      {/* Row 4: Host breakdown table */}
-      <div style={panelStyle}>
+      {/* Row 4: Host breakdown table — hidden on phone. */}
+      <div style={panelStyle} className="mobile-health-hide">
         <div style={panelTitleStyle}>Hypervisors</div>
         {h.host_breakdown.length === 0 ? (
           <p style={{ color: 'var(--text-muted)' }}>No hypervisors enrolled.</p>
