@@ -10,6 +10,33 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.32.14 — stopped VMs no longer report phantom CPU / network
+
+Stopped VMs were rendering small but non-zero CPU percentages (e.g.
+DRP: 7.8% while SHUT OFF). Three bugs stacked:
+
+- **Agent: no state guard.** `vmCPUUsage` ran `virsh domstats
+  --cpu-total` against every domain regardless of state. Network
+  ifstats had the same pattern.
+- **Agent: uint64 underflow.** When a VM's cpu.time counter reset
+  (stop, restart, or driver re-initialisation), the subtraction
+  `cpuNs - prev.cpuNs` wrapped to a huge positive number that
+  survived the 100% clamp and rendered as a bogus percentage.
+- **Agent: stale baselines.** The `prevVMCPU` cache never evicted.
+  A VM that stopped, was undefined, or was renamed left a baseline
+  that collided with the next start.
+
+Fixes:
+
+- CPU + network counters only read when `vm.State == running`.
+- Counter-backwards guard in `vmCPUUsage` drops the baseline instead
+  of underflowing.
+- Baseline eviction on stop transition (per-VM in `buildVM`) and
+  periodic sweep of names no longer in `virsh list --all`.
+- Server-side defensive clamp in `ApplyTelemetry`: a non-running VM
+  always reports 0 CPU / 0 MemUsage / 0 network bytes regardless of
+  what the agent sends. Renders correctly against unupgraded agents.
+
 ## v5.32.11 — CI hardens against the bugs this week exposed
 - **SPA build gate.** Gitea + GitHub test workflows now run
   `npm run build` (tsc + vite) on every push. v5.30.0 and v5.31.6

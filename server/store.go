@@ -288,6 +288,19 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 		if v.Networks == nil {
 			v.Networks = []models.VMNetwork{}
 		}
+		// Defensive clamp: a non-running VM cannot have live resource
+		// usage. Pre-v5.32.14 agents had an underflow bug in
+		// vmCPUUsage that surfaced phantom CPU % on stopped domains;
+		// guard here so fixed servers render correctly even against
+		// unupgraded agents.
+		if v.State != models.VMRunning {
+			v.CPUUsage = 0
+			v.MemUsageMB = 0
+			for j := range v.Networks {
+				v.Networks[j].RxBytes = 0
+				v.Networks[j].TxBytes = 0
+			}
+		}
 		s.applyVMSideData(&v)
 		vms[i] = &v
 		// Track VM state transitions so the dispatcher can fire
