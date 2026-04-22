@@ -10,6 +10,71 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.33.5 — Windows kvm-tools update from the WebUI actually works
+
+Three fixes that together make "Update N selected" on `/kvm-tools`
+succeed for Windows guests. Previously it failed with:
+
+```
+Copy-Item : The process cannot access the file
+'C:\Program Files\kvm-tools\kvm-tools.exe' because it is being
+used by another process.
+```
+
+### Server picks the right binary by guest OS
+
+`kvmToolsBinaryURL` hardcoded `kvm-tools-linux-amd64`. Windows
+guests downloaded the Linux binary and couldn't run it — the
+self-update silently stranded. Now `handleGuestTelemetry` passes
+the guest's reported OS string ("Microsoft Windows 10 Pro",
+etc.) and the URL builder picks
+`kvm-tools-windows-amd64.exe` for anything containing
+`windows`, defaulting to Linux otherwise.
+
+### `selfUpdate` uses the Windows rename-trick
+
+On Linux `os.Rename(newBinary, exe)` works even for a running
+ELF — the kernel keeps the old inode alive. Windows refuses the
+rename. But NTFS *does* let you rename a running exe to a
+different name within the same directory. The new Windows branch
+in `selfUpdate`:
+
+1. Downloads to `exe.new`.
+2. Renames `exe` → `exe.old` (running process keeps executing
+   from the old file; just on a different path now).
+3. Renames `exe.new` → `exe`.
+4. Spawns a detached helper (`timeout` + `schtasks /End` +
+   `schtasks /Run`) so the Task Scheduler relaunches the new
+   binary after the old process exits.
+5. `os.Exit(0)`.
+
+Unix path is unchanged — same single `os.Rename` it always did.
+
+### `install.ps1` applies the same trick on re-install
+
+The installer also used `Copy-Item -Force` directly, which hit
+the same "file in use" error whenever the script was re-run on a
+host with kvm-tools already installed. Now:
+
+1. Stops the scheduled task (best-effort).
+2. Renames any existing `kvm-tools.exe` → `kvm-tools.exe.old`
+   (works even if the task is still holding the file).
+3. Copies the new binary into place.
+4. Registers and starts the task. If the copy fails, the old
+   binary is rolled back before exit.
+
+### Immediate operator action
+
+Windows guests that were running the pre-v5.33.5 daemon need one
+more manual update to pick up the fix — their current daemon
+still tries the broken in-place overwrite on self-update. Either:
+
+- Re-run `install.ps1` manually on each Windows guest (picks up
+  v5.33.5 `selfUpdate`), or
+- Trigger the WebUI "Update N selected" now that the server
+  serves the correct Windows binary — the install step runs
+  inside the new exe, which has the rename-trick flow.
+
 ## v5.33.4 — mobile UI polish
 
 Targeted fixes for the issues reported against the v5.33.0 mobile

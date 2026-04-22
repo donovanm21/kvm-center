@@ -69,7 +69,49 @@ Write-Info "Using binary: $Source"
 if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir | Out-Null
 }
-Copy-Item -Force $Source $BinPath
+
+# Re-install / upgrade path (v5.33.5): Copy-Item -Force can't
+# overwrite a running kvm-tools.exe — Windows holds the file open as
+# long as the scheduled task is active. But NTFS *does* let us
+# rename a running exe to a different name within the same
+# directory. So:
+#   1. Stop the scheduled task (best-effort; also releases the file
+#      handle on success).
+#   2. If the target still exists, rename it to kvm-tools.exe.old.
+#   3. Copy the new binary into place.
+#   4. Restart the scheduled task below.
+if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+    try {
+        Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+        # Give Task Scheduler a moment to actually release the handle.
+        Start-Sleep -Seconds 1
+    } catch {
+        Write-Warn "Could not stop scheduled task cleanly — will rely on the rename fallback"
+    }
+}
+
+if (Test-Path $BinPath) {
+    $BackupPath = "$BinPath.old"
+    Remove-Item -Force -ErrorAction SilentlyContinue $BackupPath
+    try {
+        # Rename is permitted on Windows even if the exe is still
+        # running. Copy-Item -Force is not. This is the key fix for
+        # the 'process cannot access the file' error.
+        Rename-Item -Force -ErrorAction Stop $BinPath $BackupPath
+    } catch {
+        Fail "Could not rename existing $BinPath out of the way: $_"
+    }
+}
+
+try {
+    Copy-Item -Force -ErrorAction Stop $Source $BinPath
+} catch {
+    # Roll back so the host isn't left without any binary.
+    if (Test-Path "$BinPath.old") {
+        Rename-Item -Force "$BinPath.old" $BinPath -ErrorAction SilentlyContinue
+    }
+    Fail "Copy of new binary failed: $_"
+}
 Write-Info "Binary installed to $BinPath"
 
 # Sanity check the DMI UUID is reachable
