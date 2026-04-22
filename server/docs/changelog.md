@@ -10,6 +10,28 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.33.7 — skill round-trip fixes
+
+Hand-testing the Claude skill bundle surfaced two documentation ↔
+server mismatches. Both fixed.
+
+### `GET /api/vms/{uuid}` now exists
+
+`TOOL.md` advertised this endpoint but the server had no per-UUID
+handler — clients had to pull `/api/vms` and filter client-side.
+Added `handleGetVMByUUID` + `Store.GetVMByUUID` (case-insensitive
+UUID compare across all hosts). Registered as a subtree match on
+`/api/vms/` so the more-specific exact routes (`snapshots`,
+`screenshot`, `notes`, `console-token`) still win. Anything else
+under `/api/vms/<...>` is treated as a UUID lookup; unknown UUIDs
+return 404.
+
+### `audit_search` path corrected in TOOL.md
+
+TOOL.md said `GET /api/audit/events`; the server exposes
+`GET /api/audit`. Pure documentation fix — no server change so
+existing SPA callers are unaffected.
+
 ## v5.33.6 — install.ps1 ASCII-only
 
 v5.33.5's install.ps1 contained em-dashes (U+2014) in comments +

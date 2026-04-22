@@ -169,6 +169,34 @@ func handleGetVMs(store *Store) http.HandlerFunc {
 	}
 }
 
+// GET /api/vms/{uuid} — single VM by UUID (v5.33.7). Introduced so
+// the Claude skill and any other client can fetch a VM without the
+// overhead of pulling + filtering /api/vms. Case-insensitive UUID
+// compare; 404 when the UUID isn't in any host's current inventory.
+func handleGetVMByUUID(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "GET only")
+			return
+		}
+		rest := strings.TrimPrefix(r.URL.Path, "/api/vms/")
+		// Reject anything that still has a slash in it — the explicit
+		// subpath handlers (snapshots/screenshot/…) should have matched
+		// those. A slash-bearing remainder here means the caller asked
+		// for an endpoint we don't implement yet.
+		if rest == "" || strings.Contains(rest, "/") {
+			writeError(w, http.StatusNotFound, "unknown VM sub-resource")
+			return
+		}
+		vm := store.GetVMByUUID(rest)
+		if vm == nil {
+			writeError(w, http.StatusNotFound, "vm not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, vm)
+	}
+}
+
 // GET /api/storage[?host=<id>] — list storage pools.
 func handleGetStorage(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

@@ -991,6 +991,28 @@ func (s *Store) GetVMs(hostID string) []*models.VM {
 	return out
 }
 
+// GetVMByUUID looks up a single VM across every host. Case-insensitive
+// UUID compare. Returns nil when the UUID isn't present in any host's
+// cached inventory. Used by GET /api/vms/{uuid} — previously callers
+// had to pull /api/vms and filter client-side (v5.33.7).
+func (s *Store) GetVMByUUID(uuid string) *models.VM {
+	if uuid == "" {
+		return nil
+	}
+	want := strings.ToLower(uuid)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, vms := range s.vms {
+		for _, v := range vms {
+			if v != nil && strings.ToLower(v.UUID) == want {
+				cp := *v
+				return &cp
+			}
+		}
+	}
+	return nil
+}
+
 // GetStorage returns all storage pools. Pass hostID="" for all hosts.
 func (s *Store) GetStorage(hostID string) []*models.StoragePool {
 	s.mu.RLock()

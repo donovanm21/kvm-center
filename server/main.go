@@ -267,6 +267,12 @@ func main() {
 	mux.HandleFunc("/api/vms/screenshot", handleVMScreenshot(store))
 	mux.Handle("/api/vms/notes", requirePerm(store, "vm.edit", http.HandlerFunc(handleVMNotes(store))))
 	mux.Handle("/api/vms/console-token", requirePerm(store, "vm.console", http.HandlerFunc(handleConsoleToken(store))))
+	// Per-UUID VM detail (v5.33.7). Registered with trailing slash so
+	// Go's ServeMux treats it as a subtree match — the more-specific
+	// exact routes above (snapshots/screenshot/notes/console-token)
+	// still win. Anything else under /api/vms/<...>/ is interpreted
+	// as a UUID lookup.
+	mux.HandleFunc("/api/vms/", handleGetVMByUUID(store))
 	// Server-proxied console (v5.0.4+): noVNC HTML and the VNC WebSocket
 	// both ride through the server's HTTPS origin so every hit is
 	// re-validated against the operator's session cookie. Sharing the

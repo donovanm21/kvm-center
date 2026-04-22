@@ -129,7 +129,7 @@ Cache: server caches 15 s internally; polling is cheap.
 
 ## `audit_search`
 
-**HTTP:** `GET /api/audit/events?actor=<id>&action=<verb>&from=<ts>&limit=<n>`
+**HTTP:** `GET /api/audit?actor=<id>&action=<verb>&from=<ts>&limit=<n>`
 
 **Params:** All optional. `limit` caps at 500 by default.
 
