@@ -74,7 +74,10 @@ func TestIntegration_Backup_ExportRoundTrip(t *testing.T) {
 	if !sawManifest || !sawStore {
 		t.Fatalf("missing entries: manifest=%v store=%v", sawManifest, sawStore)
 	}
-	if manifest.SchemaFormat != "persistData.v1" {
+	// v5.32.20 bumped the schema format when tls/ca material joined
+	// the tarball. Old backups still restore — restore tooling can
+	// read either tag — but fresh exports stamp v2.
+	if manifest.SchemaFormat != "persistData.v2" {
 		t.Fatalf("schema format: got %q", manifest.SchemaFormat)
 	}
 	if manifest.CreatedBy != "alice" {
