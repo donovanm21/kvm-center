@@ -241,6 +241,13 @@ func main() {
 	// Grant pub-key (v5.11). Public trust material, so served without
 	// auth so fresh agents can fetch during first contact.
 	mux.HandleFunc("/api/migrations/grant-pubkey", handleGrantPubKey(grantSigner))
+	// Grant-signer rotation (v5.32.21, Tier S #9). Admin-only. Agents
+	// pick up the new pubkey + grace window on next /grant-pubkey
+	// fetch (on-demand when they encounter an unknown signature).
+	mux.Handle("/api/admin/grant-signer/rotate", requirePerm(store, "user.manage", http.HandlerFunc(handleGrantSignerRotate(store, grantSigner))))
+	// Virsh reconcile (v5.32.21, Tier S #1). Triggers an immediate
+	// agent telemetry refresh and returns a diff of what changed.
+	mux.Handle("/api/admin/reconcile/", requirePerm(store, "user.manage", http.HandlerFunc(handleReconcileHost(store))))
 	mux.Handle("/api/ca/hypervisors", requirePerm(store, "tls.manage", http.HandlerFunc(handleCAHypervisors(store, clusterCA))))
 	mux.Handle("/api/ca/hypervisors/", requirePerm(store, "tls.manage", http.HandlerFunc(handleCARevoke(store))))
 	mux.HandleFunc("/api/vms", handleGetVMs(store))

@@ -40,7 +40,14 @@ import (
 // anyway.
 
 var (
-	grantPubKey      ed25519.PublicKey
+	grantPubKey ed25519.PublicKey
+	// grantPrevPubKey is the server's previous-generation grant pubkey,
+	// populated during a rotation grace window (v5.32.21, Tier S #9).
+	// Nil when no rotation is in progress. verifyGrantEnvelope tries
+	// current first, falls back to prev if grantPrevUntil is in the
+	// future. Prev clears on successful refresh past the grace window.
+	grantPrevPubKey  ed25519.PublicKey
+	grantPrevUntil   time.Time
 	grantPubKeyMu    sync.RWMutex
 	consumedGrants   = map[string]time.Time{} // grant_id → accepted_at (expiry cleanup on set)
 	consumedGrantsMu sync.Mutex
@@ -86,7 +93,9 @@ func loadGrantPubKey(serverURL string) {
 		return
 	}
 	var r struct {
-		PubkeyHex string `json:"pubkey_hex"`
+		PubkeyHex         string `json:"pubkey_hex"`
+		PreviousPubkeyHex string `json:"previous_pubkey_hex"`
+		GraceExpiresAt    string `json:"grace_expires_at"`
 	}
 	if jerr := json.Unmarshal(body, &r); jerr != nil || r.PubkeyHex == "" {
 		log.Printf("grants: pubkey response malformed")
@@ -97,10 +106,28 @@ func loadGrantPubKey(serverURL string) {
 		log.Printf("grants: pubkey hex decode failed")
 		return
 	}
+	var prevPub ed25519.PublicKey
+	var graceUntil time.Time
+	if r.PreviousPubkeyHex != "" {
+		if pp, err := hex.DecodeString(r.PreviousPubkeyHex); err == nil && len(pp) == ed25519.PublicKeySize {
+			prevPub = pp
+			if r.GraceExpiresAt != "" {
+				if t, err := time.Parse(time.RFC3339, r.GraceExpiresAt); err == nil {
+					graceUntil = t
+				}
+			}
+		}
+	}
 	grantPubKeyMu.Lock()
 	grantPubKey = pub
+	grantPrevPubKey = prevPub
+	grantPrevUntil = graceUntil
 	grantPubKeyMu.Unlock()
-	log.Printf("grants: pubkey cached (%s…)", r.PubkeyHex[:16])
+	if prevPub != nil {
+		log.Printf("grants: pubkey cached (%s…) + previous (%s…) until %s", r.PubkeyHex[:16], r.PreviousPubkeyHex[:16], r.GraceExpiresAt)
+	} else {
+		log.Printf("grants: pubkey cached (%s…)", r.PubkeyHex[:16])
+	}
 }
 
 func ensureGrantPubKey(serverURL string) ed25519.PublicKey {
@@ -119,6 +146,11 @@ func ensureGrantPubKey(serverURL string) ed25519.PublicKey {
 // verifyGrantEnvelope — agent-side copy of the server's verifier.
 // Returns the decoded grant on success; error with a reason string
 // on failure.
+//
+// During a rotation grace window, verification falls back to the
+// previous pubkey if the current one doesn't match. This lets a
+// grant issued just before the server rotated still be consumed
+// after the agent picks up the new keys (v5.32.21, Tier S #9).
 func verifyGrantEnvelope(pub ed25519.PublicKey, envelope string) (*models.MigrationGrant, error) {
 	raw, err := base64.StdEncoding.DecodeString(envelope)
 	if err != nil {
@@ -128,7 +160,21 @@ func verifyGrantEnvelope(pub ed25519.PublicKey, envelope string) (*models.Migrat
 	if err := json.Unmarshal(raw, &signed); err != nil {
 		return nil, fmt.Errorf("grant: unmarshal envelope: %w", err)
 	}
-	if !ed25519.Verify(pub, signed.Payload, signed.Signature) {
+	verified := ed25519.Verify(pub, signed.Payload, signed.Signature)
+	if !verified {
+		// Try the previous pubkey if we're still inside the grace
+		// window. ensureGrantPubKey caches both; loadGrantPubKey
+		// already applied the expiry window before exposing them.
+		grantPubKeyMu.RLock()
+		prev := grantPrevPubKey
+		prevUntil := grantPrevUntil
+		grantPubKeyMu.RUnlock()
+		if prev != nil && time.Now().Before(prevUntil) &&
+			ed25519.Verify(prev, signed.Payload, signed.Signature) {
+			verified = true
+		}
+	}
+	if !verified {
 		return nil, errors.New("grant: signature invalid")
 	}
 	var g models.MigrationGrant

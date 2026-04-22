@@ -57,6 +57,9 @@ func main() {
 	// Expose the server URL to other agent packages (grants.go needs it
 	// to fetch the signer's public key on demand).
 	telemetryServerURL = *serverURL
+	// Expose the command port so /refresh-telemetry can report it in
+	// the on-demand telemetry payload. Tier S #1, v5.32.21.
+	agentCommandPort = *cmdPort
 	// Rehydrate consumed-grant replay log so a restart doesn't reset
 	// single-use enforcement.
 	LoadConsumedGrantsLog()
