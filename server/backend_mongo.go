@@ -40,12 +40,13 @@ type MongoBackend struct {
 // persisted entity is one symbol search.
 const (
 	mcoHosts            = "hosts"
-	mcoVMs              = "vms"        // flat per-VM documents keyed by uuid
-	mcoStorage          = "storage"    // flat per-pool docs keyed by host_id+name
-	mcoVMNotes          = "vm_notes"   // keyed by vm_uuid
-	mcoGuestData        = "guest_data" // keyed by vm_uuid, updated_at TTL
-	mcoMigrations       = "migrations" // append-only, indexed by started_at desc
-	mcoUsers            = "users"      // username unique
+	mcoVMs              = "vms"         // flat per-VM documents keyed by uuid
+	mcoStorage          = "storage"     // flat per-pool docs keyed by host_id+name
+	mcoVMNotes          = "vm_notes"    // keyed by vm_uuid
+	mcoGuestData        = "guest_data"  // keyed by vm_uuid, updated_at TTL
+	mcoMigrations       = "migrations"  // append-only, indexed by started_at desc
+	mcoCommandLog       = "command_log" // per-/api/command invocation, indexed by submitted_at + TTL on expires_at
+	mcoUsers            = "users"       // username unique
 	mcoGroups           = "groups"
 	mcoRoles            = "roles"
 	mcoSessions         = "sessions" // TTL on expires_at
@@ -163,6 +164,15 @@ func (b *MongoBackend) ensureIndexes(ctx context.Context) error {
 		{mcoVMs, bson.D{{Key: "host_id", Value: 1}}, nil},
 		{mcoUsers, bson.D{{Key: "username", Value: 1}}, options.Index().SetUnique(true).SetSparse(true)},
 		{mcoMigrations, bson.D{{Key: "started_at", Value: -1}}, nil},
+		// TTL on expires_at — set only for terminal records
+		// (complete/failed/cancelled). Active records omit the field,
+		// so they never expire. Tier S #2, v5.32.17.
+		{mcoMigrations, bson.D{{Key: "expires_at", Value: 1}}, options.Index().SetExpireAfterSeconds(0)},
+		// Command log — indexed for reconciler queries, TTL sweeps
+		// terminal entries 30d after completion. Tier S #4, v5.32.17.
+		{mcoCommandLog, bson.D{{Key: "submitted_at", Value: -1}}, nil},
+		{mcoCommandLog, bson.D{{Key: "outcome", Value: 1}}, nil},
+		{mcoCommandLog, bson.D{{Key: "expires_at", Value: 1}}, options.Index().SetExpireAfterSeconds(0)},
 		{mcoAuditEvents, bson.D{{Key: "at", Value: -1}}, nil},
 		{mcoAuditEvents, bson.D{{Key: "actor_id", Value: 1}}, nil},
 		{mcoAuditEvents, bson.D{{Key: "action", Value: 1}}, nil},
@@ -352,6 +362,12 @@ func (b *MongoBackend) Load(ctx context.Context) (*persistData, error) {
 		return nil, err
 	}
 
+	// Command log (v5.32.17). Mongo TTL handles its own pruning.
+	pd.CommandLog = map[string]*models.CommandLogEntry{}
+	if err := loadMapByID[models.CommandLogEntry](ctx, db, mcoCommandLog, pd.CommandLog, func(c *models.CommandLogEntry) string { return c.RequestID }); err != nil {
+		return nil, err
+	}
+
 	// Notifications (v5.4) singleton.
 	var notif models.NotificationConfig
 	err = db.Collection(mcoNotifications).FindOne(ctx, bson.D{{Key: "_id", Value: "singleton"}}).Decode(&notif)
@@ -454,13 +470,22 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 		return err
 	}
 
-	// Migrations — append-only list, persisted as the full array
+	// Migrations — append-only list, persisted as the full array.
+	// Terminal records carry expires_at = CompletedAt + 30d so the
+	// TTL index sweeps them; active records leave the field unset
+	// so they stick around indefinitely. Tier S #2, v5.32.17.
 	var migDocs []any
 	for _, m := range d.Migrations {
-		migDocs = append(migDocs, struct {
+		doc := struct {
 			ID                      string `bson:"_id"`
 			*models.MigrationRecord `bson:",inline"`
-		}{m.ID, m})
+			ExpiresAt               *time.Time `bson:"expires_at,omitempty"`
+		}{ID: m.ID, MigrationRecord: m}
+		if isTerminalMigration(m.Status) && m.CompletedAt > 0 {
+			t := time.Unix(m.CompletedAt, 0).Add(migrationRetentionDays * 24 * time.Hour)
+			doc.ExpiresAt = &t
+		}
+		migDocs = append(migDocs, doc)
 	}
 	if err := replaceMap(ctx, db, mcoMigrations, migDocs); err != nil {
 		return err
@@ -608,6 +633,13 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) error {
 			ID                     string `bson:"_id"`
 			*models.SnapshotPolicy `bson:",inline"`
 		}{p.ID, p}
+	})); err != nil {
+		return err
+	}
+
+	// Command log (v5.32.17). Inline the whole entry — _id == RequestID.
+	if err := replaceMapIfDirty(ctx, db, mcoCommandLog, "command_log", d, mapToDocs(d.CommandLog, func(c *models.CommandLogEntry) any {
+		return c
 	})); err != nil {
 		return err
 	}
