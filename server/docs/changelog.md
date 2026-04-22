@@ -10,6 +10,59 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.32.19 — durability + rotation + switchover safety
+
+Four small defensive improvements from the Tier S backlog.
+
+### Synchronous flush on terminal migration (Tier S #3)
+
+`finalizeMigration` now calls `store.Save()` directly instead of
+relying on the 30-second periodic tick. A server crash between a
+migration completing and the next tick used to lose the terminal
+flip — the record would still show "running" on restart until the
+boot reconciler could confirm. Blocking write here is worth it —
+migration terminals are what operators page on.
+
+### Console-secret rotation grace window (Tier S #10)
+
+When the server regenerates the console-token secret (e.g. after
+a restore onto a fresh host), agents would reject every existing
+token minted with the old secret until their telemetry tick
+propagated the new one. A narrow but real window of 401s.
+
+Agents now retain the previous secret for 10 minutes after a
+rotation. `verifyConsoleToken` accepts tokens signed with EITHER
+the current or the previous secret during the grace window. After
+10 minutes the previous secret expires and we're back to strict
+current-only verification.
+
+### Backend-switch round-trip verify (Tier S #14)
+
+`migrateBackend` used to Load → Save and declare success; a
+partial Save (Mongo write error on a single collection) would
+leave both backends in ambiguous states and the operator blind.
+
+Post-Save now reads the destination back and asserts key
+collection counts match the source (hosts, users, groups, roles,
+hypervisor_certs, api_tokens, snapshot_policies, migrations). Any
+count mismatch returns an error from `migrateBackend` so the
+caller stays on the source backend. Operator resolves the dst,
+retries the switch.
+
+### `migReporter` invariant documented (Tier S #7)
+
+Every read and write of the agent-side `migReporter` global
+already ran under `migStatusMu`; the invariant is now spelled out
+at the declaration so future edits can't accidentally drop the
+lock.
+
+### Tests
+
+- `agent/console_auth_test.go` — previous-secret acceptance
+  during grace, rejection after grace, unknown-secret rejection.
+- `server/backend_verify_test.go` — matching counts pass,
+  missing rows fail, nil read-back fails.
+
 ## v5.32.18 — operator escape hatches + defensive boot guards
 
 Four small Tier S operator-stranding fixes. All defensive — no new

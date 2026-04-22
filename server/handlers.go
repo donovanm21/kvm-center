@@ -589,6 +589,12 @@ func finalizeMigration(store *Store, rec *models.MigrationRecord, status, detail
 		rec.Detail = detail
 	}
 	store.AddMigration(rec)
+	// Terminal migration → force a synchronous Save so a crash in
+	// the next 30 s doesn't lose the terminal flip. The 30 s save
+	// ticker would eventually catch it, but migration terminals are
+	// exactly the records operators page on — worth paying a blocking
+	// Mongo round-trip here. Tier S #3, v5.32.19.
+	store.Save()
 }
 
 // pollMigrationStatus polls the source agent's /migrate-status endpoint
