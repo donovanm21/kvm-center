@@ -43,8 +43,10 @@ const EVENT_LABELS: Record<string, string> = {
   'host.recovered':       'Host recovered',
   'migration.complete':   'Migration complete',
   'migration.failed':     'Migration failed',
-  'tls.expiring':         'TLS cert expiring (<30 days)',
-  'snapshot.policy.failed': 'Snapshot policy failed',
+  'tls.expiring':             'Server TLS cert expiring',
+  'ca.expiring':              'Cluster CA expiring',
+  'hypervisor.cert.expiring': 'Hypervisor cert expiring',
+  'snapshot.policy.failed':   'Snapshot policy failed',
 };
 
 export function NotificationsTab() {
