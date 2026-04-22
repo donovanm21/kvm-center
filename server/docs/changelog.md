@@ -10,6 +10,49 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.33.3 — fix: gauge sweep direction + orange accent palette
+
+### Gauge sweep — correct fix
+
+v5.33.2 flipped sweep-flag from 1 to 0 thinking the first render
+was drawing the bottom half. It was actually correct before; the
+apparent "low memory sliver" in the first gauge iteration was the
+tiny 8% arc rendering where it should (top-left). Reverting to
+`sweep-flag=1` restores proper top-half rendering for both
+gauges.
+
+The subtlety: `polar()` in SystemHealth.tsx uses math convention
+(angle 90° → point at the TOP of the circle via `y = cy − r·sin(a)`),
+but SVG's internal arc-angle measurement uses the raw coord
+system where y points DOWN. The point we compute as "math 90°"
+is SVG's 270°. Going from the left (SVG 180°) through the top
+(SVG 270°) to the right (SVG 0°) is an *increasing* sweep in SVG
+terms → sweep-flag=1. Fully commented at the Gauge component
+definition now.
+
+### Orange accent everywhere
+
+Gauge fill, CPU area chart, memory area chart, VM-count
+sparkline, and the running-VMs big number all switched to
+`var(--accent)` (kvm-center orange, `#E3571E` in dark mode, auto-
+recoloured in light mode by `globals.css`). Readable against
+both theme backgrounds and consistent with the rest of the app's
+accent usage.
+
+Hosts-table inline bars keep their green/amber/red threshold
+colors — those are semantic status indicators, not stylistic
+fills.
+
+### Snapshots overview list stopped bouncing
+
+The "VMs with Snapshots" list on `/snapshots` relied on the API
+returning VMs in a stable order. The server's per-host
+`vms[hostID]` is a Go map, and iteration order is deliberately
+randomised, so every telemetry tick (~15 s) could flip two
+entries — Web and TestVM visibly swapped positions mid-use. The
+list now applies a stable sort by `(host_id, name)` in the React
+memo so positions are locked.
+
 ## v5.33.2 — fix: System Health gauges drew the bottom half
 
 The v5.33.1 semicircle gauges used SVG arc `sweep-flag=1`, which
