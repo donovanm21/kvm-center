@@ -312,6 +312,7 @@ func listVMs() []models.VM {
 	}
 
 	var vms []models.VM
+	seen := make(map[string]struct{})
 	lines := strings.Split(string(out), "\n")
 	for _, line := range lines[2:] { // skip header rows
 		line = strings.TrimSpace(line)
@@ -325,9 +326,14 @@ func listVMs() []models.VM {
 		// parts[0] = id (or "-"), parts[1] = name, parts[2:] = state words
 		name := parts[1]
 		stateStr := strings.Join(parts[2:], " ")
+		seen[name] = struct{}{}
 		vm := buildVM(name, stateStr)
 		vms = append(vms, vm)
 	}
+	// Drop cpu.time baselines for VMs no longer present (deleted or
+	// renamed). Stop transitions are handled per-VM in buildVM; this
+	// catches the undefine path.
+	sweepVMCPU(seen)
 	return vms
 }
 
@@ -469,17 +475,32 @@ func buildVM(name, stateStr string) models.VM {
 				}
 				if iface.Target.Dev != "" {
 					net.Interface = iface.Target.Dev
-					stats := virshIfStat(name, iface.Target.Dev)
-					net.RxBytes = stats[0]
-					net.TxBytes = stats[1]
+					// Only read ifstats on running VMs. domifstat
+					// against a stopped domain either errors or
+					// returns the last-observed counters, which
+					// then diff against the fresh baseline on the
+					// next start and surface as phantom traffic.
+					if vm.State == models.VMRunning {
+						stats := virshIfStat(name, iface.Target.Dev)
+						net.RxBytes = stats[0]
+						net.TxBytes = stats[1]
+					}
 				}
 				vm.Networks = append(vm.Networks, net)
 			}
 		}
 	}
 
-	// CPU usage via domstats delta.
-	vm.CPUUsage = vmCPUUsage(name, vm.CPUCount)
+	// CPU usage via domstats delta. Running-only: a stopped domain
+	// has cpu.time=0 (or the last-observed value depending on the
+	// libvirt driver) which would either underflow or appear as
+	// phantom load. forgetVMCPU drops any stale baseline so the
+	// next start compares cleanly.
+	if vm.State == models.VMRunning {
+		vm.CPUUsage = vmCPUUsage(name, vm.CPUCount)
+	} else {
+		forgetVMCPU(name)
+	}
 
 	// Snapshot count (fast metadata read; 0 on error or unsupported disk format).
 	vm.SnapshotCount = countSnapshots(name)
@@ -718,6 +739,8 @@ func virshDomMemUsed(name string) (uint64, bool) {
 }
 
 // vmCPUUsage calculates CPU % by comparing domstats cpu.time readings.
+// Callers must only invoke on running VMs — stopped domains leak a
+// stale prevVMCPU entry that would underflow on the next start.
 func vmCPUUsage(name string, cpuCount int) float64 {
 	out, err := exec.Command("virsh", "domstats", "--cpu-total", name).Output()
 	if err != nil {
@@ -736,6 +759,12 @@ func vmCPUUsage(name string, cpuCount int) float64 {
 	now := time.Now()
 	prevVMCPUMu.Lock()
 	prev, hasPrev := prevVMCPU[name]
+	// Counter went backwards — VM was restarted and cpu.time reset.
+	// Drop the stale baseline; uint64 subtraction would wrap to a
+	// huge positive number and render as a bogus percentage.
+	if hasPrev && cpuNs < prev.cpuNs {
+		hasPrev = false
+	}
 	prevVMCPU[name] = struct {
 		cpuNs uint64
 		ts    time.Time
@@ -753,6 +782,28 @@ func vmCPUUsage(name string, cpuCount int) float64 {
 	deltaNs := float64(cpuNs - prev.cpuNs)
 	pct := (deltaNs / (elapsed * float64(cpuCount) * 1e9)) * 100
 	return math.Round(math.Min(pct, 100)*100) / 100
+}
+
+// forgetVMCPU drops the cached cpu.time baseline for a VM. Called
+// when a VM transitions away from running so the next start doesn't
+// compare against a stale counter.
+func forgetVMCPU(name string) {
+	prevVMCPUMu.Lock()
+	delete(prevVMCPU, name)
+	prevVMCPUMu.Unlock()
+}
+
+// sweepVMCPU evicts baselines for names no longer present in the
+// running-VM set. Called from the telemetry tick so dead/renamed
+// domains clean up without a dedicated goroutine.
+func sweepVMCPU(running map[string]struct{}) {
+	prevVMCPUMu.Lock()
+	for name := range prevVMCPU {
+		if _, ok := running[name]; !ok {
+			delete(prevVMCPU, name)
+		}
+	}
+	prevVMCPUMu.Unlock()
 }
 
 func virshIfStat(vmName, iface string) [2]uint64 {
