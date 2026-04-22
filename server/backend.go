@@ -118,6 +118,12 @@ func (b *JSONBackend) Close(_ context.Context) error { return nil }
 // single shot. Used both for the one-time "first boot after Mongo is
 // configured" migration and the Settings → Database "Switch backend"
 // operator action.
+//
+// Post-Save verification (Tier S #14, v5.32.19): after the dst Save
+// completes, read back through dst.Load and assert key collection
+// counts match the source. If the round-trip loses rows, refuse to
+// declare success — the caller keeps using src rather than rebinding
+// the live store to a partially-populated backend.
 func migrateBackend(ctx context.Context, src, dst Backend) error {
 	if src == nil || dst == nil {
 		return errors.New("source and destination backends are both required")
@@ -132,6 +138,47 @@ func migrateBackend(ctx context.Context, src, dst Backend) error {
 	}
 	if err := dst.Save(ctx, d); err != nil {
 		return fmt.Errorf("save to %s: %w", dst.Name(), err)
+	}
+	if err := verifyBackendRoundTrip(ctx, d, dst); err != nil {
+		return fmt.Errorf("round-trip verify on %s: %w", dst.Name(), err)
+	}
+	log.Printf("backend-migrate: %s → %s OK (round-trip verified)", src.Name(), dst.Name())
+	return nil
+}
+
+// verifyBackendRoundTrip reads the destination back and checks that
+// the critical collections (hosts, users, hypervisor_certs,
+// migrations, api_tokens, snapshot_policies) match the source counts.
+// Missing rows in any of those is a data-loss signal that must
+// abort the switch — operator keeps running on src, resolves the
+// dst, tries again.
+func verifyBackendRoundTrip(ctx context.Context, src *persistData, dst Backend) error {
+	back, err := dst.Load(ctx)
+	if err != nil {
+		return fmt.Errorf("read-back Load: %w", err)
+	}
+	if back == nil {
+		return errors.New("read-back returned nil persistData")
+	}
+	type check struct {
+		name     string
+		srcCount int
+		dstCount int
+	}
+	checks := []check{
+		{"hosts", len(src.Hosts), len(back.Hosts)},
+		{"users", len(src.Users), len(back.Users)},
+		{"groups", len(src.Groups), len(back.Groups)},
+		{"roles", len(src.Roles), len(back.Roles)},
+		{"hypervisor_certs", len(src.HypervisorCerts), len(back.HypervisorCerts)},
+		{"api_tokens", len(src.APITokens), len(back.APITokens)},
+		{"snapshot_policies", len(src.SnapshotPolicies), len(back.SnapshotPolicies)},
+		{"migrations", len(src.Migrations), len(back.Migrations)},
+	}
+	for _, c := range checks {
+		if c.srcCount != c.dstCount {
+			return fmt.Errorf("%s count mismatch: src=%d dst=%d", c.name, c.srcCount, c.dstCount)
+		}
 	}
 	return nil
 }
