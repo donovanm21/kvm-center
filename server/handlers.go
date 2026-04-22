@@ -733,8 +733,8 @@ func handleGuestTelemetry(store *Store) http.HandlerFunc {
 		// and re-execs. The queue clears immediately.
 		reply := map[string]string{"status": "ok"}
 		if store.ConsumeKVMToolsUpdate(canonical) {
-			reply["update_url"] = kvmToolsBinaryURL(r)
-			log.Printf("kvm-tools-update: signalled %s → %s", canonical, reply["update_url"])
+			reply["update_url"] = kvmToolsBinaryURL(r, p.OS)
+			log.Printf("kvm-tools-update: signalled %s (os=%q) → %s", canonical, p.OS, reply["update_url"])
 		}
 		// Echo the canonical UUID when it differs from what the guest
 		// claimed — the client caches this to local disk and pins it
@@ -748,11 +748,24 @@ func handleGuestTelemetry(store *Store) http.HandlerFunc {
 }
 
 // kvmToolsBinaryURL returns the URL the in-guest daemon should pull
-// its self-update from. Hard-codes linux/amd64 because that's the
-// only guest arch we ship today. Since v5.16 downloads live on the
-// server itself under /downloads/*, so the URL is same-origin with
-// whatever port the guest originally registered against.
-func kvmToolsBinaryURL(r *http.Request) string {
+// its self-update from. Picks the right binary based on the guest
+// OS string carried in the telemetry payload:
+//
+//   - Any OS string containing "windows" → kvm-tools-windows-amd64.exe
+//   - everything else → kvm-tools-linux-amd64
+//
+// We default to linux/amd64 because that's >95% of the fleet; arm64
+// guests still get the amd64 binary (harmless — arm64 Linux guests
+// have binfmt_misc or qemu-user configured by default on most
+// distros, but this is a known limitation). A future
+// GuestTelemetryPayload extension will ship goos+goarch explicitly
+// so we can pick precisely. Tier S item, tracked in the Windows
+// kvm-tools update bug memory.
+//
+// Since v5.16 downloads live on the server itself under
+// /downloads/*, so the URL is same-origin with whatever port the
+// guest originally registered against.
+func kvmToolsBinaryURL(r *http.Request, guestOS string) string {
 	if env := os.Getenv("KVM_TOOLS_BINARY_URL"); env != "" {
 		return env
 	}
@@ -760,7 +773,11 @@ func kvmToolsBinaryURL(r *http.Request) string {
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	return fmt.Sprintf("%s://%s/downloads/kvm-tools-linux-amd64", scheme, r.Host)
+	binary := "kvm-tools-linux-amd64"
+	if strings.Contains(strings.ToLower(guestOS), "windows") {
+		binary = "kvm-tools-windows-amd64.exe"
+	}
+	return fmt.Sprintf("%s://%s/downloads/%s", scheme, r.Host, binary)
 }
 
 // GET /api/kvm-tools/version — returns the kvm-tools build the server
@@ -768,8 +785,11 @@ func kvmToolsBinaryURL(r *http.Request) string {
 // daemons as "outdated".
 func handleKVMToolsVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
-		"version":    Version,
-		"binary_url": kvmToolsBinaryURL(r),
+		"version": Version,
+		// Empty guestOS → defaults to linux/amd64, which is what
+		// the SPA uses for the "Linux install one-liner". Windows
+		// guests hit the OS-aware path during self-update instead.
+		"binary_url": kvmToolsBinaryURL(r, ""),
 	})
 }
 

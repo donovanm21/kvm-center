@@ -226,15 +226,27 @@ func send(serverURL, uuid string) string {
 	return next
 }
 
-// selfUpdate downloads a new kvm-tools binary, replaces /opt/kvm-tools/
-// kvm-tools (or whatever path the running process was exec'd from) in
-// place via mv, and exits cleanly. systemd's Restart=always relaunches
-// the unit with the new binary on the next supervisor cycle.
+// selfUpdate downloads a new kvm-tools binary and replaces the
+// running executable.
 //
-// Linux allows mv onto a running ELF — the kernel keeps the old inode
-// alive for the running process, the new inode replaces the dirent.
-// The old process keeps running until exit; the new process starts
-// from the new inode.
+// Linux (and macOS): plain os.Rename() onto a running ELF works —
+// the kernel keeps the old inode alive for the running process, the
+// new inode replaces the dirent. systemd's Restart=always relaunches
+// the unit from the new binary.
+//
+// Windows (v5.33.5 fix): os.Rename CAN'T overwrite a running exe,
+// but it CAN rename the running exe to a new name within the same
+// directory (NTFS tracks files by ID, not path). So we:
+//  1. download to exe.new
+//  2. rename exe → exe.old  (running process keeps running at .old)
+//  3. rename exe.new → exe
+//  4. spawn a detached helper that kills the current process + runs
+//     `schtasks /Run /TN kvm-tools` to launch the new binary
+//  5. os.Exit(0)
+//
+// The Task Scheduler action at $BinPath then executes the new file.
+// The .old file stays on disk until the next install/update or a
+// reboot; the installer cleans it up.
 func selfUpdate(url string) error {
 	exe, err := os.Executable()
 	if err != nil {
@@ -256,26 +268,32 @@ func selfUpdate(url string) error {
 	}
 	// Write to a sibling tmp in the same directory so we can atomically
 	// rename onto the executable (mv across filesystems would fail).
-	dir := exe + ".new"
-	out, err := os.OpenFile(dir, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
+	newPath := exe + ".new"
+	out, err := os.OpenFile(newPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
 	if err != nil {
 		return fmt.Errorf("create tmp: %w", err)
 	}
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		out.Close()
-		os.Remove(dir)
+		os.Remove(newPath)
 		return fmt.Errorf("write tmp: %w", err)
 	}
 	if err := out.Close(); err != nil {
-		os.Remove(dir)
+		os.Remove(newPath)
 		return fmt.Errorf("close tmp: %w", err)
 	}
-	if err := os.Chmod(dir, 0o755); err != nil {
-		os.Remove(dir)
+	if err := os.Chmod(newPath, 0o755); err != nil {
+		os.Remove(newPath)
 		return fmt.Errorf("chmod: %w", err)
 	}
-	if err := os.Rename(dir, exe); err != nil {
-		os.Remove(dir)
+
+	if runtime.GOOS == "windows" {
+		return swapBinaryWindows(exe, newPath)
+	}
+
+	// Unix path: rename-over is safe.
+	if err := os.Rename(newPath, exe); err != nil {
+		os.Remove(newPath)
 		return fmt.Errorf("rename: %w", err)
 	}
 	// v5.32.3: migrate any legacy systemd unit still pointing at the
@@ -288,6 +306,47 @@ func selfUpdate(url string) error {
 	// Exit cleanly so systemd's Restart=always kicks in. Sleep briefly
 	// so the log line lands before the process dies.
 	time.Sleep(200 * time.Millisecond)
+	os.Exit(0)
+	return nil
+}
+
+// swapBinaryWindows implements the rename-trick + detached helper
+// flow described in the selfUpdate doc comment. Lives here (not in a
+// separate _windows.go file) because os/exec's Command works on any
+// platform — Task Scheduler calls happen via `schtasks` which is
+// Windows-only but harmless to reference from Unix builds (never
+// invoked, since swapBinaryWindows only runs when GOOS == "windows").
+func swapBinaryWindows(exe, newPath string) error {
+	oldPath := exe + ".old"
+	// Best-effort cleanup of any leftover .old from a prior update.
+	// Ignore errors — if it fails (rare, something else has it open)
+	// the installer will catch it next time.
+	_ = os.Remove(oldPath)
+
+	// Step 1: rename the running exe out of the way. Windows allows
+	// this even with the file open in our own process.
+	if err := os.Rename(exe, oldPath); err != nil {
+		os.Remove(newPath)
+		return fmt.Errorf("rename running exe to .old: %w", err)
+	}
+	// Step 2: put the new binary in place.
+	if err := os.Rename(newPath, exe); err != nil {
+		// Roll back so we don't leave the machine without any binary.
+		_ = os.Rename(oldPath, exe)
+		return fmt.Errorf("rename new binary to exe: %w", err)
+	}
+	// Step 3: spawn a detached helper that waits a few seconds (so
+	// our exit below has time to land), then kicks the Task Scheduler
+	// task. The helper is a single cmd /c script with sleep + restart.
+	// `start /B` detaches from our console so we can exit cleanly.
+	helper := `timeout /t 2 /nobreak >nul & schtasks /End /TN kvm-tools >nul 2>&1 & timeout /t 1 /nobreak >nul & schtasks /Run /TN kvm-tools`
+	cmd := exec.Command("cmd", "/c", "start", "/B", "cmd", "/c", helper)
+	if err := cmd.Start(); err != nil {
+		log.Printf("kvm-tools: swap helper spawn failed: %v — Task Scheduler will restart at next RestartInterval", err)
+	} else {
+		log.Printf("kvm-tools: swapped binary (old→%s, new→%s); helper will restart task", oldPath, exe)
+	}
+	time.Sleep(300 * time.Millisecond)
 	os.Exit(0)
 	return nil
 }
