@@ -10,6 +10,20 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.33.2 — fix: System Health gauges drew the bottom half
+
+The v5.33.1 semicircle gauges used SVG arc `sweep-flag=1`, which
+traces the arc clockwise in screen coordinates — i.e. the BOTTOM
+half of the circle. At high utilisation the arc looked plausible
+but wrong; at low utilisation (memory at 8%) it showed a tiny
+sliver sitting below the `0%` / `100%` labels with the body of
+the gauge empty.
+
+Fixed by flipping to `sweep-flag=0` (counterclockwise on screen,
+which actually traces the TOP half because SVG's y axis is
+inverted from math convention). Same fix for both the background
+track and the filled-in portion.
+
 ## v5.33.1 — System Health dashboard redesign
 
 Reworked the System Health page into a Checkmk-style dashboard

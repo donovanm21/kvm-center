@@ -328,30 +328,59 @@ function statusLabel(s: string) {
 }
 
 /* ── Gauge ─────────────────────────────────────────────────── */
+// Semicircle gauge. Top-half arc from 9 o'clock (180°) → 12 o'clock
+// (90°) → 3 o'clock (0°). SVG arc sweep-flag=0 means "counterclockwise
+// on screen" which — because SVG y-axis is flipped — traces the TOP
+// half of the circle (the half where y < cy). v5.33.1's initial
+// version used sweep-flag=1 which drew the bottom half; at low
+// percentages like memory=8% it showed a tiny sliver in the
+// wrong place. Fixed in v5.33.2.
 function Gauge({ value }: { value: number }) {
   const pct = Math.max(0, Math.min(100, value));
   const r = 72;
   const cx = 100;
   const cy = 100;
-  // Arc from 180° (left) through 0° (right). Semi-circle gauge.
   const start = polar(cx, cy, r, 180);
   const end = polar(cx, cy, r, 180 - (180 * pct) / 100);
   const fullEnd = polar(cx, cy, r, 0);
-  const largeArc = pct > 50 ? 1 : 0;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <svg viewBox="0 0 200 120" width="100%" style={{ maxWidth: 260 }}>
-        <path d={`M ${start.x} ${start.y} A ${r} ${r} 0 1 1 ${fullEnd.x} ${fullEnd.y}`}
-              stroke="var(--surface-2)" strokeWidth={14} fill="none" strokeLinecap="round" />
+        {/* Background track */}
+        <path
+          d={`M ${start.x} ${start.y} A ${r} ${r} 0 0 0 ${fullEnd.x} ${fullEnd.y}`}
+          stroke="var(--surface-2)"
+          strokeWidth={14}
+          fill="none"
+          strokeLinecap="round"
+        />
+        {/* Filled portion */}
         {pct > 0 && (
-          <path d={`M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`}
-                stroke="#FFFFFF" strokeWidth={14} fill="none" strokeLinecap="round" />
+          <path
+            d={`M ${start.x} ${start.y} A ${r} ${r} 0 0 0 ${end.x} ${end.y}`}
+            stroke="#FFFFFF"
+            strokeWidth={14}
+            fill="none"
+            strokeLinecap="round"
+          />
         )}
-        <text x={cx} y={cy - 8} textAnchor="middle" fontSize={28} fontWeight={700} fill="var(--text-strong)">
-          {pct.toFixed(2)}<tspan fontSize={16}>%</tspan>
+        <text
+          x={cx}
+          y={cy - 8}
+          textAnchor="middle"
+          fontSize={28}
+          fontWeight={700}
+          fill="var(--text-strong)"
+        >
+          {pct.toFixed(2)}
+          <tspan fontSize={16}>%</tspan>
         </text>
-        <text x={cx - r - 4} y={cy + 20} fontSize={10} fill="var(--text-muted)">0%</text>
-        <text x={cx + r + 4} y={cy + 20} fontSize={10} fill="var(--text-muted)" textAnchor="end">100%</text>
+        <text x={cx - r - 4} y={cy + 20} fontSize={10} fill="var(--text-muted)">
+          0%
+        </text>
+        <text x={cx + r + 4} y={cy + 20} fontSize={10} fill="var(--text-muted)" textAnchor="end">
+          100%
+        </text>
       </svg>
     </div>
   );
