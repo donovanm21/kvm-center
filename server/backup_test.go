@@ -45,6 +45,10 @@ func TestHandleBackup_BundlesTLSAndCA(t *testing.T) {
 	serverBackupPaths = backupPaths{TLSCert: tlsCertPath, TLSKey: tlsKeyPath, CADir: caDir}
 
 	store := NewStore(filepath.Join(tmp, "data.json"))
+	// handleBackup triggers an audit event via AsyncSave, which fires a
+	// goroutine that writes data.json AFTER this test returns. Wait for
+	// it so t.TempDir cleanup doesn't race the save and error out.
+	t.Cleanup(func() { store.saveWG.Wait() })
 	handler := handleBackup(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/admin/backup", nil)
