@@ -9,11 +9,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
-
-	"kvm-center/internal/models"
 )
 
 // staticV4 embeds the built React SPA (webui-react/dist) produced by the
@@ -140,42 +137,15 @@ func main() {
 		}
 	}
 
-	// Background: TLS expiry watcher. Fires one notification per
-	// transition into the <30d window so operators don't get spammed
-	// every tick. Skipped when TLS is disabled.
-	if reloader != nil {
-		go func() {
-			t := time.NewTicker(6 * time.Hour)
-			defer t.Stop()
-			alreadyWarned := false
-			check := func() {
-				c, err := reloader.CurrentCert()
-				if err != nil {
-					return
-				}
-				days := int(time.Until(c.NotAfter).Hours() / 24)
-				if days < 30 {
-					if !alreadyWarned {
-						store.fireNotification(&models.NotificationEvent{
-							Type:     NotifyTLSExpiring,
-							Title:    "TLS certificate expiring soon",
-							Message:  "Server cert expires in " + strconv.Itoa(days) + " days (" + c.NotAfter.UTC().Format("2006-01-02") + ").",
-							Resource: "tls",
-							Severity: "warning",
-							Detail:   map[string]string{"days": strconv.Itoa(days), "subject": c.Subject.String()},
-						})
-						alreadyWarned = true
-					}
-				} else {
-					alreadyWarned = false
-				}
-			}
-			check()
-			for range t.C {
-				check()
-			}
-		}()
-	}
+	// Background: expiry watcher. Covers three certificate classes:
+	//   - server TLS leaf (self-signed by default or operator-supplied)
+	//   - cluster CA (ECDSA P-256, 10-year default; signs hypervisor certs)
+	//   - each enrolled hypervisor's leaf cert (used for mTLS migration)
+	// Any class going silently past its expiry breaks migrations with
+	// no UI signal (reported as Tier S #8, roadmapped 2026-04-20).
+	// Fires one warning per (kind, identity) transition into the
+	// threshold window so operators don't get spammed every tick.
+	go startExpiryWatcher(store, reloader, clusterCA)
 
 	// Background: mark offline hosts and persist every 30 seconds.
 	go func() {
