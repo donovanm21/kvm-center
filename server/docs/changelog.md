@@ -10,6 +10,52 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.32.20 — backup covers TLS + CA + grant signer, DR restore works
+
+Before this release, `GET /api/admin/backup` only exported the
+store JSON. Everything else needed to rebuild a working control
+plane — server TLS material, cluster CA, migration grant signer —
+lived in a separate `scripts/kvmc-backup` wrapper that copied
+files out of the docker volume. A restore onto a fresh host with
+only the API backup left hypervisor enrolment broken: the new
+server would issue a new CA, hypervisor mTLS certs stopped
+chaining, migrations refused to start. Tier S #11.
+
+Now one tarball is the whole DR story:
+
+- `manifest.json` — version + timestamp + operator identity + a
+  SHA-256 checksum per packed file so a restore tool can verify
+  integrity.
+- `store.json` — unchanged; full persistData export.
+- `tls/server.crt`, `tls/server.key` — server TLS leaf.
+- `ca/*` — everything under `/var/lib/kvm-center/ca`: cluster CA
+  cert + key, Ed25519 grant-signer seed + pubkey. The whole
+  directory ships so future additions travel automatically.
+
+Schema format stamp bumped to `persistData.v2`.
+
+Paired with the backup: `scripts/bootstrap.sh --restore <tarball>`
+unpacks, verifies every manifest checksum, stops the stack,
+copies TLS + CA + store.json into the docker volume's layout, and
+prints next-step guidance for the operator (Mongo drop + restart).
+
+### Not in scope
+
+- `.env` (Mongo password) — operator decides to bundle separately
+  at restore time; we won't ship database credentials through the
+  same HTTPS endpoint that any admin token can hit.
+- Per-agent `consumed-grants.log` — lives on each hypervisor, not
+  on the server. Rebuilds naturally as new migrations land.
+
+### Tests
+
+- `server/backup_test.go` — `TestHandleBackup_BundlesTLSAndCA`
+  drives the handler against a staged temp dir and asserts every
+  expected tarball entry is present and every manifest checksum
+  matches the packed bytes.
+- `server/integration_backup_test.go` updated for
+  `persistData.v2`.
+
 ## v5.32.19 — durability + rotation + switchover safety
 
 Four small defensive improvements from the Tier S backlog.

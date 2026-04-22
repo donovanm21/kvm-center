@@ -26,6 +26,8 @@ Modes:
   --logs            Tail Docker stack logs
   --status          Show Docker container status
   --stop            Stop Docker stack
+  --restore         Restore from a backup tarball. Usage:
+                      bootstrap.sh --restore <path/to/backup.tgz>
   --deploy-agent    Interactive: build agent binaries and guide installation
 
 Options for --server:
@@ -449,6 +451,102 @@ EOF_ENV
 
   --stop)
     docker compose down
+    ;;
+
+  --restore)
+    # Restore the control plane from a backup tarball produced by
+    # GET /api/admin/backup (v5.32.20+). Tarball layout:
+    #   manifest.json        — checksums + provenance
+    #   store.json           — full persistData dump
+    #   tls/server.crt       — server TLS leaf
+    #   tls/server.key
+    #   ca/ca.crt            — cluster CA
+    #   ca/ca.key
+    #   ca/grant-signer.*    — migration grant signer key material
+    #
+    # Flow: stop the stack, unpack into a staging dir, verify every
+    # checksum in manifest.json matches, copy the files into the
+    # server's on-disk volumes, and leave the operator to start the
+    # stack. Mongo is not touched — on next boot the server will
+    # migrate store.json → Mongo if Mongo is empty; otherwise the
+    # operator should drop the Mongo DB first if they want to force
+    # the rehydration.
+    #
+    # Tier S #11, v5.32.20.
+    BACKUP_TAR="${1:-}"
+    if [[ -z "$BACKUP_TAR" ]]; then
+      echo "Usage: $0 --restore <path/to/backup.tgz>" >&2
+      exit 1
+    fi
+    if [[ ! -f "$BACKUP_TAR" ]]; then
+      echo "restore: backup file not found: $BACKUP_TAR" >&2
+      exit 1
+    fi
+    STAGE="$(mktemp -d)"
+    # shellcheck disable=SC2064
+    trap "rm -rf '$STAGE'" EXIT
+    echo "==> unpacking $BACKUP_TAR to $STAGE"
+    tar xzf "$BACKUP_TAR" -C "$STAGE"
+    if [[ ! -f "$STAGE/manifest.json" ]]; then
+      echo "restore: manifest.json missing — is this a v5.32.20+ backup?" >&2
+      exit 1
+    fi
+    echo "==> verifying checksums"
+    # Extract the files block from manifest.json and recompute SHA-256
+    # for each entry. Bail on any mismatch.
+    python3 - <<PYEOF "$STAGE"
+import json, hashlib, sys, os
+stage = sys.argv[1]
+with open(os.path.join(stage, "manifest.json")) as f:
+    m = json.load(f)
+files = m.get("files", {})
+missing, bad = [], []
+for rel, want in files.items():
+    path = os.path.join(stage, rel)
+    if not os.path.exists(path):
+        missing.append(rel); continue
+    got = hashlib.sha256(open(path, "rb").read()).hexdigest()
+    if got != want:
+        bad.append((rel, want, got))
+if missing or bad:
+    print("manifest verification failed:", file=sys.stderr)
+    for r in missing: print("  missing:", r, file=sys.stderr)
+    for r, w, g in bad: print(f"  checksum: {r}  want={w[:12]}… got={g[:12]}…", file=sys.stderr)
+    sys.exit(1)
+print(f"  OK — {len(files)} files verified")
+PYEOF
+    echo "==> stopping stack"
+    docker compose down || true
+    DATA_DIR="/var/lib/kvm-center"
+    TLS_DIR="$DATA_DIR/tls"
+    CA_DIR="$DATA_DIR/ca"
+    mkdir -p "$TLS_DIR" "$CA_DIR"
+    if [[ -d "$STAGE/tls" ]]; then
+      echo "==> restoring TLS material to $TLS_DIR"
+      cp -a "$STAGE/tls/." "$TLS_DIR/"
+      chmod 0600 "$TLS_DIR"/*.key 2>/dev/null || true
+    fi
+    if [[ -d "$STAGE/ca" ]]; then
+      echo "==> restoring CA + grant-signer to $CA_DIR"
+      cp -a "$STAGE/ca/." "$CA_DIR/"
+      chmod 0600 "$CA_DIR"/*.key  2>/dev/null || true
+      chmod 0600 "$CA_DIR"/*.seed 2>/dev/null || true
+    fi
+    if [[ -f "$STAGE/store.json" ]]; then
+      echo "==> restoring store.json to $DATA_DIR/data.json"
+      cp "$STAGE/store.json" "$DATA_DIR/data.json"
+      chmod 0600 "$DATA_DIR/data.json"
+    fi
+    echo ""
+    echo "Restore complete. Next steps:"
+    echo "  1. If you're using Mongo and want the restored store to be"
+    echo "     authoritative, drop the Mongo DB now so the server"
+    echo "     rehydrates from data.json on first boot:"
+    echo "       docker compose run --rm kvm-center-mongo mongosh \\"
+    echo "         --eval 'use kvm-center; db.dropDatabase()'"
+    echo "  2. Start the stack:"
+    echo "       $0 --deploy"
+    echo "  3. Watch the server logs for a clean startup + cert load."
     ;;
 
   --deploy-agent)
