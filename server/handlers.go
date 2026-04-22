@@ -199,6 +199,27 @@ func handleCommand(store *Store) http.HandlerFunc {
 		}
 
 		action := strings.ToUpper(req.Action)
+
+		// Request-ID substrate (v5.32.17+, Tier S #4).
+		//
+		//   1. Client may supply a request_id (X-Request-Id header or
+		//      body field) to opt into idempotent retries. If absent,
+		//      server mints one and echoes it on the response.
+		//   2. Server records a "pending" entry in the command log
+		//      BEFORE dispatching to the agent. Log is durable — any
+		//      crash mid-flight leaves a pending row the boot
+		//      reconciler can drive to terminal state.
+		//   3. Agent's outcome cache (keyed on request_id) returns
+		//      the cached reply on replay, so a dropped response +
+		//      client retry doesn't double-execute the command.
+		if req.RequestID == "" {
+			if h := r.Header.Get("X-Request-Id"); h != "" {
+				req.RequestID = h
+			} else {
+				req.RequestID = NewRequestID()
+			}
+		}
+		w.Header().Set("X-Request-Id", req.RequestID)
 		// Audit every command that reaches this handler, regardless of
 		// outcome. We re-audit with success=false in the error paths
 		// below; RBAC/feature rejections are covered in the overarching
@@ -339,15 +360,57 @@ func handleCommand(store *Store) http.HandlerFunc {
 			}
 		}
 		agentCmd := models.CommandRequest{
-			Action: action,
-			VMName: req.VMName,
-			VMUUID: req.VMUUID,
-			Params: req.Params,
+			RequestID: req.RequestID,
+			Action:    action,
+			VMName:    req.VMName,
+			VMUUID:    req.VMUUID,
+			Params:    req.Params,
 		}
 		body, _ := json.Marshal(agentCmd)
 
+		// Record the pending entry BEFORE the agent call so a server
+		// crash mid-flight leaves a durable row for the boot
+		// reconciler. If the same request_id was already seen, short-
+		// circuit to the cached outcome — the caller is retrying a
+		// command we already resolved.
+		actorID := ""
+		if u != nil {
+			actorID = u.ID
+		}
+		existing, replay := store.commandLog.Record(&models.CommandLogEntry{
+			RequestID:   req.RequestID,
+			Action:      action,
+			HostID:      req.HostID,
+			VMUUID:      req.VMUUID,
+			VMName:      req.VMName,
+			Params:      req.Params,
+			ActorID:     actorID,
+			SubmittedAt: time.Now(),
+			Outcome:     "pending",
+		})
+		if replay && existing.Outcome != "pending" {
+			// Prior call already finished. Return the cached outcome
+			// verbatim. Never re-drive the agent — that's the whole
+			// point of the idempotency cache.
+			log.Printf("command: replay from cache req_id=%s action=%s outcome=%s", req.RequestID, action, existing.Outcome)
+			w.Header().Set("X-Command-Replayed", "true")
+			w.Header().Set("Content-Type", "application/json")
+			status := existing.StatusCode
+			if status == 0 {
+				status = http.StatusOK
+			}
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(models.CommandResponse{
+				RequestID: existing.RequestID,
+				Replayed:  true,
+				Success:   existing.Outcome == "success",
+				Message:   existing.Message,
+			})
+			return
+		}
+
 		url := fmt.Sprintf("http://%s/command", agentAddr)
-		log.Printf("command: %s → %s  vm=%s", action, agentAddr, req.VMName)
+		log.Printf("command: %s → %s  vm=%s  req_id=%s", action, agentAddr, req.VMName, req.RequestID)
 
 		// Track migrations in the store so the Migrations summary page
 		// reflects in-flight + historical state without the React SPA
@@ -437,12 +500,33 @@ func handleCommand(store *Store) http.HandlerFunc {
 			if migRec != nil {
 				finalizeMigration(store, migRec, "failed", "agent unreachable: "+err.Error())
 			}
+			store.commandLog.Update(req.RequestID, "failed", "agent unreachable: "+err.Error(), http.StatusBadGateway, false)
 			writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
 			return
 		}
 		defer resp.Body.Close()
 
 		respBody, _ := io.ReadAll(resp.Body)
+		// Resolve the command log outcome. Any 2xx is success; 4xx/5xx
+		// is failed. Agent signals cache-replay via X-Command-Replayed
+		// header; mirror onto the log + response for the audit trail.
+		outcome := "success"
+		if resp.StatusCode >= 400 {
+			outcome = "failed"
+		}
+		var parsedResp struct {
+			Message string `json:"message"`
+		}
+		_ = json.Unmarshal(respBody, &parsedResp)
+		msg := parsedResp.Message
+		if msg == "" && resp.StatusCode >= 400 {
+			msg = strings.TrimSpace(string(respBody))
+		}
+		replayed := resp.Header.Get("X-Command-Replayed") == "true"
+		store.commandLog.Update(req.RequestID, outcome, msg, resp.StatusCode, replayed)
+		if replayed {
+			w.Header().Set("X-Command-Replayed", "true")
+		}
 		// Live migrations are synchronous in the agent — the response
 		// arrives only when virsh migrate finishes (or errors). Offline
 		// migrations return immediately and the poller takes over from
