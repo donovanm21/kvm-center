@@ -10,6 +10,62 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.33.1 — System Health dashboard redesign
+
+Reworked the System Health page into a Checkmk-style dashboard
+instead of a plain card list. The v5.33.0 shell was a good proof
+of concept but didn't give operators the glance-and-triage view
+they were after.
+
+### Backend (`GET /api/admin/system-health`)
+
+Response extended with three new top-level fields — old clients
+still work, just see more data:
+
+- `aggregates` — fleet-wide numbers: `fleet_cpu_pct`, `fleet_mem_pct`,
+  `fleet_vm_count`, `fleet_vm_running`, `fleet_cpu_cores`,
+  `fleet_mem_total_gb`, `migrations_today`, `snapshot_blocked`, plus
+  a 1h aggregate time-series (`series.t/cpu_pct/mem_pct/vms`)
+  computed by averaging the per-host metric ring buffers at each
+  slot.
+- `host_breakdown` — one row per hypervisor with `cpu_pct`,
+  `mem_pct`, `storage_pct`, `vm_count`, `agent_version`,
+  `outdated`, `maintenance`.
+- `problems` — aggregated "needs-attention-right-now" list:
+  offline hosts, outdated agents, expiring certs, stuck
+  migrations, stranded command-log entries, snapshot-blocked VMs.
+  Each carries `{severity, source, resource, summary}`.
+
+Still cached 15 s server-side; still admin-only (user.manage).
+
+### SPA (`/system-health`)
+
+- **Row 1**: five big status tiles — Overall, Control plane,
+  Database, TLS & CA, Hypervisors. Green / amber / red background
+  with the status word in 30 px caps. Takes ~1 s to read.
+- **Row 2**: CPU gauge (semi-circle, 0–100%) + 1h CPU line chart.
+- **Row 3**: Memory gauge + 1h memory line chart (matching
+  purple for mem, green for CPU — matches the host sparklines).
+- **Row 4**: Running-VM count big-number + VM-count sparkline +
+  secondary subsystem cards (Guest tools, Migrations, Snapshots,
+  Command log) in an auto-fit grid.
+- **Row 5**: Hypervisor breakdown table — per-host inline bars for
+  CPU / memory / storage + VM count + agent version with "outdated"
+  flag.
+- **Row 6**: Cluster problems feed — CRIT/WARN chips, source,
+  resource, and summary. Auto-hidden when the list is empty.
+
+Charts are plain inline SVG — no charting library, no bundle
+bloat. Area gradient fills match the reference dashboard style.
+
+### Notes
+
+- Per-host ring buffers (1 h / 30 s samples) already existed for
+  the HostDetail sparklines; we just reuse them on the backend to
+  build the fleet aggregate without adding any new collection
+  path. Live numbers update on every telemetry tick; the chart
+  fills from the left over the first hour after deploy.
+
 ## v5.33.0 — P1: system health + mobile UI + Claude skill
 
 Minor version bump. Ships all three P1 operator-value items from
