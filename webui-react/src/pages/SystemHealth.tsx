@@ -127,7 +127,7 @@ export function SystemHealth() {
           <div style={panelTitleStyle}>CPU utilization over the last hour</div>
           <AreaChart
             series={a.series.t.map((t, i) => ({ t, v: a.series.cpu_pct[i] ?? 0 }))}
-            color={C.green}
+            color="var(--accent)"
             unit="%"
             height={160}
           />
@@ -143,7 +143,7 @@ export function SystemHealth() {
           <div style={panelTitleStyle}>Memory utilization over the last hour</div>
           <AreaChart
             series={a.series.t.map((t, i) => ({ t, v: a.series.mem_pct[i] ?? 0 }))}
-            color="#B37FEB"
+            color="var(--accent)"
             unit="%"
             height={160}
           />
@@ -154,7 +154,7 @@ export function SystemHealth() {
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 12 }}>
         <div style={panelStyle}>
           <div style={panelTitleStyle}>Running VMs: Fleet</div>
-          <BigNumber number={a.fleet_vm_running} sub={`of ${a.fleet_vm_count} total`} color="#4B8FF7" />
+          <BigNumber number={a.fleet_vm_running} sub={`of ${a.fleet_vm_count} total`} color="var(--accent)" />
           <VMTrendSparkline series={a.series.t.map((t, i) => ({ t, v: a.series.vms[i] ?? 0 }))} />
           <div style={panelFootnote}>
             {a.migrations_today} migration{a.migrations_today === 1 ? '' : 's'} started in the last 24h
@@ -328,13 +328,21 @@ function statusLabel(s: string) {
 }
 
 /* ── Gauge ─────────────────────────────────────────────────── */
-// Semicircle gauge. Top-half arc from 9 o'clock (180°) → 12 o'clock
-// (90°) → 3 o'clock (0°). SVG arc sweep-flag=0 means "counterclockwise
-// on screen" which — because SVG y-axis is flipped — traces the TOP
-// half of the circle (the half where y < cy). v5.33.1's initial
-// version used sweep-flag=1 which drew the bottom half; at low
-// percentages like memory=8% it showed a tiny sliver in the
-// wrong place. Fixed in v5.33.2.
+// Semicircle gauge. Draws the top half from 9 o'clock (180°) →
+// 12 o'clock → 3 o'clock (0°).
+//
+// Sweep-flag gotcha: polar() below uses math convention (angle 90°
+// means the point at the TOP of the circle, computed as
+// y = cy − r·sin(a)). SVG's internal arc-angle measurement uses
+// raw coords where y points DOWN — so what we compute as "math
+// 90°" is SVG's 270°. Going from our start (SVG angle 180°) to our
+// end (SVG angle 270° for the top midpoint) is INCREASING in SVG
+// terms, which is sweep-flag=1. v5.33.2 had this backwards; this
+// v5.33.3 fix aligns the sweep-flag with the polar convention.
+//
+// Fill uses var(--accent) (kvm-center orange) so the bar reads
+// correctly in both dark and light themes — the globals.css accent
+// palette already adapts.
 function Gauge({ value }: { value: number }) {
   const pct = Math.max(0, Math.min(100, value));
   const r = 72;
@@ -346,19 +354,19 @@ function Gauge({ value }: { value: number }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <svg viewBox="0 0 200 120" width="100%" style={{ maxWidth: 260 }}>
-        {/* Background track */}
+        {/* Background track — full top-half semicircle. */}
         <path
-          d={`M ${start.x} ${start.y} A ${r} ${r} 0 0 0 ${fullEnd.x} ${fullEnd.y}`}
+          d={`M ${start.x} ${start.y} A ${r} ${r} 0 0 1 ${fullEnd.x} ${fullEnd.y}`}
           stroke="var(--surface-2)"
           strokeWidth={14}
           fill="none"
           strokeLinecap="round"
         />
-        {/* Filled portion */}
-        {pct > 0 && (
+        {/* Filled portion. Arc is always ≤ 180°, so large-arc=0. */}
+        {pct > 0.01 && (
           <path
-            d={`M ${start.x} ${start.y} A ${r} ${r} 0 0 0 ${end.x} ${end.y}`}
-            stroke="#FFFFFF"
+            d={`M ${start.x} ${start.y} A ${r} ${r} 0 0 1 ${end.x} ${end.y}`}
+            stroke="var(--accent)"
             strokeWidth={14}
             fill="none"
             strokeLinecap="round"
@@ -445,8 +453,8 @@ function VMTrendSparkline({ series }: { series: Point[] }) {
   const area = `0,${h} ${poly} ${w},${h}`;
   return (
     <svg viewBox={`0 0 ${w} ${h}`} width="100%" preserveAspectRatio="none" style={{ marginTop: 4 }}>
-      <polyline points={area} fill="#4B8FF7" fillOpacity={0.2} stroke="none" />
-      <polyline points={poly} fill="none" stroke="#4B8FF7" strokeWidth={1.5} />
+      <polyline points={area} fill="var(--accent)" fillOpacity={0.2} stroke="none" />
+      <polyline points={poly} fill="none" stroke="var(--accent)" strokeWidth={1.5} />
     </svg>
   );
 }
