@@ -10,6 +10,24 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.32.16 — bootstrap.sh --deploy cleans up after itself
+
+Every `docker compose build` leaves the previous `kvm-center-server`
+image layer dangling and adds ~1–2 GB of BuildKit cache. Across
+enough redeploys these accumulate — we hit 91% disk on the docker
+host before noticing. Now every `--stack` and `--deploy` run ends
+with a `post_deploy_cleanup` pass that:
+
+- Runs `docker image prune -f` (dangling only — never touches
+  tagged images in use by other stack containers on the host).
+- Runs `docker builder prune -f --filter "until=168h"` so back-to-
+  back redeploys keep a week of cache for speed but older entries
+  get reclaimed.
+
+Skipped automatically on dev workstations where `docker` isn't on
+PATH. Picked up by the Gitea CD workflow without changes since it
+dispatches through the same script.
+
 ## v5.32.15 — cert expiry watcher covers CA + hypervisor leaves
 
 Pre-5.32.15 the expiry watcher only warned on the server TLS leaf.
