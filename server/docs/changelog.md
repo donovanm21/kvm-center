@@ -10,6 +10,77 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.32.17 — idempotent commands + bounded retention + SSE hygiene
+
+Rolls three Tier S operator-stranding fixes into one release. The
+unifying principle: **every action must be idempotent and
+trackable, so reconciliation is easy and precise.**
+
+### Request-ID substrate (Tier S #4) — foundational
+
+Every `/api/command` invocation now carries a `request_id`. The
+server records a durable `command_log` entry before dispatching,
+the agent keeps a 10-minute outcome cache keyed on the id, and a
+retry with the same id returns the cached reply instead of
+re-executing virsh. A dropped response + client retry no longer
+produces a duplicate snapshot, double migration, or re-applied
+EDIT_VM.
+
+- **Client interface**: supply `X-Request-Id` header or body
+  `request_id` on `/api/command`. Server mints one if absent and
+  echoes `X-Request-Id` on the response. Replays return
+  `X-Command-Replayed: true`.
+- **Durability**: command log persists through Mongo (indexed on
+  submitted_at + outcome, TTL 30 days on terminal entries) and
+  the JSON fallback. Survives crash.
+- **Reconciliation**: at boot, entries stuck in "pending" for more
+  than 45 minutes flip to "unknown" with an audit event. Admin UI
+  surfaces them so the operator can resolve manually (the agent
+  may or may not have applied the command — server can't tell).
+- **Admin API**: `GET /api/admin/command-log?limit=...&outcome=...`
+  returns the recent log (user.manage gated).
+- **Audit**: every command log state change fans through the
+  existing audit pipeline with the request_id in the detail map.
+
+### Migration TTL + slice cap (Tier S #2)
+
+Migration records grew unbounded — `data.json` bloated, every SSE
+publish copied the whole slice, `/api/migrations` got slower.
+
+- **Mongo TTL**: completed/failed/cancelled records get an
+  `expires_at` stamp (CompletedAt + 30 days) and the `expires_at`
+  TTL index sweeps them. Active records never expire.
+- **In-memory cap**: `migrationSliceCap = 1000`. When exceeded,
+  oldest terminal records drop first. Active records never
+  eligible for drop — losing an in-flight migration is worse than
+  a memory spike.
+
+### SSE subscriber eviction (Tier S #5)
+
+A stuck reverse-proxy or a suspended laptop could accumulate SSE
+subscribers forever, each burning 32-event channel backlog. No cap
+existed and slow consumers were never evicted.
+
+- **Subscriber cap**: 256 simultaneous clients. Additional
+  connections get `503 Service Unavailable` with a retry hint.
+- **Drop eviction**: each `Publish` that can't write to a buffer
+  bumps a per-sub drop counter; three consecutive drops → evict.
+  Successful writes reset the counter so a subscriber that
+  temporarily stalls can recover.
+
+### Tests
+
+New unit tests exercise the core of each change:
+
+- `server/command_log_test.go` — replay detection, outcome
+  stamping, Pending age filter, cap eviction preserves pending.
+- `server/migrations_trim_test.go` — terminal-only drop,
+  all-active no-op.
+- `server/sse_eviction_test.go` — stalled subscriber evicted,
+  successful write resets counter, cap rejects.
+- `agent/outcome_cache_test.go` — round-trip, TTL expiry,
+  empty request_id is a no-op.
+
 ## v5.32.16 — bootstrap.sh --deploy cleans up after itself
 
 Every `docker compose build` leaves the previous `kvm-center-server`

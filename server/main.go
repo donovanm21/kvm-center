@@ -206,6 +206,11 @@ func main() {
 	mux.Handle("/api/tokens/me/", http.HandlerFunc(handleMyAPIToken(store)))
 	mux.Handle("/api/tokens/", requirePerm(store, "user.manage", http.HandlerFunc(handleAPIToken(store))))
 
+	// Command log (v5.32.17). Admin-only: shows the last N /api/command
+	// invocations with actor + outcome, and surfaces any "unknown"
+	// entries the boot reconciler flagged.
+	mux.Handle("/api/admin/command-log", requirePerm(store, "user.manage", http.HandlerFunc(handleCommandLog(store))))
+
 	// Hypervisor PKI (v5.10.0). Admin-gated except /sign (which is
 	// protected by the one-time enrollment token) and /bundle (public
 	// trust anchor).
@@ -304,6 +309,11 @@ func main() {
 	// live migrate HTTP response goes to a closed socket across a
 	// restart, so finalizeMigration never runs).
 	go reconcileStrandedMigrations(store)
+	// Command log: flip any "pending" entries older than the cutoff
+	// to "unknown" so the admin UI surfaces them. We can't tell
+	// whether the agent actually ran them — hence "unknown", not
+	// "failed". Tier S #4, v5.32.17.
+	go reconcileStrandedCommands(store)
 	seedPublicURLFromEnv(store)
 	notifyStore = store
 	mux.HandleFunc("/api/setup/state", handleSetupState(store))

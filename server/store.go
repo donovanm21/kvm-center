@@ -41,6 +41,7 @@ type persistData struct {
 	Metrics          *models.MetricsConfig               `json:"metrics,omitempty"`
 	APITokens        map[string]*models.APIToken         `json:"api_tokens,omitempty"`
 	HypervisorCerts  map[string]*models.HypervisorCert   `json:"hypervisor_certs,omitempty"`
+	CommandLog       map[string]*models.CommandLogEntry  `json:"command_log,omitempty"`
 	// ConsoleSecret is the HMAC-SHA256 key the server uses to mint
 	// per-session VM console tokens (see console_token.go). Generated
 	// on first use; persisted so agents that cached it don't need a
@@ -134,8 +135,12 @@ type Store struct {
 	// store; this is glance-at-the-last-hour material, memory-only, and
 	// refills naturally after a restart.
 	hostMetrics map[string]*hostMetricRing
-	features    models.Features
-	dataFile    string
+	// commandLog (v5.32.17) tracks every mutating /api/command invocation
+	// for idempotent retries + post-crash reconciliation. Owns its own
+	// mutex — never take s.mu and commandLog.mu together.
+	commandLog *CommandLog
+	features   models.Features
+	dataFile   string
 	// backend is the pluggable persistence layer (JSON file or Mongo).
 	// Wired post-construction by NewStoreWithBackend; NewStore still
 	// works for tests and falls back to JSONBackend on dataFile.
@@ -195,6 +200,7 @@ func NewStoreWithBackend(backend Backend, dataFile string) *Store {
 		hypervisorCerts:     make(map[string]*models.HypervisorCert),
 		caEnrollTokens:      make(map[string]*caEnrollEntry),
 		hostMetrics:         make(map[string]*hostMetricRing),
+		commandLog:          NewCommandLog(),
 		dataFile:            dataFile,
 		backend:             backend,
 	}
@@ -630,6 +636,27 @@ func (s *Store) resolveCanonicalUUID(p *models.GuestTelemetryPayload) string {
 	return p.VMUUID
 }
 
+// migrationSliceCap bounds s.migrations so the in-memory slice, the
+// whole-state JSON dump, and every GetMigrations() copy don't grow
+// without limit across a long-lived deployment. Terminal records
+// (complete/failed) are the drop candidates once the cap is hit;
+// active records (running/cancelling) are kept regardless so we
+// don't lose state on an in-flight migration. Mongo deployments get
+// a hard TTL (migrationRetentionDays) on top — this cap is belt +
+// braces for the in-memory and JSON-fallback paths.
+const (
+	migrationSliceCap      = 1000
+	migrationRetentionDays = 30
+)
+
+// isTerminalMigration matches the Status values we treat as "will
+// never change again" for retention + trim purposes. Defined here
+// rather than in models so the backend + store share one source of
+// truth.
+func isTerminalMigration(status string) bool {
+	return status == "complete" || status == "failed" || status == "cancelled"
+}
+
 // AddMigration inserts or updates a migration record.
 func (s *Store) AddMigration(r *models.MigrationRecord) {
 	s.mu.Lock()
@@ -643,6 +670,7 @@ func (s *Store) AddMigration(r *models.MigrationRecord) {
 	}
 	if !found {
 		s.migrations = append(s.migrations, r)
+		s.migrations = trimMigrations(s.migrations, migrationSliceCap)
 	}
 	// Fire-once tracker for terminal-state notifications. Callers
 	// (finalizeMigration / pollMigrationStatus) often mutate the same
@@ -683,6 +711,43 @@ func (s *Store) AddMigration(r *models.MigrationRecord) {
 			})
 		}
 	}
+}
+
+// trimMigrations enforces migrationSliceCap while preserving every
+// active record. When the cap is exceeded it drops the oldest
+// terminal-state (complete/failed) entries until len == cap or no
+// more terminal entries remain. If somehow the cap is blown purely
+// by active records, the slice grows past cap on purpose — losing
+// an in-flight migration record is worse than a memory spike.
+func trimMigrations(s []*models.MigrationRecord, cap int) []*models.MigrationRecord {
+	if len(s) <= cap {
+		return s
+	}
+	// Two-pass: collect indices of terminal entries oldest-first,
+	// then drop until len == cap.
+	drop := make(map[int]struct{})
+	for i, m := range s {
+		if m == nil {
+			continue
+		}
+		if m.Status == "complete" || m.Status == "failed" || m.Status == "cancelled" {
+			drop[i] = struct{}{}
+			if len(s)-len(drop) <= cap {
+				break
+			}
+		}
+	}
+	if len(drop) == 0 {
+		return s
+	}
+	out := make([]*models.MigrationRecord, 0, len(s)-len(drop))
+	for i, m := range s {
+		if _, skip := drop[i]; skip {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // GetMigrations returns all migration records, newest first.
@@ -1012,6 +1077,7 @@ func computeDirty(d *persistData) map[string]bool {
 		"api_tokens":        d.APITokens,
 		"snapshot_policies": d.SnapshotPolicies,
 		"hypervisor_certs":  d.HypervisorCerts,
+		"command_log":       d.CommandLog,
 		"metrics":           d.Metrics,
 	}
 	for name, v := range fields {
@@ -1061,6 +1127,7 @@ func (s *Store) Save() {
 		Metrics:          s.metrics,
 		APITokens:        s.apiTokens,
 		HypervisorCerts:  s.hypervisorCerts,
+		CommandLog:       s.commandLog.snapshot(),
 		ConsoleSecret:    s.consoleSecret,
 	}
 	s.mu.RUnlock()
@@ -1164,6 +1231,9 @@ func (s *Store) load() {
 	}
 	if d.HypervisorCerts != nil {
 		s.hypervisorCerts = d.HypervisorCerts
+	}
+	if d.CommandLog != nil {
+		s.commandLog.replace(d.CommandLog)
 	}
 	log.Printf("store: loaded %d hosts, %d users, %d groups, %d roles from %s",
 		len(s.hosts), len(s.users), len(s.groups), len(s.roles), s.dataFile)

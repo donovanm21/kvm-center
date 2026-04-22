@@ -285,6 +285,31 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Idempotency replay check (v5.32.17, Tier S #4). If we've seen
+	// this request_id within outcomeCacheTTL, return the cached
+	// response verbatim instead of re-running the command. Empty
+	// request_id = pre-5.32.17 server or direct curl — no caching.
+	if req.RequestID != "" {
+		if e, ok := outcomes.get(req.RequestID); ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Command-Replayed", "true")
+			w.WriteHeader(e.status)
+			_, _ = w.Write(e.body)
+			log.Printf("command: replay req_id=%s action=%s status=%d", req.RequestID, req.Action, e.status)
+			return
+		}
+		// Wrap the writer so the outcome cache records the response
+		// when the handler returns.
+		rec := &recorderWriter{ResponseWriter: w}
+		defer func() {
+			if rec.status == 0 {
+				rec.status = http.StatusOK
+			}
+			outcomes.put(req.RequestID, rec.status, rec.body)
+		}()
+		w = rec
+	}
+
 	vmTarget := req.VMName
 	if vmTarget == "" {
 		vmTarget = req.VMUUID
