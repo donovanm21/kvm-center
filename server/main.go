@@ -148,12 +148,26 @@ func main() {
 	go startExpiryWatcher(store, reloader, clusterCA)
 
 	// Background: mark offline hosts and persist every 30 seconds.
+	// Phantom-host prune runs on a separate, slower tick (hourly) so
+	// it can't thrash the store under load and so a noisy audit log
+	// doesn't complicate a storm of MarkOfflineHosts calls.
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
 			store.MarkOfflineHosts()
 			store.Save()
+		}
+	}()
+	go func() {
+		// Stagger: first prune after 10 min, then hourly. No need to
+		// race with the post-boot reconcile storm.
+		time.Sleep(10 * time.Minute)
+		store.PrunePhantomHosts()
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			store.PrunePhantomHosts()
 		}
 	}()
 
@@ -244,6 +258,10 @@ func main() {
 	mux.HandleFunc("/api/migrations", handleGetMigrations(store))
 	mux.HandleFunc("/api/migrations/record", handlePostMigration(store))
 	mux.Handle("/api/migrations/cancel", requirePerm(store, "vm.migrate", http.HandlerFunc(handleCancelMigration(store))))
+	// Force-fail (v5.32.18): admin-only escape hatch when the normal
+	// cancel path refuses. Does NOT talk to the agent — operator has
+	// presumably resolved the VM state manually.
+	mux.Handle("/api/migrations/force-fail", requirePerm(store, "user.manage", http.HandlerFunc(handleForceFailMigration(store))))
 	mux.HandleFunc("/api/migrate-status", handleMigrateStatus(store))
 	mux.HandleFunc("/api/kvm-tools/version", handleKVMToolsVersion)
 	mux.Handle("/api/kvm-tools/update", requirePerm(store, "vm.edit", http.HandlerFunc(handleKVMToolsUpdate(store))))
