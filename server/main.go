@@ -90,6 +90,11 @@ func main() {
 	}
 	log.Printf("ca: cluster CA loaded from %s (NotAfter=%s)", *caDir, clusterCA.Cert().NotAfter.Format(time.RFC3339))
 
+	// Publish on-disk paths for the backup handler (Tier S #11, v5.32.20).
+	// TLS paths are resolved below after the -cert / -key flags and the
+	// auto-gen fallback; set the CA dir here because it's known now.
+	serverBackupPaths.CADir = *caDir
+
 	// Grant signer (v5.11). Ed25519 key used to sign per-migration
 	// authorization tokens. Stored next to the cluster CA so a single
 	// volume backs everything the control plane needs to survive a
@@ -135,6 +140,8 @@ func main() {
 		if _, err := reloader.GetCertificate(nil); err != nil {
 			log.Fatalf("server: tls cert load: %v", err)
 		}
+		serverBackupPaths.TLSCert = certPath
+		serverBackupPaths.TLSKey = keyPath
 	}
 
 	// Background: expiry watcher. Covers three certificate classes:
