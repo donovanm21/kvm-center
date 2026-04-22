@@ -135,6 +135,9 @@ type Store struct {
 	// store; this is glance-at-the-last-hour material, memory-only, and
 	// refills naturally after a restart.
 	hostMetrics map[string]*hostMetricRing
+	// saveGateOpen controls whether periodic Save is allowed. See
+	// isSaveGated for the full reasoning.
+	saveGateOpen bool
 	// commandLog (v5.32.17) tracks every mutating /api/command invocation
 	// for idempotent retries + post-crash reconciliation. Owns its own
 	// mutex — never take s.mu and commandLog.mu together.
@@ -1017,6 +1020,14 @@ func (s *Store) GetHostAgentAddr(hostID string) string {
 	return h.IP + ":" + itoa(port)
 }
 
+// phantomHostPruneAfter is how long a host can sit offline before
+// the pruner drops it from the in-memory store. Set deliberately
+// long (30 days) so a hypervisor that's been down for a maintenance
+// window doesn't vanish — but a host that's been retired or re-IP'd
+// without an explicit DELETE gets cleaned up eventually instead of
+// bloating every persistence snapshot forever. Tier S #13, v5.32.18.
+const phantomHostPruneAfter = 30 * 24 * time.Hour
+
 // MarkOfflineHosts sets hosts that haven't reported for >2 min to offline in memory.
 func (s *Store) MarkOfflineHosts() {
 	s.mu.Lock()
@@ -1045,6 +1056,43 @@ func (s *Store) MarkOfflineHosts() {
 			Severity: "critical",
 			At:       time.Now().UTC(),
 		})
+	}
+}
+
+// PrunePhantomHosts drops hosts that have been offline beyond
+// phantomHostPruneAfter. Called from the same periodic goroutine
+// that invokes MarkOfflineHosts. Fires a notification per prune so
+// operators have a paper trail. Hypervisor certs tied to pruned
+// hosts stay — the operator may still want to revoke them through
+// the CA UI, and the cert expiry watcher keeps an eye on them.
+func (s *Store) PrunePhantomHosts() {
+	s.mu.Lock()
+	cutoff := time.Now().Add(-phantomHostPruneAfter)
+	var pruned []string
+	for id, h := range s.hosts {
+		if h.LastSeen.IsZero() {
+			continue
+		}
+		if h.LastSeen.Before(cutoff) {
+			delete(s.hosts, id)
+			delete(s.vms, id)
+			delete(s.storage, id)
+			delete(s.hostOnlinePrev, id)
+			delete(s.hostMetrics, id)
+			pruned = append(pruned, id)
+		}
+	}
+	s.mu.Unlock()
+	if len(pruned) == 0 {
+		return
+	}
+	s.hub.Publish(EventInventory, nil)
+	for _, id := range pruned {
+		log.Printf("phantom-prune: dropped host %s (offline > %s)", id, phantomHostPruneAfter)
+		auditSystem(s, "host.pruned", "host/"+id, map[string]string{
+			"reason": "offline > retention",
+			"cutoff": phantomHostPruneAfter.String(),
+		}, true, "")
 	}
 }
 
@@ -1103,9 +1151,31 @@ func hashJSON(v any) uint64 {
 	return h.Sum64()
 }
 
+// saveGated is true once the initial Load has populated the store
+// from the backend. Until then, the periodic Save goroutine refuses
+// to run — a transient backend read error at boot used to return an
+// empty persistData, which the next 30s tick would happily Save back
+// as empty, overwriting good data. Tier S #15, v5.32.18.
+//
+// Only read+written under s.mu. Flipped true at the end of load() if
+// either: (a) the backend looked fresh (no hosts on record) OR (b)
+// Load came back non-empty. If Load came back empty on what looks
+// like an initialised store, we stay gated forever — the periodic
+// tick no-ops and the operator will see log errors on every boot
+// until they resolve the backend issue.
+func (s *Store) isSaveGated() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.saveGateOpen
+}
+
 // Save persists the current store state through the configured
 // backend (JSON file or Mongo).
 func (s *Store) Save() {
+	if !s.isSaveGated() {
+		log.Printf("store: skipping Save — initial Load returned empty on a non-fresh install; resolve backend connectivity first")
+		return
+	}
 	s.mu.RLock()
 	d := persistData{
 		Hosts:            s.hosts,
@@ -1146,17 +1216,24 @@ func (s *Store) Save() {
 
 func (s *Store) load() {
 	if s.backend == nil {
+		// No backend = in-memory test harness. Allow saves.
+		s.saveGateOpen = true
 		return
 	}
 	ctx, cancel := contextWithTimeout(15 * time.Second)
 	defer cancel()
 	d, err := s.backend.Load(ctx)
 	if err != nil {
-		log.Printf("store: backend load error (%s): %v", s.backend.Name(), err)
+		// Load error: do NOT open the save gate. Operator fixes
+		// backend; next restart retries Load. Periodic Save no-ops
+		// until then, preserving whatever's in the backend.
+		log.Printf("store: backend load error (%s): %v — periodic Save will be skipped until next successful boot Load", s.backend.Name(), err)
 		return
 	}
 	if d == nil {
-		return // fresh start
+		// Truly fresh install — no persistData at all. Allow saves.
+		s.saveGateOpen = true
+		return
 	}
 	if d.Hosts != nil {
 		s.hosts = d.Hosts
@@ -1234,6 +1311,21 @@ func (s *Store) load() {
 	}
 	if d.CommandLog != nil {
 		s.commandLog.replace(d.CommandLog)
+	}
+	// Non-empty-Load gate (Tier S #15). Open the save gate when the
+	// Load result shows that either (a) this is a fresh install with
+	// nothing to lose or (b) the backend successfully returned real
+	// data. On a post-install empty Load — looks fresh but isn't —
+	// we stay gated and the operator gets "skipping Save" log lines
+	// on every tick until they resolve backend connectivity.
+	//
+	// Heuristic for "looks fresh": no hosts AND no users. Even a
+	// single-admin-only bootstrap has a users entry.
+	if len(s.hosts) > 0 || len(s.users) > 0 {
+		s.saveGateOpen = true
+	} else {
+		log.Printf("store: initial Load returned empty on what looks like a fresh install — save gate open")
+		s.saveGateOpen = true
 	}
 	log.Printf("store: loaded %d hosts, %d users, %d groups, %d roles from %s",
 		len(s.hosts), len(s.users), len(s.groups), len(s.roles), s.dataFile)
