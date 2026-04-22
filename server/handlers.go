@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"kvm-center/internal/models"
@@ -592,9 +593,43 @@ func finalizeMigration(store *Store, rec *models.MigrationRecord, status, detail
 
 // pollMigrationStatus polls the source agent's /migrate-status endpoint
 // every second and mirrors phase/progress/detail onto the in-store
+// migrationPollerClaims is the set of migration IDs currently being
+// polled. A fresh handleCommand goroutine and a boot-reconciler
+// retry could otherwise race — each writing to the same
+// MigrationRecord, each calling finalizeMigration, firing duplicate
+// terminal audit events. Tier S #6, v5.32.18.
+var migrationPollerClaims struct {
+	mu sync.Mutex
+	m  map[string]struct{}
+}
+
+func claimMigrationPoller(id string) bool {
+	migrationPollerClaims.mu.Lock()
+	defer migrationPollerClaims.mu.Unlock()
+	if migrationPollerClaims.m == nil {
+		migrationPollerClaims.m = make(map[string]struct{})
+	}
+	if _, ok := migrationPollerClaims.m[id]; ok {
+		return false
+	}
+	migrationPollerClaims.m[id] = struct{}{}
+	return true
+}
+
+func releaseMigrationPoller(id string) {
+	migrationPollerClaims.mu.Lock()
+	defer migrationPollerClaims.mu.Unlock()
+	delete(migrationPollerClaims.m, id)
+}
+
 // migration record. Stops when the agent reports the migration is no
 // longer Active, or after a 90-minute safety net.
 func pollMigrationStatus(store *Store, rec *models.MigrationRecord, agentAddr string) {
+	if !claimMigrationPoller(rec.ID) {
+		log.Printf("migration-poller: already polling id=%s vm=%s — second claim refused", rec.ID, rec.VMName)
+		return
+	}
+	defer releaseMigrationPoller(rec.ID)
 	deadline := time.Now().Add(90 * time.Minute)
 	client := &http.Client{Timeout: 4 * time.Second}
 	url := fmt.Sprintf("http://%s/migrate-status", agentAddr)
@@ -1082,6 +1117,56 @@ func handleCancelMigration(store *Store) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write(body)
+	}
+}
+
+// POST /api/migrations/force-fail?id=<migration-id> — admin escape
+// hatch for a migration record stranded in "running" / "cancelling"
+// that the normal cancel flow refuses to touch (e.g. agent crashed
+// mid-cleanup). Marks the record "failed" with an explicit
+// "manually failed" message, fires the standard terminal
+// notification, and writes an audit event. Does NOT talk to the
+// agent — the caller has presumably already confirmed the source/
+// destination VM state out-of-band. Tier S #12, v5.32.18.
+func handleForceFailMigration(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			writeError(w, http.StatusBadRequest, "id query param required")
+			return
+		}
+		reason := r.URL.Query().Get("reason")
+		if reason == "" {
+			reason = "manually failed by operator"
+		}
+		var rec *models.MigrationRecord
+		for _, m := range store.GetMigrations() {
+			if m.ID == id {
+				rec = m
+				break
+			}
+		}
+		if rec == nil {
+			writeError(w, http.StatusNotFound, "migration not found")
+			return
+		}
+		if isTerminalMigration(rec.Status) {
+			writeError(w, http.StatusConflict, "migration already terminal (status="+rec.Status+")")
+			return
+		}
+		audit(store, r, AuditMigrationCancel, "migration/"+id, map[string]string{
+			"vm":     rec.VMName,
+			"phase":  rec.Phase,
+			"reason": reason,
+			"forced": "true",
+		}, true, "")
+		log.Printf("migration force-fail: id=%s vm=%s phase=%s reason=%q", id, rec.VMName, rec.Phase, reason)
+		finalizeMigration(store, rec, "failed", reason)
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id, "status": "failed"})
 	}
 }
 
