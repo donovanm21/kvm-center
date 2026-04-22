@@ -51,7 +51,13 @@ RUN VERSION=$(cat /src/server/VERSION) && \
     chmod +x /dist/install-agent.sh /dist/update-agent.sh /dist/install-kvm-tools.sh \
              /dist/install-kvmctl.sh /dist/libvirt-hooks-qemu.sh && \
     ln -sf kvm-tools-linux-amd64 /dist/kvm-tools-amd64 && \
-    ln -sf kvm-tools-linux-arm64 /dist/kvm-tools-arm64
+    ln -sf kvm-tools-linux-arm64 /dist/kvm-tools-arm64 && \
+    # Claude skill bundle (v5.33.0, P1.3). Packaged here so the
+    # install one-liner can curl → tar → install.sh without extra
+    # infrastructure. install.sh chmod-fixed so the tarball round-trip
+    # preserves the executable bit.
+    chmod +x /src/skill/install.sh && \
+    tar czf /dist/kvm-center-skill.tar.gz -C /src/skill .
 
 # ── Stage 1c: Build the Go server ─────────────────────────────────────────────
 FROM golang:1.25-alpine AS builder

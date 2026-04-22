@@ -37,6 +37,15 @@ var versionRaw string
 var grafanaDashboard []byte
 var Version = strings.TrimSpace(versionRaw)
 
+// GitSHA is set at build time via -ldflags. Embedded in the system
+// health response so operators can cross-reference "which build is
+// running" with the deploy log.
+var GitSHA = "unknown"
+
+// serverStartedAt is captured at process start. Used by the system
+// health endpoint to report uptime without depending on /proc.
+var serverStartedAt = time.Now()
+
 func main() {
 	mongoURL := flag.String("mongo-url", envOrDefault("KVM_CENTER_MONGO_URL", ""), "MongoDB URI — if set, data is persisted in Mongo instead of the JSON file. Leave blank for the JSON backend.")
 	mongoDB := flag.String("mongo-db", envOrDefault("KVM_CENTER_MONGO_DB", "kvm-center"), "MongoDB database name (used when -mongo-url is set)")
@@ -248,6 +257,9 @@ func main() {
 	// Virsh reconcile (v5.32.21, Tier S #1). Triggers an immediate
 	// agent telemetry refresh and returns a diff of what changed.
 	mux.Handle("/api/admin/reconcile/", requirePerm(store, "user.manage", http.HandlerFunc(handleReconcileHost(store))))
+	// System health (v5.33.0, P1.1). Admin-gated single-pane status.
+	// Cached 15s inside the handler so polling pages don't stampede.
+	mux.Handle("/api/admin/system-health", requirePerm(store, "user.manage", handleSystemHealth(store, clusterCA, reloader, grantSigner)))
 	mux.Handle("/api/ca/hypervisors", requirePerm(store, "tls.manage", http.HandlerFunc(handleCAHypervisors(store, clusterCA))))
 	mux.Handle("/api/ca/hypervisors/", requirePerm(store, "tls.manage", http.HandlerFunc(handleCARevoke(store))))
 	mux.HandleFunc("/api/vms", handleGetVMs(store))

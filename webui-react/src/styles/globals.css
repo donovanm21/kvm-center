@@ -517,3 +517,86 @@ body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
 .docs-prose th { color: var(--text-faded); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
 .docs-prose blockquote { border-left: 3px solid var(--accent); background: var(--surface-2); padding: 10px 14px; margin: 10px 0; color: var(--text-body); }
 .docs-prose strong { color: var(--text-strong); }
+
+/* ── Responsive mobile (v5.33.0, P1.2) ─────────────────────── */
+/* Breakpoints:
+ *   ≤ 640 px  — phone: sidebar → drawer, tables → card list.
+ *   641–1024  — tablet: sidebar is drawer by default, body fills.
+ *   > 1024    — desktop: sidebar pinned (default layout).
+ *
+ * The drawer is slide-out-from-left, overlays content, and is
+ * toggled by the hamburger button (.nav-toggle) in the topbar
+ * that only renders below the tablet breakpoint. */
+.nav-toggle {
+  display: none;
+  background: transparent; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: 5px;
+  padding: 6px 10px; cursor: pointer;
+}
+.nav-backdrop {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 45;
+}
+.nav-backdrop.open { display: block; }
+
+@media (max-width: 1024px) {
+  .app-body { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed; top: 64px; left: 0; bottom: 0;
+    width: 240px;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease-out;
+    z-index: 50;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .nav-toggle { display: inline-flex; align-items: center; gap: 6px; }
+  .topbar { padding: 0 12px; gap: 10px; }
+  .topbar .logo svg { display: none; }
+  .brand-sub { display: none; }
+}
+
+@media (max-width: 640px) {
+  .main { padding: 12px; }
+  .topbar { gap: 6px; }
+  .version-badge { display: none; }
+  .brand { font-size: 16px; }
+  /* Data tables collapse to a card-per-row stack below 640px.
+   * Every <table class="data-table"> participates; headers hide
+   * and each cell stacks with a data-label prefix fed by React
+   * via td.data-label prop. */
+  table.data-table thead { display: none; }
+  table.data-table,
+  table.data-table tbody,
+  table.data-table tr,
+  table.data-table td {
+    display: block; width: 100%;
+  }
+  table.data-table tr {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    background: var(--surface-1);
+  }
+  table.data-table td {
+    padding: 4px 0;
+    border: none !important;
+    display: flex; justify-content: space-between; gap: 10px;
+    font-size: 13px;
+  }
+  table.data-table td::before {
+    content: attr(data-label);
+    color: var(--text-muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    align-self: center;
+  }
+  /* Modals go full-screen on phones. */
+  .modal, .modal-content, .kvm-modal {
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    width: 100vw !important;
+    border-radius: 0 !important;
+  }
+}
