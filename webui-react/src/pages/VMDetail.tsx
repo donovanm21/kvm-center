@@ -212,7 +212,7 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       {/* Three-column layout: thumbnail · guest card · usage stack */}
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr 320px', gap: 16, alignItems: 'stretch' }}>
+      <div className="mobile-stack" style={{ display: 'grid', gridTemplateColumns: '260px 1fr 320px', gap: 16, alignItems: 'stretch' }}>
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div
             onClick={thumbURL ? openConsole : undefined}
@@ -310,7 +310,7 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
       </div>
 
       {/* VM hardware quick-view + Notes */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
+      <div className="mobile-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
         <HardwareQuickView vm={vm} />
         <NotesPanel vm={vm} />
       </div>
