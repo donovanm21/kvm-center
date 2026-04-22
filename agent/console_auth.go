@@ -37,27 +37,42 @@ import (
 
 const secretCacheFile = "/var/lib/kvm-center-agent/console-secret"
 
+// consoleSecretGraceWindow is how long the previous secret stays
+// acceptable after a rotation. Longer than consoleTokenTTL
+// (5 min on the server) so a token minted just before the rotation
+// survives until its natural expiry. Tier S #10, v5.32.19.
+const consoleSecretGraceWindow = 10 * time.Minute
+
 var (
-	consoleSecret  string
-	consoleSecMu   sync.RWMutex
-	hostIDForToken string
+	consoleSecret     string
+	consoleSecretPrev string
+	consoleSecretRot  time.Time
+	consoleSecMu      sync.RWMutex
+	hostIDForToken    string
 )
 
 // SetConsoleSecret is called from the telemetry loop whenever the
-// server replies with a secret. Atomic swap + persist. Safe no-op
-// when the value hasn't changed (avoids burning disk I/O every tick).
+// server replies with a secret. Atomic swap + persist. When the
+// secret changes, the outgoing value is retained as a "previous"
+// key that verifyConsoleToken will still accept for
+// consoleSecretGraceWindow — this covers tokens that were minted
+// with the old secret but arrive at this agent after it rotated.
 func SetConsoleSecret(s string) {
 	if s == "" {
 		return
 	}
 	consoleSecMu.Lock()
 	changed := s != consoleSecret
+	if changed && consoleSecret != "" {
+		consoleSecretPrev = consoleSecret
+		consoleSecretRot = time.Now()
+	}
 	consoleSecret = s
 	consoleSecMu.Unlock()
 	if changed {
 		_ = os.MkdirAll(filepath.Dir(secretCacheFile), 0o755)
 		_ = os.WriteFile(secretCacheFile, []byte(s), 0o600)
-		log.Printf("console-auth: cached new console-token secret")
+		log.Printf("console-auth: cached new console-token secret (previous retained for %s)", consoleSecretGraceWindow)
 	}
 }
 
@@ -89,6 +104,8 @@ func SetHostIDForToken(id string) {
 func verifyConsoleToken(r *http.Request, vmName string) error {
 	consoleSecMu.RLock()
 	secret := consoleSecret
+	prev := consoleSecretPrev
+	prevUntil := consoleSecretRot.Add(consoleSecretGraceWindow)
 	host := hostIDForToken
 	consoleSecMu.RUnlock()
 	if secret == "" {
@@ -112,13 +129,27 @@ func verifyConsoleToken(r *http.Request, vmName string) error {
 	if time.Now().Unix() > exp {
 		return fmt.Errorf("token expired")
 	}
+	if checkConsoleTokenSignature(secret, host, vmName, exp, nonce, token) {
+		return nil
+	}
+	// Fall back to the previous secret if we're still inside the
+	// post-rotation grace window. Covers tokens that were minted
+	// with the old secret but arrive after the agent rotated.
+	if prev != "" && time.Now().Before(prevUntil) &&
+		checkConsoleTokenSignature(prev, host, vmName, exp, nonce, token) {
+		return nil
+	}
+	return fmt.Errorf("token signature mismatch")
+}
+
+// checkConsoleTokenSignature returns true iff the token HMAC matches
+// when signed with the given secret. Pulled out of verifyConsoleToken
+// so verify can fall back to the previous (pre-rotation) secret.
+func checkConsoleTokenSignature(secret, host, vmName string, exp int64, nonce, token string) bool {
 	h := hmac.New(sha256.New, []byte(secret))
 	fmt.Fprintf(h, "%s|%s|%d|%s", host, vmName, exp, nonce)
 	want := base64.RawURLEncoding.EncodeToString(h.Sum(nil))
-	if subtle.ConstantTimeCompare([]byte(want), []byte(token)) != 1 {
-		return fmt.Errorf("token signature mismatch")
-	}
-	return nil
+	return subtle.ConstantTimeCompare([]byte(want), []byte(token)) == 1
 }
 
 // ParseTelemetryReply extracts console_secret (if present) from the
