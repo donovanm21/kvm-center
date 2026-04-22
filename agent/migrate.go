@@ -47,6 +47,11 @@ var (
 	// Set on startOfflineMigrate, closed when the goroutine exits. nil
 	// when the reporter couldn't open (e.g. server has no gRPC listener
 	// yet) — setMigStatus skips silently in that case.
+	//
+	// INVARIANT: every read and every assignment must happen while
+	// holding migStatusMu. Tier S #7 (v5.32.19) locked this down —
+	// audit any new caller against the pattern already used by
+	// setMigStatus, startOfflineMigrate, and the terminal-flush block.
 	migReporter *MigrationProgressReporter
 )
 
