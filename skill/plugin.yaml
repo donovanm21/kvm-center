@@ -1,0 +1,39 @@
+# Anthropic plugin manifest stub. The plugin format is still evolving;
+# this file is provisional and may be replaced once the format
+# stabilises. Operators without a plugin runtime can use the skill
+# directly via the SKILL.md+TOOL.md pair.
+name: kvm-center
+version: v5.33.0
+author: kvm-center
+description: |
+  Manage a KVM hypervisor fleet through the kvm-center control
+  plane. Drives the same REST API kvmctl + the SPA use.
+entry: SKILL.md
+references:
+  - TOOL.md
+auth:
+  type: bearer-token
+  # Reads the same config kvmctl writes so login state is shared.
+  config_file: ~/.config/kvm-center/config.json
+  env_fallback:
+    server: KVMCTL_SERVER
+    token:  KVMCTL_TOKEN
+capabilities:
+  - list_hosts
+  - list_vms
+  - vm_detail
+  - vm_action
+  - list_migrations
+  - list_snapshots
+  - create_snapshot
+  - system_health
+  - audit_search
+  - reconcile_host
+  - force_fail_migration
+confirmation_required:
+  # Destructive actions require an in-chat confirmation before the
+  # tool call fires. Keys are tool names; value is a reason string
+  # shown to the user.
+  vm_action: "Lifecycle / migration / delete verbs mutate VM state."
+  create_snapshot: "Snapshots burn pool storage."
+  force_fail_migration: "Marks migration failed — operator must have verified VM state out-of-band."

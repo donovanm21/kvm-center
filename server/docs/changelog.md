@@ -10,6 +10,67 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.33.0 — P1: system health + mobile UI + Claude skill
+
+Minor version bump. Ships all three P1 operator-value items from
+the roadmap in one release.
+
+### System health page
+
+One URL answers "is the deployment OK?" at a glance. No more
+bouncing between Hosts, Migrations, Settings → TLS, `docker ps`,
+and Mongo.
+
+- New admin endpoint `GET /api/admin/system-health`. Cached 15 s
+  server-side so operator polling doesn't stampede libvirt/Mongo.
+- Rollup (green / amber / red) across eight subsystems: control
+  plane, database, TLS & certs, hypervisors, guest kvm-tools,
+  migrations, snapshots, command log.
+- Per-subsystem card: status pill + one-line headline + expandable
+  detail map. Amber = degraded but operable; red = action
+  required.
+- New SPA page at `/system-health` (admin nav). Polls every 15 s.
+- Agent telemetry now carries `agent_version`, so the hypervisors
+  subsystem flags version drift between control plane and agents.
+- Unit tests lock the rollup logic and per-subsystem thresholds.
+
+### Responsive mobile UI
+
+Full parity isn't the goal; the on-call paths (check status, flip
+maintenance, power-cycle a VM, tail a migration) now work from a
+phone.
+
+- Breakpoints at ≤640 px (phone) and 641–1024 px (tablet).
+- Sidebar collapses to an off-canvas drawer below tablet, toggled
+  by a new hamburger button in the topbar. Drawer auto-closes on
+  route change.
+- Data tables reflow to card-per-row stacks below 640 px using the
+  existing `.data-table` class — zero per-page code changes. Each
+  cell renders its `data-label` attribute as the column header.
+- Modals go full-screen below 640 px so create-VM / migrate /
+  edit-hardware forms are actually usable.
+- Console / noVNC stays desktop-only by design — honest
+  disclaimer in situ beats a broken canvas.
+
+### Claude skill bundle
+
+Downloadable skill package that lets Claude Code (or any
+Claude-compatible agent) drive kvm-center from a conversation.
+
+- `SKILL.md` — frontmatter + invocation rules + tool reference +
+  worked examples. Terse so the model loads it every turn without
+  burning context.
+- `TOOL.md` — per-tool HTTP schemas + auth + error model.
+- `plugin.yaml` — provisional Anthropic plugin manifest.
+- `install.sh` — drops everything into `~/.claude/skills/kvm-center/`.
+- Bundled at `/downloads/kvm-center-skill.tar.gz`; new "Claude
+  Skill" tab on the Deployment page.
+
+Uses the existing kvmctl token file (`~/.config/kvm-center/config.json`)
+or `KVMCTL_SERVER` + `KVMCTL_TOKEN` env — no new credential
+store. Destructive actions (migrate, delete, power-cycle) require
+in-chat confirmation; read-only actions run without a prompt.
+
 ## v5.32.21 — Tier S complete: grant rotation + virsh reconcile
 
 Ships the last two Tier S operator-stranding items. The backlog is

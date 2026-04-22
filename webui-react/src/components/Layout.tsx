@@ -29,18 +29,29 @@ const NAV_MAIN: NavEntry[] = [
 
 const NAV_ADMIN: NavEntry[] = [
   { to: '/deployment', label: 'Deployment', icon: <DeployIcon /> },
+  { to: '/system-health', label: 'System Health', icon: <PulseIcon />, requires: 'user.manage' },
   { to: '/settings', label: 'Settings', icon: <GearIcon />, requires: 'user.manage' },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
   const { hasPerm } = useAuth();
   const showAdmin = NAV_ADMIN.some((e) => !e.requires || hasPerm(e.requires));
+  // Mobile drawer (v5.33.0, P1.2). Below the tablet breakpoint the
+  // sidebar collapses off-canvas; the hamburger in the topbar toggles
+  // .open. Auto-closes on route change so tapping a link doesn't leave
+  // the drawer hanging over the page.
+  const [navOpen, setNavOpen] = useState(false);
+  const loc = useLocation();
+  useEffect(() => {
+    setNavOpen(false);
+  }, [loc.pathname]);
 
   return (
     <div className="app-shell">
-      <Topbar />
+      <Topbar onToggleNav={() => setNavOpen((v) => !v)} />
+      <div className={'nav-backdrop' + (navOpen ? ' open' : '')} onClick={() => setNavOpen(false)} />
       <div className="app-body">
-        <nav className="sidebar">
+        <nav className={'sidebar' + (navOpen ? ' open' : '')}>
           <div className="sidebar-section-title">Overview</div>
           {NAV_MAIN.filter((e) => !e.requires || hasPerm(e.requires)).map((e) => (
             <NavLink
@@ -78,7 +89,7 @@ export function Layout({ children }: { children: ReactNode }) {
   );
 }
 
-function Topbar() {
+function Topbar({ onToggleNav }: { onToggleNav: () => void }) {
   const [version, setVersion] = useState<string>('…');
   const [theme, toggleTheme] = useTheme();
   const [centerOpen, setCenterOpen] = useState(false);
@@ -91,6 +102,11 @@ function Topbar() {
   }, []);
   return (
     <header className="topbar">
+      <button type="button" className="nav-toggle" onClick={onToggleNav} aria-label="Toggle navigation">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+          <path d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z" />
+        </svg>
+      </button>
       <div className="logo">
         <BrandLogo size={40} />
         <div className="brand-text">
@@ -247,6 +263,13 @@ function StorageIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
       <path d="M4.318 2.687C5.234 2.271 6.536 2 8 2s2.766.27 3.682.687C12.644 3.125 13 3.627 13 4c0 .374-.356.875-1.318 1.313C10.766 5.729 9.464 6 8 6s-2.766-.27-3.682-.687C3.356 4.875 3 4.373 3 4c0-.374.356-.875 1.318-1.313M13 5.698V7c0 .374-.356.875-1.318 1.313C10.766 8.729 9.464 9 8 9s-2.766-.27-3.682-.687C3.356 7.875 3 7.373 3 7V5.698c.271.202.58.378.904.525C4.978 6.711 6.427 7 8 7s3.022-.289 4.096-.777A5 5 0 0 0 13 5.698m0 3V10c0 .374-.356.875-1.318 1.313C10.766 11.729 9.464 12 8 12s-2.766-.27-3.682-.687C3.356 10.875 3 10.373 3 10V8.698c.271.202.58.378.904.525C4.978 9.711 6.427 10 8 10s3.022-.289 4.096-.777A5 5 0 0 0 13 8.698m0 3V13c0 .374-.356.875-1.318 1.313C10.766 14.729 9.464 15 8 15s-2.766-.27-3.682-.687C3.356 13.875 3 13.373 3 13v-1.302c.271.202.58.378.904.525C4.978 12.711 6.427 13 8 13s3.022-.289 4.096-.777q.325-.147.904-.525" />
+    </svg>
+  );
+}
+function PulseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+      <path d="M0 8h3l1-4 2 8 2-6 1 2h7v1H9.5l-1-2-2 6-2-8-0.7 4H0z" />
     </svg>
   );
 }

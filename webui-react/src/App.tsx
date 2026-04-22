@@ -21,6 +21,7 @@ import { KVMTools } from './pages/KVMTools';
 import { Migrations } from './pages/Migrations';
 import { Deployment } from './pages/Deployment';
 import { Settings } from './pages/Settings';
+import { SystemHealth } from './pages/SystemHealth';
 import { Docs } from './pages/Docs';
 
 // Port of each v3 view lands as its own route and replaces the stub.
@@ -95,6 +96,7 @@ function Shell() {
         <Route path="/migrations" element={<Migrations />} />
         <Route path="/kvm-tools" element={<KVMTools />} />
         <Route path="/deployment" element={<Deployment />} />
+        <Route path="/system-health" element={<SystemHealth />} />
         <Route path="/settings/*" element={<Settings />} />
         <Route path="/docs" element={<Docs />} />
         <Route path="/docs/:slug" element={<Docs />} />

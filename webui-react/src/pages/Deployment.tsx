@@ -215,7 +215,7 @@ function PackageCard({ icon, title, description, snippets }: PackageCardProps) {
 }
 
 /* ── Direct downloads ────────────────────────────────────── */
-type DownloadGroup = 'tools' | 'agent' | 'kvmctl';
+type DownloadGroup = 'tools' | 'agent' | 'kvmctl' | 'skill';
 interface DownloadFile { name: string; desc: string }
 const DOWNLOAD_GROUPS: { key: DownloadGroup; label: string; files: DownloadFile[] }[] = [
   {
@@ -250,6 +250,13 @@ const DOWNLOAD_GROUPS: { key: DownloadGroup; label: string; files: DownloadFile[
       { name: 'kvmctl-windows-amd64.exe', desc: 'kvmctl — Windows x86_64' },
       { name: 'install-kvmctl.sh',        desc: 'Installer — Linux / macOS' },
       { name: 'install-kvmctl.ps1',       desc: 'Installer — Windows (PowerShell)' },
+    ],
+  },
+  {
+    key: 'skill',
+    label: 'Claude Skill',
+    files: [
+      { name: 'kvm-center-skill.tar.gz', desc: 'Claude Code skill bundle — SKILL.md + TOOL.md + install.sh. curl | tar | bash to drive kvm-center from chat.' },
     ],
   },
 ];
