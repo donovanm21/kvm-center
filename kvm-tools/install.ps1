@@ -4,7 +4,7 @@
 #
 # Usage (elevated PowerShell):
 #   .\install.ps1 -Server https://kvm-center.example.com:8190
-# Self-signed certs are trusted; install a real cert via Settings → TLS
+# Self-signed certs are trusted; install a real cert via Settings -> TLS
 # to silence the per-report warning.
 
 [CmdletBinding()]
@@ -71,7 +71,7 @@ if (-not (Test-Path $InstallDir)) {
 }
 
 # Re-install / upgrade path (v5.33.5): Copy-Item -Force can't
-# overwrite a running kvm-tools.exe — Windows holds the file open as
+# overwrite a running kvm-tools.exe - Windows holds the file open as
 # long as the scheduled task is active. But NTFS *does* let us
 # rename a running exe to a different name within the same
 # directory. So:
@@ -86,7 +86,7 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
         # Give Task Scheduler a moment to actually release the handle.
         Start-Sleep -Seconds 1
     } catch {
-        Write-Warn "Could not stop scheduled task cleanly — will rely on the rename fallback"
+        Write-Warn "Could not stop scheduled task cleanly - will rely on the rename fallback"
     }
 }
 
