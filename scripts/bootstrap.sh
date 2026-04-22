@@ -42,6 +42,27 @@ EOF
 
 [[ $# -eq 0 ]] && usage
 
+# post_deploy_cleanup reclaims disk that accumulates across repeated
+# docker compose builds on the deploy host. Each rebuild leaves the
+# old kvm-center-server image dangling (same tag, new SHA) plus ~1–2
+# GB of BuildKit layer cache. Without a cleanup step these add up —
+# the deploy host ran out of disk once at 91% used, which is how we
+# noticed. Keep two hard invariants:
+#   1. Never touch running containers or their images. `image prune`
+#      without `-a` removes ONLY dangling (untagged) layers.
+#   2. Keep 7 days of BuildKit cache so back-to-back redeploys stay
+#      fast. Older entries are the ones that balloon.
+# Skipped if `docker` isn't on PATH (e.g. when --stack is invoked
+# from an unprivileged shell on a dev workstation).
+post_deploy_cleanup() {
+  if ! command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "Post-deploy cleanup: pruning dangling images + build cache >7d…"
+  docker image prune -f 2>&1 | tail -1 || true
+  docker builder prune -f --filter "until=168h" 2>&1 | tail -1 || true
+}
+
 MODE="$1"; shift
 
 case "$MODE" in
@@ -71,6 +92,7 @@ case "$MODE" in
     GIT_SHA=$(git rev-parse HEAD)
     docker compose build --build-arg GIT_SHA="$GIT_SHA"
     docker compose up -d
+    post_deploy_cleanup
     echo ""
     IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
     echo "  Web UI → https://${IP:-localhost}:8190"
@@ -314,6 +336,7 @@ EOF_ENV
     GIT_SHA=$(git rev-parse HEAD)
     docker compose build --build-arg GIT_SHA="$GIT_SHA"
     docker compose up -d
+    post_deploy_cleanup
     echo "Stack deployed. Pushing fresh agent binary to each hypervisor…"
     "$REPO_DIR/scripts/bootstrap.sh" --update-agents || \
       echo "WARN: agent push had errors — run './scripts/bootstrap.sh --update-agents' manually"
