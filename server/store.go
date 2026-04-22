@@ -265,6 +265,7 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 	host.OS = p.OS
 	host.KernelVer = p.KernelVer
 	host.LibvirtVer = p.LibvirtVer
+	host.AgentVersion = p.AgentVersion
 	host.CPUUsage = p.CPUUsage
 	host.CPUCount = p.CPUCount
 	host.MemUsage = p.MemUsage
