@@ -38,7 +38,7 @@ export function Settings() {
         Settings
       </h2>
 
-      <div style={tabsStyle}>
+      <div className="settings-tabs" style={tabsStyle}>
         {TABS.map((t) => (
           <NavLink
             key={t.to}

@@ -55,7 +55,7 @@ export function SnapshotsOverview() {
   const selected = uuid ? (vms.data ?? []).find((v) => v.uuid === uuid) : null;
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16, alignItems: 'flex-start' }}>
+    <div className="mobile-stack" style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16, alignItems: 'flex-start' }}>
       <div className="panel" style={{ padding: 0, overflow: 'hidden', minHeight: 200 }}>
         <div style={listHeaderStyle}>
           VMs with Snapshots
