@@ -705,17 +705,29 @@ type MigrationRecord struct {
 }
 
 // CommandRequest is sent by the server to an agent's POST /command endpoint.
+// RequestID (v5.32.17+) uniquely identifies this invocation — the agent
+// keeps a short-TTL outcome cache keyed on it, so a retry after a
+// dropped response returns the cached reply instead of re-executing
+// the command. Empty RequestID disables idempotency (pre-5.32.17
+// servers + curl-by-hand).
 type CommandRequest struct {
-	Action string            `json:"action"` // START, STOP, RESTART, SNAPSHOT, MIGRATE
-	VMName string            `json:"vm_name"`
-	VMUUID string            `json:"vm_uuid"`
-	Params map[string]string `json:"params,omitempty"`
+	RequestID string            `json:"request_id,omitempty"`
+	Action    string            `json:"action"` // START, STOP, RESTART, SNAPSHOT, MIGRATE
+	VMName    string            `json:"vm_name"`
+	VMUUID    string            `json:"vm_uuid"`
+	Params    map[string]string `json:"params,omitempty"`
 }
 
 // CommandResponse is returned by the agent after executing a command.
+// RequestID (v5.32.17+) echoes the value from the CommandRequest. When
+// Replayed is true, this response was served from the agent's outcome
+// cache — the command already executed on a prior call with the same
+// request_id.
 type CommandResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
+	RequestID string `json:"request_id,omitempty"`
+	Replayed  bool   `json:"replayed,omitempty"`
+	Success   bool   `json:"success"`
+	Message   string `json:"message"`
 	// RequiresReboot flags commands (EDIT_VM today) that were
 	// accepted but couldn't be applied live. The UI reads this to
 	// prompt the operator to shut down + restart the VM.
@@ -730,10 +742,41 @@ type CommandResponse struct {
 }
 
 // APICommandRequest is sent by the web UI to POST /api/command on the server.
+// RequestID is optional: the client may supply one to turn a sequence
+// of retries into a single logical operation; when empty, the server
+// mints one and echoes it in the response header `X-Request-Id`.
 type APICommandRequest struct {
-	HostID string            `json:"host_id"`
-	VMName string            `json:"vm_name"`
-	VMUUID string            `json:"vm_uuid"`
-	Action string            `json:"action"`
-	Params map[string]string `json:"params,omitempty"`
+	RequestID string            `json:"request_id,omitempty"`
+	HostID    string            `json:"host_id"`
+	VMName    string            `json:"vm_name"`
+	VMUUID    string            `json:"vm_uuid"`
+	Action    string            `json:"action"`
+	Params    map[string]string `json:"params,omitempty"`
+}
+
+// CommandLogEntry records every mutating command the server
+// dispatched so a restart + any dropped response can be reconciled
+// from this log alone. Written BEFORE the agent call and updated
+// when the agent responds. TTL-expired 30 days after terminal.
+//
+// Tier S #4, v5.32.17.
+type CommandLogEntry struct {
+	RequestID   string            `json:"request_id" bson:"_id"`
+	Action      string            `json:"action" bson:"action"`
+	HostID      string            `json:"host_id" bson:"host_id"`
+	VMUUID      string            `json:"vm_uuid,omitempty" bson:"vm_uuid,omitempty"`
+	VMName      string            `json:"vm_name,omitempty" bson:"vm_name,omitempty"`
+	Params      map[string]string `json:"params,omitempty" bson:"params,omitempty"`
+	ActorID     string            `json:"actor_id,omitempty" bson:"actor_id,omitempty"`
+	SubmittedAt time.Time         `json:"submitted_at" bson:"submitted_at"`
+	AppliedAt   *time.Time        `json:"applied_at,omitempty" bson:"applied_at,omitempty"`
+	// Outcome is "pending" while the command is in flight, then
+	// "success" / "failed" when the agent returns, or "unknown" when
+	// the server crashed mid-flight and the boot reconciler couldn't
+	// determine terminal state.
+	Outcome    string     `json:"outcome" bson:"outcome"`
+	StatusCode int        `json:"status_code,omitempty" bson:"status_code,omitempty"`
+	Message    string     `json:"message,omitempty" bson:"message,omitempty"`
+	Replayed   bool       `json:"replayed,omitempty" bson:"replayed,omitempty"`
+	ExpiresAt  *time.Time `json:"-" bson:"expires_at,omitempty"`
 }

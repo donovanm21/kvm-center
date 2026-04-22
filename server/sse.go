@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,54 +31,99 @@ const (
 	EventIDPs      = "idps"
 )
 
+// Subscriber hygiene — belt + braces against a stuck reverse proxy
+// or a paused tab holding the connection open while its buffer fills
+// up. Tier S #5, v5.32.17.
+const (
+	// sseMaxSubscribers caps simultaneous SSE clients. A realistic
+	// operator browser opens 1–2; this headroom is enough for the
+	// biggest deploy we can imagine + any lingering half-closed
+	// sockets waiting on TCP timeouts.
+	sseMaxSubscribers = 256
+	// sseMaxConsecutiveDrops is the number of events in a row we'll
+	// tolerate skipping for a given slow subscriber before evicting
+	// it. Drops mean the 32-entry channel buffer is full; three in a
+	// row signals the consumer has stalled, not merely paused.
+	sseMaxConsecutiveDrops = 3
+	// sseBufferSize is the per-subscriber channel backlog. Matches
+	// the pre-5.32.17 default; also sized to 1 round of fan-out
+	// across all event types plus a pair of heartbeats.
+	sseBufferSize = 32
+)
+
 type sseEvent struct {
 	Type    string
 	Payload map[string]any // optional; use nil when "just invalidate"
 }
 
+// sseSub wraps a subscriber channel with a drop counter. Eviction
+// fires once the counter hits sseMaxConsecutiveDrops, so a subscriber
+// can recover as long as it's keeping up.
+type sseSub struct {
+	ch             chan sseEvent
+	drops          atomic.Int32
+	evictRequested atomic.Bool
+}
+
 type SSEHub struct {
 	mu   sync.RWMutex
-	subs map[chan sseEvent]struct{}
+	subs map[*sseSub]struct{}
 }
 
 func NewSSEHub() *SSEHub {
-	return &SSEHub{subs: make(map[chan sseEvent]struct{})}
+	return &SSEHub{subs: make(map[*sseSub]struct{})}
 }
 
-func (h *SSEHub) subscribe() chan sseEvent {
-	ch := make(chan sseEvent, 32)
+// subscribe returns a new subscriber, or nil if the cap is hit. The
+// caller must check nil and respond 503 to the client.
+func (h *SSEHub) subscribe() *sseSub {
 	h.mu.Lock()
-	h.subs[ch] = struct{}{}
-	h.mu.Unlock()
-	return ch
+	defer h.mu.Unlock()
+	if len(h.subs) >= sseMaxSubscribers {
+		log.Printf("sse: subscriber cap reached (%d); rejecting new client", sseMaxSubscribers)
+		return nil
+	}
+	sub := &sseSub{ch: make(chan sseEvent, sseBufferSize)}
+	h.subs[sub] = struct{}{}
+	return sub
 }
 
-func (h *SSEHub) unsubscribe(ch chan sseEvent) {
+func (h *SSEHub) unsubscribe(sub *sseSub) {
 	h.mu.Lock()
-	if _, ok := h.subs[ch]; ok {
-		delete(h.subs, ch)
-		close(ch)
+	if _, ok := h.subs[sub]; ok {
+		delete(h.subs, sub)
+		close(sub.ch)
 	}
 	h.mu.Unlock()
 }
 
 // Publish fans an event out to every current subscriber. A slow
-// subscriber whose channel is full is silently dropped for this event —
-// the next event will either be received or the client will fall back
-// to its 60 s safety-net refetch.
+// subscriber whose channel is full is silently dropped for this
+// event AND gets its drop counter bumped; after
+// sseMaxConsecutiveDrops in a row the subscriber is marked for
+// eviction. Successful deliveries reset the counter.
 func (h *SSEHub) Publish(typ string, payload map[string]any) {
 	if h == nil {
 		return
 	}
 	ev := sseEvent{Type: typ, Payload: payload}
+	var toEvict []*sseSub
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-	for ch := range h.subs {
+	for sub := range h.subs {
 		select {
-		case ch <- ev:
+		case sub.ch <- ev:
+			sub.drops.Store(0)
 		default:
-			// subscriber backlog full — skip rather than block
+			n := sub.drops.Add(1)
+			if n >= sseMaxConsecutiveDrops && !sub.evictRequested.Swap(true) {
+				toEvict = append(toEvict, sub)
+			}
 		}
+	}
+	h.mu.RUnlock()
+	for _, sub := range toEvict {
+		log.Printf("sse: evicting stalled subscriber after %d consecutive drops", sseMaxConsecutiveDrops)
+		h.unsubscribe(sub)
 	}
 }
 
@@ -89,14 +135,18 @@ func handleSSEEvents(hub *SSEHub) http.HandlerFunc {
 			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 			return
 		}
+		sub := hub.subscribe()
+		if sub == nil {
+			http.Error(w, "event stream at capacity, retry shortly", http.StatusServiceUnavailable)
+			return
+		}
+		defer hub.unsubscribe(sub)
+
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 		// Tell any reverse proxy (nginx, traefik) not to buffer the body.
 		w.Header().Set("X-Accel-Buffering", "no")
-
-		ch := hub.subscribe()
-		defer hub.unsubscribe(ch)
 
 		// Prime the connection so the browser's EventSource commits
 		// immediately (rather than waiting on the first event).
@@ -117,7 +167,7 @@ func handleSSEEvents(hub *SSEHub) http.HandlerFunc {
 					return
 				}
 				flusher.Flush()
-			case ev, ok := <-ch:
+			case ev, ok := <-sub.ch:
 				if !ok {
 					return
 				}
