@@ -10,6 +10,62 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.32.18 — operator escape hatches + defensive boot guards
+
+Four small Tier S operator-stranding fixes. All defensive — no new
+user-facing features, each closes a specific way the control plane
+could strand state.
+
+### Force-fail stuck migration (Tier S #12)
+
+`handleCancelMigration` refuses to cancel once `phase == cleanup`
+(correct for data safety — source disks are gone). But if the
+agent crashed mid-cleanup, the record stayed `running` forever
+until the next reboot ran the boot reconciler. New admin-only
+endpoint `POST /api/migrations/force-fail?id=&reason=` (user.manage
+gated) marks the record `failed` with an explicit message and
+fires the standard terminal audit + notification. Does NOT contact
+the agent — the operator has presumably already verified VM state
+out-of-band.
+
+### Phantom host auto-prune (Tier S #13)
+
+A host re-IP'd or retired without an explicit DELETE would sit
+`offline` in the store forever, bloating every persistence
+snapshot. New `PrunePhantomHosts()` runs hourly (first pass 10min
+post-boot) and drops hosts whose `LastSeen` is more than 30 days
+old, along with their cached VM and storage entries. Hypervisor
+certs for pruned hosts remain — they may still want explicit
+revocation through the CA UI, and the cert expiry watcher keeps
+tracking them. Each prune fires an audit event.
+
+### Periodic-Save non-empty gate (Tier S #15)
+
+A boot-time Load error (Mongo read-timeout during startup) used to
+leave the store empty, which the next 30-second Save tick would
+happily write back as empty and overwrite the backend. The
+periodic save goroutine now refuses to run until initial Load has
+completed — either successfully (any outcome including truly
+fresh) or never (stays gated, operator resolves backend and
+restarts). Repeated "skipping Save" log lines surface the
+condition.
+
+### Singleflight migration poller (Tier S #6)
+
+A new `/api/command` dispatch spawning `pollMigrationStatus`
+concurrently with a boot-reconciler pass could double-claim the
+same record, both writing to the same `MigrationRecord` and both
+calling `finalizeMigration`. Per-ID `migrationPollerClaims` set
+rejects the second claim with a log line. Released when the
+goroutine returns normally.
+
+### Tests
+
+- `server/migration_poller_claim_test.go` — singleflight and
+  independent-ID behaviour.
+- `server/phantom_prune_test.go` — expired host pruned with its
+  VMs/storage, active host kept, zero-LastSeen skipped.
+
 ## v5.32.17 — idempotent commands + bounded retention + SSE hygiene
 
 Rolls three Tier S operator-stranding fixes into one release. The
