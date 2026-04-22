@@ -30,14 +30,16 @@ import (
 const (
 	notifyQueueSize = 256
 
-	NotifyVMCrashed       = "vm.crashed"
-	NotifyVMRecovered     = "vm.recovered"
-	NotifyHostOffline     = "host.offline"
-	NotifyHostRecovered   = "host.recovered"
-	NotifyMigrationDone   = "migration.complete"
-	NotifyMigrationFailed = "migration.failed"
-	NotifyTLSExpiring     = "tls.expiring"
-	NotifySnapPolicyFail  = "snapshot.policy.failed"
+	NotifyVMCrashed              = "vm.crashed"
+	NotifyVMRecovered            = "vm.recovered"
+	NotifyHostOffline            = "host.offline"
+	NotifyHostRecovered          = "host.recovered"
+	NotifyMigrationDone          = "migration.complete"
+	NotifyMigrationFailed        = "migration.failed"
+	NotifyTLSExpiring            = "tls.expiring"
+	NotifyCAExpiring             = "ca.expiring"
+	NotifyHypervisorCertExpiring = "hypervisor.cert.expiring"
+	NotifySnapPolicyFail         = "snapshot.policy.failed"
 )
 
 // AllNotifyTypes drives the UI checkbox list. Add new constants here
@@ -50,6 +52,8 @@ var AllNotifyTypes = []string{
 	NotifyMigrationDone,
 	NotifyMigrationFailed,
 	NotifyTLSExpiring,
+	NotifyCAExpiring,
+	NotifyHypervisorCertExpiring,
 	NotifySnapPolicyFail,
 }
 

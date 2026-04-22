@@ -10,6 +10,31 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.32.15 — cert expiry watcher covers CA + hypervisor leaves
+
+Pre-5.32.15 the expiry watcher only warned on the server TLS leaf.
+Two silent cliffs remained: the cluster CA (10-year default —
+invisible today, catastrophic on the day it expires because every
+migration breaks at once) and each enrolled hypervisor's mTLS leaf.
+
+Changes:
+
+- Watcher now ticks through all three certificate classes every 6
+  hours: server TLS, cluster CA, and every non-revoked hypervisor
+  cert in `store.listHypervisorCerts()`.
+- Two severity bands per cert:
+  - **Warning** — leaf <30 days, CA <180 days.
+  - **Critical** — leaf <7 days, CA <30 days.
+- One-shot edge-triggering per (kind, identity, severity) so a
+  cert sitting in the window doesn't spam notifications every
+  tick. Certs that rotate past the window re-arm so a later drift
+  back in fires again.
+- Two new notification types: `ca.expiring` and
+  `hypervisor.cert.expiring`. Operators can opt each channel in
+  independently from Settings → Notifications.
+- Unit tests (`server/cert_watcher_test.go`) lock the edge
+  behaviour and per-identity independence.
+
 ## v5.32.14 — stopped VMs no longer report phantom CPU / network
 
 Stopped VMs were rendering small but non-zero CPU percentages (e.g.
