@@ -10,6 +10,62 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.32.21 — Tier S complete: grant rotation + virsh reconcile
+
+Ships the last two Tier S operator-stranding items. The backlog is
+now fully cleared — every item the 2026-04-20 stability audit
+flagged has a landed fix.
+
+### Grant-signer rotation with grace window (Tier S #9)
+
+A compromise response used to require hand-editing the filesystem
+and restarting the server. There is now:
+
+- `POST /api/admin/grant-signer/rotate` (user.manage). Generates a
+  new Ed25519 keypair, demotes the current public half to
+  "previous", persists both alongside the rotation timestamp.
+  Audited.
+- `GET /api/migrations/grant-pubkey` now returns `previous_pubkey_hex`
+  + `rotated_at` + `grace_expires_at` during the grace window so
+  agents can accept grants issued under the previous key for 10
+  minutes (longer than the 5-min grant TTL — every in-flight grant
+  survives).
+- Agent verify path tries current first, falls back to previous
+  during the window. On reload, stale previous-key sidecars past
+  grace are cleaned up automatically.
+- Only the public half of the old key is retained. The private
+  half is discarded at rotation, so no new grants can be issued
+  under it even during the grace window.
+
+### Virsh drift reconcile (Tier S #1)
+
+Telemetry already replaces the server's VM inventory on every
+tick, so routine drift self-corrects. What was missing was an
+admin action to **trigger + see** the reconciliation on demand —
+essential for post-incident triage when the operator needs to
+know whether the SPA is fresh or cached.
+
+- `POST /api/admin/reconcile/{host_id}` (user.manage). Snapshots
+  server state, tells the agent to refresh telemetry
+  synchronously, snapshots again, returns a diff: added VMs,
+  removed VMs, state-changed VMs, and before/after LastSeen.
+- New agent endpoint `POST /refresh-telemetry` runs one collection
+  + send cycle synchronously and returns when the server has
+  applied it.
+- Unreachable hosts return a partial report with
+  `agent_status: "unreachable"` so the operator sees the problem
+  instead of a timeout.
+- Audited per call.
+
+### Tests
+
+- `server/grants_rotation_test.go` — rotate keeps previous key,
+  previous key still verifies pre-rotation grants, stale
+  previous-key sidecars past grace expire on reload.
+- `server/handlers_reconcile_test.go` — no-agent-address → skipped,
+  unreachable agent → unreachable, missing host → 404, UUID
+  indexing falls back to name.
+
 ## v5.32.20 — backup covers TLS + CA + grant signer, DR restore works
 
 Before this release, `GET /api/admin/backup` only exported the

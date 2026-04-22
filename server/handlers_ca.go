@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -244,12 +246,56 @@ func handleCABundle(ca *ClusterCA) http.HandlerFunc {
 }
 
 // handleGrantPubKey serves the Ed25519 public half used to verify
-// migration grants. Returns hex so agents can cache it as a string
-// and round-trip through config without binary handling.
+// migration grants. During a rotation grace window the previous key
+// is also returned so agents can accept grants issued under it until
+// the grace window elapses. Response shape is backward-compatible
+// with pre-v5.32.21 agents — they just ignore the new fields.
 func handleGrantPubKey(signer *GrantSigner) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{
-			"pubkey_hex": signer.PublicKeyHex(),
+		current, previous, rotAt, graceExpires := signer.RotationState()
+		body := map[string]any{
+			"pubkey_hex": current,
+		}
+		if previous != "" {
+			body["previous_pubkey_hex"] = previous
+			body["rotated_at"] = rotAt.Format(time.RFC3339)
+			body["grace_expires_at"] = graceExpires.Format(time.RFC3339)
+		}
+		writeJSON(w, http.StatusOK, body)
+	}
+}
+
+// handleGrantSignerRotate triggers a key rotation and returns the new
+// public key. Admin-only (user.manage). Audited. During the grace
+// window both current and previous keys verify; after grace the old
+// key is discarded. Tier S #9, v5.32.21.
+func handleGrantSignerRotate(store *Store, signer *GrantSigner) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		if signer == nil {
+			writeError(w, http.StatusServiceUnavailable, "grant signer not initialised")
+			return
+		}
+		pub, err := signer.Rotate()
+		if err != nil {
+			audit(store, r, "grants.rotate", "grant-signer", nil, false, err.Error())
+			writeError(w, http.StatusInternalServerError, "rotate: "+err.Error())
+			return
+		}
+		newHex := hex.EncodeToString(pub)
+		audit(store, r, "grants.rotate", "grant-signer", map[string]string{
+			"new_pubkey_prefix": newHex[:16],
+			"grace_seconds":     fmt.Sprintf("%d", int(grantRotationGrace.Seconds())),
+		}, true, "")
+		log.Printf("grants: signer rotated — new pubkey %s… (grace=%s)", newHex[:16], grantRotationGrace)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":               true,
+			"pubkey_hex":       newHex,
+			"grace_seconds":    int(grantRotationGrace.Seconds()),
+			"grace_expires_at": time.Now().UTC().Add(grantRotationGrace).Format(time.RFC3339),
 		})
 	}
 }

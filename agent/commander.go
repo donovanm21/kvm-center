@@ -197,6 +197,30 @@ func powerCycleVM(vmTarget string) ([]byte, error) {
 	return exec.Command("virsh", "start", vmTarget).CombinedOutput()
 }
 
+// agentCommandPort is set by main() so on-demand telemetry refresh
+// calls can stamp the right agent_port on the payload. 0 when unset
+// (test or pre-boot).
+var agentCommandPort int
+
+// handleRefreshTelemetry runs one telemetry collection + send cycle
+// on demand and waits for it to complete. Used by the server's
+// virsh-reconcile admin endpoint so the caller can read the store
+// immediately after and see the up-to-date state. Tier S #1,
+// v5.32.21.
+func handleRefreshTelemetry(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	if telemetryServerURL == "" {
+		http.Error(w, "agent has no server URL configured", http.StatusPreconditionFailed)
+		return
+	}
+	sendTelemetry(telemetryServerURL, agentCommandPort)
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"ok":true,"refreshed":true}`))
+}
+
 // StartCommandServer listens for POST /command from the control plane.
 // currentMaxMemKiB returns the persisted <memory> cap for vmTarget
 // in KiB. Used by EDIT_VM's mem_mb path to decide setmem/setmaxmem
@@ -267,6 +291,12 @@ func StartCommandServer(addr string) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	})
+	// v5.32.21, Tier S #1: on-demand telemetry refresh. Admin hits
+	// /api/admin/reconcile/{host} on the server, server proxies to
+	// this endpoint, agent collects + POSTs telemetry synchronously.
+	// Returns after the telemetry call completes so the caller can
+	// diff before/after.
+	mux.HandleFunc("/refresh-telemetry", handleRefreshTelemetry)
 	log.Printf("agent command server listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("commander: %v", err)
