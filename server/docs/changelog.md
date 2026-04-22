@@ -10,6 +10,20 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.33.6 — install.ps1 ASCII-only
+
+v5.33.5's install.ps1 contained em-dashes (U+2014) in comments +
+a warning string. Windows PowerShell 5.1 reads `.ps1` files
+without a BOM using the system ANSI code page (CP1252 on English
+Windows), not UTF-8 — the multi-byte UTF-8 sequences got
+misinterpreted as stray bytes, and one of those bytes happened
+to be `"` which closed a string literal early and cascaded into
+"Missing closing '}'" parse errors on lines far from the actual
+source.
+
+Replaced every em-dash with `-` and swapped one `→` for `->`.
+Script now parses cleanly on default Windows PowerShell.
+
 ## v5.33.5 — Windows kvm-tools update from the WebUI actually works
 
 Three fixes that together make "Update N selected" on `/kvm-tools`
