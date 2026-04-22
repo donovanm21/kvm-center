@@ -25,8 +25,25 @@ export function SnapshotsOverview() {
   const { uuid } = useParams<{ uuid: string }>();
   const [query, setQuery] = useState('');
 
+  // Stable sort (host_id, then vm name) so successive telemetry
+  // ticks don't reorder the list. Without this, the server's map
+  // iteration order on vms[hostID] shuffles per tick and the list
+  // "bounces" — e.g. Web and TestVM swap positions every few
+  // seconds. v5.33.3 fix.
   const vmsWithSnaps = useMemo(
-    () => (vms.data ?? []).filter((v) => (v.snapshot_count ?? 0) > 0),
+    () =>
+      (vms.data ?? [])
+        .filter((v) => (v.snapshot_count ?? 0) > 0)
+        .slice()
+        .sort((a, b) => {
+          const ha = (a.host_id ?? '').toLowerCase();
+          const hb = (b.host_id ?? '').toLowerCase();
+          if (ha !== hb) return ha < hb ? -1 : 1;
+          const na = (a.name ?? '').toLowerCase();
+          const nb = (b.name ?? '').toLowerCase();
+          if (na !== nb) return na < nb ? -1 : 1;
+          return 0;
+        }),
     [vms.data],
   );
   const filtered = useMemo(() => {
