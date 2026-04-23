@@ -36,6 +36,13 @@ orchestration. Operators interact through the React SPA or the
 - **Metrics** — optional InfluxDB v2 sink with a Grafana dashboard
   template.
 
+## A VM, start to snapshot
+
+A quick tour of the Actions menu on a VM — shutdown, start back up,
+and take a snapshot — all without leaving the detail view.
+
+![VM lifecycle: shutdown, start, snapshot](/api/docs/media/02-vm-lifecycle.webp)
+
 ## Where to go next
 
 - **[Getting started](/docs/getting-started)** — stand up the stack,
