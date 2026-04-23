@@ -43,6 +43,21 @@ and take a snapshot — all without leaving the detail view.
 
 ![VM lifecycle: shutdown, start, snapshot](/api/docs/media/02-vm-lifecycle.webp)
 
+## A snapshot policy in 30 seconds
+
+Pick a cadence, a retention, the VMs you want covered, done. The
+"VMs covered" counter ticks up as you check boxes.
+
+![Create a snapshot policy](/api/docs/media/04-snapshot-policy.webp)
+
+## System Health at a glance
+
+One scroll down the System Health dashboard shows every subsystem
+the cluster cares about — hosts, VMs, guest kvm-tools, migrations,
+snapshots, command log.
+
+![System Health dashboard](/api/docs/media/05-system-health.webp)
+
 ## Where to go next
 
 - **[Getting started](/docs/getting-started)** — stand up the stack,

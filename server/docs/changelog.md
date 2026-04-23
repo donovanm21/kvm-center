@@ -10,6 +10,24 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.35.0 — six more walkthrough clips + scroll-restart
+
+Six new operator walkthrough clips, embedded in the docs they
+explain:
+
+- **Overview** — snapshot policy create, System Health tour.
+- **Getting started** — mint an enrollment token, Create VM wizard,
+  configure a webhook channel.
+- **Authentication** — filter and inspect the audit log.
+
+Docs viewer now restarts animated WebP clips from frame 0 each time
+they scroll into view. The browser otherwise caches the decoded
+animation loop, so a user scrolling down to a clip mid-cycle misses
+the intro. Implemented in the Docs page with an IntersectionObserver
+that swaps the image `src` to a blank pixel when the clip leaves the
+viewport and back to the real URL on re-entry — forces a fresh
+decode context every time.
+
 ## v5.34.1 — walkthrough clips embedded in the existing docs
 
 The in-app docs now ship short silent WebP clips showing common

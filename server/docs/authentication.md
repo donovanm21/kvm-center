@@ -53,6 +53,11 @@ the audit event. The Audit Log's **Via** column distinguishes:
 - **System** — background tasks (snapshot scheduler, drain,
   migration poller)
 
+Filtering the audit log by action + outcome, then scanning the Via
+column:
+
+![Audit log filter and inspect](/api/docs/media/06-audit-log.webp)
+
 ## RBAC
 
 Every API endpoint is gated on a permission string. Permissions are

@@ -109,6 +109,15 @@ CA. Two steps:
 The host appears in the dashboard within 30 seconds. An **mTLS** pill
 on the host detail page confirms the cert is live.
 
+Minting the enrollment token looks like this:
+
+![Mint a hypervisor enrollment token](/api/docs/media/09-hypervisor-enroll.webp)
+
+And standing up the first VM — Create VM wizard, pick a host, size
+it, point at an install source — is a single modal:
+
+![Create VM wizard](/api/docs/media/08-create-vm.webp)
+
 ## 4. Set up the CLI (optional)
 
 ```sh
@@ -123,6 +132,9 @@ kvmctl hosts
 
 - **Settings → Notifications** — webhook (Discord / Slack / generic)
   or email channels, pick which events fire.
+
+  ![Configure a webhook channel](/api/docs/media/07-notifications.webp)
+
 - **Settings → Metrics** — InfluxDB v2 URL / org / bucket / token,
   import the Grafana dashboard from the download link.
 
