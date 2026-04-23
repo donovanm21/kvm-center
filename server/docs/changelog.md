@@ -10,6 +10,12 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.35.3 — back-to-top button on doc pages
+
+Floating "↑ Top" pill appears bottom-right once the reader has
+scrolled past the fold on a doc page. Smooth-scrolls back to the
+top; resets on every slug change.
+
 ## v5.35.2 — right-size walkthrough clips
 
 Clips are quick visual references, not full-screen demos. Two

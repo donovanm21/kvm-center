@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
@@ -106,6 +106,19 @@ export function Docs() {
     return () => obs.disconnect();
   }, [page.data]);
 
+  // Back-to-top button. Show once the reader has scrolled past the
+  // point where the sidebar is still useful — roughly the sidebar's
+  // own max height. Reset on slug change so navigating to a new
+  // doc starts hidden.
+  const [showTop, setShowTop] = useState(false);
+  useEffect(() => {
+    setShowTop(false);
+    const onScroll = () => setShowTop(window.scrollY > 480);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [currentSlug]);
+
   return (
     <div className="mobile-stack" style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, alignItems: 'flex-start', minHeight: '100%' }}>
       <aside style={sidebarStyle}>
@@ -146,9 +159,41 @@ export function Docs() {
           <article className="docs-prose" dangerouslySetInnerHTML={{ __html: page.data.html }} />
         )}
       </main>
+
+      {showTop && (
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          aria-label="Back to top"
+          title="Back to top"
+          style={backToTopStyle}
+        >
+          <span style={{ fontSize: 16, lineHeight: 1 }}>↑</span>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}>Top</span>
+        </button>
+      )}
     </div>
   );
 }
+
+const backToTopStyle: React.CSSProperties = {
+  position: 'fixed',
+  right: 24,
+  bottom: 24,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 2,
+  padding: '10px 12px',
+  minWidth: 44,
+  border: '1px solid var(--border)',
+  borderRadius: 999,
+  background: 'var(--surface)',
+  color: 'var(--text-strong)',
+  cursor: 'pointer',
+  boxShadow: '0 4px 14px rgba(0,0,0,0.35)',
+  zIndex: 50,
+};
 
 const sidebarStyle: React.CSSProperties = {
   position: 'sticky',
