@@ -20,5 +20,7 @@ FROM alpine:latest
 RUN apk add --no-cache ca-certificates curl
 COPY --from=build /out/demo-seed  /bin/demo-seed
 COPY --from=build /out/demo-agent /bin/demo-agent
-# Default to the agent — compose overrides for the seed container.
-ENTRYPOINT ["/bin/demo-agent"]
+# No ENTRYPOINT — the compose service picks one via `command:`.
+# Default CMD = agent so `docker run kvm-center-demo:latest` alone
+# runs the agent.
+CMD ["/bin/demo-agent"]
