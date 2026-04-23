@@ -1,0 +1,24 @@
+# Dockerfile.demo — builds both the demo-seed and demo-agent binaries
+# from the same source tree and picks one via the container command.
+#
+# Usage from docker-compose.demo.yml:
+#   seed service → command: ["/bin/demo-seed"]
+#   agent service → command: ["/bin/demo-agent"]
+#
+# Kept in demo/ so git-filter-repo strips it with the rest of the
+# demo tree when publishing to the public GitHub mirror.
+
+FROM golang:1.25-alpine AS build
+WORKDIR /src
+COPY go.mod go.su[m] ./
+COPY . .
+RUN go mod tidy
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/demo-seed  ./demo/seed && \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/demo-agent ./demo/agent
+
+FROM alpine:latest
+RUN apk add --no-cache ca-certificates curl
+COPY --from=build /out/demo-seed  /bin/demo-seed
+COPY --from=build /out/demo-agent /bin/demo-agent
+# Default to the agent — compose overrides for the seed container.
+ENTRYPOINT ["/bin/demo-agent"]

@@ -1,0 +1,122 @@
+# demo stack — dev-only, NOT for production use.
+#
+# Runs a full kvm-center deployment against Mongo with synthetic
+# fixture data: 3 hypervisors, 20 VMs, 100 migrations of history,
+# 500 audit events, snapshot policies, notifications config, tokens.
+# No real hypervisors involved — the demo-agent containers stand in
+# for them, posting telemetry on a loop and no-op'ing commands.
+#
+# Start:   ../scripts/demo-up.sh
+# Reset:   ../scripts/demo-reset.sh
+# Tear:    docker compose -f docker-compose.demo.yml down -v
+#
+# SPA:     http://localhost:8290
+# Admin:   admin / demo-password
+# Token:   kvmc_demo0001.00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+
+name: kvm-center-demo
+
+services:
+  kvm-center-demo-mongo:
+    image: mongo:7
+    container_name: kvm-center-demo-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: demo
+      MONGO_INITDB_ROOT_PASSWORD: demo-mongo-password
+    volumes:
+      - kvm-center-demo-mongo:/data/db
+    networks: [demo]
+
+  kvm-center-demo-server:
+    # Reuse the production server image. Build it first via
+    #   docker compose -f ../docker-compose.yml build kvm-center-server
+    # (the demo-up.sh script handles this automatically).
+    image: kvm-center-server:latest
+    container_name: kvm-center-demo-server
+    restart: unless-stopped
+    ports:
+      - "8290:8190"
+    environment:
+      KVM_CENTER_MONGO_URL: mongodb://demo:demo-mongo-password@kvm-center-demo-mongo:27017
+      KVM_CENTER_MONGO_DB: kvm-center-demo
+      KVM_CENTER_DISABLE_HTTP: "1"
+      KVM_CENTER_TLS_ADDR: ":8190"
+    depends_on:
+      - kvm-center-demo-mongo
+    volumes:
+      - kvm-center-demo-tls:/var/lib/kvm-center/tls
+      - kvm-center-demo-ca:/var/lib/kvm-center/ca
+      - kvm-center-demo-data:/var/lib/kvm-center
+    networks: [demo]
+
+  kvm-center-demo-seed:
+    # One-shot seed container. Runs after server is up, populates
+    # Mongo with fixtures, exits. restart=no so it doesn't re-seed on
+    # reboot (use demo-reset.sh to force a re-seed).
+    build:
+      context: ..
+      dockerfile: demo/Dockerfile.demo
+    image: kvm-center-demo:latest
+    container_name: kvm-center-demo-seed
+    command: ["/bin/demo-seed"]
+    restart: "no"
+    environment:
+      KVM_CENTER_DEMO_MONGO_URL: mongodb://demo:demo-mongo-password@kvm-center-demo-mongo:27017
+      KVM_CENTER_DEMO_MONGO_DB: kvm-center-demo
+    depends_on:
+      - kvm-center-demo-mongo
+      - kvm-center-demo-server
+    networks: [demo]
+
+  kvm-center-demo-agent01:
+    image: kvm-center-demo:latest
+    container_name: kvm-center-demo-agent01
+    restart: unless-stopped
+    command: ["/bin/demo-agent"]
+    environment:
+      KVM_CENTER_DEMO_MONGO_URL: mongodb://demo:demo-mongo-password@kvm-center-demo-mongo:27017
+      KVM_CENTER_DEMO_MONGO_DB: kvm-center-demo
+      KVM_CENTER_DEMO_HOST_ID: hv-demo01.example.lan
+      KVM_CENTER_SERVER: https://kvm-center-demo-server:8190
+    depends_on:
+      - kvm-center-demo-seed
+    networks: [demo]
+
+  kvm-center-demo-agent02:
+    image: kvm-center-demo:latest
+    container_name: kvm-center-demo-agent02
+    restart: unless-stopped
+    command: ["/bin/demo-agent"]
+    environment:
+      KVM_CENTER_DEMO_MONGO_URL: mongodb://demo:demo-mongo-password@kvm-center-demo-mongo:27017
+      KVM_CENTER_DEMO_MONGO_DB: kvm-center-demo
+      KVM_CENTER_DEMO_HOST_ID: hv-demo02.example.lan
+      KVM_CENTER_SERVER: https://kvm-center-demo-server:8190
+    depends_on:
+      - kvm-center-demo-seed
+    networks: [demo]
+
+  kvm-center-demo-agent03:
+    image: kvm-center-demo:latest
+    container_name: kvm-center-demo-agent03
+    restart: unless-stopped
+    command: ["/bin/demo-agent"]
+    environment:
+      KVM_CENTER_DEMO_MONGO_URL: mongodb://demo:demo-mongo-password@kvm-center-demo-mongo:27017
+      KVM_CENTER_DEMO_MONGO_DB: kvm-center-demo
+      KVM_CENTER_DEMO_HOST_ID: hv-demo03.example.lan
+      KVM_CENTER_SERVER: https://kvm-center-demo-server:8190
+    depends_on:
+      - kvm-center-demo-seed
+    networks: [demo]
+
+volumes:
+  kvm-center-demo-mongo:
+  kvm-center-demo-tls:
+  kvm-center-demo-ca:
+  kvm-center-demo-data:
+
+networks:
+  demo:
+    driver: bridge
