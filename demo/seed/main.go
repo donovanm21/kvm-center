@@ -241,7 +241,13 @@ const (
 )
 
 func hostID(idx int) string { return fmt.Sprintf("hv-demo%02d.example.lan", idx) }
-func hostIP(idx int) string { return fmt.Sprintf("192.0.2.%d", demoBaseIP4+idx) }
+
+// host.IP is what the server uses to reach the agent + what the UI
+// shows in the host card. In the demo we use a docker DNS alias
+// (demo-agent-NN) so the server can reach the single demo-agents
+// container. The UI displays this string verbatim — clearly flags
+// the environment as a demo.
+func hostIP(idx int) string { return fmt.Sprintf("demo-agent-%02d", idx) }
 func hostPort(idx int) int  { return demoBasePort + idx }
 
 func buildHosts(fx *fixtures) {
