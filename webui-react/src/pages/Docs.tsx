@@ -68,6 +68,44 @@ export function Docs() {
     return () => el.removeEventListener('click', onClick);
   }, [navigate, page.data]);
 
+  // Restart animated WebP clips from frame 0 each time they scroll
+  // into view. The browser caches the decoded animation and keeps
+  // playing it forever on a loop, so a user who scrolls to a clip
+  // halfway through its cycle misses the intro. Re-setting the src
+  // (with a short query-string churn to dodge the disk cache when
+  // needed) forces a fresh decode context starting at frame 0.
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el || !page.data) return;
+    const imgs = Array.from(el.querySelectorAll<HTMLImageElement>('img[src*="/api/docs/media/"]'));
+    if (imgs.length === 0) return;
+
+    // Stash the original src and swap it for a blank pixel until the
+    // image enters the viewport. Subsequent entries toggle the src
+    // off/on to restart the animation.
+    const originals = new Map<HTMLImageElement, string>();
+    for (const img of imgs) {
+      originals.set(img, img.src);
+      img.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+    }
+
+    const obs = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const img = entry.target as HTMLImageElement;
+        const src = originals.get(img);
+        if (!src) continue;
+        if (entry.isIntersecting) {
+          img.src = src;
+        } else {
+          img.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+        }
+      }
+    }, { threshold: 0.25 });
+
+    imgs.forEach((img) => obs.observe(img));
+    return () => obs.disconnect();
+  }, [page.data]);
+
   return (
     <div className="mobile-stack" style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, alignItems: 'flex-start', minHeight: '100%' }}>
       <aside style={sidebarStyle}>
