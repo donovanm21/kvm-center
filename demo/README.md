@@ -17,19 +17,19 @@ hypervisors required. Used for:
 
 ## What's inside
 
-| Collection        | Count | Notes                                                                              |
-|-------------------|-------|------------------------------------------------------------------------------------|
-| Hypervisors       | 3     | `hv-demo01/02/03.example.lan` on `192.0.2.11-13` (RFC5737 docs-only range)         |
-| VMs               | 20    | Linux + Windows mix, realistic sizes, some UEFI-pflash (snapshot-blocked)          |
-| Storage pools     | 5     | Mixed utilisation incl. one near-full for the storage-pressure indicator           |
-| Migrations        | 100   | Across the last 30 days, mostly complete, some failed/cancelled                    |
-| Audit events      | 500   | Spread across admin/operator/viewer actors                                         |
-| Snapshot policies | 3     | 2 active (hourly + daily), 1 paused                                                |
-| Command log       | 50    | Mostly success; 3 "unknown" stranded entries for the health-problems card          |
-| API tokens        | 1     | Fixed `kvmc_demo0001...` so predictable across resets                              |
-| Users / Groups    | 3 / 2 | `admin`, `operator`, `viewer` with matching role bundles                           |
-| Notifications     | 3 ch. | Slack webhook + PagerDuty webhook + disabled email — exercise the full config UI   |
-| Hypervisor certs  | 3     | One per host, 10-year validity                                                     |
+| Collection        | Count | Notes                                                                                          |
+|-------------------|-------|------------------------------------------------------------------------------------------------|
+| Hypervisors       | 30    | `hv-demo01..30.example.lan` on `192.0.2.11-40` (RFC5737 docs-only range). Tiered: 5 small edge nodes, ~19 medium workhorses, 3 large compute boxes, 3 GPU hosts |
+| VMs               | ~150  | 4-6 per host, mix of web/api/db/dev/CI/staging/Windows/ML archetypes                           |
+| Storage pools     | 30-33 | One default per host + nvme-fast on GPU/large hosts                                            |
+| Migrations        | 200   | Across the last 30 days, mostly complete, some failed/cancelled                                |
+| Audit events      | 800   | Spread across admin/operator/viewer actors                                                     |
+| Snapshot policies | 4     | 3 active (web hourly + db daily + api weekly), 1 paused                                        |
+| Command log       | 100   | Mostly success; 3 "unknown" stranded entries for the health-problems card                      |
+| API tokens        | 1     | Fixed `kvmc_demo0001...` so predictable across resets                                          |
+| Users / Groups    | 3 / 2 | `admin`, `operator`, `viewer` with matching role bundles                                       |
+| Notifications     | 3 ch. | Slack webhook + PagerDuty webhook + disabled email — exercise the full config UI               |
+| Hypervisor certs  | 30    | One per host, 10-year validity                                                                 |
 
 Every hostname is `*.example.lan`; every IP is in the RFC5737
 documentation ranges (`192.0.2.0/24`, `198.51.100.0/24`,

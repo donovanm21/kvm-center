@@ -54,8 +54,8 @@ done
 echo "==> running seed"
 docker compose -f "$DEMO_COMPOSE" run --rm kvm-center-demo-seed
 
-echo "==> starting demo agents"
-docker compose -f "$DEMO_COMPOSE" up -d kvm-center-demo-agent01 kvm-center-demo-agent02 kvm-center-demo-agent03
+echo "==> starting demo agents (single container, goroutine per host)"
+docker compose -f "$DEMO_COMPOSE" up -d kvm-center-demo-agents
 
 # Restart the server so it reloads state from Mongo after the seed.
 # (ApplyTelemetry from agents will keep it fresh, but the initial

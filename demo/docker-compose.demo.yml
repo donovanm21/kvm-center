@@ -1,10 +1,12 @@
 # demo stack — dev-only, NOT for production use.
 #
 # Runs a full kvm-center deployment against Mongo with synthetic
-# fixture data: 3 hypervisors, 20 VMs, 100 migrations of history,
-# 500 audit events, snapshot policies, notifications config, tokens.
-# No real hypervisors involved — the demo-agent containers stand in
-# for them, posting telemetry on a loop and no-op'ing commands.
+# fixture data: 30 hypervisors (mixed tiers incl. GPU hosts), ~150
+# VMs across them, 200 migrations of history, 800 audit events,
+# snapshot policies, notifications config, tokens. No real
+# hypervisors involved — the single demo-agents container stands in
+# for every synthetic host, posting telemetry on a loop and no-op'ing
+# commands from the server.
 #
 # Start:   ../scripts/demo-up.sh
 # Reset:   ../scripts/demo-reset.sh
@@ -69,43 +71,18 @@ services:
       - kvm-center-demo-server
     networks: [demo]
 
-  kvm-center-demo-agent01:
+  # Single demo-agent container that impersonates every synthetic
+  # hypervisor. One goroutine per host posts telemetry + serves the
+  # command endpoint on a unique port (8101..8130) per host's
+  # agent_port setting in the seed.
+  kvm-center-demo-agents:
     image: kvm-center-demo:latest
-    container_name: kvm-center-demo-agent01
+    container_name: kvm-center-demo-agents
     restart: unless-stopped
     command: ["/bin/demo-agent"]
     environment:
       KVM_CENTER_DEMO_MONGO_URL: mongodb://demo:demo-mongo-password@kvm-center-demo-mongo:27017
       KVM_CENTER_DEMO_MONGO_DB: kvm-center-demo
-      KVM_CENTER_DEMO_HOST_ID: hv-demo01.example.lan
-      KVM_CENTER_SERVER: https://kvm-center-demo-server:8190
-    depends_on:
-      - kvm-center-demo-seed
-    networks: [demo]
-
-  kvm-center-demo-agent02:
-    image: kvm-center-demo:latest
-    container_name: kvm-center-demo-agent02
-    restart: unless-stopped
-    command: ["/bin/demo-agent"]
-    environment:
-      KVM_CENTER_DEMO_MONGO_URL: mongodb://demo:demo-mongo-password@kvm-center-demo-mongo:27017
-      KVM_CENTER_DEMO_MONGO_DB: kvm-center-demo
-      KVM_CENTER_DEMO_HOST_ID: hv-demo02.example.lan
-      KVM_CENTER_SERVER: https://kvm-center-demo-server:8190
-    depends_on:
-      - kvm-center-demo-seed
-    networks: [demo]
-
-  kvm-center-demo-agent03:
-    image: kvm-center-demo:latest
-    container_name: kvm-center-demo-agent03
-    restart: unless-stopped
-    command: ["/bin/demo-agent"]
-    environment:
-      KVM_CENTER_DEMO_MONGO_URL: mongodb://demo:demo-mongo-password@kvm-center-demo-mongo:27017
-      KVM_CENTER_DEMO_MONGO_DB: kvm-center-demo
-      KVM_CENTER_DEMO_HOST_ID: hv-demo03.example.lan
       KVM_CENTER_SERVER: https://kvm-center-demo-server:8190
     depends_on:
       - kvm-center-demo-seed

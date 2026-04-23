@@ -4,14 +4,18 @@
 // DEV USE ONLY — the demo/ tree is stripped from the public GitHub
 // mirror during the scrub.
 //
-// Scope (matches the user's "large" pick, 2026-04-23):
-//   - 3 hypervisors (hv-demo01/02/03.example.lan, RFC5737 IPs)
-//   - 20 VMs across them (mix of Linux + Windows, various states)
-//   - ~100 migrations across the last 30 days (complete / failed / cancelled)
-//   - ~500 audit events
-//   - 3 snapshot policies (2 active, 1 paused)
+// Scope (matches the user's "large deployment" pick, 2026-04-23):
+//   - 30 hypervisors (hv-demo01-30.example.lan), mixed tiers
+//     (small / medium / large — cores + RAM vary; three GPU-equipped
+//     hosts), RFC5737 IPs 192.0.2.11-40
+//   - ~150 VMs distributed across them (4-6 per host) — variety of
+//     workload templates covering web / db / dev / CI / Windows /
+//     ML / media
+//   - 200 migrations across the last 30 days
+//   - 800 audit events
+//   - 4 snapshot policies (3 active, 1 paused)
 //   - Notification config with webhook + email channels
-//   - Command log with ~50 entries (incl. 3 "unknown" stranded for
+//   - Command log with ~100 entries (incl. 3 "unknown" stranded for
 //     the System Health problems card)
 //   - Hypervisor certs (one per host, valid 10y)
 //   - API tokens: 1 system-level admin token printed on stdout
@@ -19,10 +23,11 @@
 //
 // Run as a one-shot container inside the demo docker-compose stack.
 // Env:
-//   KVM_CENTER_DEMO_MONGO_URL  mongodb URI (REQUIRED)
-//   KVM_CENTER_DEMO_MONGO_DB   db name (default: kvm-center-demo)
-//   KVM_CENTER_DEMO_VERSION    string stamped as agent_version etc.
-//                              (default: dev)
+//
+//	KVM_CENTER_DEMO_MONGO_URL  mongodb URI (REQUIRED)
+//	KVM_CENTER_DEMO_MONGO_DB   db name (default: kvm-center-demo)
+//	KVM_CENTER_DEMO_VERSION    string stamped as agent_version etc.
+//	                           (default: dev)
 package main
 
 import (
@@ -174,141 +179,320 @@ func buildFixtures() *fixtures {
 
 // ─── Hosts ─────────────────────────────────────────────────────
 
-func buildHosts(fx *fixtures) {
-	fx.hosts = []*models.Host{
-		{
-			ID: "hv-demo01.example.lan", IP: "192.0.2.11", AgentPort: 8081,
-			CPUUsage: 18.4, CPUCount: 32, MemUsage: 62.1, MemTotalMB: 128 * 1024, MemFreeMB: 48 * 1024,
-			VMCount: 7, Status: models.HostOnline, LastSeen: now.Add(-12 * time.Second),
-			OS: "Rocky Linux 9.7 (Blue Onyx)", KernelVer: "5.14.0-544.el9.x86_64",
-			LibvirtVer: "virsh (libvirt) 10.10.0", Uptime: "17d 4h 23m", AgentVersion: demoVersion,
-			CPUModel: "AMD EPYC 7543P 32-Core Processor",
-			Sockets:  1, CoresPerSocket: 32, ThreadsPerCore: 2, NUMANodes: 1,
-		},
-		{
-			ID: "hv-demo02.example.lan", IP: "192.0.2.12", AgentPort: 8081,
-			CPUUsage: 7.2, CPUCount: 32, MemUsage: 41.8, MemTotalMB: 128 * 1024, MemFreeMB: 74 * 1024,
-			VMCount: 7, Status: models.HostOnline, LastSeen: now.Add(-8 * time.Second),
-			OS: "Rocky Linux 9.7 (Blue Onyx)", KernelVer: "5.14.0-544.el9.x86_64",
-			LibvirtVer: "virsh (libvirt) 10.10.0", Uptime: "45d 12h 1m", AgentVersion: demoVersion,
-			CPUModel: "AMD EPYC 7543P 32-Core Processor",
-			Sockets:  1, CoresPerSocket: 32, ThreadsPerCore: 2, NUMANodes: 1,
-		},
-		{
-			ID: "hv-demo03.example.lan", IP: "192.0.2.13", AgentPort: 8081,
-			CPUUsage: 33.9, CPUCount: 48, MemUsage: 78.5, MemTotalMB: 256 * 1024, MemFreeMB: 55 * 1024,
-			VMCount: 6, Status: models.HostOnline, LastSeen: now.Add(-14 * time.Second),
-			OS: "Rocky Linux 9.7 (Blue Onyx)", KernelVer: "5.14.0-544.el9.x86_64",
-			LibvirtVer: "virsh (libvirt) 10.10.0", Uptime: "3d 2h 7m", AgentVersion: demoVersion,
-			CPUModel: "AMD EPYC 7543P 32-Core Processor",
-			Sockets:  2, CoresPerSocket: 24, ThreadsPerCore: 2, NUMANodes: 2,
-			GPUs: []string{"NVIDIA GeForce RTX 3090 (0000:41:00.0)", "NVIDIA GeForce RTX 3090 (0000:a1:00.0)"},
+// Host tier templates. 30-host fleet is distributed across these
+// three shapes to mimic a real deployment: mostly medium workhorses,
+// a handful of small edge nodes, plus three beefy GPU hosts.
+type hostTier struct {
+	cpuCount, sockets, coresPerSocket, threadsPerCore, numaNodes int
+	memGB                                                        int
+	cpuModel                                                     string
+	gpus                                                         []string
+}
+
+var (
+	tierSmall = hostTier{
+		cpuCount: 16, sockets: 1, coresPerSocket: 16, threadsPerCore: 1, numaNodes: 1,
+		memGB:    64,
+		cpuModel: "Intel Xeon E-2388G @ 3.20 GHz",
+	}
+	tierMedium = hostTier{
+		cpuCount: 32, sockets: 1, coresPerSocket: 32, threadsPerCore: 2, numaNodes: 1,
+		memGB:    128,
+		cpuModel: "AMD EPYC 7543P 32-Core Processor",
+	}
+	tierLarge = hostTier{
+		cpuCount: 64, sockets: 2, coresPerSocket: 32, threadsPerCore: 2, numaNodes: 2,
+		memGB:    256,
+		cpuModel: "AMD EPYC 7763 64-Core Processor",
+	}
+	tierGPU = hostTier{
+		cpuCount: 48, sockets: 2, coresPerSocket: 24, threadsPerCore: 2, numaNodes: 2,
+		memGB:    256,
+		cpuModel: "AMD EPYC 7543 32-Core Processor",
+		gpus: []string{
+			"NVIDIA GeForce RTX 3090 (0000:41:00.0)",
+			"NVIDIA GeForce RTX 3090 (0000:a1:00.0)",
 		},
 	}
+)
+
+// hostTierFor picks a tier for a given host index. Fleet shape:
+//   - Hosts 1-3: GPU (for the ML/gaming workloads)
+//   - Hosts 4-8: small edge nodes
+//   - Hosts 9-27: medium workhorses (majority)
+//   - Hosts 28-30: large compute boxes
+func hostTierFor(idx int) hostTier {
+	switch {
+	case idx >= 1 && idx <= 3:
+		return tierGPU
+	case idx >= 4 && idx <= 8:
+		return tierSmall
+	case idx >= 28 && idx <= 30:
+		return tierLarge
+	default:
+		return tierMedium
+	}
+}
+
+const (
+	demoHostCount = 30
+	demoBaseIP4   = 10 // host 01 → 192.0.2.11
+	demoBasePort  = 8100
+)
+
+func hostID(idx int) string { return fmt.Sprintf("hv-demo%02d.example.lan", idx) }
+func hostIP(idx int) string { return fmt.Sprintf("192.0.2.%d", demoBaseIP4+idx) }
+func hostPort(idx int) int  { return demoBasePort + idx }
+
+func buildHosts(fx *fixtures) {
+	for i := 1; i <= demoHostCount; i++ {
+		t := hostTierFor(i)
+		// CPU + mem usage: varied but bounded for a healthy fleet.
+		cpuUse := 3.0 + rng.Float64()*35.0
+		memUse := 20.0 + rng.Float64()*65.0
+		if i%7 == 0 {
+			// Occasional high-mem host (db workload).
+			memUse = 75.0 + rng.Float64()*15.0
+		}
+		uptime := humanUptime(time.Duration(rng.Intn(90*24)) * time.Hour)
+		h := &models.Host{
+			ID:           hostID(i),
+			IP:           hostIP(i),
+			AgentPort:    hostPort(i),
+			CPUUsage:     round1(cpuUse),
+			CPUCount:     t.cpuCount,
+			MemUsage:     round1(memUse),
+			MemTotalMB:   uint64(t.memGB) * 1024,
+			MemFreeMB:    uint64(float64(t.memGB*1024) * (1.0 - memUse/100.0)),
+			Status:       models.HostOnline,
+			LastSeen:     now.Add(-time.Duration(5+rng.Intn(20)) * time.Second),
+			OS:           "Rocky Linux 9.7 (Blue Onyx)",
+			KernelVer:    "5.14.0-544.el9.x86_64",
+			LibvirtVer:   "virsh (libvirt) 10.10.0",
+			Uptime:       uptime,
+			AgentVersion: demoVersion,
+			CPUModel:     t.cpuModel,
+			Sockets:      t.sockets, CoresPerSocket: t.coresPerSocket,
+			ThreadsPerCore: t.threadsPerCore, NUMANodes: t.numaNodes,
+			GPUs: t.gpus,
+		}
+		fx.hosts = append(fx.hosts, h)
+	}
+}
+
+func round1(f float64) float64 { return float64(int(f*10)) / 10 }
+
+func humanUptime(d time.Duration) string {
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	mins := int(d.Minutes()) % 60
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, mins)
+	}
+	return fmt.Sprintf("%dh %dm", hours, mins)
 }
 
 // ─── VMs ───────────────────────────────────────────────────────
 
-type vmDef struct {
-	name, uuid, host, os, kernel, hostname string
-	state                                  models.VMState
-	cpus                                   int
-	memMB                                  uint64
-	diskGB                                 float64
-	diskUseGB                              float64
-	firmware                               string
-	blockSnap                              bool // SnapshotsBlockedReason set
-	snapCount                              int
-	noKVMTools                             bool
+// vmTemplate describes one archetype. Per-host generation picks a
+// set of templates based on the host's tier + picks realistic
+// usage numbers around the template's baseline.
+type vmTemplate struct {
+	prefix, os, kernel, firmware string
+	cpus                         int
+	memMB                        uint64
+	diskGB                       float64
+	fillPct                      float64 // typical disk fill as fraction
+	blockSnap                    bool
+	runningBias                  float64 // probability the VM is running
+	requiresGPU                  bool    // only placed on GPU-equipped hosts
+	tags                         string  // unused today, room for later
+}
+
+var vmTemplates = []vmTemplate{
+	{prefix: "web", os: "Rocky Linux 9.7 (Blue Onyx)", kernel: "5.14.0-544.el9.x86_64", firmware: "bios", cpus: 4, memMB: 8192, diskGB: 40, fillPct: 0.32, runningBias: 0.95},
+	{prefix: "api", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", firmware: "efi", cpus: 4, memMB: 8192, diskGB: 50, fillPct: 0.45, runningBias: 0.95},
+	{prefix: "db", os: "Rocky Linux 9.7 (Blue Onyx)", kernel: "5.14.0-544.el9.x86_64", firmware: "bios", cpus: 8, memMB: 32768, diskGB: 500, fillPct: 0.62, runningBias: 0.98},
+	{prefix: "cache", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", firmware: "efi", cpus: 2, memMB: 16384, diskGB: 30, fillPct: 0.10, runningBias: 0.98},
+	{prefix: "staging", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", firmware: "efi", cpus: 6, memMB: 16384, diskGB: 100, fillPct: 0.40, runningBias: 0.85},
+	{prefix: "dev", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", firmware: "efi", cpus: 8, memMB: 16384, diskGB: 200, fillPct: 0.50, runningBias: 0.75},
+	{prefix: "ci", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", firmware: "efi", cpus: 8, memMB: 16384, diskGB: 200, fillPct: 0.42, runningBias: 0.9},
+	{prefix: "monitor", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", firmware: "efi", cpus: 4, memMB: 8192, diskGB: 120, fillPct: 0.40, runningBias: 1.0},
+	{prefix: "registry", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", firmware: "efi", cpus: 2, memMB: 4096, diskGB: 500, fillPct: 0.35, runningBias: 1.0},
+	{prefix: "media", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", firmware: "efi+secureboot", cpus: 4, memMB: 16384, diskGB: 4096, fillPct: 0.55, blockSnap: true, runningBias: 0.95},
+	{prefix: "backup", os: "Rocky Linux 9.7 (Blue Onyx)", kernel: "5.14.0-544.el9.x86_64", firmware: "bios", cpus: 2, memMB: 4096, diskGB: 2048, fillPct: 0.55, runningBias: 0.6},
+	{prefix: "legacy", os: "Rocky Linux 8.10 (Green Obsidian)", kernel: "4.18.0-553.el8.x86_64", firmware: "bios", cpus: 2, memMB: 4096, diskGB: 40, fillPct: 0.32, runningBias: 0.4},
+	{prefix: "winsrv", os: "Microsoft Windows Server 2022", kernel: "10.0.20348", firmware: "efi+secureboot", cpus: 8, memMB: 32768, diskGB: 200, fillPct: 0.44, blockSnap: true, runningBias: 0.9},
+	{prefix: "winclient", os: "Microsoft Windows 10 Pro", kernel: "10.0.19045", firmware: "efi+secureboot", cpus: 4, memMB: 16384, diskGB: 120, fillPct: 0.53, blockSnap: true, runningBias: 0.85},
+	// GPU-only archetypes (placed only on GPU-equipped hosts).
+	{prefix: "ml", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", firmware: "efi+secureboot", cpus: 16, memMB: 65536, diskGB: 1024, fillPct: 0.67, blockSnap: true, runningBias: 0.9, requiresGPU: true},
+	{prefix: "gpu", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", firmware: "efi+secureboot", cpus: 16, memMB: 65536, diskGB: 500, fillPct: 0.45, blockSnap: true, runningBias: 0.85, requiresGPU: true},
+}
+
+const blockedReason = "UEFI pflash nvram is raw format — libvirt requires qcow2 nvram for internal snapshots. Convert with `qemu-img convert -O qcow2 <nvram>.fd <nvram>.qcow2`, then edit the domain XML so the <nvram> element uses format=\"qcow2\" and points at the new file."
+
+// vmUUID builds a stable UUID so migrations + audit can reference
+// them from a second pass without re-ordering worries.
+func vmUUID(hostIdx, vmIdx int) string {
+	return fmt.Sprintf("11111111-%04d-0000-0000-%012d", hostIdx, vmIdx)
 }
 
 func buildVMs(fx *fixtures) {
-	defs := []vmDef{
-		// hv-demo01 (7 VMs)
-		{name: "vm-web01", uuid: "11111111-0001-0000-0000-000000000001", host: "hv-demo01.example.lan", os: "Rocky Linux 9.7 (Blue Onyx)", kernel: "5.14.0-544.el9.x86_64", hostname: "vm-web01.example.lan", state: models.VMRunning, cpus: 4, memMB: 8192, diskGB: 40, diskUseGB: 14.2, firmware: "bios", snapCount: 3},
-		{name: "vm-api01", uuid: "11111111-0001-0000-0000-000000000002", host: "hv-demo01.example.lan", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", hostname: "vm-api01.example.lan", state: models.VMRunning, cpus: 4, memMB: 8192, diskGB: 50, diskUseGB: 21.8, firmware: "efi", snapCount: 2},
-		{name: "vm-db01", uuid: "11111111-0001-0000-0000-000000000003", host: "hv-demo01.example.lan", os: "Rocky Linux 9.7 (Blue Onyx)", kernel: "5.14.0-544.el9.x86_64", hostname: "vm-db01.example.lan", state: models.VMRunning, cpus: 8, memMB: 32768, diskGB: 500, diskUseGB: 312.4, firmware: "bios", snapCount: 5},
-		{name: "vm-cache01", uuid: "11111111-0001-0000-0000-000000000004", host: "hv-demo01.example.lan", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", hostname: "vm-cache01.example.lan", state: models.VMRunning, cpus: 2, memMB: 16384, diskGB: 30, diskUseGB: 3.1, firmware: "efi"},
-		{name: "vm-monitor", uuid: "11111111-0001-0000-0000-000000000005", host: "hv-demo01.example.lan", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", hostname: "grafana.example.lan", state: models.VMRunning, cpus: 4, memMB: 8192, diskGB: 120, diskUseGB: 47.3, firmware: "efi", snapCount: 1},
-		{name: "vm-ci01", uuid: "11111111-0001-0000-0000-000000000006", host: "hv-demo01.example.lan", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", hostname: "ci01.example.lan", state: models.VMRunning, cpus: 8, memMB: 16384, diskGB: 200, diskUseGB: 84.6, firmware: "efi", snapCount: 2},
-		{name: "vm-legacy", uuid: "11111111-0001-0000-0000-000000000007", host: "hv-demo01.example.lan", os: "Rocky Linux 8.10 (Green Obsidian)", kernel: "4.18.0-553.el8.x86_64", hostname: "legacy.example.lan", state: models.VMStopped, cpus: 2, memMB: 4096, diskGB: 40, diskUseGB: 12.5, firmware: "bios", noKVMTools: true},
-
-		// hv-demo02 (7 VMs)
-		{name: "vm-web02", uuid: "11111111-0002-0000-0000-000000000001", host: "hv-demo02.example.lan", os: "Rocky Linux 9.7 (Blue Onyx)", kernel: "5.14.0-544.el9.x86_64", hostname: "vm-web02.example.lan", state: models.VMRunning, cpus: 4, memMB: 8192, diskGB: 40, diskUseGB: 11.9, firmware: "bios", snapCount: 3},
-		{name: "vm-api02", uuid: "11111111-0002-0000-0000-000000000002", host: "hv-demo02.example.lan", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", hostname: "vm-api02.example.lan", state: models.VMRunning, cpus: 4, memMB: 8192, diskGB: 50, diskUseGB: 22.4, firmware: "efi", snapCount: 2},
-		{name: "vm-db02", uuid: "11111111-0002-0000-0000-000000000003", host: "hv-demo02.example.lan", os: "Rocky Linux 9.7 (Blue Onyx)", kernel: "5.14.0-544.el9.x86_64", hostname: "vm-db02.example.lan", state: models.VMRunning, cpus: 8, memMB: 32768, diskGB: 500, diskUseGB: 298.7, firmware: "bios", snapCount: 4},
-		{name: "vm-staging", uuid: "11111111-0002-0000-0000-000000000004", host: "hv-demo02.example.lan", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", hostname: "staging.example.lan", state: models.VMRunning, cpus: 6, memMB: 16384, diskGB: 100, diskUseGB: 41.2, firmware: "efi", snapCount: 7},
-		{name: "vm-registry", uuid: "11111111-0002-0000-0000-000000000005", host: "hv-demo02.example.lan", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", hostname: "registry.example.lan", state: models.VMRunning, cpus: 2, memMB: 4096, diskGB: 500, diskUseGB: 187.5, firmware: "efi"},
-		{name: "vm-backup", uuid: "11111111-0002-0000-0000-000000000006", host: "hv-demo02.example.lan", os: "Rocky Linux 9.7 (Blue Onyx)", kernel: "5.14.0-544.el9.x86_64", hostname: "backup.example.lan", state: models.VMStopped, cpus: 2, memMB: 4096, diskGB: 2048, diskUseGB: 1128.0, firmware: "bios"},
-		{name: "vm-media", uuid: "11111111-0002-0000-0000-000000000007", host: "hv-demo02.example.lan", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", hostname: "media.example.lan", state: models.VMRunning, cpus: 4, memMB: 16384, diskGB: 4096, diskUseGB: 2314.7, firmware: "efi+secureboot", blockSnap: true},
-
-		// hv-demo03 (6 VMs incl. Windows)
-		{name: "vm-web03", uuid: "11111111-0003-0000-0000-000000000001", host: "hv-demo03.example.lan", os: "Rocky Linux 9.7 (Blue Onyx)", kernel: "5.14.0-544.el9.x86_64", hostname: "vm-web03.example.lan", state: models.VMRunning, cpus: 4, memMB: 8192, diskGB: 40, diskUseGB: 12.7, firmware: "bios", snapCount: 3},
-		{name: "vm-gpu01", uuid: "11111111-0003-0000-0000-000000000002", host: "hv-demo03.example.lan", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", hostname: "gpu01.example.lan", state: models.VMRunning, cpus: 16, memMB: 65536, diskGB: 500, diskUseGB: 217.4, firmware: "efi+secureboot", blockSnap: true},
-		{name: "vm-ml01", uuid: "11111111-0003-0000-0000-000000000003", host: "hv-demo03.example.lan", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", hostname: "ml01.example.lan", state: models.VMRunning, cpus: 16, memMB: 65536, diskGB: 1024, diskUseGB: 687.9, firmware: "efi+secureboot", blockSnap: true},
-		{name: "vm-dev01", uuid: "11111111-0003-0000-0000-000000000004", host: "hv-demo03.example.lan", os: "Ubuntu 24.04.4 LTS", kernel: "6.8.0-51-generic", hostname: "dev01.example.lan", state: models.VMRunning, cpus: 8, memMB: 16384, diskGB: 200, diskUseGB: 91.3, firmware: "efi", snapCount: 2},
-		{name: "vm-winsrv", uuid: "11111111-0003-0000-0000-000000000005", host: "hv-demo03.example.lan", os: "Microsoft Windows Server 2022", kernel: "10.0.20348", hostname: "WIN-DEMO01", state: models.VMRunning, cpus: 8, memMB: 32768, diskGB: 200, diskUseGB: 87.3, firmware: "efi+secureboot", blockSnap: true},
-		{name: "vm-winclient", uuid: "11111111-0003-0000-0000-000000000006", host: "hv-demo03.example.lan", os: "Microsoft Windows 10 Pro", kernel: "10.0.19045", hostname: "DESKTOP-DEMO01", state: models.VMRunning, cpus: 4, memMB: 16384, diskGB: 120, diskUseGB: 64.8, firmware: "efi+secureboot", blockSnap: true},
-	}
-
-	blockedReason := "UEFI pflash nvram is raw format — libvirt requires qcow2 nvram for internal snapshots. Convert with `qemu-img convert -O qcow2 <nvram>.fd <nvram>.qcow2`, then edit the domain XML so the <nvram> element uses format=\"qcow2\" and points at the new file."
-
-	for _, d := range defs {
-		v := &models.VM{
-			Name: d.name, UUID: d.uuid, HostID: d.host, State: d.state,
-			CPUCount: d.cpus, MemTotalMB: d.memMB, DiskTotalGB: d.diskGB, DiskUsageGB: d.diskUseGB,
-			DiskPath: fmt.Sprintf("/var/lib/libvirt/images/%s.qcow2", d.name), DiskType: "qcow2",
-			CPUMode: "host-passthrough", Autostart: d.state == models.VMRunning,
-			BootDev:     "hd",
-			Firmware:    d.firmware,
-			MachineType: "pc-q35-rhel9.6.0",
-			VideoModel:  "virtio",
-			SnapshotCount: d.snapCount,
-			Networks: []models.VMNetwork{
-				{MAC: fmt.Sprintf("52:54:00:%02x:%02x:%02x", rng.Intn(256), rng.Intn(256), rng.Intn(256)),
-					Bridge: "br0", Interface: fmt.Sprintf("vnet%d", rng.Intn(50))},
-			},
-		}
-		if d.state == models.VMRunning {
-			v.MemUsageMB = uint64(float64(d.memMB) * (0.3 + rng.Float64()*0.5))
-			v.CPUUsage = 1.5 + rng.Float64()*40
-			if !d.noKVMTools {
-				v.KVMToolsVersion = demoVersion
-				v.GuestOS = d.os
-				v.GuestKernel = d.kernel
-				v.GuestHostname = d.hostname
+	// Distribution: 4-6 VMs per host. Avg 5 → ~150 VMs total.
+	for i, h := range fx.hosts {
+		hostIdx := i + 1
+		vmCount := 4 + rng.Intn(3) // 4, 5, or 6
+		// Candidate templates for this host — filter out GPU-only
+		// archetypes if the host has no GPU.
+		isGPU := len(h.GPUs) > 0
+		candidates := make([]vmTemplate, 0, len(vmTemplates))
+		for _, t := range vmTemplates {
+			if t.requiresGPU && !isGPU {
+				continue
 			}
+			candidates = append(candidates, t)
 		}
-		if d.blockSnap {
-			v.SnapshotsBlockedReason = blockedReason
+		// Pick vmCount templates, tending to include 1 web + 1 db on
+		// each host so the archetype distribution is realistic.
+		chosen := pickTemplates(candidates, vmCount)
+		for j, t := range chosen {
+			vmIdx := j + 1
+			uuid := vmUUID(hostIdx, vmIdx)
+			name := fmt.Sprintf("vm-%s%02d-%02d", t.prefix, hostIdx, vmIdx)
+			running := rng.Float64() < t.runningBias
+			state := models.VMRunning
+			if !running {
+				state = models.VMStopped
+			}
+			// Disk usage: baseline fill ± 10%.
+			fill := t.fillPct + (rng.Float64()-0.5)*0.2
+			if fill < 0.05 {
+				fill = 0.05
+			}
+			if fill > 0.95 {
+				fill = 0.95
+			}
+			diskUseGB := t.diskGB * fill
+			v := &models.VM{
+				Name: name, UUID: uuid, HostID: h.ID, State: state,
+				CPUCount: t.cpus, MemTotalMB: t.memMB,
+				DiskTotalGB: t.diskGB, DiskUsageGB: round1(diskUseGB),
+				DiskPath:      fmt.Sprintf("/var/lib/libvirt/images/%s.qcow2", name),
+				DiskType:      "qcow2",
+				CPUMode:       "host-passthrough",
+				Autostart:     state == models.VMRunning,
+				BootDev:       "hd",
+				Firmware:      t.firmware,
+				MachineType:   "pc-q35-rhel9.6.0",
+				VideoModel:    "virtio",
+				SnapshotCount: rng.Intn(5),
+				Networks: []models.VMNetwork{{
+					MAC:       fmt.Sprintf("52:54:00:%02x:%02x:%02x", rng.Intn(256), rng.Intn(256), rng.Intn(256)),
+					Bridge:    "br0",
+					Interface: fmt.Sprintf("vnet%d", rng.Intn(50)),
+				}},
+			}
+			if state == models.VMRunning {
+				v.MemUsageMB = uint64(float64(t.memMB) * (0.25 + rng.Float64()*0.55))
+				v.CPUUsage = round1(0.8 + rng.Float64()*45.0)
+				v.KVMToolsVersion = demoVersion
+				v.GuestOS = t.os
+				v.GuestKernel = t.kernel
+				hostnameStem := strings.TrimSuffix(name, fmt.Sprintf("-%02d", vmIdx))
+				v.GuestHostname = hostnameStem + ".example.lan"
+				if strings.HasPrefix(t.prefix, "win") {
+					v.GuestHostname = fmt.Sprintf("%s-%02d", strings.ToUpper(t.prefix), hostIdx)
+				}
+				v.GuestAgent = true
+				v.GuestSource = "kvm-tools"
+			}
+			if t.blockSnap {
+				v.SnapshotsBlockedReason = blockedReason
+			}
+			v.AllDisks = []models.VMDisk{{
+				Target: "vda", Device: "disk", DiskType: "qcow2", Bus: "virtio",
+				Path: v.DiskPath, CapacityGB: t.diskGB, AllocGB: v.DiskUsageGB,
+			}}
+			fx.vms[h.ID] = append(fx.vms[h.ID], v)
 		}
-		if !d.noKVMTools && d.state == models.VMRunning {
-			v.GuestAgent = true
-			v.GuestSource = "kvm-tools"
-		}
-		// One primary disk entry.
-		v.AllDisks = []models.VMDisk{{
-			Target: "vda", Device: "disk", DiskType: "qcow2", Bus: "virtio",
-			Path: v.DiskPath, CapacityGB: d.diskGB, AllocGB: d.diskUseGB,
-		}}
-		fx.vms[d.host] = append(fx.vms[d.host], v)
+		// Keep host.VMCount in sync — server recomputes from
+		// telemetry but the seeded value shows on first render.
+		h.VMCount = len(fx.vms[h.ID])
 	}
+}
+
+// pickTemplates picks n templates with replacement. Biases slightly
+// toward variety so you rarely get 5 "web" VMs on one host.
+func pickTemplates(pool []vmTemplate, n int) []vmTemplate {
+	out := make([]vmTemplate, 0, n)
+	usedPrefix := map[string]int{}
+	for len(out) < n {
+		t := pool[rng.Intn(len(pool))]
+		// Reject if the same archetype is already chosen twice.
+		if usedPrefix[t.prefix] >= 2 {
+			continue
+		}
+		usedPrefix[t.prefix]++
+		out = append(out, t)
+	}
+	return out
 }
 
 // ─── Storage pools ─────────────────────────────────────────────
 
 func buildStorage(fx *fixtures) {
-	fx.storage["hv-demo01.example.lan"] = []*models.StoragePool{
-		{Name: "default", HostID: "hv-demo01.example.lan", State: "active", PoolType: "dir", Path: "/var/lib/libvirt/images", CapacityGB: 2048, AllocationGB: 462, AvailableGB: 1586},
-		{Name: "isos", HostID: "hv-demo01.example.lan", State: "active", PoolType: "dir", Path: "/var/lib/libvirt/isos", CapacityGB: 512, AllocationGB: 64, AvailableGB: 448},
+	for _, h := range fx.hosts {
+		// Sum allocated disk across this host's VMs to derive a
+		// plausible storage usage number. Primary pool sizes come
+		// from the host tier.
+		var allocated float64
+		for _, v := range fx.vms[h.ID] {
+			allocated += v.DiskUsageGB
+		}
+		var primaryCapGB float64
+		switch {
+		case len(h.GPUs) > 0:
+			primaryCapGB = 8192
+		case h.CPUCount >= 64:
+			primaryCapGB = 8192
+		case h.CPUCount >= 32:
+			primaryCapGB = 4096
+		default:
+			primaryCapGB = 2048
+		}
+		// Add 15-40% headroom over actual allocation to look lived-in.
+		needed := allocated * (1.15 + rng.Float64()*0.25)
+		if needed > primaryCapGB {
+			primaryCapGB = roundToGB(needed)
+		}
+		avail := primaryCapGB - allocated
+		fx.storage[h.ID] = []*models.StoragePool{
+			{
+				Name: "default", HostID: h.ID, State: "active", PoolType: "dir",
+				Path:         "/var/lib/libvirt/images",
+				CapacityGB:   primaryCapGB,
+				AllocationGB: round1(allocated),
+				AvailableGB:  round1(avail),
+			},
+		}
+		// GPU + large hosts get an extra fast-nvme pool.
+		if len(h.GPUs) > 0 || h.CPUCount >= 64 {
+			fx.storage[h.ID] = append(fx.storage[h.ID], &models.StoragePool{
+				Name: "nvme-fast", HostID: h.ID, State: "active", PoolType: "dir",
+				Path:         "/mnt/nvme/images",
+				CapacityGB:   2048,
+				AllocationGB: round1(400 + rng.Float64()*800),
+				AvailableGB:  round1(600 + rng.Float64()*800),
+			})
+		}
 	}
-	fx.storage["hv-demo02.example.lan"] = []*models.StoragePool{
-		{Name: "default", HostID: "hv-demo02.example.lan", State: "active", PoolType: "dir", Path: "/var/lib/libvirt/images", CapacityGB: 4096, AllocationGB: 3994, AvailableGB: 102},
-	}
-	fx.storage["hv-demo03.example.lan"] = []*models.StoragePool{
-		{Name: "default", HostID: "hv-demo03.example.lan", State: "active", PoolType: "dir", Path: "/var/lib/libvirt/images", CapacityGB: 8192, AllocationGB: 1161, AvailableGB: 7031},
-		{Name: "nvme-fast", HostID: "hv-demo03.example.lan", State: "active", PoolType: "dir", Path: "/mnt/nvme/images", CapacityGB: 2048, AllocationGB: 905, AvailableGB: 1143},
-	}
+}
+
+func roundToGB(f float64) float64 {
+	// Round up to the nearest 512 GB for capacity — mimics how real
+	// pools are provisioned.
+	step := 512.0
+	return float64(int((f+step-1)/step)) * step
 }
 
 // ─── Users + Groups + Roles ────────────────────────────────────
@@ -357,12 +541,12 @@ func buildTokens(fx *fixtures) {
 	secret := "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
 	sum := sha256.Sum256([]byte(secret))
 	fx.tokens[id] = &models.APIToken{
-		ID:        id,
-		Name:      "Demo admin token",
-		OwnerID:   adminUserID,
-		Kind:      "system",
-		Hash:      hex.EncodeToString(sum[:]),
-		CreatedAt: now.Add(-14 * 24 * time.Hour),
+		ID:         id,
+		Name:       "Demo admin token",
+		OwnerID:    adminUserID,
+		Kind:       "system",
+		Hash:       hex.EncodeToString(sum[:]),
+		CreatedAt:  now.Add(-14 * 24 * time.Hour),
 		LastUsedAt: now.Add(-5 * time.Minute),
 	}
 }
@@ -396,32 +580,59 @@ func fakeFingerprint(seed string) string {
 // ─── Snapshot policies ─────────────────────────────────────────
 
 func buildPolicies(fx *fixtures) {
-	// Active hourly: web tier
+	// Pick VMs by archetype name prefix — the generated pool has
+	// variable naming but we can filter by whether name contains
+	// the archetype's prefix.
+	pickByPrefix := func(prefix string, max int) []string {
+		var out []string
+		for _, vms := range fx.vms {
+			for _, v := range vms {
+				if strings.Contains(v.Name, "vm-"+prefix) {
+					out = append(out, v.UUID)
+					if len(out) >= max {
+						return out
+					}
+				}
+			}
+		}
+		return out
+	}
+	// Active hourly: web tier — cover up to 8 web VMs.
 	fx.policies["pol_demo_web_hourly"] = &models.SnapshotPolicy{
 		ID: "pol_demo_web_hourly", Name: "Web tier — hourly",
-		Enabled:       true,
-		VMUUIDs:       []string{"11111111-0001-0000-0000-000000000001", "11111111-0002-0000-0000-000000000001", "11111111-0003-0000-0000-000000000001"},
-		EveryMinutes:  60, RetentionKeep: 12,
+		Enabled:      true,
+		VMUUIDs:      pickByPrefix("web", 8),
+		EveryMinutes: 60, RetentionKeep: 12,
 		CreatedAt:    now.Add(-21 * 24 * time.Hour),
 		LastRunAt:    now.Add(-12 * time.Minute),
-		LastRunCount: 3,
+		LastRunCount: 8,
 	}
-	// Active daily: db tier
+	// Active daily: db tier.
 	fx.policies["pol_demo_db_daily"] = &models.SnapshotPolicy{
 		ID: "pol_demo_db_daily", Name: "Database — daily",
-		Enabled:       true,
-		VMUUIDs:       []string{"11111111-0001-0000-0000-000000000003", "11111111-0002-0000-0000-000000000003"},
-		EveryMinutes:  1440, RetentionKeep: 7,
+		Enabled:      true,
+		VMUUIDs:      pickByPrefix("db", 8),
+		EveryMinutes: 1440, RetentionKeep: 7,
 		CreatedAt:    now.Add(-45 * 24 * time.Hour),
 		LastRunAt:    now.Add(-7 * time.Hour),
-		LastRunCount: 2,
+		LastRunCount: 6,
 	}
-	// Paused: old weekly policy that operator disabled
+	// Active weekly: api tier.
+	fx.policies["pol_demo_api_weekly"] = &models.SnapshotPolicy{
+		ID: "pol_demo_api_weekly", Name: "API tier — weekly",
+		Enabled:      true,
+		VMUUIDs:      pickByPrefix("api", 10),
+		EveryMinutes: 10080, RetentionKeep: 4,
+		CreatedAt:    now.Add(-10 * 24 * time.Hour),
+		LastRunAt:    now.Add(-3 * 24 * time.Hour),
+		LastRunCount: 9,
+	}
+	// Paused: old weekly policy the operator disabled.
 	fx.policies["pol_demo_weekly_paused"] = &models.SnapshotPolicy{
 		ID: "pol_demo_weekly_paused", Name: "Weekly full (paused)",
-		Enabled:       false,
-		VMUUIDs:       []string{"11111111-0001-0000-0000-000000000003"},
-		EveryMinutes:  10080, RetentionKeep: 4,
+		Enabled:      false,
+		VMUUIDs:      pickByPrefix("staging", 3),
+		EveryMinutes: 10080, RetentionKeep: 4,
 		CreatedAt:    now.Add(-60 * 24 * time.Hour),
 		LastRunAt:    now.Add(-10 * 24 * time.Hour),
 		LastRunCount: 1,
@@ -445,11 +656,11 @@ func buildNotifications(fx *fixtures) {
 				WebhookURL:    "https://events.pagerduty.com/v2/enqueue",
 				WebhookFormat: "generic",
 				EventTypes: map[string]bool{
-					"host.offline":       true,
-					"migration.failed":   true,
-					"tls.expiring":       true,
-					"ca.expiring":        true,
-					"vm.crashed":         true,
+					"host.offline":     true,
+					"migration.failed": true,
+					"tls.expiring":     true,
+					"ca.expiring":      true,
+					"vm.crashed":       true,
 				},
 				LastSendAt:    now.Add(-3 * time.Hour).Format(time.RFC3339),
 				LastSendCount: 3,
@@ -486,27 +697,29 @@ func buildFeatures(fx *fixtures) {
 	}
 }
 
-// ─── Migrations (30 days, ~100 records) ────────────────────────
+// ─── Migrations (30 days, ~200 records) ────────────────────────
 
 func buildMigrations(fx *fixtures) {
-	// Candidate VM+host pairings for synthetic migrations.
-	pairs := []struct {
-		vmUUID, vmName, src, dst string
-	}{
-		{"11111111-0001-0000-0000-000000000001", "vm-web01", "hv-demo01.example.lan", "hv-demo02.example.lan"},
-		{"11111111-0001-0000-0000-000000000001", "vm-web01", "hv-demo02.example.lan", "hv-demo01.example.lan"},
-		{"11111111-0002-0000-0000-000000000001", "vm-web02", "hv-demo02.example.lan", "hv-demo03.example.lan"},
-		{"11111111-0002-0000-0000-000000000002", "vm-api02", "hv-demo02.example.lan", "hv-demo03.example.lan"},
-		{"11111111-0001-0000-0000-000000000006", "vm-ci01", "hv-demo01.example.lan", "hv-demo02.example.lan"},
-		{"11111111-0002-0000-0000-000000000004", "vm-staging", "hv-demo02.example.lan", "hv-demo01.example.lan"},
-		{"11111111-0001-0000-0000-000000000002", "vm-api01", "hv-demo01.example.lan", "hv-demo03.example.lan"},
-		{"11111111-0003-0000-0000-000000000004", "vm-dev01", "hv-demo03.example.lan", "hv-demo02.example.lan"},
-		{"11111111-0002-0000-0000-000000000002", "vm-api02", "hv-demo03.example.lan", "hv-demo02.example.lan"},
-		{"11111111-0001-0000-0000-000000000004", "vm-cache01", "hv-demo01.example.lan", "hv-demo02.example.lan"},
+	// Flatten the current fleet into (vmName, uuid, host) tuples so
+	// we can pick a random VM and move it to any OTHER host.
+	type vmEntry struct{ uuid, name, host string }
+	var pool []vmEntry
+	for _, vms := range fx.vms {
+		for _, v := range vms {
+			pool = append(pool, vmEntry{v.UUID, v.Name, v.HostID})
+		}
 	}
-	// Produce 100 migrations spread across the last 30 days.
-	for i := 0; i < 100; i++ {
-		p := pairs[rng.Intn(len(pairs))]
+	hostIDs := make([]string, 0, len(fx.hosts))
+	for _, h := range fx.hosts {
+		hostIDs = append(hostIDs, h.ID)
+	}
+	// 200 migrations across the last 30 days.
+	for i := 0; i < 200; i++ {
+		vm := pool[rng.Intn(len(pool))]
+		dst := hostIDs[rng.Intn(len(hostIDs))]
+		for dst == vm.host {
+			dst = hostIDs[rng.Intn(len(hostIDs))]
+		}
 		age := time.Duration(rng.Intn(30*24)) * time.Hour
 		startedAt := now.Add(-age).Unix()
 		mode := "live"
@@ -529,10 +742,10 @@ func buildMigrations(fx *fixtures) {
 		}
 		elapsed := int64(60 + rng.Intn(300))
 		rec := &models.MigrationRecord{
-			ID:          fmt.Sprintf("%s-%d-%04x", p.vmName, startedAt, i),
-			VMName:      p.vmName,
-			SourceHost:  p.src,
-			DestHost:    p.dst,
+			ID:          fmt.Sprintf("%s-%d-%04x", vm.name, startedAt, i),
+			VMName:      vm.name,
+			SourceHost:  vm.host,
+			DestHost:    dst,
 			Mode:        mode,
 			Transport:   transport,
 			Status:      status,
@@ -584,8 +797,11 @@ func buildAudit(fx *fixtures) {
 			vmUUIDs = append(vmUUIDs, v.UUID)
 		}
 	}
-	hostIDs := []string{"hv-demo01.example.lan", "hv-demo02.example.lan", "hv-demo03.example.lan"}
-	for i := 0; i < 500; i++ {
+	hostIDs := make([]string, 0, len(fx.hosts))
+	for _, h := range fx.hosts {
+		hostIDs = append(hostIDs, h.ID)
+	}
+	for i := 0; i < 800; i++ {
 		a := actions[rng.Intn(len(actions))]
 		actor := actors[rng.Intn(len(actors))]
 		var resource string
@@ -619,19 +835,19 @@ func buildAudit(fx *fixtures) {
 	}
 }
 
-// ─── Command log (~50 incl. 3 stranded) ────────────────────────
+// ─── Command log (~100 incl. 3 stranded) ───────────────────────
 
 func buildCommandLog(fx *fixtures) {
-	vmList := []struct{ uuid, name, host string }{
-		{"11111111-0001-0000-0000-000000000001", "vm-web01", "hv-demo01.example.lan"},
-		{"11111111-0002-0000-0000-000000000001", "vm-web02", "hv-demo02.example.lan"},
-		{"11111111-0003-0000-0000-000000000001", "vm-web03", "hv-demo03.example.lan"},
-		{"11111111-0001-0000-0000-000000000002", "vm-api01", "hv-demo01.example.lan"},
-		{"11111111-0002-0000-0000-000000000003", "vm-db02", "hv-demo02.example.lan"},
+	type vmEntry struct{ uuid, name, host string }
+	var pool []vmEntry
+	for _, vms := range fx.vms {
+		for _, v := range vms {
+			pool = append(pool, vmEntry{v.UUID, v.Name, v.HostID})
+		}
 	}
 	actions := []string{"START", "STOP", "RESTART", "SNAPSHOT", "POWER_CYCLE", "EDIT_VM"}
-	for i := 0; i < 47; i++ {
-		vm := vmList[rng.Intn(len(vmList))]
+	for i := 0; i < 97; i++ {
+		vm := pool[rng.Intn(len(pool))]
 		act := actions[rng.Intn(len(actions))]
 		reqID := fmt.Sprintf("req_%s", randHex(16))
 		submitted := now.Add(-time.Duration(rng.Intn(7*24*60)) * time.Minute)
@@ -653,7 +869,7 @@ func buildCommandLog(fx *fixtures) {
 	}
 	// 3 stranded "unknown" entries → flagged on the Health problems card.
 	for i := 0; i < 3; i++ {
-		vm := vmList[i]
+		vm := pool[rng.Intn(len(pool))]
 		reqID := fmt.Sprintf("req_%s", randHex(16))
 		submitted := now.Add(-time.Duration(60+rng.Intn(300)) * time.Minute)
 		applied := submitted.Add(4 * time.Hour)
@@ -662,7 +878,7 @@ func buildCommandLog(fx *fixtures) {
 			RequestID: reqID, Action: "MIGRATE", HostID: vm.host, VMUUID: vm.uuid, VMName: vm.name,
 			ActorID: adminUserID, SubmittedAt: submitted, AppliedAt: &applied,
 			Outcome: "unknown", StatusCode: 0,
-			Message: "server restarted while command was in flight; outcome undetermined - check the target VM state and resolve manually",
+			Message:   "server restarted while command was in flight; outcome undetermined - check the target VM state and resolve manually",
 			ExpiresAt: &expires,
 		}
 	}
@@ -762,13 +978,13 @@ func writeFixtures(ctx context.Context, db *mongo.Database, fx *fixtures) error 
 	consoleSecret := hex.EncodeToString(randBytes(32))
 	cols = append(cols, col{"notifications", []any{
 		struct {
-			ID string `bson:"_id"`
+			ID                         string `bson:"_id"`
 			*models.NotificationConfig `bson:",inline"`
 		}{"singleton", fx.notif},
 	}})
 	cols = append(cols, col{"features", []any{
 		struct {
-			ID string `bson:"_id"`
+			ID              string `bson:"_id"`
 			models.Features `bson:",inline"`
 		}{"singleton", fx.features},
 	}})

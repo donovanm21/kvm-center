@@ -1,19 +1,22 @@
-// Command demo-agent impersonates a kvm-center hypervisor agent for
-// the demo deployment. Reads its host + VM fixtures directly from
-// the demo Mongo backend on startup, then POSTs telemetry to the
-// server every 15 s and serves the agent HTTP API on :8081 so the
-// server can issue (no-op) commands against it.
+// Command demo-agent impersonates every synthetic kvm-center
+// hypervisor in the demo deployment from a single container.
+// Reads the full fleet (hosts + their VMs + storage pools) from
+// Mongo on startup, then spins one goroutine per host that POSTs
+// telemetry to the server every 15 s and serves the agent HTTP API
+// on a per-host port (8100 + N).
 //
 // Stage 1 (v5.33.7+): static metrics — numbers seeded by demo-seed
 // are echoed back on every tick without drift. Stage 2 will add
-// realistic drift; stage 3 will add scripted scenarios.
+// realistic drift + reactive /command state flipping; stage 3 will
+// add scripted scenarios.
+//
+// One container, all 30 hosts, keeps the compose file trivial.
 //
 // Env:
-//   KVM_CENTER_DEMO_MONGO_URL   Mongo URI (REQUIRED)
-//   KVM_CENTER_DEMO_MONGO_DB    db name (default: kvm-center-demo)
-//   KVM_CENTER_DEMO_HOST_ID     which host's fixtures to claim (REQUIRED)
-//   KVM_CENTER_SERVER           control plane URL (REQUIRED)
-//   KVM_CENTER_AGENT_PORT       HTTP listen port (default: 8081)
+//
+//	KVM_CENTER_DEMO_MONGO_URL   Mongo URI (REQUIRED)
+//	KVM_CENTER_DEMO_MONGO_DB    db name (default: kvm-center-demo)
+//	KVM_CENTER_SERVER           control plane URL (REQUIRED)
 package main
 
 import (
@@ -26,7 +29,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -39,13 +41,12 @@ import (
 	"kvm-center/internal/models"
 )
 
-var (
-	state     demoState
-	stateMu   sync.RWMutex
-	serverURL string
-)
+var serverURL string
 
-type demoState struct {
+// hostAgent owns one synthetic host's state + HTTP server. One goroutine
+// per instance, all sharing the shared HTTP out-client.
+type hostAgent struct {
+	mu      sync.RWMutex
 	host    *models.Host
 	vms     []*models.VM
 	storage []*models.StoragePool
@@ -54,114 +55,112 @@ type demoState struct {
 func main() {
 	mongoURI := mustEnv("KVM_CENTER_DEMO_MONGO_URL")
 	mongoDB := envOr("KVM_CENTER_DEMO_MONGO_DB", "kvm-center-demo")
-	hostID := mustEnv("KVM_CENTER_DEMO_HOST_ID")
 	serverURL = mustEnv("KVM_CENTER_SERVER")
-	agentPort, _ := strconv.Atoi(envOr("KVM_CENTER_AGENT_PORT", "8081"))
 
-	log.Printf("demo-agent: host=%s  server=%s  port=%d", hostID, serverURL, agentPort)
+	log.Printf("demo-agent: server=%s", serverURL)
 
-	if err := loadFixtures(mongoURI, mongoDB, hostID); err != nil {
-		log.Fatalf("load fixtures: %v", err)
+	agents, err := loadFleet(mongoURI, mongoDB)
+	if err != nil {
+		log.Fatalf("load fleet: %v", err)
+	}
+	log.Printf("demo-agent: loaded %d synthetic hypervisors", len(agents))
+
+	// One HTTP server per host, listening on a unique port. The
+	// server's command dispatch reaches each via its host.AgentPort.
+	for _, a := range agents {
+		go startCommandServer(a)
 	}
 
-	// HTTP server for command callbacks.
-	go startCommandServer(agentPort)
-
-	// Initial tick immediately, then every 15 s.
-	sendTelemetry()
-	ticker := time.NewTicker(15 * time.Second)
-	defer ticker.Stop()
+	// Telemetry loop — every agent fires every 15 s.
+	for _, a := range agents {
+		go a.telemetryLoop()
+	}
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-
-	for {
-		select {
-		case <-ticker.C:
-			sendTelemetry()
-		case s := <-sig:
-			log.Printf("demo-agent: received %s, shutting down", s)
-			return
-		}
-	}
+	<-sig
+	log.Printf("demo-agent: shutting down")
 }
 
-// ─── Fixture load ──────────────────────────────────────────────
+// ─── Fleet load ────────────────────────────────────────────────
 
-func loadFixtures(uri, dbName, hostID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func loadFleet(uri, dbName string) ([]*hostAgent, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	cli, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 	if err != nil {
-		return fmt.Errorf("mongo connect: %w", err)
+		return nil, fmt.Errorf("mongo connect: %w", err)
 	}
 	defer cli.Disconnect(ctx)
 	db := cli.Database(dbName)
 
-	// Wait for the seed container to have populated the DB. Retry up
-	// to ~2 min then give up. Without this the agent can race the
-	// seeder and boot with no VMs.
+	// Wait for seed to finish (any host exists).
 	deadline := time.Now().Add(2 * time.Minute)
 	for {
-		var hostDoc bson.M
-		err := db.Collection("hosts").FindOne(ctx, bson.M{"_id": hostID}).Decode(&hostDoc)
-		if err == nil {
+		n, err := db.Collection("hosts").CountDocuments(ctx, bson.D{})
+		if err == nil && n > 0 {
 			break
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("host %s not seeded after 2 min: %w", hostID, err)
+			return nil, fmt.Errorf("no hosts seeded after 2 min")
 		}
 		time.Sleep(2 * time.Second)
 	}
 
-	// Host.
-	var hostDoc bson.M
-	if err := db.Collection("hosts").FindOne(ctx, bson.M{"_id": hostID}).Decode(&hostDoc); err != nil {
-		return fmt.Errorf("host %s: %w", hostID, err)
-	}
-	h := decodeHost(hostDoc)
-	// VMs for this host.
-	vmCur, err := db.Collection("vms").Find(ctx, bson.M{"hostid": hostID})
+	// Pull every host, VM, pool up front into in-memory maps.
+	hostCur, err := db.Collection("hosts").Find(ctx, bson.D{})
 	if err != nil {
-		return fmt.Errorf("vms find: %w", err)
+		return nil, fmt.Errorf("hosts find: %w", err)
 	}
-	var vms []*models.VM
-	for vmCur.Next(ctx) {
-		var doc bson.M
-		if err := vmCur.Decode(&doc); err != nil {
-			return err
-		}
-		vms = append(vms, decodeVM(doc))
+	var hostDocs []bson.M
+	if err := hostCur.All(ctx, &hostDocs); err != nil {
+		return nil, fmt.Errorf("hosts decode: %w", err)
 	}
-	vmCur.Close(ctx)
 
-	// Storage pools for this host.
-	stCur, err := db.Collection("storage").Find(ctx, bson.M{"hostid": hostID})
+	vmCur, err := db.Collection("vms").Find(ctx, bson.D{})
 	if err != nil {
-		return fmt.Errorf("storage find: %w", err)
+		return nil, fmt.Errorf("vms find: %w", err)
 	}
-	var pools []*models.StoragePool
-	for stCur.Next(ctx) {
-		var doc bson.M
-		if err := stCur.Decode(&doc); err != nil {
-			return err
-		}
-		pools = append(pools, decodeStorage(doc))
+	var vmDocs []bson.M
+	if err := vmCur.All(ctx, &vmDocs); err != nil {
+		return nil, fmt.Errorf("vms decode: %w", err)
 	}
-	stCur.Close(ctx)
 
-	stateMu.Lock()
-	state = demoState{host: h, vms: vms, storage: pools}
-	stateMu.Unlock()
-	log.Printf("demo-agent: loaded host=%s vms=%d storage_pools=%d", h.ID, len(vms), len(pools))
-	return nil
+	stCur, err := db.Collection("storage").Find(ctx, bson.D{})
+	if err != nil {
+		return nil, fmt.Errorf("storage find: %w", err)
+	}
+	var stDocs []bson.M
+	if err := stCur.All(ctx, &stDocs); err != nil {
+		return nil, fmt.Errorf("storage decode: %w", err)
+	}
+
+	// Group VMs + storage by host_id.
+	vmsByHost := map[string][]*models.VM{}
+	for _, d := range vmDocs {
+		v := decodeVM(d)
+		vmsByHost[v.HostID] = append(vmsByHost[v.HostID], v)
+	}
+	storageByHost := map[string][]*models.StoragePool{}
+	for _, d := range stDocs {
+		p := decodeStorage(d)
+		storageByHost[p.HostID] = append(storageByHost[p.HostID], p)
+	}
+	// Build one hostAgent per host.
+	agents := make([]*hostAgent, 0, len(hostDocs))
+	for _, d := range hostDocs {
+		h := decodeHost(d)
+		agents = append(agents, &hostAgent{
+			host:    h,
+			vms:     vmsByHost[h.ID],
+			storage: storageByHost[h.ID],
+		})
+	}
+	return agents, nil
 }
 
-// decodeHost / decodeVM / decodeStorage remarshal a bson.M through
-// JSON into the typed model. The server doesn't have BSON tags on
-// these types, so the driver's default lower-casing produces
-// non-standard field names; JSON has the canonical names (snake_case).
-// Round-tripping via JSON keeps the decoder trivial.
+// decode* helpers normalise the driver's default lowercased keys
+// back to snake_case so the models' JSON tags can rehydrate.
 func decodeHost(m bson.M) *models.Host {
 	var h models.Host
 	remarshal(m, &h)
@@ -178,16 +177,11 @@ func decodeStorage(m bson.M) *models.StoragePool {
 	return &p
 }
 
-// remarshal normalises the driver's default lowercased keys into
-// the snake_case JSON names the model expects. It iterates the
-// bson.M, converts every key (e.g. "hostid") to the snake_case form
-// ("host_id") by looking up the model's JSON tag, then marshals into
-// the target. Done via a blunt field-name map — good enough for the
-// demo's needs.
+// remarshal converts a bson.M's lowercased keys to the JSON
+// snake_case the models expect, then round-trips via JSON.
 func remarshal(m bson.M, out any) {
 	normalised := make(map[string]any, len(m))
 	for k, v := range m {
-		// Drop Mongo-internal keys.
 		if k == "_id" {
 			continue
 		}
@@ -203,101 +197,112 @@ func remarshal(m bson.M, out any) {
 	}
 }
 
-// keyMap maps the driver's lowercased field names to the snake_case
-// JSON keys on models. Covers only fields we actually read.
-var keyMap = func() map[string]string {
-	// If the key isn't explicitly mapped, pass it through as-is —
-	// the json.Unmarshal will ignore unknown keys. Explicit entries
-	// below rename ambiguous ones (e.g. "hostid" → "host_id").
-	return map[string]string{
-		"id":              "id",
-		"ip":              "ip",
-		"agentport":       "agent_port",
-		"cpuusage":        "cpu_usage",
-		"cpucount":        "cpu_count",
-		"memusage":        "mem_usage",
-		"memtotalmb":      "mem_total_mb",
-		"memfreemb":       "mem_free_mb",
-		"vmcount":         "vm_count",
-		"status":          "status",
-		"lastseen":        "last_seen",
-		"os":              "os",
-		"kernelver":       "kernel_ver",
-		"libvirtver":      "libvirt_ver",
-		"uptime":          "uptime",
-		"agentversion":    "agent_version",
-		"cpumodel":        "cpu_model",
-		"sockets":         "sockets",
-		"corespersocket":  "cores_per_socket",
-		"threadspercore":  "threads_per_core",
-		"numanodes":       "numa_nodes",
-		"gpus":            "gpus",
-		"name":            "name",
-		"uuid":            "uuid",
-		"hostid":          "host_id",
-		"state":           "state",
-		"disktotalgb":     "disk_total_gb",
-		"diskusagegb":     "disk_usage_gb",
-		"diskpath":        "disk_path",
-		"disktype":        "disk_type",
-		"cpumode":         "cpu_mode",
-		"autostart":       "autostart",
-		"bootdev":         "boot_dev",
-		"firmware":        "firmware",
-		"machinetype":     "machine_type",
-		"videomodel":      "video_model",
-		"snapshotcount":   "snapshot_count",
-		"networks":        "networks",
-		"kvmtoolsversion": "kvm_tools_version",
-		"guestos":         "guest_os",
-		"guestkernel":     "guest_kernel",
-		"guesthostname":   "guest_hostname",
-		"memusagemb":      "mem_usage_mb",
-		"alldisks":        "all_disks",
-		"hasqemuagent":    "has_qemu_agent",
-		"snapshotsblockedreason": "snapshots_blocked_reason",
-		// storage pool
-		"path":         "path",
-		"type":         "type",
-		"capacitygb":   "capacity_gb",
-		"allocationgb": "allocation_gb",
-		"availablegb":  "available_gb",
-		"persistent":   "persistent",
-	}
-}()
+var keyMap = map[string]string{
+	"id":                     "id",
+	"ip":                     "ip",
+	"agentport":              "agent_port",
+	"cpuusage":               "cpu_usage",
+	"cpucount":               "cpu_count",
+	"memusage":               "mem_usage",
+	"memtotalmb":             "mem_total_mb",
+	"memfreemb":              "mem_free_mb",
+	"vmcount":                "vm_count",
+	"status":                 "status",
+	"lastseen":               "last_seen",
+	"os":                     "os",
+	"kernelver":              "kernel_ver",
+	"libvirtver":             "libvirt_ver",
+	"uptime":                 "uptime",
+	"agentversion":           "agent_version",
+	"cpumodel":               "cpu_model",
+	"sockets":                "sockets",
+	"corespersocket":         "cores_per_socket",
+	"threadspercore":         "threads_per_core",
+	"numanodes":              "numa_nodes",
+	"gpus":                   "gpus",
+	"name":                   "name",
+	"uuid":                   "uuid",
+	"hostid":                 "host_id",
+	"state":                  "state",
+	"disktotalgb":            "disk_total_gb",
+	"diskusagegb":            "disk_usage_gb",
+	"diskpath":               "disk_path",
+	"disktype":               "disk_type",
+	"cpumode":                "cpu_mode",
+	"autostart":              "autostart",
+	"bootdev":                "boot_dev",
+	"firmware":               "firmware",
+	"machinetype":            "machine_type",
+	"videomodel":             "video_model",
+	"snapshotcount":          "snapshot_count",
+	"networks":               "networks",
+	"kvmtoolsversion":        "kvm_tools_version",
+	"guestos":                "guest_os",
+	"guestkernel":            "guest_kernel",
+	"guesthostname":          "guest_hostname",
+	"memusagemb":             "mem_usage_mb",
+	"alldisks":               "all_disks",
+	"guestagent":             "guest_agent",
+	"guestsource":            "guest_source",
+	"snapshotsblockedreason": "snapshots_blocked_reason",
+	"path":                   "path",
+	"type":                   "type",
+	"pooltype":               "pool_type",
+	"capacitygb":             "capacity_gb",
+	"allocationgb":           "allocation_gb",
+	"availablegb":            "available_gb",
+	"persistent":             "persistent",
+}
 
 // ─── Telemetry ─────────────────────────────────────────────────
 
-func sendTelemetry() {
-	stateMu.RLock()
-	h := state.host
-	vms := append([]*models.VM(nil), state.vms...)
-	storage := append([]*models.StoragePool(nil), state.storage...)
-	stateMu.RUnlock()
+func (a *hostAgent) telemetryLoop() {
+	// Stagger initial POSTs so 30 agents don't stampede the server
+	// at boot. Deterministic stagger based on port number.
+	time.Sleep(time.Duration(a.host.AgentPort%30) * 500 * time.Millisecond)
+	a.sendTelemetry()
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
+	for range t.C {
+		a.sendTelemetry()
+	}
+}
+
+var telClient = &http.Client{
+	Timeout:   10 * time.Second,
+	Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, //nolint:gosec
+}
+
+func (a *hostAgent) sendTelemetry() {
+	a.mu.RLock()
+	h := a.host
+	vms := a.vms
+	storage := a.storage
+	a.mu.RUnlock()
 	if h == nil {
 		return
 	}
 	payload := models.TelemetryPayload{
-		HostID:       h.ID,
-		IP:           h.IP,
-		AgentPort:    h.AgentPort,
-		OS:           h.OS,
-		KernelVer:    h.KernelVer,
-		LibvirtVer:   h.LibvirtVer,
-		CPUUsage:     h.CPUUsage,
-		CPUCount:     h.CPUCount,
-		MemUsage:     h.MemUsage,
-		MemTotalMB:   h.MemTotalMB,
-		MemFreeMB:    h.MemFreeMB,
-		Uptime:       h.Uptime,
-		AgentVersion: h.AgentVersion,
-		CPUModel:     h.CPUModel,
-		Sockets:      h.Sockets,
+		HostID:         h.ID,
+		IP:             h.IP,
+		AgentPort:      h.AgentPort,
+		OS:             h.OS,
+		KernelVer:      h.KernelVer,
+		LibvirtVer:     h.LibvirtVer,
+		CPUUsage:       h.CPUUsage,
+		CPUCount:       h.CPUCount,
+		MemUsage:       h.MemUsage,
+		MemTotalMB:     h.MemTotalMB,
+		MemFreeMB:      h.MemFreeMB,
+		Uptime:         h.Uptime,
+		AgentVersion:   h.AgentVersion,
+		CPUModel:       h.CPUModel,
+		Sockets:        h.Sockets,
 		CoresPerSocket: h.CoresPerSocket,
 		ThreadsPerCore: h.ThreadsPerCore,
-		NUMANodes:    h.NUMANodes,
-		GPUs:         h.GPUs,
-		Timestamp:    time.Now(),
+		NUMANodes:      h.NUMANodes,
+		GPUs:           h.GPUs,
+		Timestamp:      time.Now(),
 	}
 	for _, v := range vms {
 		if v != nil {
@@ -311,38 +316,37 @@ func sendTelemetry() {
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("demo-agent: marshal: %v", err)
+		log.Printf("demo-agent: marshal %s: %v", h.ID, err)
 		return
 	}
-	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec
-	client := &http.Client{Timeout: 10 * time.Second, Transport: tr}
-	resp, err := client.Post(serverURL+"/api/telemetry", "application/json", bytes.NewReader(body))
+	resp, err := telClient.Post(serverURL+"/api/telemetry", "application/json", bytes.NewReader(body))
 	if err != nil {
-		log.Printf("demo-agent: post: %v", err)
+		log.Printf("demo-agent: post %s: %v", h.ID, err)
 		return
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		log.Printf("demo-agent: telemetry returned %d", resp.StatusCode)
-	}
+	_ = resp.Body.Close()
 }
 
-// ─── Command server ────────────────────────────────────────────
+// ─── Per-host command server ──────────────────────────────────
 
-func startCommandServer(port int) {
+func startCommandServer(a *hostAgent) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/command", handleCommand)
 	mux.HandleFunc("/migrate-status", handleMigrateStatus)
 	mux.HandleFunc("/cancel-migrate", handleCancel)
-	mux.HandleFunc("/refresh-telemetry", handleRefresh)
+	mux.HandleFunc("/refresh-telemetry", func(w http.ResponseWriter, _ *http.Request) {
+		go a.sendTelemetry()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"refreshed":true}`))
+	})
 	mux.HandleFunc("/snapshots/", handleSnapshots)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
-	addr := fmt.Sprintf(":%d", port)
-	log.Printf("demo-agent: command server listening on %s", addr)
+	addr := fmt.Sprintf(":%d", a.host.AgentPort)
+	log.Printf("demo-agent: %s command server on %s", a.host.ID, addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("demo-agent: %v", err)
+		log.Printf("demo-agent: %s listen error: %v", a.host.ID, err)
 	}
 }
 
@@ -366,17 +370,10 @@ func handleCancel(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"success": true})
 }
 
-func handleRefresh(w http.ResponseWriter, _ *http.Request) {
-	go sendTelemetry()
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "refreshed": true})
-}
-
-// Returns fake snapshot list for any VM.
 func handleSnapshots(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	name := strings.TrimPrefix(r.URL.Path, "/snapshots/")
-	// Generate 0-3 fake snapshots deterministically from the VM name.
+	// Deterministic number of fake snapshots from the VM name.
 	var snaps []map[string]any
 	count := len(name) % 4
 	for i := 0; i < count; i++ {

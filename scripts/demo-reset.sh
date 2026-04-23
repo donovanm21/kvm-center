@@ -10,9 +10,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEMO_COMPOSE="$REPO_ROOT/demo/docker-compose.demo.yml"
 
-echo "$(date -Iseconds)  demo-reset: stopping agents"
-docker compose -f "$DEMO_COMPOSE" stop \
-  kvm-center-demo-agent01 kvm-center-demo-agent02 kvm-center-demo-agent03
+echo "$(date -Iseconds)  demo-reset: stopping agents container"
+docker compose -f "$DEMO_COMPOSE" stop kvm-center-demo-agents
 
 echo "$(date -Iseconds)  demo-reset: running seed (drops + reinserts)"
 docker compose -f "$DEMO_COMPOSE" run --rm kvm-center-demo-seed
@@ -20,8 +19,7 @@ docker compose -f "$DEMO_COMPOSE" run --rm kvm-center-demo-seed
 echo "$(date -Iseconds)  demo-reset: restarting server"
 docker compose -f "$DEMO_COMPOSE" restart kvm-center-demo-server >/dev/null
 
-echo "$(date -Iseconds)  demo-reset: starting agents"
-docker compose -f "$DEMO_COMPOSE" start \
-  kvm-center-demo-agent01 kvm-center-demo-agent02 kvm-center-demo-agent03
+echo "$(date -Iseconds)  demo-reset: starting agents container"
+docker compose -f "$DEMO_COMPOSE" start kvm-center-demo-agents
 
 echo "$(date -Iseconds)  demo-reset: done"
