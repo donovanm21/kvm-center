@@ -10,7 +10,7 @@ Inventory, live + offline migrations, snapshots, VNC consoles,
 mTLS between hosts, signed per-migration grants, in-app docs,
 Influx-backed metrics — all in one Go binary and a tiny agent.
 
-<img src="docs/assets/kvm-center-tour.webp" alt="kvm-center full UI tour — dashboard, hosts, VMs, snapshots, storage, migrations, System Health, docs" width="860">
+<img src="docs/assets/kvm-center-tour.webp" alt="kvm-center full UI tour — dashboard, hosts, VMs, snapshots, storage, migrations, System Health, docs" width="720">
 
 [Quick start](#quick-start) · [Documentation](server/docs/overview.md) · [Architecture](server/docs/architecture.md) · [Changelog](server/docs/changelog.md)
 

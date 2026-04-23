@@ -38,7 +38,7 @@ for dir in "$VID_DIR"/*/; do
   out="$OUT_DIR/${flow}.webp"
   echo "   $raw → $out"
   ffmpeg -y -loglevel error -i "$webm" \
-    -vf "fps=10,scale=1100:-2:flags=lanczos" \
+    -vf "fps=10,scale=860:-2:flags=lanczos" \
     -c:v libwebp -lossless 0 -q:v 28 -preset picture -compression_level 6 -loop 0 -an \
     "$out"
 done
