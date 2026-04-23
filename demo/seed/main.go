@@ -529,7 +529,7 @@ func buildMigrations(fx *fixtures) {
 		}
 		elapsed := int64(60 + rng.Intn(300))
 		rec := &models.MigrationRecord{
-			ID:          fmt.Sprintf("%s-%d", p.vmName, startedAt),
+			ID:          fmt.Sprintf("%s-%d-%04x", p.vmName, startedAt, i),
 			VMName:      p.vmName,
 			SourceHost:  p.src,
 			DestHost:    p.dst,
