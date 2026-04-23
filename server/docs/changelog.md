@@ -10,6 +10,14 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.35.1 — full UI tour in the README
+
+Replaces the old static setup-wizard GIF with a 75-second WebP that
+walks every major section of the app (dashboard → hosts → VMs →
+snapshots → storage → migrations → System Health → docs). Same
+recording pipeline as the per-feature clips; the spec lives at
+`demo/walkthroughs/specs/10-full-tour.spec.ts`.
+
 ## v5.35.0 — six more walkthrough clips + scroll-restart
 
 Six new operator walkthrough clips, embedded in the docs they
