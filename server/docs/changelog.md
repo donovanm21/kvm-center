@@ -10,6 +10,24 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.34.0 — walkthrough clips in the in-app docs
+
+The in-app docs now ship short silent WebP clips showing common
+operator flows. First three: sign-in + dashboard tour, VM lifecycle
+(shutdown → start → snapshot), and an offline migration with the
+progress arc.
+
+Clips are embedded at build time alongside the markdown and served
+from a new public endpoint `/api/docs/media/<name>`. A new
+**Walkthroughs** page under "Getting started" embeds them inline.
+
+The recording pipeline lives in `demo/walkthroughs/` — Playwright
+specs against the demo stack, captured as WebM, then compressed to
+WebP via ffmpeg. The whole thing runs in a container
+(`scripts/record-walkthroughs.sh`) so the host doesn't need node,
+ffmpeg, or the Playwright browsers locally. The demo-walkthrough
+source is Gitea-only — scrubbed from the public GitHub mirror.
+
 ## v5.33.7 — skill round-trip fixes
 
 Hand-testing the Claude skill bundle surfaced two documentation ↔
