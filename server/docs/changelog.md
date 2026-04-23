@@ -10,6 +10,16 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.35.2 — right-size walkthrough clips
+
+Clips are quick visual references, not full-screen demos. Two
+changes so they read that way:
+
+- Docs prose now caps images to the text-column width via CSS
+  (`max-width: 100%` + thin border, rounded corners).
+- Re-encoded every clip at 860 px wide (from 1100) so files match
+  the display size. Total media footprint dropped ~30 %.
+
 ## v5.35.1 — full UI tour in the README
 
 Replaces the old static setup-wizard GIF with a 75-second WebP that

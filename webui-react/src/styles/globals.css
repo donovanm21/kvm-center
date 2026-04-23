@@ -517,6 +517,14 @@ body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
 .docs-prose th { color: var(--text-faded); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
 .docs-prose blockquote { border-left: 3px solid var(--accent); background: var(--surface-2); padding: 10px 14px; margin: 10px 0; color: var(--text-body); }
 .docs-prose strong { color: var(--text-strong); }
+.docs-prose img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 12px 0 18px 0;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
 
 /* ── Responsive mobile (v5.33.0, P1.2) ─────────────────────── */
 /* Breakpoints:
