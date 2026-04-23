@@ -99,6 +99,10 @@ func main() {
 		go a.telemetryLoop()
 	}
 
+	// Scripted scenarios on a loop: load spikes, offline blips,
+	// snapshot policy simulator. See scenarios.go.
+	startScenarios(agents)
+
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
@@ -372,6 +376,11 @@ func (a *hostAgent) sendTelemetry() {
 	if h == nil {
 		return
 	}
+	// Offline-blip scenario: the scheduler set a paused flag; stop
+	// posting so the server's offline threshold kicks in.
+	if fleet != nil && fleet.isPaused(h.ID) {
+		return
+	}
 	payload := models.TelemetryPayload{
 		HostID:         h.ID,
 		IP:             h.IP,
@@ -422,7 +431,7 @@ func (a *hostAgent) sendTelemetry() {
 func startCommandServer(a *hostAgent) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/command", a.handleCommand)
-	mux.HandleFunc("/migrate-status", handleMigrateStatus)
+	mux.HandleFunc("/migrate-status", a.handleMigrateStatus)
 	mux.HandleFunc("/cancel-migrate", handleCancel)
 	mux.HandleFunc("/refresh-telemetry", func(w http.ResponseWriter, _ *http.Request) {
 		go a.sendTelemetry()
@@ -549,10 +558,37 @@ func (a *hostAgent) handleCommand(w http.ResponseWriter, r *http.Request) {
 	case "CHANGE_MEDIA":
 		resp["message"] = "demo: media change accepted (UI-only in demo)"
 	case "MIGRATE", "OFFLINE_MIGRATE":
-		resp["success"] = false
-		resp["message"] = "demo mode: live migration is not wired in stage 2 — coming in stage 3"
+		// Stage 3: accept the migration + let /migrate-status render
+		// a ~3-min progress arc. The scenarios module holds the
+		// synthMigration + handles the eventual host-flip when the
+		// arc completes.
+		dst := req.Params["destination"]
+		if dst == "" {
+			dst = req.Params["dest_host"]
+		}
+		// Resolve dst — server sends an IP (demo-agent-NN) so map
+		// it back to a host ID using the fleet registry.
+		if dst != "" {
+			if dstAgent := resolveDstByAlias(dst); dstAgent != nil {
+				dst = dstAgent.host.ID
+			}
+		}
+		if dst == "" || vm == nil || dst == a.host.ID {
+			resp["success"] = false
+			resp["message"] = "demo: migration needs a valid destination different from source"
+			a.mu.Unlock()
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+		// Unlock before calling startMigration so it can take fleet
+		// locks in the right order.
+		vmName := vm.Name
+		vmUUID := vm.UUID
 		a.mu.Unlock()
-		w.WriteHeader(http.StatusServiceUnavailable)
+		m := startMigration(a.host.ID, vmUUID, vmName, dst)
+		log.Printf("demo: migration started %s %s → %s (duration=%s)", vmName, a.host.ID, dst, m.duration)
+		resp["message"] = "demo: migration started (will take " + m.duration.Truncate(time.Second).String() + ")"
 		_ = json.NewEncoder(w).Encode(resp)
 		return
 	default:
@@ -596,11 +632,48 @@ func atoi(s string) int {
 	return n
 }
 
-func handleMigrateStatus(w http.ResponseWriter, _ *http.Request) {
+// handleMigrateStatus looks up any in-flight synthetic migration
+// for this host and reports a progress arc. The server's
+// pollMigrationStatus goroutine drives the migration record off
+// these replies, so a 0→100 arc here shows up as a moving
+// progress bar in the SPA + eventually flips the record to
+// complete.
+func (a *hostAgent) handleMigrateStatus(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	m := migrationFor(a.host.ID)
+	if m == nil {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"active": false, "phase": "idle", "progress": 0,
+		})
+		return
+	}
+	now := time.Now()
+	p := m.progress(now)
+	if p >= 100 {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"active": false, "phase": "complete", "progress": 100,
+			"vm_name": m.vmName, "detail": "Migration finished",
+		})
+		return
+	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"active": false, "phase": "idle", "progress": 0,
+		"active": true, "phase": m.phase(now), "progress": p,
+		"vm_name": m.vmName, "detail": fmt.Sprintf("Copying memory + disk (%d%%)", p),
 	})
+}
+
+// resolveDstByAlias maps a destination value (could be a docker
+// alias like "demo-agent-04" sent by the server as host.IP, or the
+// host ID itself) to its fleet agent.
+func resolveDstByAlias(dst string) *hostAgent {
+	fleet.mu.RLock()
+	defer fleet.mu.RUnlock()
+	for _, a := range fleet.agents {
+		if a.host.IP == dst || a.host.ID == dst {
+			return a
+		}
+	}
+	return nil
 }
 
 func handleCancel(w http.ResponseWriter, _ *http.Request) {
