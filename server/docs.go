@@ -26,7 +26,7 @@ import (
 // Docs are public — no session or token required. They're
 // reference material, not operational state.
 
-//go:embed docs/*.md
+//go:embed docs/*.md docs/media/*
 var docsFS embed.FS
 
 // DocPage is the flat metadata + rendered HTML for one page.
@@ -190,6 +190,35 @@ func handleDocsTree(w http.ResponseWriter, r *http.Request) {
 		out = append(out, entry{p.Slug, p.Title, p.Section, p.Order})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func handleDocsMedia(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/api/docs/media/")
+	if name == "" || strings.Contains(name, "..") || strings.Contains(name, "/") {
+		writeError(w, http.StatusBadRequest, "invalid media name")
+		return
+	}
+	data, err := fs.ReadFile(docsFS, "docs/media/"+name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "no media at "+name)
+		return
+	}
+	ct := "application/octet-stream"
+	switch {
+	case strings.HasSuffix(name, ".webp"):
+		ct = "image/webp"
+	case strings.HasSuffix(name, ".png"):
+		ct = "image/png"
+	case strings.HasSuffix(name, ".jpg"), strings.HasSuffix(name, ".jpeg"):
+		ct = "image/jpeg"
+	case strings.HasSuffix(name, ".gif"):
+		ct = "image/gif"
+	case strings.HasSuffix(name, ".svg"):
+		ct = "image/svg+xml"
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_, _ = w.Write(data)
 }
 
 func handleDocsPage(w http.ResponseWriter, r *http.Request) {

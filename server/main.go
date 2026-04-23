@@ -222,6 +222,7 @@ func main() {
 	// Docs (v5.14). Public — reference material, not operational state.
 	mux.HandleFunc("/api/docs/tree", handleDocsTree)
 	mux.HandleFunc("/api/docs/page/", handleDocsPage)
+	mux.HandleFunc("/api/docs/media/", handleDocsMedia)
 	mux.HandleFunc("/api/grafana/dashboard.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Content-Disposition", `attachment; filename="kvm-center-dashboard.json"`)
