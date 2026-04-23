@@ -11,6 +11,10 @@ enrolled hypervisors. Live migrations stream the running VM state
 over mTLS; offline migrations ship a compressed disk then define +
 start on the target.
 
+An offline migration from the UI, with the progress bar running:
+
+![Offline migration from the Actions menu](/api/docs/media/03-live-migration.webp)
+
 ## Transports
 
 | Transport | When used | How the bytes move |

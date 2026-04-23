@@ -66,6 +66,8 @@ Visit `https://<server>:8190` in a browser. First use asks for a new
 administrator: pick a username and password (min 8 chars). 2FA (TOTP)
 can be enabled later from the user menu → **Security & 2FA**.
 
+![Sign in and the dashboard landing](/api/docs/media/01-login-dashboard.webp)
+
 Once the admin account is created, the SPA routes to **`/setup`**
 and walks you through four optional steps:
 

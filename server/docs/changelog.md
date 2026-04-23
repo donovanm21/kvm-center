@@ -10,16 +10,17 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
-## v5.34.0 — walkthrough clips in the in-app docs
+## v5.34.1 — walkthrough clips embedded in the existing docs
 
 The in-app docs now ship short silent WebP clips showing common
-operator flows. First three: sign-in + dashboard tour, VM lifecycle
-(shutdown → start → snapshot), and an offline migration with the
-progress arc.
+operator flows, embedded inline where they're relevant:
+
+- **Overview** — a VM lifecycle tour (shutdown → start → snapshot).
+- **Getting started** — first-run sign-in + dashboard landing.
+- **Migrations** — an offline migration with the progress arc.
 
 Clips are embedded at build time alongside the markdown and served
-from a new public endpoint `/api/docs/media/<name>`. A new
-**Walkthroughs** page under "Getting started" embeds them inline.
+from a new public endpoint `/api/docs/media/<name>`.
 
 The recording pipeline lives in `demo/walkthroughs/` — Playwright
 specs against the demo stack, captured as WebM, then compressed to
