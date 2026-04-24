@@ -72,18 +72,23 @@ func runOneLiveMetricsStream(ctx context.Context, grpcAddr, hostID string) error
 	if err != nil {
 		return err
 	}
+	// Defer every cleanup immediately after the corresponding resource
+	// is acquired. Belt-and-braces: conn.Close() tears down any open
+	// stream, but keeping a dedicated stream close makes the cleanup
+	// invariant obvious and guards against a future edit that moves
+	// the defers around. (P0.3, v5.36.)
 	defer conn.Close()
 	client := agentpb.NewAgentServiceClient(conn)
 	stream, err := client.StreamVMMetrics(ctx)
 	if err != nil {
 		return err
 	}
+	defer func() { _, _ = stream.CloseAndRecv() }()
 	ticker := time.NewTicker(liveMetricsInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			_, _ = stream.CloseAndRecv()
 			return nil
 		case <-ticker.C:
 			if err := sendLiveMetricsFrame(stream, hostID); err != nil {

@@ -132,6 +132,12 @@ function MaintenanceToggle({ host }: { host: Host }) {
  * its own binary on disk, and exits so systemd restarts it. Requires
  * host.manage.
  */
+type UpdateAgentResponse = {
+  ok?: boolean;
+  message?: string;
+  version?: string;
+};
+
 function UpdateAgentButton({ host }: { host: Host }) {
   const { hasPerm } = useAuth();
   const qc = useQueryClient();
@@ -140,8 +146,8 @@ function UpdateAgentButton({ host }: { host: Host }) {
   const canManage = hasPerm('host.manage');
 
   const mut = useMutation({
-    mutationFn: () => apiPost(`/api/hosts/${encodeURIComponent(host.id)}/update-agent`),
-    onSuccess: (data: any) => {
+    mutationFn: () => apiPost<UpdateAgentResponse>(`/api/hosts/${encodeURIComponent(host.id)}/update-agent`),
+    onSuccess: (data) => {
       toast('success', data?.message || `Agent update requested on ${host.id}`);
       setAsking(false);
       // Telemetry from the fresh binary lands 30s later; invalidate
@@ -693,7 +699,7 @@ function VMsTab({ host }: { host: Host }) {
     [vms.data, host.id],
   );
   const list = useMemo(
-    () => [...filtered].sort((a, b) => compare((a as any)[sort.key], (b as any)[sort.key])),
+    () => [...filtered].sort((a, b) => compare(a[sort.key as keyof VM], b[sort.key as keyof VM])),
     [filtered, sort, compare],
   );
   const pg = usePagination(list);
@@ -745,7 +751,7 @@ function StorageTab({ host }: { host: Host }) {
     [storage.data, host.id],
   );
   const pools = useMemo(
-    () => [...filtered].sort((a, b) => compare((a as any)[sort.key], (b as any)[sort.key])),
+    () => [...filtered].sort((a, b) => compare(a[sort.key as keyof StoragePool], b[sort.key as keyof StoragePool])),
     [filtered, sort, compare],
   );
   if (pools.length === 0) {

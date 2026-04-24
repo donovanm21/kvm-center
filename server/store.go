@@ -250,9 +250,15 @@ func (s *Store) ensureBuiltInRoles() {
 }
 
 // ApplyTelemetry upserts a host and replaces its VMs and storage pools atomically.
+//
+// Lock discipline (v5.36 P0.1): the write lock is held only for the
+// mutation phase. Metrics emit + notification fan-out run after an
+// explicit Unlock() so they can't stall behind the ingest path, and
+// the snapshots they capture are owned by this invocation (copies
+// of *Host / []*VM / []*StoragePool) — no shared mutable state
+// crosses the goroutine boundary.
 func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	host, ok := s.hosts[p.HostID]
 	if !ok {
@@ -342,10 +348,11 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 	// the agent report immediately instead of on the next client poll.
 	s.hub.Publish(EventInventory, map[string]any{"host_id": p.HostID})
 
-	// Emit metrics (v5.13). Fan out a snapshot of host + VM samples
-	// to the InfluxDB queue; no-op when metrics config is absent or
-	// disabled. Outside the lock for non-allocation reasons — queueSample
-	// only touches a channel.
+	// Snapshot everything the post-lock fan-out needs before we
+	// release. `hostCopy` is a value copy; `vmsCopy` / `poolsCopy`
+	// hold pointers owned by this invocation (future ApplyTelemetry
+	// calls build new *VM / *StoragePool allocations, so the
+	// goroutine's view stays stable).
 	var hostCopy models.Host
 	var vmsCopy []*models.VM
 	if host != nil {
@@ -356,10 +363,16 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 	if s.metrics != nil {
 		prefix = s.metrics.MeasurementPrefix
 	}
+	poolsCopy := append([]*models.StoragePool(nil), pools...)
+
+	// Release the write lock before spawning side-effect goroutines.
+	// Keeps the ingest path's critical section tight and means the
+	// AppendHostMetric / fireNotification paths can take the lock
+	// themselves without waiting for us to return.
+	s.mu.Unlock()
 
 	// Metrics side effects — fan out outside the lock. Tight loop
 	// so the per-VM emit stays bounded on a large fleet.
-	poolsCopy := append([]*models.StoragePool(nil), pools...)
 	go func() {
 		s.EmitHostMetrics(&hostCopy, prefix)
 		s.EmitVMMetrics(vmsCopy, prefix)
@@ -661,9 +674,18 @@ func isTerminalMigration(status string) bool {
 	return status == "complete" || status == "failed" || status == "cancelled"
 }
 
-// AddMigration inserts or updates a migration record.
-func (s *Store) AddMigration(r *models.MigrationRecord) {
-	s.mu.Lock()
+// addMigrationLocked inserts / upserts a migration record. Caller
+// MUST hold s.mu.Lock(). Returns whether this call is responsible
+// for firing the terminal-state notification (i.e. this is the
+// first time the record has flipped to complete/failed). The
+// notification itself is fired by the caller after it drops the
+// lock, keeping the lock-held section tight.
+//
+// Introduced v5.36 (P0.2) so finalizeMigration + pollMigrationStatus
+// can do their "mutate rec fields + upsert the record" pairs inside
+// a single critical section, eliminating the torn-read window a
+// concurrent migrations snapshot could otherwise observe.
+func (s *Store) addMigrationLocked(r *models.MigrationRecord) (shouldNotify bool) {
 	found := false
 	for i, m := range s.migrations {
 		if m.ID == r.ID {
@@ -677,11 +699,10 @@ func (s *Store) AddMigration(r *models.MigrationRecord) {
 		s.migrations = trimMigrations(s.migrations, migrationSliceCap)
 	}
 	// Fire-once tracker for terminal-state notifications. Callers
-	// (finalizeMigration / pollMigrationStatus) often mutate the same
-	// *r in place before calling us, so a prevStatus comparison off
-	// the slice doesn't work — the slice already holds the new value.
-	// A per-ID notified set is the simple, correct alternative.
-	shouldNotify := false
+	// often mutate the same *r in place before calling us, so a
+	// prevStatus comparison off the slice doesn't work — the slice
+	// already holds the new value. A per-ID notified set is the
+	// simple, correct alternative.
 	if r.Status == "complete" || r.Status == "failed" {
 		if s.migrationNotified == nil {
 			s.migrationNotified = map[string]bool{}
@@ -691,6 +712,80 @@ func (s *Store) AddMigration(r *models.MigrationRecord) {
 			shouldNotify = true
 		}
 	}
+	return shouldNotify
+}
+
+// UpdateMigrationProgress applies non-terminal polling updates
+// (phase / progress / detail) to an existing record atomically.
+// The slice upsert and the *MigrationRecord mutations happen under
+// one write-lock so a concurrent GetMigrations snapshot can never
+// observe a torn intermediate state. Tier 1 P0.2, v5.36.
+func (s *Store) UpdateMigrationProgress(rec *models.MigrationRecord, phase string, progress int, detail string) {
+	if rec == nil {
+		return
+	}
+	s.mu.Lock()
+	rec.Phase = phase
+	rec.Progress = progress
+	rec.Detail = detail
+	shouldNotify := s.addMigrationLocked(rec)
+	s.mu.Unlock()
+	s.hub.Publish(EventMigration, map[string]any{"id": rec.ID, "status": rec.Status})
+	_ = shouldNotify // non-terminal path doesn't notify
+}
+
+// FinalizeMigration stamps a record as terminal (complete / failed)
+// and upserts it in one atomic section. Fires the terminal
+// notification after releasing the lock — matches the behaviour of
+// AddMigration's pre-v5.36 fire-once path.
+func (s *Store) FinalizeMigration(rec *models.MigrationRecord, status, detail string) {
+	if rec == nil {
+		return
+	}
+	s.mu.Lock()
+	rec.Status = status
+	rec.CompletedAt = time.Now().Unix()
+	rec.ElapsedSec = rec.CompletedAt - rec.StartedAt
+	if status == "complete" {
+		rec.Progress = 100
+		rec.Phase = "complete"
+	} else {
+		rec.Phase = "failed"
+		rec.Error = detail
+	}
+	if detail != "" {
+		rec.Detail = detail
+	}
+	shouldNotify := s.addMigrationLocked(rec)
+	s.mu.Unlock()
+	s.hub.Publish(EventMigration, map[string]any{"id": rec.ID, "status": rec.Status})
+	if shouldNotify {
+		switch rec.Status {
+		case "complete":
+			s.fireNotification(&models.NotificationEvent{
+				Type:     NotifyMigrationDone,
+				Title:    "Migration complete: " + rec.VMName,
+				Message:  fmt.Sprintf("%s migrated %s → %s in %ds.", rec.VMName, rec.SourceHost, rec.DestHost, rec.ElapsedSec),
+				Resource: "migration/" + rec.ID,
+				Severity: "info",
+			})
+		case "failed":
+			s.fireNotification(&models.NotificationEvent{
+				Type:     NotifyMigrationFailed,
+				Title:    "Migration failed: " + rec.VMName,
+				Message:  fmt.Sprintf("%s migration %s → %s failed: %s", rec.VMName, rec.SourceHost, rec.DestHost, rec.Error),
+				Resource: "migration/" + rec.ID,
+				Severity: "critical",
+				Detail:   map[string]string{"error": rec.Error, "phase": rec.Phase},
+			})
+		}
+	}
+}
+
+// AddMigration inserts or updates a migration record.
+func (s *Store) AddMigration(r *models.MigrationRecord) {
+	s.mu.Lock()
+	shouldNotify := s.addMigrationLocked(r)
 	s.mu.Unlock()
 	s.hub.Publish(EventMigration, map[string]any{"id": r.ID, "status": r.Status})
 
