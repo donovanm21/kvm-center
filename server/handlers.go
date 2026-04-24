@@ -600,23 +600,13 @@ func resolveHostByIP(store *Store, ip string) string {
 	return ip
 }
 
-// finalizeMigration stamps a record as complete or failed and re-publishes
-// it through the store so SSE clients see the terminal state.
+// finalizeMigration stamps a record as complete or failed and
+// re-publishes it through the store so SSE clients see the terminal
+// state. The field mutations + slice upsert run in one critical
+// section inside Store.FinalizeMigration — no torn-read window
+// (Tier 1 P0.2, v5.36).
 func finalizeMigration(store *Store, rec *models.MigrationRecord, status, detail string) {
-	rec.Status = status
-	rec.CompletedAt = time.Now().Unix()
-	rec.ElapsedSec = rec.CompletedAt - rec.StartedAt
-	if status == "complete" {
-		rec.Progress = 100
-		rec.Phase = "complete"
-	} else {
-		rec.Phase = "failed"
-		rec.Error = detail
-	}
-	if detail != "" {
-		rec.Detail = detail
-	}
-	store.AddMigration(rec)
+	store.FinalizeMigration(rec, status, detail)
 	// Terminal migration → force a synchronous Save so a crash in
 	// the next 30 s doesn't lose the terminal flip. The 30 s save
 	// ticker would eventually catch it, but migration terminals are
@@ -704,10 +694,7 @@ func pollMigrationStatus(store *Store, rec *models.MigrationRecord, agentAddr st
 			}
 			return
 		}
-		rec.Phase = s.Phase
-		rec.Progress = s.Progress
-		rec.Detail = s.Detail
-		store.AddMigration(rec)
+		store.UpdateMigrationProgress(rec, s.Phase, s.Progress, s.Detail)
 	}
 	finalizeMigration(store, rec, "failed", "migration timed out after 90 minutes")
 }

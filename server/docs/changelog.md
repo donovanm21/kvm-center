@@ -10,6 +10,44 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.36.0 — P0 code-quality fixes from 2026-04-20 review
+
+Five correctness items from the tier-1 backlog, all merged into
+one release since each is small in isolation.
+
+- **`Store.ApplyTelemetry` lock discipline.** The telemetry write
+  lock is now released explicitly before the metrics + notification
+  fan-out goroutines launch. Snapshots of host / VMs / pools /
+  transitions are captured under the lock; the fan-out reads only
+  those copies. Side effects no longer stall behind the ingest
+  path.
+- **Migration record torn-write.** `pollMigrationStatus` and
+  `finalizeMigration` previously mutated a `*MigrationRecord`'s
+  fields outside the lock, then re-upserted via `AddMigration` —
+  a concurrent snapshot could see a torn intermediate state. Two
+  new store methods (`UpdateMigrationProgress`,
+  `FinalizeMigration`) do the field mutation + slice upsert in a
+  single critical section. Terminal notification fire-once tracker
+  preserved.
+- **Agent live-metrics stream cleanup.** `runOneLiveMetricsStream`
+  now defers `conn.Close()` AND `stream.CloseAndRecv()` immediately
+  after the corresponding resource is acquired. Belt-and-braces —
+  the original happy-path pattern was correct, but the paired
+  defers mean a future edit can't reintroduce the leak.
+- **SPA `any`-typed response handling.** `HostDetail.tsx`'s
+  `UpdateAgentButton` declares a typed `UpdateAgentResponse`
+  instead of `(data: any)`. Two `(x as any)[sort.key]` escapes in
+  the VM + Storage tabs now use `keyof VM` / `keyof StoragePool`.
+- **Agent test coverage.** New `collector_test.go` exercises
+  `prevVMCPU`'s mutex invariant (concurrent writers + sweepers +
+  forgets) under `go test -race`. New `edit_xml_test.go` covers
+  the pure-function heart of the EDIT_VM XML-patch path (cpu_mode
+  /boot_dev/video_model, multi-quote styles, `<cputune>` vs
+  `<cpu>` false-match).
+
+No behaviour change for operators. This is the last of the P0
+tier-1 items from the code review.
+
 ## v5.35.4 — brisker README tour clip
 
 README hero clip re-recorded at a faster cadence: half the pauses,
