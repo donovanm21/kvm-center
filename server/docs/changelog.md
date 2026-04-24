@@ -10,6 +10,16 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.35.4 — brisker README tour clip
+
+README hero clip re-recorded at a faster cadence: half the pauses,
+quicker scrolls, no host / VM detail detours. Reads as a surface-
+area-at-a-glance tour rather than a guided walkthrough. 40 s instead
+of 75 s; file size ~2.7 MB instead of 5.7 MB.
+
+The per-feature clips stay at their readable pace — that's where
+we want the viewer to follow along, not skim.
+
 ## v5.35.3 — back-to-top button on doc pages
 
 Floating "↑ Top" pill appears bottom-right once the reader has
