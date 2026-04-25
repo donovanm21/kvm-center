@@ -10,6 +10,46 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.37.0 — Tier 2 cleanups + cache-key factory + metrics circuit breaker
+
+A batch of small, mostly-mechanical wins from the Tier 2 backlog.
+
+- **`<StatePill>` + `<LockBadge>` extracted** to `components/StatePill.tsx`.
+  Replaces the `<span className={`state-pill ${state}`}>` pattern that
+  was duplicated across VMs, VMDetail, HostDetail, Hosts, Dashboard,
+  Snapshots overview. Adds aria-labels + leading glyphs so colour
+  is no longer the only signal — colourblind operators see the
+  same intent without the styling change. (Tier 2 #11 + #14.)
+- **`SortableTH` compare is type-aware.** Booleans sort by truth,
+  digit-only strings sort numerically, missing values sink to the
+  end regardless of direction. Pre-fix every non-numeric coerced
+  to string and "10" beat "9". (Tier 2 #12.)
+- **Create VM modal resets host-picker on close.** The previous
+  pick lingered after dismiss; reopening against an offline host
+  surfaced an unending "info loading…" state. (Tier 2 #13.)
+- **`parseMigrationProgress` range-check.** Negative or >100
+  values now reject instead of leaking into SPA progress bars.
+  Test cases extended. (Tier 2 #7.)
+- **Error logging on EDIT_VM rollback paths.** When a vCPU cap
+  raise fails and the agent tries to bring the VM back up, a
+  failed `virsh start` is now logged with the VM name. Pre-fix
+  the start error swallowed silently and the operator saw only
+  the original setvcpus failure. (Tier 2 #6.)
+- **JSON error responses on `/api/hosts/<id>/metrics`.** The two
+  `http.Error(w, ...)` plain-text returns are now `writeError`
+  JSON. Other `http.Error` sites in oidc/saml/console_proxy/sse
+  stay as text — they're pre-handshake or browser-redirect paths
+  where JSON would confuse the client. (Tier 2 #10.)
+- **Metrics circuit breaker.** Influx push failures past 6
+  consecutive opens a 90 s circuit so we stop hammering an
+  unreachable server. The producer side still drops on a full
+  channel, so telemetry handlers never block. (P2 #4.)
+- **`queryKeys.ts` cache-key factory.** New centralised exports
+  for every React Query key. Future shape changes (tenant scoping,
+  invalidation sets) become one-file edits. Existing hooks
+  continue to spell their keys inline; adoption is incremental.
+  (P2 #3.)
+
 ## v5.36.0 — P0 code-quality fixes from 2026-04-20 review
 
 Five correctness items from the tier-1 backlog, all merged into

@@ -114,7 +114,10 @@ var migrateProgressRe = regexp.MustCompile(`Migration:\s*\[\s*(\d+)(?:\.\d+)?\s*
 
 // parseMigrationProgress returns the integer percentage carried by a
 // virsh "Migration: [N %]" line. Second return is false if the line
-// isn't a progress tick.
+// isn't a progress tick or the captured integer falls outside the
+// 0-100 % envelope (Tier 2 #7, v5.37.0). Pre-fix the value was
+// passed through unchecked — a malformed input could push >100 into
+// the SPA's progress bar geometry.
 func parseMigrationProgress(line string) (int, bool) {
 	m := migrateProgressRe.FindStringSubmatch(line)
 	if m == nil {
@@ -122,6 +125,9 @@ func parseMigrationProgress(line string) (int, bool) {
 	}
 	pct, err := strconv.Atoi(m[1])
 	if err != nil {
+		return 0, false
+	}
+	if pct < 0 || pct > 100 {
 		return 0, false
 	}
 	return pct, true
@@ -447,12 +453,21 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 						// VM is now shut off — raise cap + apply count.
 						if o, e := exec.Command("virsh", "setvcpus", vmTarget, v, "--maximum", "--config").CombinedOutput(); e != nil {
 							// Best-effort: bring the VM back up before reporting.
-							_, _ = exec.Command("virsh", "start", vmTarget).CombinedOutput()
+							// Log the restart outcome so the operator sees if
+							// the VM is left shut off — silent-swallow used to
+							// produce misleading "setvcpus failed" alerts when
+							// the actual operational hit was a failed restart.
+							// Tier 2 #6, v5.37.0.
+							if so, se := exec.Command("virsh", "start", vmTarget).CombinedOutput(); se != nil {
+								log.Printf("edit_vm: %s left SHUT OFF after setvcpus --maximum rollback (start error: %s)", vmTarget, strings.TrimSpace(string(so)))
+							}
 							respond(w, false, "setvcpus --maximum failed: "+strings.TrimSpace(string(o)))
 							return
 						}
 						if o2, e2 := exec.Command("virsh", "setvcpus", vmTarget, v, "--config").CombinedOutput(); e2 != nil {
-							_, _ = exec.Command("virsh", "start", vmTarget).CombinedOutput()
+							if so, se := exec.Command("virsh", "start", vmTarget).CombinedOutput(); se != nil {
+								log.Printf("edit_vm: %s left SHUT OFF after setvcpus rollback (start error: %s)", vmTarget, strings.TrimSpace(string(so)))
+							}
 							respond(w, false, "setvcpus (after raising max) failed: "+strings.TrimSpace(string(o2)))
 							return
 						}

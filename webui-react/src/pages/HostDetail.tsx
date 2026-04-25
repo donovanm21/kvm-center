@@ -14,7 +14,8 @@ import { useVMCommand } from '@/hooks/useVMCommand';
 import type { Host, HostPCIDevice, StoragePool, VM } from '@/types';
 import { CreateSnapshotModal } from '@/pages/VMDetail';
 import { SortableTH, useSort } from '@/components/SortableTH';
-import { LockBadge, PHASES_PAST_DEFINE, lockKey, type LockReason } from '@/pages/VMs';
+import { PHASES_PAST_DEFINE, lockKey } from '@/pages/VMs';
+import { LockBadge, StatePill, type LockReason } from '@/components/StatePill';
 
 /**
  * MaintenanceToggle flips a host between operational and "draining"
@@ -534,7 +535,7 @@ function HostVMRow({
         )}
         {lock && <LockBadge reason={lock} />}
       </td>
-      <td><span className={`state-pill ${vm.state}`}>{vm.state}</span></td>
+      <td><StatePill state={vm.state} /></td>
       <td>{vm.cpu_count}</td>
       <td>
         {vm.mem_total_mb > 0
@@ -781,7 +782,7 @@ function StorageTab({ host }: { host: Host }) {
               <tr key={p.name}>
                 <td style={{ fontWeight: 500, color: 'var(--text-strong)' }}>{p.name}</td>
                 <td style={{ color: 'var(--text-muted)' }}>{p.pool_type || '—'}</td>
-                <td><span className={`state-pill ${p.state === 'running' ? 'running' : 'stopped'}`}>{p.state}</span></td>
+                <td><StatePill state={p.state === 'running' ? 'running' : 'stopped'} label={p.state} /></td>
                 <td>{p.capacity_gb.toFixed(1)} GB</td>
                 <td>{p.allocation_gb.toFixed(1)} GB</td>
                 <td>{p.available_gb.toFixed(1)} GB</td>

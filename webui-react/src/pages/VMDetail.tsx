@@ -3,6 +3,7 @@ import { Link, NavLink, useMatch, useNavigate, useParams } from 'react-router-do
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { ActionsMenu, type ActionGroup } from '@/components/ActionsMenu';
+import { StatePill } from '@/components/StatePill';
 import { MigrateModal } from '@/components/MigrateModal';
 import { Modal } from '@/components/Modal';
 import { PaginationBar, usePagination } from '@/components/Pagination';
@@ -123,7 +124,7 @@ function DetailHeader({ vm, openModal }: { vm: VM; openModal: (k: ModalKind) => 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
       <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)' }}>{vm.name}</div>
-      <span className={`state-pill ${vm.state}`}>{vm.state}</span>
+      <StatePill state={vm.state} />
       {lock && (
         <span
           className={`lock-pill ${lock.reason === 'rolled-back' ? 'danger' : 'warn'}`}
@@ -284,7 +285,7 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
           <KV label="UUID" value={vm.uuid} mono />
           <KV
             label="Power State"
-            valueNode={<span className={`state-pill ${vm.state}`}>{vm.state}</span>}
+            valueNode={<StatePill state={vm.state} />}
           />
         </div>
 
@@ -1478,7 +1479,7 @@ function SnapshotsTab({ vm }: { vm: VM }) {
                 <td style={{ fontFamily: "'SF Mono', monospace", color: 'var(--text-muted)', fontSize: 11 }}>
                   {s.creation_time}
                 </td>
-                <td><span className={`state-pill ${s.state === 'running' ? 'running' : 'stopped'}`}>{s.state}</span></td>
+                <td><StatePill state={s.state === 'running' ? 'running' : 'stopped'} label={s.state} /></td>
                 <td style={{ color: 'var(--text-faded)', fontSize: 11 }}>{s.parent || '—'}</td>
                 <td style={{ display: 'flex', gap: 6 }}>
                   <button

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { PaginationBar, usePagination } from '@/components/Pagination';
 import { SortableTH, useSort } from '@/components/SortableTH';
+import { HostStatusPill } from '@/components/StatePill';
 import { useHosts, useVMs } from '@/hooks/useInventory';
 import type { Host } from '@/types';
 
@@ -108,7 +109,7 @@ function HostRow({ host, vmStats }: { host: Host; vmStats?: { total: number; run
       </td>
       <td style={{ color: 'var(--text-muted)', fontFamily: "'SF Mono', monospace", fontSize: 11 }}>{host.ip}</td>
       <td>
-        <span className={`state-pill ${host.status === 'online' ? 'running' : 'stopped'}`}>{host.status}</span>
+        <HostStatusPill status={host.status} />
         {host.maintenance_mode && <span className="tone-pill warn" style={{ marginLeft: 6 }} title={host.maintenance_reason || 'Maintenance mode'}>maintenance</span>}
       </td>
       <td>{vmStats ? `${vmStats.running} / ${vmStats.total}` : host.vm_count}</td>

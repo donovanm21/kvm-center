@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Pagination } from '@/components/Pagination';
+import { HostStatusPill } from '@/components/StatePill';
 import { useHosts, useStorage, useVMs } from '@/hooks/useInventory';
 import type { Host, StoragePool, VM } from '@/types';
 
@@ -165,9 +166,7 @@ function HostCard({ host, vms, pools }: { host: Host; vms: VM[]; pools: StorageP
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-          <span className={`state-pill ${host.status === 'online' ? 'running' : 'stopped'}`}>
-            {host.status === 'online' ? 'connected' : 'disconnected'}
-          </span>
+          <HostStatusPill status={host.status === 'online' ? 'connected' : 'disconnected'} />
           <Link to={`/hosts/${encodeURIComponent(host.id)}`} style={manageLink}>
             Manage →
           </Link>

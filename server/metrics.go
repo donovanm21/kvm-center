@@ -33,6 +33,14 @@ const (
 	metricsDefaultBatchSize = 100
 	metricsDefaultFlushSec  = 10
 	metricsDefaultPrefix    = "kvm_center_"
+	// Circuit breaker (P2 #4, v5.37.0). After this many consecutive
+	// push failures the worker stops draining the queue for the
+	// cooldown window — telemetry writers continue producing
+	// samples; queueSample drops them on a full channel as before.
+	// Influx coming back is detected by a successful push; failure
+	// counter resets on success.
+	metricsCircuitFailThreshold = 6
+	metricsCircuitCooldown      = 90 * time.Second
 )
 
 // metricSample is one line-protocol record ready to format.
@@ -57,6 +65,9 @@ func (s *Store) startMetricsWorker(ctx context.Context) {
 		batch := make([]metricSample, 0, metricsDefaultBatchSize*2)
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
+		// Circuit-breaker state — see metricsCircuit* constants.
+		consecutiveFails := 0
+		var openUntil time.Time
 
 		drain := func() {
 			for {
@@ -96,15 +107,32 @@ func (s *Store) startMetricsWorker(ctx context.Context) {
 			if len(batch) < size && !(len(batch) > 0 && time.Since(batch[0].Timestamp) >= time.Duration(flush)*time.Second) {
 				continue
 			}
+			// Circuit open → drop the batch without dialing Influx.
+			// Producers stay non-blocking (queueSample drops on full),
+			// so this just stops us hammering an unreachable server.
+			if !openUntil.IsZero() && time.Now().Before(openUntil) {
+				batch = batch[:0]
+				continue
+			}
 			if err := pushToInflux(cfg, batch); err != nil {
 				s.recordMetricsResult(err, int64(len(batch)))
-				log.Printf("metrics: influx push failed: %v (batch=%d)", err, len(batch))
-				if len(batch) > metricsQueueSize*2 {
+				consecutiveFails++
+				log.Printf("metrics: influx push failed: %v (batch=%d, consecutive=%d)", err, len(batch), consecutiveFails)
+				if consecutiveFails >= metricsCircuitFailThreshold {
+					openUntil = time.Now().Add(metricsCircuitCooldown)
+					log.Printf("metrics: circuit opened for %s after %d consecutive failures", metricsCircuitCooldown, consecutiveFails)
+					batch = batch[:0]
+				} else if len(batch) > metricsQueueSize*2 {
 					log.Printf("metrics: dropping %d samples after sustained failure", len(batch))
 					batch = batch[:0]
 				}
 				continue
 			}
+			if consecutiveFails > 0 {
+				log.Printf("metrics: influx recovered after %d failures", consecutiveFails)
+			}
+			consecutiveFails = 0
+			openUntil = time.Time{}
 			s.recordMetricsResult(nil, int64(len(batch)))
 			batch = batch[:0]
 		}

@@ -20,12 +20,37 @@ export function useSort<K extends string>(initialKey: K, initialDir: SortDir = '
   const onToggle = useCallback((key: K) => {
     setSort((cur) => (cur.key === key ? { key, dir: cur.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
   }, []);
+  // Type-aware compare. Pre-v5.37 every non-numeric value coerced to
+  // string, which broke (a) booleans (true/false sorted alphabetically:
+  // false ahead of true on asc, regardless of intent), and (b) "small
+  // integer carried as a string" cases like memory_mb sometimes
+  // arriving as "8192" — those sorted lexically ("10" before "9").
+  // Tier 2 #12, v5.37.0.
   const compare = useMemo(() => {
     const mul = sort.dir === 'asc' ? 1 : -1;
     return (a: unknown, b: unknown): number => {
+      // Nulls / undefined go last regardless of direction so sorting
+      // doesn't push empty cells to the visible top.
+      const aMissing = a === null || a === undefined || a === '';
+      const bMissing = b === null || b === undefined || b === '';
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+
       if (typeof a === 'number' && typeof b === 'number') return (a - b) * mul;
-      const sa = String(a ?? '').toLowerCase();
-      const sb = String(b ?? '').toLowerCase();
+      if (typeof a === 'boolean' && typeof b === 'boolean') {
+        return (Number(a) - Number(b)) * mul;
+      }
+      // String pair that *looks* numeric on both sides → numeric
+      // compare. Pure digits or signed/decimal literals only.
+      if (typeof a === 'string' && typeof b === 'string') {
+        const numLike = /^-?\d+(\.\d+)?$/;
+        if (numLike.test(a) && numLike.test(b)) {
+          return (parseFloat(a) - parseFloat(b)) * mul;
+        }
+      }
+      const sa = String(a).toLowerCase();
+      const sb = String(b).toLowerCase();
       return sa.localeCompare(sb) * mul;
     };
   }, [sort]);

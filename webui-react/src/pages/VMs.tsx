@@ -5,11 +5,13 @@ import { CreateVMModal } from '@/components/CreateVMModal';
 import { KVMToolsPill } from '@/components/KVMToolsPill';
 import { PaginationBar, usePagination } from '@/components/Pagination';
 import { SortableTH, useSort } from '@/components/SortableTH';
+import { LockBadge, StatePill, type LockReason } from '@/components/StatePill';
 import { useVMs, useFeatures, useKVMToolsLatest, useMigrations } from '@/hooks/useInventory';
 import { useAuth } from '@/hooks/useAuth';
 import type { VM } from '@/types';
 
-export type LockReason = 'migrating' | 'rolled-back';
+// Re-export so existing consumers (HostDetail) keep their import shape.
+export { LockBadge, type LockReason };
 
 // Phases that mean the destination already had the VM defined when the
 // migration failed. The agent's rollback path tries to undefine + delete
@@ -155,7 +157,7 @@ function VMRow({ vm, lock, latestKVMTools }: { vm: VM; lock?: LockReason; latest
         {lock && <LockBadge reason={lock} />}
       </td>
       <td style={{ color: 'var(--text-muted)' }}>{vm.host_id}</td>
-      <td><span className={`state-pill ${vm.state}`}>{vm.state}</span></td>
+      <td><StatePill state={vm.state} /></td>
       <td>{vm.cpu_count}</td>
       <td>
         {vm.mem_total_mb > 0
@@ -171,15 +173,6 @@ function VMRow({ vm, lock, latestKVMTools }: { vm: VM; lock?: LockReason; latest
         <KVMToolsPill vm={vm} latest={latestKVMTools} showVersion />
       </td>
     </tr>
-  );
-}
-
-export function LockBadge({ reason }: { reason: LockReason }) {
-  const isRollback = reason === 'rolled-back';
-  return (
-    <span className={`lock-pill ${isRollback ? 'danger' : 'warn'}`}>
-      {isRollback ? 'rolled back' : 'migrating'}
-    </span>
   );
 }
 
