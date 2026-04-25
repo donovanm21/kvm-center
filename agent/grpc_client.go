@@ -20,6 +20,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 
 	agentpb "kvm-center/gen/agentpb"
 )
@@ -68,8 +69,11 @@ func OpenMigrationProgressReporter(parent context.Context, grpcAddr string) (*Mi
 		return nil, fmt.Errorf("grpc dial %s: %w", grpcAddr, err)
 	}
 	ctx, cancel := context.WithCancel(parent)
+	// Identify ourselves to the gRPC auth interceptor — Tier 2 #9,
+	// v5.37.1. Server rejects streams that don't carry this header.
+	streamCtx := metadata.AppendToOutgoingContext(ctx, "x-kvmc-agent-host", hostname())
 	client := agentpb.NewAgentServiceClient(conn)
-	stream, err := client.StreamMigrationProgress(ctx)
+	stream, err := client.StreamMigrationProgress(streamCtx)
 	if err != nil {
 		cancel()
 		_ = conn.Close()

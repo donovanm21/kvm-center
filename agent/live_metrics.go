@@ -23,6 +23,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 
 	agentpb "kvm-center/gen/agentpb"
 	"kvm-center/internal/models"
@@ -79,7 +80,9 @@ func runOneLiveMetricsStream(ctx context.Context, grpcAddr, hostID string) error
 	// the defers around. (P0.3, v5.36.)
 	defer conn.Close()
 	client := agentpb.NewAgentServiceClient(conn)
-	stream, err := client.StreamVMMetrics(ctx)
+	// Identify ourselves to the gRPC auth interceptor — Tier 2 #9.
+	streamCtx := metadata.AppendToOutgoingContext(ctx, "x-kvmc-agent-host", hostID)
+	stream, err := client.StreamVMMetrics(streamCtx)
 	if err != nil {
 		return err
 	}

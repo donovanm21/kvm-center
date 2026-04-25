@@ -283,6 +283,21 @@ func handleCommand(store *Store) http.HandlerFunc {
 			case "DELETE_SNAPSHOT":
 				audit(store, r, AuditVMSnapDelete, resource, detail, true, "")
 			case "MIGRATE", "OFFLINE_MIGRATE":
+				// Carry the chosen transport into the audit detail so
+				// the trail makes the SSH-vs-mTLS choice explicit.
+				// Tier 2 #8, v5.37.1: `transport` is set from the
+				// Migrate modal (auto / mtls / ssh); when SSH is used
+				// the agent dials with `StrictHostKeyChecking=no`,
+				// which is fine on a trusted management VLAN but
+				// worth surfacing on the audit trail.
+				if t := strings.TrimSpace(req.Params["transport"]); t != "" {
+					detail["transport"] = t
+				}
+				if action == "OFFLINE_MIGRATE" {
+					detail["mode"] = "offline"
+				} else {
+					detail["mode"] = "live"
+				}
 				audit(store, r, AuditMigrationStart, resource, detail, true, "")
 			case "DELETE_VM":
 				audit(store, r, AuditVMDelete, resource, detail, true, "")
