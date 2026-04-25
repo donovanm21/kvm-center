@@ -69,6 +69,12 @@ export function CreateVMModal({ open, onClose }: Props) {
   }, [info.data]);
 
   const reset = () => {
+    // Reset hostID too — the open-effect re-picks the first online host
+    // on next open. Pre-v5.37 the picker held a stale host (possibly
+    // since-offline), which silently re-fired the host-info query
+    // against an unreachable agent and surfaced the "info loading…"
+    // state forever. Tier 2 #13.
+    setHostID('');
     setName('');
     setMemory(2048);
     setVCPUs(2);

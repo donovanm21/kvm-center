@@ -115,13 +115,13 @@ func (s *Store) HostMetricsSnapshot(hostID string) []hostMetricSample {
 func handleHostMetrics(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
-			http.Error(w, "GET only", http.StatusMethodNotAllowed)
+			writeError(w, http.StatusMethodNotAllowed, "GET only")
 			return
 		}
 		// Path: /api/hosts/<id>/metrics
 		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		if len(parts) < 4 {
-			http.Error(w, "host id required", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "host id required")
 			return
 		}
 		id := parts[2]

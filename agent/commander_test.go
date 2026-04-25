@@ -26,6 +26,8 @@ func TestParseMigrationProgress(t *testing.T) {
 		{"[ 50.00 %]", 0, false},            // missing Migration: prefix
 		{"Migration: [ -1.00 %]", 0, false}, // negative rejected
 		{"Migration: [.5 %]", 0, false},     // no integer part
+		{"Migration: [150 %]", 0, false},    // out-of-range high (Tier 2 #7)
+		{"Migration: [101.0 %]", 0, false},  // off-by-one high
 	}
 	for _, c := range cases {
 		got, ok := parseMigrationProgress(c.in)
