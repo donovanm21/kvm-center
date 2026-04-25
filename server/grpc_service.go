@@ -19,6 +19,7 @@ package main
 // from HTTP/2 multiplex for simpler ops + easier firewall rules.
 
 import (
+	"context"
 	"io"
 	"log"
 	"net"
@@ -28,6 +29,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	agentpb "kvm-center/gen/agentpb"
@@ -175,11 +177,59 @@ func (s *agentGRPCServer) StreamVMMetrics(stream agentpb.AgentService_StreamVMMe
 // registered. Keeps the registration in one place so both the
 // multiplexed-on-8190 path and the optional dedicated-port path
 // expose the same handlers.
+//
+// v5.37.1 (Tier 2 #9): every stream goes through agentAuthInterceptor,
+// which requires an `x-kvmc-agent-host` metadata key naming a host
+// the server already knows. The full mTLS-client-cert story still
+// has to land — this is the cheapest layer that closes the "any TCP
+// peer can stream frames" hole.
 func buildGRPCServer(store *Store) *grpc.Server {
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(
+		grpc.StreamInterceptor(agentAuthStreamInterceptor(store)),
+	)
 	agentpb.RegisterAgentServiceServer(srv, &agentGRPCServer{store: store})
 	return srv
 }
+
+// agentAuthStreamInterceptor rejects gRPC streams that don't identify
+// themselves with a known host_id. Looking-glass auth — anyone on the
+// management VLAN who can reach :8190 still gets in if they spoof a
+// real host_id, but unauthenticated probes and unrelated services no
+// longer reach the streaming handlers. Callers wired to use the
+// interceptor must include `x-kvmc-agent-host: <id>` on every stream
+// open; agents do this from `live_metrics.go` and `migrate.go`.
+func agentAuthStreamInterceptor(store *Store) grpc.StreamServerInterceptor {
+	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		md, ok := metadata.FromIncomingContext(ss.Context())
+		if !ok {
+			log.Printf("grpc: refusing %s — no metadata on stream", info.FullMethod)
+			return status.Error(codes.Unauthenticated, "missing metadata")
+		}
+		hostIDs := md.Get("x-kvmc-agent-host")
+		if len(hostIDs) == 0 || strings.TrimSpace(hostIDs[0]) == "" {
+			log.Printf("grpc: refusing %s — no x-kvmc-agent-host header", info.FullMethod)
+			return status.Error(codes.Unauthenticated, "x-kvmc-agent-host required")
+		}
+		hostID := strings.TrimSpace(hostIDs[0])
+		if store.GetHost(hostID) == nil {
+			log.Printf("grpc: refusing %s — unknown host_id=%q", info.FullMethod, hostID)
+			return status.Error(codes.PermissionDenied, "unknown host")
+		}
+		// Carry the verified host_id in context so handlers can rely
+		// on it without re-reading metadata.
+		ctx := context.WithValue(ss.Context(), agentHostKey{}, hostID)
+		return handler(srv, &authedServerStream{ServerStream: ss, ctx: ctx})
+	}
+}
+
+type agentHostKey struct{}
+
+type authedServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (s *authedServerStream) Context() context.Context { return s.ctx }
 
 // startGRPCServerOn binds an already-built grpc.Server to its own
 // TCP listener. Used when the operator wants a dedicated gRPC port
@@ -215,8 +265,13 @@ func startGRPCServerOn(addr string, srv *grpc.Server) (stop func(), err error) {
 func startGRPCServer(addr string, store *Store, tlsCreds credentials.TransportCredentials) (stop func(), err error) {
 	srv := buildGRPCServer(store)
 	if tlsCreds != nil {
-		// Legacy path — not used in prod. Rebuild with creds.
-		srv = grpc.NewServer(grpc.Creds(tlsCreds))
+		// Legacy path — not used in prod. Rebuild with creds, but
+		// keep the auth-stream interceptor so this code path still
+		// enforces the host_id check (Tier 2 #9, v5.37.1).
+		srv = grpc.NewServer(
+			grpc.Creds(tlsCreds),
+			grpc.StreamInterceptor(agentAuthStreamInterceptor(store)),
+		)
 		agentpb.RegisterAgentServiceServer(srv, &agentGRPCServer{store: store})
 	}
 	return startGRPCServerOn(addr, srv)

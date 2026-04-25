@@ -10,6 +10,23 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.37.1 — gRPC stream auth + migration-transport audit detail
+
+- **gRPC streams now require an `x-kvmc-agent-host` metadata header**
+  identifying a known host_id. A `StreamServerInterceptor` rejects
+  streams that don't carry it or name a host the server hasn't seen.
+  The agent's live-metrics + migration-progress dialers now attach
+  the header automatically. Pre-fix any TCP peer reaching `:8190`
+  could open a stream and inject frames; this is the cheapest layer
+  that closes that gap. Full mTLS-client-cert auth still pending.
+  (Tier 2 #9.)
+- **Migration audit detail carries transport + mode.** The audit
+  event for MIGRATE / OFFLINE_MIGRATE now records `transport`
+  (auto / mtls / ssh) and `mode` (live / offline). Closes the
+  visibility gap on SSH-vs-mTLS migrations — operator can grep the
+  audit log to see which migrations rode the `StrictHostKeyChecking=no`
+  ssh path. (Tier 2 #8.)
+
 ## v5.37.0 — Tier 2 cleanups + cache-key factory + metrics circuit breaker
 
 A batch of small, mostly-mechanical wins from the Tier 2 backlog.
