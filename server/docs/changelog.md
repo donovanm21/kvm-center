@@ -10,6 +10,24 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.37.2 — internal: dispatcher + store-persist split
+
+Pure refactor — no operator-visible behaviour change. Ship as a
+separate release so the diff is easy to revert if a regression
+surfaces.
+
+- **`agent/action_edit_vm.go`** — EDIT_VM action extracted from the
+  `agent/commander.go` switch (~240 lines moved). The dispatcher
+  now delegates with `case "EDIT_VM": handleEditVM(w, req, vmTarget)`.
+  First cut of the per-action split (P2 #1); MIGRATE / DELETE_VM /
+  CHANGE_MEDIA are next when that surface is touched again.
+- **`server/store_persist.go`** — `lastHashes`, `computeDirty`,
+  `hashJSON`, `isSaveGated`, `Save`, `load`, `AsyncSave` and the
+  small `itoa` helper moved out of `server/store.go`. The Backend
+  interface already separates persistence from the in-memory cache;
+  the file split makes that visible at the package level. Methods
+  remain on `*Store` so callers don't move (P2 #2 first cut).
+
 ## v5.37.1 — gRPC stream auth + migration-transport audit detail
 
 - **gRPC streams now require an `x-kvmc-agent-host` metadata header**
