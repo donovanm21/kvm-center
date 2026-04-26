@@ -10,6 +10,25 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.38.0 — internal: dispatcher + store split finished
+
+Pure refactor — closes out the P2 #1 + #2 architectural cleanup
+items that started in v5.37.2.
+
+- **`agent/action_migrate.go`** + **`action_delete_vm.go`** —
+  MIGRATE / OFFLINE_MIGRATE / DELETE_VM extracted from the
+  `commander.go` switch. Each handler is self-contained (writes
+  its own response). `commander.go` is down from 836 to 574 lines.
+- **`server/store_migrations.go`** + **`store_hosts_vms.go`** —
+  migration / host / VM / storage methods moved out of `store.go`.
+  All methods stay on `*Store`; the file split makes the surface
+  navigable. `store.go` is down from 1474 to 652 lines.
+
+The dispatcher now reads in one screen — case statements that
+remain are ≤ 25 lines each. Same applies to `store.go`: it's
+limited to construction, telemetry ingest, guest-tools rehydration,
+and notes/queue helpers.
+
 ## v5.37.2 — internal: dispatcher + store-persist split
 
 Pure refactor — no operator-visible behaviour change. Ship as a
