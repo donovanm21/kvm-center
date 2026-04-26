@@ -440,122 +440,13 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	case "MIGRATE":
-		dest := req.Params["destination"]
-		if dest == "" {
-			respond(w, false, "MIGRATE requires params.destination")
-			return
-		}
-		// v5.11: forward the server-minted migration grant to the
-		// destination agent so the dest validates + records it before
-		// libvirtd's TLS handshake starts. Only applies to mTLS
-		// migrations; legacy ssh path ignores the param.
-		if grant := req.Params["grant"]; grant != "" && req.Params["migration_transport"] == "tls" {
-			if err := forwardGrantToDest(dest, grant); err != nil {
-				respond(w, false, "destination rejected migration grant: "+err.Error())
-				return
-			}
-		}
-		uri := migrationURI(dest, req.Params["migration_transport"])
-		// --undefinesource removes the source domain definition once the
-		// live migration completes. Without it the UI still lists the
-		// "ghost" VM on the source host until the next libvirtd restart,
-		// surfacing as a duplicate inventory entry (exactly what bit us
-		// on the offline path in v5.4.3).
-		args := []string{"migrate", "--live", "--persistent", "--undefinesource", "--verbose"}
-		if req.Params["copy_storage"] == "true" {
-			args = append(args, "--copy-storage-all")
-		}
-		args = append(args, vmTarget, uri)
-		// v5.32.0: stream progress frames via gRPC while virsh runs.
-		// --verbose writes "Migration: [ N %]" lines to stderr; we tail
-		// them and push matching phase/progress frames to the server.
-		// HTTP response is still the single terminal signal (success +
-		// stdout); gRPC just makes the progress bar move mid-flight.
-		//
-		// v5.32.9: mark the shared MigrationStatus.Active=true so that
-		// /self-update + bootstrap.sh --update-agents refuse to restart
-		// this agent mid-flight. Without this, a deploy that happens
-		// while a live migration is in progress kills the virsh
-		// subprocess, libvirt rolls back atomically (VM survives on
-		// source), and the server is left with a stranded "running"
-		// record. v5.29.1's guard only covered offline migrations which
-		// set Active themselves; live piggybacked off the synchronous
-		// HTTP call.
-		setLiveMigrateActive(req.Params["migration_id"], vmTarget, dest, true)
-		out, err = runLiveMigrateWithProgress(args, req.Params["migration_id"], vmTarget, dest)
-		setLiveMigrateActive(req.Params["migration_id"], vmTarget, dest, false)
+		handleMigrate(w, req, vmTarget)
+		return
 	case "DELETE_VM":
-		// Multi-stage destruction: force-off if still running, undefine with
-		// NVRAM + managed save + snapshot metadata, optionally remove the
-		// backing disks reported by dumpxml. The UI gates this behind its
-		// own multi-step confirmation; delete_disks defaults to false so
-		// an accidental DELETE doesn't lose data.
-		deleteDisks := req.Params["delete_disks"] == "true"
-		if out, derr := exec.Command("virsh", "destroy", vmTarget).CombinedOutput(); derr != nil {
-			// "domain is not running" is fine; anything else aborts.
-			msg := strings.ToLower(string(out))
-			if !strings.Contains(msg, "not running") && !strings.Contains(msg, "is not active") {
-				respond(w, false, "could not force-off VM: "+strings.TrimSpace(string(out)))
-				return
-			}
-		}
-		diskPaths := collectVMDiskPaths(vmTarget)
-		undefArgs := []string{"undefine", vmTarget, "--nvram", "--managed-save", "--snapshots-metadata"}
-		if deleteDisks {
-			// --remove-all-storage only works when the disks live in a libvirt
-			// storage pool. If that fails we retry without and unlink files
-			// ourselves below.
-			undefArgs = append(undefArgs, "--remove-all-storage")
-		}
-		out, err = exec.Command("virsh", undefArgs...).CombinedOutput()
-		if err != nil && deleteDisks && len(diskPaths) > 0 {
-			if out2, err2 := exec.Command("virsh", "undefine", vmTarget,
-				"--nvram", "--managed-save", "--snapshots-metadata").CombinedOutput(); err2 == nil {
-				out, err = out2, nil
-			}
-		}
-		if err == nil && deleteDisks {
-			for _, p := range diskPaths {
-				if rerr := removeDiskFile(p); rerr != nil {
-					log.Printf("delete_vm: could not remove %s: %v", p, rerr)
-				}
-			}
-		}
-		if err == nil && !deleteDisks && len(diskPaths) > 0 {
-			log.Printf("delete_vm: kept %d disk file(s) — delete_disks=false", len(diskPaths))
-		}
+		handleDeleteVM(w, req, vmTarget)
+		return
 	case "OFFLINE_MIGRATE":
-		dest := req.Params["destination"]
-		if dest == "" {
-			respond(w, false, "OFFLINE_MIGRATE requires params.destination")
-			return
-		}
-		status := getMigStatus()
-		if status.Active {
-			respond(w, false, "another migration is already in progress: "+status.VMName)
-			return
-		}
-		keepRaw := req.Params["keep_raw"] == "true"
-		// v5.11.4: if the server attached a grant (transport=tls),
-		// forward it to the destination so the libvirt hook on dest
-		// authorises the eventual VM start. v5.11.5 will switch the
-		// data transfer itself to qemu+tls vol-upload; v5.11.4 still
-		// uses scp but ties offline into the same grant path.
-		if grant := req.Params["grant"]; grant != "" && req.Params["migration_transport"] == "tls" {
-			if err := forwardGrantToDest(dest, grant); err != nil {
-				respond(w, false, "destination rejected migration grant: "+err.Error())
-				return
-			}
-		}
-		opts := MTLSOptions{
-			TargetPool:    req.Params["target_pool"],
-			NewVMName:     req.Params["new_vm_name"],
-			RegenerateMAC: req.Params["regenerate_mac"] == "true",
-		}
-		log.Printf("command: offline-migrate vm=%s → %s keep_raw=%v transport=%s pool=%q rename=%q regen_mac=%v (async)",
-			vmTarget, dest, keepRaw, req.Params["migration_transport"], opts.TargetPool, opts.NewVMName, opts.RegenerateMAC)
-		startOfflineMigrate(vmTarget, dest, req.Params["migration_id"], keepRaw, req.Params["migration_transport"], opts)
-		respond(w, true, "offline migration started — poll /migrate-status for progress")
+		handleOfflineMigrate(w, req, vmTarget)
 		return
 	default:
 		respond(w, false, "unknown action: "+req.Action)
