@@ -198,7 +198,10 @@ const backToTopStyle: React.CSSProperties = {
 
 const sidebarStyle: React.CSSProperties = {
   position: 'sticky',
-  top: 20,
+  // v5.45.1: clear the 64 px global topbar + a small breathing
+  // gap. Pre-fix the docs sidebar tucked under the topbar after
+  // the global layout switched to window-level scrolling.
+  top: 84,
   padding: '16px 12px',
   borderRight: '1px solid var(--border)',
   maxHeight: 'calc(100vh - 100px)',

@@ -110,12 +110,15 @@ a:hover { color: var(--accent-hover); }
 .app-shell {
   display: grid;
   grid-template-rows: 64px 1fr;
-  height: 100%;
+  /* v5.45.1: switched from `height: 100%` to `min-height` so the
+     shell grows with content. Combined with sticky topbar +
+     sidebar, the page (window) is the scroll container — long
+     pages now leave the nav visible the whole time. */
+  min-height: 100%;
 }
 .app-body {
   display: grid;
   grid-template-columns: 240px 1fr;
-  min-height: 0;
 }
 
 /* ── Topbar ──────────────────────────────────────────────── */
@@ -126,6 +129,11 @@ a:hover { color: var(--accent-hover); }
   padding: 0 20px;
   background: #13161D;
   border-bottom: 1px solid var(--border);
+  /* v5.45.1: pin so the brand + version + user-menu stay visible
+     while the page below scrolls. Pairs with .sidebar's sticky. */
+  position: sticky;
+  top: 0;
+  z-index: 30;
 }
 body.light-mode .topbar { background: #FFFFFF; }
 .topbar .logo { display: flex; align-items: center; gap: 12px; }
@@ -156,6 +164,15 @@ body.light-mode .version-badge { background: #FFF4EC; color: #C04512; border-col
   border-right: 1px solid var(--border);
   padding: 14px 10px;
   overflow-y: auto;
+  /* v5.45.1: sticky-pin under the topbar so the nav stays
+     visible while .main scrolls (long pages: docs, audit log,
+     system health). Topbar is the 64 px first grid row of
+     .app-shell. align-self: start keeps the cell from stretching
+     so sticky's containing block is the viewport. */
+  position: sticky;
+  top: 64px;
+  align-self: start;
+  max-height: calc(100vh - 64px);
 }
 body.light-mode .sidebar { background: #FFFFFF; }
 .sidebar-section-title {
@@ -183,7 +200,11 @@ body.light-mode .nav-item.active { background: #FFF4EC; color: #C04512; }
 /* ── Main content ────────────────────────────────────────── */
 .main {
   display: flex; flex-direction: column;
-  overflow-y: auto;
+  /* v5.45.1: removed `overflow-y: auto` so the document scrolls
+     as the scroll container instead of `.main`. Sticky-pinned
+     `.topbar` + `.sidebar` rely on the window being the scroll
+     context — otherwise they'd anchor to `.main`'s internal
+     scroll and disappear with it. */
   padding: 20px;
 }
 .breadcrumb {
