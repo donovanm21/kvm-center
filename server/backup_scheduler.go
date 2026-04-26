@@ -10,17 +10,21 @@ package main
 // the schedule's `LastRunAt` / `LastRunErr` fields. Schedule lives
 // in persistData so it survives restarts; defaults to disabled.
 //
-// Out of scope (intentionally): per-target encryption, S3-style
-// remote storage, full cron grammar. The roadmap has those as v2
-// items if operators ask.
+// v5.45.0 added cron expressions + per-tarball AES-GCM encryption.
+// S3 / remote storage still deferred — local + scheduled is the
+// 80 % case for homelab + small-team deployments.
 
 import (
 	"archive/tar"
 	"compress/gzip"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -28,10 +32,33 @@ import (
 	"strings"
 	"time"
 
+	"github.com/robfig/cron/v3"
+
 	"kvm-center/internal/models"
 )
 
 const backupSchedulerTick = 1 * time.Minute
+
+// Encrypted-tarball envelope (v5.45.0):
+//   "KVMCB1\n" magic    (7 bytes — "KVMC Backup v1\n")
+//   16-byte salt        (PBKDF2)
+//   12-byte AES-GCM nonce
+//   ciphertext + tag    (rest of file)
+//
+// PBKDF2-SHA256 / 200 000 iters / 32-byte key derived from the
+// operator-supplied passphrase. The full plaintext tarball is the
+// GCM input — restore strips the envelope, decrypts in one pass,
+// then unpacks. Authenticated under GCM so tampering is detected.
+const (
+	backupEnvelopeMagic = "KVMCB1\n"
+	backupSaltLen       = 16
+	backupGCMNonceLen   = 12
+	backupPBKDF2Iter    = 200_000
+	backupAESKeyLen     = 32
+)
+
+// cronParser is the standard 5-field parser (no seconds).
+var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
 // GetBackupSchedule returns a copy of the current schedule, or nil
 // if not configured.
@@ -66,12 +93,48 @@ func (s *Store) recordBackupRun(t time.Time, size int64, err error) {
 		} else {
 			s.backupSchedule.LastRunErr = ""
 		}
-		if s.backupSchedule.EveryHours > 0 {
+		// Compute next-run target. Cron takes priority when set;
+		// otherwise fall back to EveryHours.
+		if expr := strings.TrimSpace(s.backupSchedule.CronExpr); expr != "" {
+			if sched, perr := cronParser.Parse(expr); perr == nil {
+				s.backupSchedule.NextRunAt = sched.Next(t.UTC())
+			}
+		} else if s.backupSchedule.EveryHours > 0 {
 			s.backupSchedule.NextRunAt = t.Add(time.Duration(s.backupSchedule.EveryHours) * time.Hour).UTC()
 		}
 	}
 	s.mu.Unlock()
 	s.AsyncSave()
+}
+
+// backupIsDue decides whether the scheduler should fire based on
+// the configured cadence. Cron expression takes priority. Returns
+// (due, err) — invalid schedules report err so the operator sees
+// the parse failure in last_run_err.
+func backupIsDue(sc *models.BackupSchedule, now time.Time) (bool, error) {
+	if sc == nil {
+		return false, nil
+	}
+	expr := strings.TrimSpace(sc.CronExpr)
+	if expr != "" {
+		sched, err := cronParser.Parse(expr)
+		if err != nil {
+			return false, fmt.Errorf("cron_expr parse: %w", err)
+		}
+		// First run after configuration — fire immediately so the
+		// operator sees feedback rather than waiting up to a day.
+		if sc.LastRunAt.IsZero() {
+			return true, nil
+		}
+		return !sched.Next(sc.LastRunAt).After(now), nil
+	}
+	if sc.EveryHours <= 0 {
+		return false, nil
+	}
+	if sc.LastRunAt.IsZero() {
+		return true, nil
+	}
+	return time.Since(sc.LastRunAt) >= time.Duration(sc.EveryHours)*time.Hour, nil
 }
 
 // startBackupScheduler launches the once-a-minute tick. Cancel via
@@ -91,10 +154,17 @@ func (s *Store) runBackupSchedulerTick() {
 	if sc == nil || !sc.Enabled {
 		return
 	}
-	if sc.EveryHours <= 0 || sc.DestPath == "" {
+	if sc.DestPath == "" {
 		return
 	}
-	due := sc.LastRunAt.IsZero() || time.Since(sc.LastRunAt) >= time.Duration(sc.EveryHours)*time.Hour
+	due, err := backupIsDue(sc, time.Now().UTC())
+	if err != nil {
+		// Surface invalid cron expressions on the persisted state so
+		// the operator sees them in the UI's last-run-error field.
+		log.Printf("backup-scheduler: invalid schedule: %v", err)
+		s.recordBackupRun(time.Now().UTC(), 0, err)
+		return
+	}
 	if !due {
 		return
 	}
@@ -159,14 +229,32 @@ func (s *Store) runScheduledBackup(sc *models.BackupSchedule, ts time.Time) (int
 	}
 	manBytes, _ := json.MarshalIndent(&manifest, "", "  ")
 
-	filename := fmt.Sprintf("kvm-center-backup-%s.tar.gz", ts.Format("20060102-150405"))
+	// Encrypted tarballs land with a `.enc` suffix so a future
+	// restore tool can dispatch decryption without sniffing every
+	// file. Plain tarballs keep the legacy name.
+	suffix := ".tar.gz"
+	encrypted := strings.TrimSpace(sc.EncryptionPassphrase) != ""
+	if encrypted {
+		suffix = ".tar.gz.enc"
+	}
+	filename := fmt.Sprintf("kvm-center-backup-%s%s", ts.Format("20060102-150405"), suffix)
 	full := filepath.Join(sc.DestPath, filename)
 	tmp := full + ".tmp"
 	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return 0, fmt.Errorf("create tarball: %w", err)
 	}
-	gz := gzip.NewWriter(out)
+	// When encrypting, build the tarball into a memory buffer first
+	// (kilobytes — same size class as backup.go's existing flow) so
+	// we can wrap it under AES-GCM in one pass. Plain path streams
+	// straight to disk.
+	var sink io.Writer = out
+	var encBuf *backupEncWriter
+	if encrypted {
+		encBuf = &backupEncWriter{}
+		sink = encBuf
+	}
+	gz := gzip.NewWriter(sink)
 	tw := tar.NewWriter(gz)
 	writeTarFile := func(name string, data []byte, mode int64) error {
 		h := &tar.Header{Name: name, Mode: mode, Size: int64(len(data)), ModTime: ts}
@@ -198,6 +286,21 @@ func (s *Store) runScheduledBackup(sc *models.BackupSchedule, ts time.Time) (int
 		out.Close()
 		os.Remove(tmp)
 		return 0, fmt.Errorf("close gz: %w", err)
+	}
+	// Encrypted path: take the buffered tarball, wrap in AES-GCM,
+	// stream to the output file as `KVMCB1\n<salt><nonce><ct||tag>`.
+	if encrypted {
+		envelope, encErr := encryptBackupEnvelope(encBuf.buf, []byte(sc.EncryptionPassphrase))
+		if encErr != nil {
+			out.Close()
+			os.Remove(tmp)
+			return 0, fmt.Errorf("encrypt: %w", encErr)
+		}
+		if _, werr := out.Write(envelope); werr != nil {
+			out.Close()
+			os.Remove(tmp)
+			return 0, fmt.Errorf("write envelope: %w", werr)
+		}
 	}
 	if err := out.Close(); err != nil {
 		os.Remove(tmp)
@@ -259,4 +362,86 @@ func errMsg(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// backupEncWriter buffers a tarball in memory so the scheduler can
+// wrap it in one AES-GCM pass after gzip + tar are closed. Sized
+// for the typical backup (kilobytes); a giant store grows the
+// buffer, which is fine — the tarball already lives in memory in
+// `entries` for the manifest hashing.
+type backupEncWriter struct {
+	buf []byte
+}
+
+func (w *backupEncWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	return len(p), nil
+}
+
+// encryptBackupEnvelope turns a plain tarball into the
+// "KVMCB1\n<salt><nonce><ct||tag>" envelope. The passphrase is
+// PBKDF2-stretched (200k iterations / SHA-256) to a 32-byte AES
+// key, then AES-256-GCM seals the whole tarball.
+func encryptBackupEnvelope(plain, pass []byte) ([]byte, error) {
+	salt := make([]byte, backupSaltLen)
+	if _, err := rand.Read(salt); err != nil {
+		return nil, fmt.Errorf("salt: %w", err)
+	}
+	key := pbkdf2(pass, salt, backupPBKDF2Iter, backupAESKeyLen)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("aes init: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("gcm init: %w", err)
+	}
+	nonce := make([]byte, backupGCMNonceLen)
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, fmt.Errorf("nonce: %w", err)
+	}
+	ct := gcm.Seal(nil, nonce, plain, nil)
+	out := make([]byte, 0, len(backupEnvelopeMagic)+backupSaltLen+backupGCMNonceLen+len(ct))
+	out = append(out, []byte(backupEnvelopeMagic)...)
+	out = append(out, salt...)
+	out = append(out, nonce...)
+	out = append(out, ct...)
+	return out, nil
+}
+
+// DecryptBackupEnvelope is the inverse — used by the restore path
+// when it sniffs the magic prefix on an uploaded file. Exported so
+// the restore handler can call it without re-implementing.
+func DecryptBackupEnvelope(envelope, pass []byte) ([]byte, error) {
+	if !strings.HasPrefix(string(envelope[:min(len(envelope), len(backupEnvelopeMagic))]), backupEnvelopeMagic) {
+		return nil, fmt.Errorf("not a kvm-center encrypted backup (missing %q magic)", backupEnvelopeMagic)
+	}
+	headerLen := len(backupEnvelopeMagic) + backupSaltLen + backupGCMNonceLen
+	if len(envelope) <= headerLen {
+		return nil, fmt.Errorf("truncated envelope (%d bytes)", len(envelope))
+	}
+	salt := envelope[len(backupEnvelopeMagic) : len(backupEnvelopeMagic)+backupSaltLen]
+	nonce := envelope[len(backupEnvelopeMagic)+backupSaltLen : headerLen]
+	ct := envelope[headerLen:]
+	key := pbkdf2(pass, salt, backupPBKDF2Iter, backupAESKeyLen)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("aes init: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("gcm init: %w", err)
+	}
+	plain, err := gcm.Open(nil, nonce, ct, nil)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt (wrong passphrase or tampering): %w", err)
+	}
+	return plain, nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

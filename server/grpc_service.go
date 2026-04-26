@@ -187,9 +187,45 @@ func (s *agentGRPCServer) StreamVMMetrics(stream agentpb.AgentService_StreamVMMe
 func buildGRPCServer(store *Store) *grpc.Server {
 	srv := grpc.NewServer(
 		grpc.StreamInterceptor(agentAuthStreamInterceptor(store)),
+		grpc.UnaryInterceptor(agentAuthUnaryInterceptor(store)),
 	)
 	agentpb.RegisterAgentServiceServer(srv, &agentGRPCServer{store: store})
 	return srv
+}
+
+// agentAuthUnaryInterceptor mirrors the stream-side interceptor's
+// host_id binding for unary RPCs (currently OpenConsoleSession).
+// Same precedence: verified client cert > metadata header. The
+// GRPCRequireClientCert feature flag also applies here.
+func agentAuthUnaryInterceptor(store *Store) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if certHostID, ok := agentHostFromClientCert(ctx); ok {
+			if store.GetHost(certHostID) == nil {
+				log.Printf("grpc: refusing %s — client cert CN %q is not a known host", info.FullMethod, certHostID)
+				return nil, status.Error(codes.PermissionDenied, "unknown host")
+			}
+			ctx = context.WithValue(ctx, agentHostKey{}, certHostID)
+			return handler(ctx, req)
+		}
+		if store.GetFeatures().GRPCRequireClientCert {
+			log.Printf("grpc: refusing %s — GRPCRequireClientCert on but no verified client cert", info.FullMethod)
+			return nil, status.Error(codes.Unauthenticated, "client cert required")
+		}
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated, "missing metadata")
+		}
+		hostIDs := md.Get("x-kvmc-agent-host")
+		if len(hostIDs) == 0 || strings.TrimSpace(hostIDs[0]) == "" {
+			return nil, status.Error(codes.Unauthenticated, "x-kvmc-agent-host required")
+		}
+		hostID := strings.TrimSpace(hostIDs[0])
+		if store.GetHost(hostID) == nil {
+			return nil, status.Error(codes.PermissionDenied, "unknown host")
+		}
+		ctx = context.WithValue(ctx, agentHostKey{}, hostID)
+		return handler(ctx, req)
+	}
 }
 
 // agentAuthStreamInterceptor rejects gRPC streams that don't identify
@@ -215,10 +251,15 @@ func agentAuthStreamInterceptor(store *Store) grpc.StreamServerInterceptor {
 			return handler(srv, &authedServerStream{ServerStream: ss, ctx: ctx})
 		}
 
-		// No client cert → fall back to the metadata header
-		// introduced in v5.37.1 (Tier 2 #9). This keeps existing
-		// agents working while operators roll the cert-presenting
-		// build out across the fleet.
+		// No client cert. v5.46.0: refuse outright when
+		// Features.GRPCRequireClientCert is on (operator has
+		// confirmed the fleet uniformly has leaf certs). Otherwise
+		// fall back to the metadata header from v5.37.1 (Tier 2 #9)
+		// so existing agents keep working through the rollout.
+		if store.GetFeatures().GRPCRequireClientCert {
+			log.Printf("grpc: refusing %s — GRPCRequireClientCert on but no verified client cert", info.FullMethod)
+			return status.Error(codes.Unauthenticated, "client cert required")
+		}
 		md, ok := metadata.FromIncomingContext(ss.Context())
 		if !ok {
 			log.Printf("grpc: refusing %s — no metadata on stream", info.FullMethod)
@@ -274,6 +315,28 @@ type authedServerStream struct {
 
 func (s *authedServerStream) Context() context.Context { return s.ctx }
 
+// OpenConsoleSession (v5.47.0) — issues a fresh HMAC-signed token
+// for a VM console + the WebSocket URL. Same token shape as the
+// existing HTTP `/api/vms/console-token` endpoint, so a kvmctl
+// `console <vm>` flow can pick whichever transport is convenient.
+//
+// Authentication is the gRPC stream interceptor's job — by the
+// time the caller reaches this RPC the host_id has been bound via
+// mTLS client cert (preferred) or the metadata header.
+func (s *agentGRPCServer) OpenConsoleSession(ctx context.Context, req *agentpb.ConsoleRequest) (*agentpb.ConsoleResponse, error) {
+	if req == nil || req.GetHostId() == "" || req.GetVmName() == "" {
+		return nil, status.Error(codes.InvalidArgument, "host_id + vm_name required")
+	}
+	token, exp, nonce := s.store.SignConsoleToken(req.GetHostId(), req.GetVmName())
+	wsURL := "/api/console-ws/" + req.GetHostId() + "/" + req.GetVmName()
+	return &agentpb.ConsoleResponse{
+		WsUrl:     wsURL,
+		Token:     token,
+		ExpiresAt: exp,
+		Nonce:     nonce,
+	}, nil
+}
+
 // startGRPCServerOn binds an already-built grpc.Server to its own
 // TCP listener. Used when the operator wants a dedicated gRPC port
 // alongside the multiplexed-on-8190 path.
@@ -314,6 +377,7 @@ func startGRPCServer(addr string, store *Store, tlsCreds credentials.TransportCr
 		srv = grpc.NewServer(
 			grpc.Creds(tlsCreds),
 			grpc.StreamInterceptor(agentAuthStreamInterceptor(store)),
+			grpc.UnaryInterceptor(agentAuthUnaryInterceptor(store)),
 		)
 		agentpb.RegisterAgentServiceServer(srv, &agentGRPCServer{store: store})
 	}

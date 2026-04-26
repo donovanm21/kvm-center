@@ -26,6 +26,7 @@ package main
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -93,7 +94,31 @@ func handleRestore(store *Store) http.HandlerFunc {
 		}
 		defer os.RemoveAll(stage)
 
-		if err := extractTarGz(file, stage); err != nil {
+		// v5.45.0: encrypted tarballs carry a 7-byte magic prefix.
+		// Read the body into memory (capped at 64 MB by MaxBytesReader)
+		// so we can sniff + optionally decrypt before handing the
+		// stream to extractTarGz.
+		raw, err := io.ReadAll(file)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "read upload: "+err.Error())
+			return
+		}
+		var input io.Reader = bytes.NewReader(raw)
+		if len(raw) >= len(backupEnvelopeMagic) && string(raw[:len(backupEnvelopeMagic)]) == backupEnvelopeMagic {
+			passphrase := r.FormValue("passphrase")
+			if passphrase == "" {
+				writeError(w, http.StatusBadRequest, "encrypted backup — supply 'passphrase' in the form")
+				return
+			}
+			plain, decErr := DecryptBackupEnvelope(raw, []byte(passphrase))
+			if decErr != nil {
+				writeError(w, http.StatusBadRequest, decErr.Error())
+				return
+			}
+			input = bytes.NewReader(plain)
+		}
+
+		if err := extractTarGz(input, stage); err != nil {
 			writeError(w, http.StatusBadRequest, "extract: "+err.Error())
 			return
 		}

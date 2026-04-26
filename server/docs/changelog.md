@@ -10,6 +10,60 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.45.0 — backup v2 + gRPC console RPC + CI E2E + state-pill bugfix
+
+Operations + the last of the deferred RPC work, plus two UI bugs
+the v5.37.0 `<StatePill>` extraction left behind.
+
+### Backup v2
+
+- **Cron expressions.** `BackupSchedule.CronExpr` (5-field format,
+  via `github.com/robfig/cron/v3`) takes priority over
+  `EveryHours` when set. UI offers a radio toggle between the two.
+- **Per-tarball AES-GCM encryption.** Set
+  `BackupSchedule.EncryptionPassphrase` and tarballs land as
+  `…tar.gz.enc` wrapped in `KVMCB1\n<salt><nonce><ciphertext>`.
+  PBKDF2-SHA256 / 200 000 iters / 32-byte key. Restore endpoint
+  sniffs the magic + decrypts when the operator supplies a
+  `passphrase` form field. Server's GET handler strips the
+  passphrase from responses (`has_passphrase` flag instead).
+
+### SSH known_hosts distribution
+
+- `PUT /api/admin/ssh-known-hosts` stores operator-curated
+  `known_hosts` content in `Features.SSHKnownHosts`. Agents fetch
+  via `GET /api/agents/ssh-known-hosts` (plaintext, no auth — host
+  keys are public material).
+- Agent fetcher refreshes once at startup + every hour;
+  `install-agent.sh` pulls during enrollment.
+
+### gRPC enforcement + console RPC
+
+- `Features.GRPCRequireClientCert` — when on, the stream + unary
+  interceptors refuse callers without a CA-signed client cert
+  (no metadata-header fallback).
+- `OpenConsoleSession` RPC implemented: same shape as HTTP
+  `/api/vms/console-token`. Unary interceptor enforces host_id
+  binding.
+
+### CI
+
+- `.gitea/workflows/e2e.yml` stands up the demo stack and runs
+  every Playwright spec under `demo/e2e/`. Failure uploads
+  `output/` for debugging.
+
+### Bugfixes
+
+- **State-pill double dot** — `.state-pill::before` CSS rendered
+  a decorative dot AND `<StatePill>` rendered its own glyph.
+  Removed the `::before`.
+- **Dashboard "connected" pill colourless** — `HostStatusPill`
+  only matched literal `"online"` for the running colour;
+  Dashboard passes `"connected"`. Now matches a small set
+  (`online`, `connected`, `up`, `healthy`).
+- **KVM Tools page** — Windows update flow note added while the
+  swap-helper bug remains open.
+
 ## v5.44.0 — security hardening: gRPC client-cert + SSH host-key
 
 Two opt-in tighten-ups for operators on shared / multi-tenant

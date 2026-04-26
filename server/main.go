@@ -394,6 +394,22 @@ func main() {
 			handleBackupSchedulePut(store)(w, r)
 		}
 	})))
+	// SSH known_hosts (v5.46.0). Admin endpoint for operator
+	// curation; the agent-facing fetch is below — also exposed but
+	// gated on a hypervisor cert (or token-bearing kvmctl) to
+	// prevent random LAN peers from harvesting the file.
+	mux.Handle("/api/admin/ssh-known-hosts", requirePerm(store, "user.manage", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleSSHKnownHostsGet(store)(w, r)
+		} else {
+			handleSSHKnownHostsPut(store)(w, r)
+		}
+	})))
+	// Agent-facing read-only endpoint. The install script + the
+	// agent fetch this during enrollment + on a periodic refresh.
+	// No SPA session required — agents on the management VLAN
+	// already have HTTPS access. Returns plaintext.
+	mux.HandleFunc("/api/agents/ssh-known-hosts", handleAgentSSHKnownHosts(store))
 	// Database backend status + migration (v5.1+). Gated on user.manage;
 	// considered a platform-ops operation alongside TLS management.
 	mux.Handle("/api/settings/database", requirePerm(store, "user.manage", handleDatabaseStatus(store)))

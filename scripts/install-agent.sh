@@ -205,9 +205,24 @@ fi
 # Authorize the key and populate known_hosts for other nodes.
 PUBKEY=$(cat "${MIGRATOR_SSH}/id_ed25519.pub")
 grep -qF "$PUBKEY" "${MIGRATOR_SSH}/authorized_keys" 2>/dev/null || echo "$PUBKEY" >> "${MIGRATOR_SSH}/authorized_keys"
+
+# v5.46.0: pull the operator-curated known_hosts from the server so
+# the strict-host-key-checking opt-in (Features.SSHStrictHostKeyChecking)
+# works without manual fleet edits. Best-effort — empty on a fresh
+# install where the operator hasn't curated anything yet; the agent
+# refreshes on its periodic update tick.
+if [[ -n "${SERVER_URL:-}" ]]; then
+  KNOWN_HOSTS_BODY=$(curl -fsSLk --max-time 10 "${SERVER_URL}/api/agents/ssh-known-hosts" 2>/dev/null || true)
+  if [[ -n "$KNOWN_HOSTS_BODY" ]]; then
+    echo "$KNOWN_HOSTS_BODY" > "${MIGRATOR_SSH}/known_hosts"
+    echo "  Pulled curated known_hosts from $SERVER_URL"
+  fi
+fi
+
 chown -R kvm-migrator:kvm-migrator "$MIGRATOR_SSH"
 chmod 700 "$MIGRATOR_SSH"
 chmod 600 "${MIGRATOR_SSH}/id_ed25519" "${MIGRATOR_SSH}/authorized_keys"
+[[ -f "${MIGRATOR_SSH}/known_hosts" ]] && chmod 644 "${MIGRATOR_SSH}/known_hosts"
 echo "  Migration keypair ready"
 
 # ── Hypervisor PKI enrollment (v5.10.0) ────────────────────────────────────────

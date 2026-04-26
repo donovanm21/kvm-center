@@ -242,8 +242,11 @@ export function KVMTools() {
 
       <p style={{ marginTop: 12, fontSize: 11, color: 'var(--text-faded)' }}>
         Updates are delivered on the next telemetry tick (~30 s). The in-guest daemon
-        downloads the new binary, replaces itself, and systemd brings it back up. No
-        SSH from the server required.
+        downloads the new binary and replaces itself; on Linux guests systemd brings
+        it back up. No SSH from the server required. <strong>Windows guests:</strong>{' '}
+        the swap currently doesn't always restart cleanly — see the open bug at{' '}
+        <code>project_windows_update_bug.md</code>; safer to run <code>install.ps1</code>{' '}
+        manually on Windows hosts until the Task Scheduler hand-off is fixed.
       </p>
     </>
   );

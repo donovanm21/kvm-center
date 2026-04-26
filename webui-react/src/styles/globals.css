@@ -409,7 +409,10 @@ body.light-mode .btn-danger-sm { background: #FFEBE9; color: #A40E26; border-col
   font-size: 10px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.5px;
 }
-.state-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+/* v5.45.1: removed the `::before` decorative dot — `<StatePill>`
+   now renders its own leading glyph (●/■/⏸/✕), and the pseudo-
+   element produced a doubled icon. Kept the rule's flex-gap so
+   StatePill's glyph still spaces away from its label. */
 .state-pill.running { background: #1E3D23; color: #3FB950; }
 .state-pill.stopped { background: var(--surface-3); color: var(--text-muted); }
 .state-pill.paused  { background: #3d2a00; color: #ff9800; }

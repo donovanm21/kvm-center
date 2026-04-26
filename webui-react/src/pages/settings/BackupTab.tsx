@@ -13,9 +13,12 @@ import { useToast } from '@/hooks/useToast';
 
 interface BackupSchedule {
   enabled: boolean;
-  every_hours: number;
+  every_hours?: number;
+  cron_expr?: string;
   dest_path: string;
   retain_count: number;
+  encryption_passphrase?: string;
+  has_passphrase?: boolean; // server-only, response field
   last_run_at?: string;
   last_run_err?: string;
   last_run_size_bytes?: number;
@@ -98,15 +101,26 @@ export function BackupTab() {
   const [schedDraft, setSchedDraft] = useState<BackupSchedule>({
     enabled: false,
     every_hours: 24,
+    cron_expr: '',
     dest_path: '/var/lib/kvm-center/backups',
     retain_count: 7,
+    encryption_passphrase: '',
   });
+  const [schedMode, setSchedMode] = useState<'every' | 'cron'>('every');
   useEffect(() => {
-    if (schedQ.data) setSchedDraft({
+    if (!schedQ.data) return;
+    const hasCron = !!(schedQ.data.cron_expr && schedQ.data.cron_expr.trim());
+    setSchedMode(hasCron ? 'cron' : 'every');
+    setSchedDraft({
       enabled: schedQ.data.enabled,
       every_hours: schedQ.data.every_hours || 24,
+      cron_expr: schedQ.data.cron_expr || '',
       dest_path: schedQ.data.dest_path || '/var/lib/kvm-center/backups',
       retain_count: schedQ.data.retain_count ?? 7,
+      // Server never echoes the passphrase back. Empty in the form
+      // means "keep current"; the user types only if they want to
+      // change it.
+      encryption_passphrase: '',
     });
   }, [schedQ.data]);
   const saveSched = useMutation({
@@ -229,16 +243,51 @@ export function BackupTab() {
             Enable scheduled backups
           </label>
           <span />
-          <label>Every (hours)</label>
-          <input
-            type="number"
-            min={1}
-            max={720}
-            value={schedDraft.every_hours}
-            onChange={(e) => setSchedDraft({ ...schedDraft, every_hours: parseInt(e.target.value || '0', 10) })}
-            disabled={!canManage || !schedDraft.enabled}
-            style={schedInputStyle}
-          />
+          <label>Cadence</label>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <input
+                type="radio"
+                checked={schedMode === 'every'}
+                onChange={() => { setSchedMode('every'); setSchedDraft({ ...schedDraft, cron_expr: '' }); }}
+                disabled={!canManage || !schedDraft.enabled}
+              /> Every N hours
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <input
+                type="radio"
+                checked={schedMode === 'cron'}
+                onChange={() => setSchedMode('cron')}
+                disabled={!canManage || !schedDraft.enabled}
+              /> Cron expression
+            </label>
+          </div>
+          {schedMode === 'every' ? (
+            <>
+              <label>Every (hours)</label>
+              <input
+                type="number"
+                min={1}
+                max={720}
+                value={schedDraft.every_hours}
+                onChange={(e) => setSchedDraft({ ...schedDraft, every_hours: parseInt(e.target.value || '0', 10) })}
+                disabled={!canManage || !schedDraft.enabled}
+                style={schedInputStyle}
+              />
+            </>
+          ) : (
+            <>
+              <label>Cron (5 fields)</label>
+              <input
+                type="text"
+                placeholder="0 3 * * *  (daily 03:00)"
+                value={schedDraft.cron_expr}
+                onChange={(e) => setSchedDraft({ ...schedDraft, cron_expr: e.target.value })}
+                disabled={!canManage || !schedDraft.enabled}
+                style={{ ...schedInputStyle, fontFamily: "'SF Mono', monospace" }}
+              />
+            </>
+          )}
           <label>Destination path</label>
           <input
             type="text"
@@ -258,7 +307,22 @@ export function BackupTab() {
             disabled={!canManage || !schedDraft.enabled}
             style={schedInputStyle}
           />
+          <label>Encryption passphrase</label>
+          <input
+            type="password"
+            placeholder={schedQ.data?.has_passphrase ? '(configured — leave blank to keep)' : '(optional — set to encrypt tarballs with AES-GCM)'}
+            value={schedDraft.encryption_passphrase}
+            onChange={(e) => setSchedDraft({ ...schedDraft, encryption_passphrase: e.target.value })}
+            disabled={!canManage || !schedDraft.enabled}
+            style={schedInputStyle}
+          />
         </div>
+        <p style={{ ...paraStyle, marginTop: 10, marginBottom: 0, fontSize: 11 }}>
+          When set, tarballs land as <code>kvm-center-backup-…tar.gz.enc</code> wrapped in
+          AES-256-GCM under a PBKDF2-stretched key. <strong>The server stores the passphrase
+          alongside the schedule</strong> — protect <code>data.json</code> on disk
+          accordingly. Restore prompts for it automatically when the magic header is detected.
+        </p>
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button
             type="button"
