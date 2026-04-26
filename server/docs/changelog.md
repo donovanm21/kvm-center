@@ -10,6 +10,24 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.45.1 — sticky topbar + sidebar so nav follows long pages
+
+Long pages (Docs, Audit log, System Health) used to scroll the
+whole layout, taking the global nav and topbar out of view. The
+v5.45.1 layout pins both:
+
+- `.topbar` is `position: sticky; top: 0` with `z-index: 30`.
+- `.sidebar` is `position: sticky; top: 64px; align-self: start;
+  max-height: calc(100vh - 64px)` so it tracks the topbar's
+  bottom edge and stays scrollable on its own.
+- `.main` lost its `overflow-y: auto` — the document body is now
+  the scroll container, which is what sticky positioning needs to
+  pin against the viewport.
+- `.app-shell` switched from `height: 100%` to `min-height: 100%`
+  so it grows with content.
+- Docs sidebar's sticky offset moved from `top: 20` → `top: 84`
+  to clear the new pinned topbar.
+
 ## v5.45.0 — backup v2 + gRPC console RPC + CI E2E + state-pill bugfix
 
 Operations + the last of the deferred RPC work, plus two UI bugs
