@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { apiPost, apiPostForm } from '@/api/client';
+import { apiGet, apiPost, apiPostForm, apiPut } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
 
@@ -10,6 +10,17 @@ import { useToast } from '@/hooks/useToast';
 // (post-restore reboot). Two-pane layout — left pane backs up, right
 // pane restores. Restore is gated behind a typed-confirmation step
 // because it stomps live state on the next restart.
+
+interface BackupSchedule {
+  enabled: boolean;
+  every_hours: number;
+  dest_path: string;
+  retain_count: number;
+  last_run_at?: string;
+  last_run_err?: string;
+  last_run_size_bytes?: number;
+  next_run_at?: string;
+}
 
 interface BackupManifest {
   version: string;
@@ -77,6 +88,35 @@ export function BackupTab() {
   });
 
   const confirmReady = confirmText.trim().toUpperCase() === 'RESTORE';
+
+  // ── Schedule (v5.43.0) — periodic backup configuration. ───────
+  const qc = useQueryClient();
+  const schedQ = useQuery<BackupSchedule | null>({
+    queryKey: ['backup-schedule'],
+    queryFn: () => apiGet<BackupSchedule | null>('/api/admin/backup/schedule'),
+  });
+  const [schedDraft, setSchedDraft] = useState<BackupSchedule>({
+    enabled: false,
+    every_hours: 24,
+    dest_path: '/var/lib/kvm-center/backups',
+    retain_count: 7,
+  });
+  useEffect(() => {
+    if (schedQ.data) setSchedDraft({
+      enabled: schedQ.data.enabled,
+      every_hours: schedQ.data.every_hours || 24,
+      dest_path: schedQ.data.dest_path || '/var/lib/kvm-center/backups',
+      retain_count: schedQ.data.retain_count ?? 7,
+    });
+  }, [schedQ.data]);
+  const saveSched = useMutation({
+    mutationFn: () => apiPut<BackupSchedule>('/api/admin/backup/schedule', schedDraft),
+    onSuccess: () => {
+      toast('success', schedDraft.enabled ? 'Schedule saved' : 'Schedule disabled');
+      qc.invalidateQueries({ queryKey: ['backup-schedule'] });
+    },
+    onError: (e) => toast('error', `Save failed: ${e instanceof Error ? e.message : String(e)}`),
+  });
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="mobile-stack">
@@ -167,9 +207,98 @@ export function BackupTab() {
           </div>
         )}
       </section>
+
+      <section className="panel" style={{ padding: 18, gridColumn: '1 / -1' }}>
+        <h3 style={titleStyle}>Schedule</h3>
+        <p style={paraStyle}>
+          When enabled, the server runs a backup every{' '}
+          <code>every_hours</code> hours, writes the tarball to{' '}
+          <code>dest_path</code>, and keeps the last{' '}
+          <code>retain_count</code> files. Mount a host directory
+          into the container so backups land outside the container's
+          writable layer.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '10px 16px', alignItems: 'center', fontSize: 12 }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={schedDraft.enabled}
+              onChange={(e) => setSchedDraft({ ...schedDraft, enabled: e.target.checked })}
+              disabled={!canManage}
+            />{' '}
+            Enable scheduled backups
+          </label>
+          <span />
+          <label>Every (hours)</label>
+          <input
+            type="number"
+            min={1}
+            max={720}
+            value={schedDraft.every_hours}
+            onChange={(e) => setSchedDraft({ ...schedDraft, every_hours: parseInt(e.target.value || '0', 10) })}
+            disabled={!canManage || !schedDraft.enabled}
+            style={schedInputStyle}
+          />
+          <label>Destination path</label>
+          <input
+            type="text"
+            value={schedDraft.dest_path}
+            onChange={(e) => setSchedDraft({ ...schedDraft, dest_path: e.target.value })}
+            disabled={!canManage || !schedDraft.enabled}
+            placeholder="/var/lib/kvm-center/backups"
+            style={schedInputStyle}
+          />
+          <label>Retain count</label>
+          <input
+            type="number"
+            min={0}
+            max={365}
+            value={schedDraft.retain_count}
+            onChange={(e) => setSchedDraft({ ...schedDraft, retain_count: parseInt(e.target.value || '0', 10) })}
+            disabled={!canManage || !schedDraft.enabled}
+            style={schedInputStyle}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button
+            type="button"
+            className="btn-primary-sm"
+            disabled={!canManage || saveSched.isPending}
+            onClick={() => saveSched.mutate()}
+          >
+            {saveSched.isPending ? 'Saving…' : 'Save schedule'}
+          </button>
+        </div>
+        {schedQ.data?.last_run_at && (
+          <div style={{ marginTop: 14, padding: 10, background: 'var(--surface-2)', borderRadius: 4, fontSize: 12 }}>
+            <div><strong>Last run</strong> — {new Date(schedQ.data.last_run_at).toLocaleString()}</div>
+            {schedQ.data.last_run_err
+              ? <div style={{ color: '#F85149', marginTop: 4 }}>error: {schedQ.data.last_run_err}</div>
+              : <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>
+                  ok — {(schedQ.data.last_run_size_bytes || 0).toLocaleString()} bytes
+                </div>}
+            {schedQ.data.next_run_at && (
+              <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>
+                Next run — {new Date(schedQ.data.next_run_at).toLocaleString()}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
+
+const schedInputStyle: React.CSSProperties = {
+  height: 30,
+  padding: '0 10px',
+  background: 'var(--bg-input)',
+  border: '1px solid var(--border)',
+  borderRadius: 4,
+  color: 'var(--text-body)',
+  fontSize: 12,
+  fontFamily: 'inherit',
+};
 
 const titleStyle: React.CSSProperties = {
   margin: '0 0 10px 0',

@@ -660,6 +660,23 @@ type Features struct {
 	PublicURL string `json:"public_url,omitempty"`
 }
 
+// BackupSchedule (v5.43.0) gates the in-process scheduler that
+// runs `ExportSnapshot` periodically and writes the bundled tarball
+// to `DestPath`, retaining the last `RetainCount` files. The
+// scheduler ticks every minute in a background goroutine and fires
+// when `time.Since(LastRunAt) >= EveryHours`. Disabled by default
+// — operator opts in from Settings → Backup.
+type BackupSchedule struct {
+	Enabled     bool      `json:"enabled"`
+	EveryHours  int       `json:"every_hours"`
+	DestPath    string    `json:"dest_path"`
+	RetainCount int       `json:"retain_count"`
+	LastRunAt   time.Time `json:"last_run_at,omitempty"`
+	LastRunErr  string    `json:"last_run_err,omitempty"`
+	LastRunSize int64     `json:"last_run_size_bytes,omitempty"`
+	NextRunAt   time.Time `json:"next_run_at,omitempty"`
+}
+
 // Permission constants. PermAdmin is a wildcard granting everything.
 const (
 	PermAdmin         = "admin"

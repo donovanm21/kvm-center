@@ -10,6 +10,28 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.43.0 — scheduled backups
+
+The pre-5.43 backup endpoint was unscheduled — operators wrapped
+it in cron or Restic. The new in-process scheduler runs the same
+export under operator control:
+
+- New persisted config (`BackupSchedule`): `enabled`,
+  `every_hours`, `dest_path`, `retain_count`. Persists in the
+  store alongside notifications + metrics config.
+- `GET /api/admin/backup/schedule` + `PUT` for the config; both
+  gated on `user.manage`. Outcome (last-run time, size, error,
+  next-run target) is included in the GET response.
+- Once-per-minute server goroutine wakes, checks if a run is due,
+  fires `ExportSnapshot`, writes a tarball atomically into
+  `dest_path`, rotates older files past `retain_count`, audits
+  the run.
+- **Settings → Backup → Schedule** UI: enable toggle, hours +
+  path + retain inputs, save button, and a last-run summary that
+  surfaces stuck schedulers.
+
+Disabled by default. Opt in from the UI when ready.
+
 ## v5.42.0 — form validation adoption sweep
 
 Migrate the remaining modals onto the v5.41.0 Zod + `useZodForm`

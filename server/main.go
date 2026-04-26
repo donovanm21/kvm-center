@@ -125,6 +125,7 @@ func main() {
 	store.startAuditShipper(context.Background())
 	store.startSnapshotScheduler(context.Background())
 	store.startNotificationDispatcher(context.Background())
+	store.startBackupScheduler()
 	hub := NewSSEHub()
 	store.hub = hub // state-changing store methods publish via this handle
 
@@ -384,6 +385,15 @@ func main() {
 	// brings the server back against the restored state.
 	mux.Handle("/api/admin/restore", requirePerm(store, "user.manage", handleRestore(store)))
 	mux.Handle("/api/admin/restart", requirePerm(store, "user.manage", handleRestart(store)))
+	// Backup schedule (v5.43.0). Single endpoint, GET returns the
+	// current schedule + last-run outcome; PUT replaces it.
+	mux.Handle("/api/admin/backup/schedule", requirePerm(store, "user.manage", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleBackupScheduleGet(store)(w, r)
+		} else {
+			handleBackupSchedulePut(store)(w, r)
+		}
+	})))
 	// Database backend status + migration (v5.1+). Gated on user.manage;
 	// considered a platform-ops operation alongside TLS management.
 	mux.Handle("/api/settings/database", requirePerm(store, "user.manage", handleDatabaseStatus(store)))

@@ -170,6 +170,7 @@ func (s *Store) snapshotBytes() ([]byte, map[string]bool, bool) {
 		HypervisorCerts:  s.hypervisorCerts,
 		CommandLog:       s.commandLog.snapshot(),
 		ConsoleSecret:    s.consoleSecret,
+		BackupSchedule:   s.backupSchedule,
 	}
 	d.Dirty = computeDirty(&d)
 	bytes, err := json.Marshal(&d)
@@ -246,6 +247,9 @@ func (s *Store) load() {
 	}
 	if d.ConsoleSecret != "" {
 		s.consoleSecret = d.ConsoleSecret
+	}
+	if d.BackupSchedule != nil {
+		s.backupSchedule = d.BackupSchedule
 	}
 	if d.Audit != nil {
 		s.audit = d.Audit
