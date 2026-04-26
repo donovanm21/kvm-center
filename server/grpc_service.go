@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
 	agentpb "kvm-center/gen/agentpb"
@@ -200,6 +201,24 @@ func buildGRPCServer(store *Store) *grpc.Server {
 // open; agents do this from `live_metrics.go` and `migrate.go`.
 func agentAuthStreamInterceptor(store *Store) grpc.StreamServerInterceptor {
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		// v5.44.0: prefer the cluster-CA-verified client cert when
+		// the agent presents one. The cert's CN is the host_id,
+		// pinned at enrollment time. Cryptographically authenticated
+		// (TLS handshake + CA chain check), so it beats the
+		// self-asserted metadata header.
+		if certHostID, ok := agentHostFromClientCert(ss.Context()); ok {
+			if store.GetHost(certHostID) == nil {
+				log.Printf("grpc: refusing %s — client cert CN %q is not a known host", info.FullMethod, certHostID)
+				return status.Error(codes.PermissionDenied, "unknown host")
+			}
+			ctx := context.WithValue(ss.Context(), agentHostKey{}, certHostID)
+			return handler(srv, &authedServerStream{ServerStream: ss, ctx: ctx})
+		}
+
+		// No client cert → fall back to the metadata header
+		// introduced in v5.37.1 (Tier 2 #9). This keeps existing
+		// agents working while operators roll the cert-presenting
+		// build out across the fleet.
 		md, ok := metadata.FromIncomingContext(ss.Context())
 		if !ok {
 			log.Printf("grpc: refusing %s — no metadata on stream", info.FullMethod)
@@ -220,6 +239,30 @@ func agentAuthStreamInterceptor(store *Store) grpc.StreamServerInterceptor {
 		ctx := context.WithValue(ss.Context(), agentHostKey{}, hostID)
 		return handler(srv, &authedServerStream{ServerStream: ss, ctx: ctx})
 	}
+}
+
+// agentHostFromClientCert pulls the verified-peer host_id out of a
+// TLS client cert when one was presented. Returns ("", false) when
+// the peer didn't present a cert (HTTP/JSON path on the multiplexed
+// listener) or when the chain didn't validate.
+func agentHostFromClientCert(ctx context.Context) (string, bool) {
+	p, ok := peer.FromContext(ctx)
+	if !ok || p.AuthInfo == nil {
+		return "", false
+	}
+	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
+	if !ok {
+		return "", false
+	}
+	chains := tlsInfo.State.VerifiedChains
+	if len(chains) == 0 || len(chains[0]) == 0 {
+		return "", false
+	}
+	leaf := chains[0][0]
+	if leaf == nil || strings.TrimSpace(leaf.Subject.CommonName) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(leaf.Subject.CommonName), true
 }
 
 type agentHostKey struct{}

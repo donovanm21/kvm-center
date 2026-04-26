@@ -477,7 +477,7 @@ func offlineMigrate(ctx context.Context, vmName, dest string, keepRaw bool) erro
 		_, _ = sshMigrator(dest, "rm -f "+shellQuote(remoteScpDest), "")
 		start = time.Now()
 		out, err = exec.CommandContext(ctx,
-			"scp", "-i", migratorKey, "-o", "StrictHostKeyChecking=no",
+			"scp", "-i", migratorKey, "-o", sshStrictHostKeyOpt(),
 			tmpQcow, fmt.Sprintf("%s@%s:%s", migratorUser, dest, remoteScpDest),
 		).CombinedOutput()
 		os.Remove(tmpQcow)
@@ -635,7 +635,7 @@ func shellQuote(s string) string {
 func sshMigrator(host, cmd, stdin string) (string, error) {
 	args := []string{
 		"-i", migratorKey,
-		"-o", "StrictHostKeyChecking=no",
+		"-o", sshStrictHostKeyOpt(),
 		"-o", "BatchMode=yes",
 		fmt.Sprintf("%s@%s", migratorUser, host),
 		cmd,

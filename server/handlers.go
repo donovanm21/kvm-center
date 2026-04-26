@@ -376,6 +376,14 @@ func handleCommand(store *Store) http.HandlerFunc {
 					req.Params["migration_transport"] = "ssh"
 				}
 			}
+			// v5.44.0: thread the operator's StrictHostKeyChecking
+			// preference through to the agent. The agent reads the
+			// param at dispatch time (action_migrate.go calls
+			// setSSHStrict) so the SSH-transport path picks up the
+			// right `-o StrictHostKeyChecking=yes/no`.
+			if store.GetFeatures().SSHStrictHostKeyChecking {
+				req.Params["strict_host_key"] = "yes"
+			}
 			modeLabel := "live"
 			if action == "OFFLINE_MIGRATE" {
 				modeLabel = "offline"

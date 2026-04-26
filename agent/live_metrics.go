@@ -68,7 +68,11 @@ func runOneLiveMetricsStream(ctx context.Context, grpcAddr, hostID string) error
 	// cert that makes the HTTP client run with InsecureSkipVerify. Match
 	// that trust model here; operator upgrades to a trusted cert via
 	// Settings → TLS when they're ready.
-	creds := credentials.NewTLS(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec // homelab trust model, see agent/main.go
+	tlsCfg := &tls.Config{InsecureSkipVerify: true} //nolint:gosec // homelab trust model, see agent/main.go
+	if leaf, ok := agentClientCert(); ok {
+		tlsCfg.Certificates = []tls.Certificate{leaf}
+	}
+	creds := credentials.NewTLS(tlsCfg)
 	conn, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return err

@@ -63,7 +63,11 @@ func OpenMigrationProgressReporter(parent context.Context, grpcAddr string) (*Mi
 	// auto-generated self-signed cert. InsecureSkipVerify matches
 	// the homelab pairing story; operator swaps to a trusted cert
 	// via Settings → TLS when ready.
-	tlsCreds := credentials.NewTLS(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec // see agent/main.go
+	tlsCfg := &tls.Config{InsecureSkipVerify: true} //nolint:gosec // see agent/main.go
+	if leaf, ok := agentClientCert(); ok {
+		tlsCfg.Certificates = []tls.Certificate{leaf}
+	}
+	tlsCreds := credentials.NewTLS(tlsCfg)
 	conn, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(tlsCreds))
 	if err != nil {
 		return nil, fmt.Errorf("grpc dial %s: %w", grpcAddr, err)

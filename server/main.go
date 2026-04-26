@@ -484,6 +484,12 @@ func main() {
 			MinVersion:     tls.VersionTLS12,
 			// HTTP/2 is required for gRPC — advertise h2 in ALPN.
 			NextProtos: []string{"h2", "http/1.1"},
+			// v5.44.0 (gRPC mTLS opt-in): accept a client cert if the
+			// peer presents one, but don't require it. Browsers and
+			// kvmctl don't carry one; agents may. The gRPC stream
+			// interceptor verifies the chain when present.
+			ClientCAs:  clusterCA.Pool(),
+			ClientAuth: tls.VerifyClientCertIfGiven,
 		},
 	}
 	// v5.32.2: plain-HTTP :8090 kept alive for legacy kvm-tools running

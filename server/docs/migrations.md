@@ -60,6 +60,27 @@ Offline-only, under the Migrate modal's **Advanced** section:
 Live migrations don't expose these — live assumes identical config
 on both sides.
 
+## SSH-transport host-key checking (v5.44.0)
+
+When the SSH transport is in use the agent dials with
+`StrictHostKeyChecking=no` by default — fine on a dedicated
+management VLAN, but flagged as a hardening item in the v5.32 review.
+
+**Settings → General → Strict SSH host-key checking.** Flip the
+toggle on to make agents dial with `StrictHostKeyChecking=yes`.
+Operators must populate `/var/lib/kvm-migrator/.ssh/known_hosts`
+on every agent **before** flipping the flag — otherwise SSH
+migrations refuse with "host key verification failed" on the first
+unrecognized destination.
+
+The setting threads through `Features.SSHStrictHostKeyChecking` →
+`/api/command` params (`strict_host_key=yes`) → agent's
+`setSSHStrict` → `ssh -o StrictHostKeyChecking=…`.
+
+Audit events for SSH migrations have carried the chosen transport
+since v5.37.1, so the trail still distinguishes legacy SSH dials
+from the strict ones.
+
 ## Concurrency
 
 The server refuses overlapping migrations on the same source or

@@ -64,6 +64,28 @@ export function GeneralTab() {
             </div>
           );
         })}
+        {/* v5.44.0 — positive-polarity flag, distinct from the
+             disable_* family above. */}
+        <div style={rowStyle}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)' }}>Strict SSH host-key checking</div>
+            <div style={helpStyle}>
+              Forces the agent's SSH-transport migration paths (offline scp, fallback live qemu+ssh) to dial
+              with <code>StrictHostKeyChecking=yes</code>. Operators must populate{' '}
+              <code>/var/lib/kvm-migrator/.ssh/known_hosts</code> on every agent first, otherwise SSH
+              migrations refuse with "host key verification failed". Recommended on shared management
+              networks; the default off matches the legacy posture audit-logged in v5.37.1.
+            </div>
+          </div>
+          <Toggle
+            checked={!!features.data?.ssh_strict_host_key_checking}
+            disabled={!canEdit || update.isPending}
+            onChange={(v) => {
+              const next: Features = { ...(features.data ?? {}), ssh_strict_host_key_checking: v };
+              update.mutate(next);
+            }}
+          />
+        </div>
       </div>
     </div>
   );
