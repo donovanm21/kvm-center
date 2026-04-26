@@ -43,7 +43,12 @@ body.light-mode {
 }
 
 * { box-sizing: border-box; }
-html, body, #root { height: 100%; margin: 0; }
+/* v5.45.2: switched root chain from fixed `height: 100%` to
+   `min-height` so the document body is the scroll container.
+   With a fixed-height root, sticky descendants (.topbar, .sidebar)
+   pin to a containing block that's already the size of the
+   viewport — so scrolling past it took them with it. */
+html, body, #root { min-height: 100vh; margin: 0; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
@@ -108,17 +113,22 @@ a:hover { color: var(--accent-hover); }
 #root { display: flex; flex-direction: column; }
 
 .app-shell {
-  display: grid;
-  grid-template-rows: 64px 1fr;
-  /* v5.45.1: switched from `height: 100%` to `min-height` so the
-     shell grows with content. Combined with sticky topbar +
-     sidebar, the page (window) is the scroll container — long
-     pages now leave the nav visible the whole time. */
-  min-height: 100%;
+  /* v5.45.2: flex column instead of grid. Sticky descendants pin
+     to their containing block; with the previous grid-template-
+     rows: 64px 1fr layout, the topbar's row was exactly its own
+     height, leaving sticky no room to operate in some browsers
+     and the header disappeared as the page scrolled. Flex column
+     puts the topbar in normal flow with a contentful sibling
+     below — sticky now anchors to the .app-shell flex container,
+     which grows with content. */
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 .app-body {
   display: grid;
   grid-template-columns: 240px 1fr;
+  flex: 1;
 }
 
 /* ── Topbar ──────────────────────────────────────────────── */
@@ -127,10 +137,14 @@ a:hover { color: var(--accent-hover); }
   align-items: center;
   gap: 16px;
   padding: 0 20px;
+  height: 64px;
+  flex-shrink: 0;
   background: #13161D;
   border-bottom: 1px solid var(--border);
-  /* v5.45.1: pin so the brand + version + user-menu stay visible
-     while the page below scrolls. Pairs with .sidebar's sticky. */
+  /* v5.45.2: pin so the brand + version + user-menu stay visible
+     while the page below scrolls. Pairs with .sidebar's sticky.
+     Explicit height since .app-shell is no longer a grid that
+     defines the row size. */
   position: sticky;
   top: 0;
   z-index: 30;

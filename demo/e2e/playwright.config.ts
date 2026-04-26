@@ -30,10 +30,20 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testIgnore: /mobile\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1440, height: 900 },
       },
+    },
+    // v5.46.0: iPhone profile for the mobile /m route tree. Same
+    // backend, same fixtures — just a phone-shaped viewport with
+    // mobile UA so MobileShell renders. Only runs the mobile spec
+    // file; the desktop project ignores it.
+    {
+      name: 'iphone',
+      testMatch: /mobile\.spec\.ts/,
+      use: { ...devices['iPhone 15'] },
     },
   ],
 });

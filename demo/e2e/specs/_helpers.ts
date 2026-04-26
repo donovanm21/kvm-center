@@ -24,3 +24,17 @@ export async function gotoSidebar(page: Page, label: RegExp) {
   // Settle the URL change before the caller asserts on content.
   await page.waitForLoadState('domcontentloaded');
 }
+
+/**
+ * Sign in for the mobile /m route tree (v5.46.0). The desktop Login
+ * form is reused; after submit we land on /m thanks to the auto-
+ * redirect, then the MobileShell renders (data-testid="mobile-shell"
+ * is the canonical post-auth chrome marker on mobile).
+ */
+export async function loginAsAdminMobile(page: Page) {
+  await page.goto('/m');
+  await page.locator('#login-username').fill(ADMIN_USERNAME);
+  await page.locator('#login-password').fill(ADMIN_PASSWORD);
+  await page.getByRole('button', { name: /sign in|log in|login/i }).click();
+  await page.getByTestId('mobile-shell').waitFor({ state: 'visible' });
+}

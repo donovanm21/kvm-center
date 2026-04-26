@@ -2,7 +2,7 @@
   "name": "KVM Center",
   "short_name": "KVM Center",
   "description": "Centralized KVM/QEMU hypervisor fleet management",
-  "start_url": "/",
+  "start_url": "/m",
   "display": "standalone",
   "background_color": "#0B0E13",
   "theme_color": "#E3571E",
