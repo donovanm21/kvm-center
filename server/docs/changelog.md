@@ -10,6 +10,29 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.40.0 — Playwright Tier 2 E2E suite
+
+Assertion-driven SPA tests live alongside the existing walkthrough
+recording infrastructure. Walkthroughs *navigate*; E2E *asserts* —
+a failing E2E run means the SPA broke. Containerised so the host
+needs nothing beyond Docker; runs against a demo deployment via
+`scripts/run-e2e.sh`.
+
+Coverage in this first cut:
+
+- **auth** — login + bad-password rejection + sign-out via the
+  user menu.
+- **inventory** — dashboard host cards, VMs list, VM detail,
+  hosts list. Asserts the v5.37.0 `<StatePill>` aria-labels are
+  wired (so a styling regression that drops them surfaces here).
+- **system-health** — page heading + at least one labelled
+  subsystem panel within the polling tick.
+- **docs** — sidebar tree + rendered article; `/api/docs/media/*`
+  returns image/webp.
+
+Lives at `demo/e2e/` (Gitea-only — scrubbed from the GitHub
+mirror, same as `demo/walkthroughs/`).
+
 ## v5.39.0 — API-driven restore + Settings → Backup tab
 
 Restore is no longer CLI-only. **Settings → Backup** has the
