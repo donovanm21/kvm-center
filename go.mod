@@ -5,6 +5,7 @@ go 1.25
 require (
 	github.com/crewjam/saml v0.4.14
 	github.com/go-ldap/ldap/v3 v3.4.8
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/yuin/goldmark v1.7.8
 	go.mongodb.org/mongo-driver v1.17.1
 	google.golang.org/grpc v1.80.0

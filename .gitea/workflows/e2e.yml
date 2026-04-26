@@ -1,0 +1,52 @@
+name: e2e
+
+# Tier 2 SPA E2E suite (v5.45.0+). Stands up the demo stack inside
+# the runner, waits for the server to come healthy, runs every
+# Playwright spec under demo/e2e/, tears down. Failures upload the
+# trace + video bundle so the operator can replay the broken flow
+# without the runner state.
+#
+# Triggers on push to main + pull-request. Heavier than the
+# `test` job (docker stack inside the runner), so it's a
+# parallel job rather than a series gate.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bring up the demo stack
+        run: |
+          ./scripts/demo-up.sh
+          # demo-up returns once the seed completes; a few extra
+          # seconds let the agent goroutines register their first
+          # telemetry tick so the inventory has hosts.
+          sleep 15
+
+      - name: Run Playwright E2E
+        run: |
+          KVMC_DEMO_URL=https://localhost:8290 ./scripts/run-e2e.sh
+        # Capture artefacts even when tests pass — the trace is
+        # cheap and useful for debugging flake.
+        continue-on-error: false
+
+      - name: Upload Playwright artefacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output
+          path: demo/e2e/output/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Tear down demo stack
+        if: always()
+        run: |
+          docker compose -f demo/docker-compose.demo.yml down -v --remove-orphans || true

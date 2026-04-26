@@ -88,6 +88,10 @@ func main() {
 	// telemetry POST when anything flips, so the SPA reflects a VM
 	// going running↔shutoff within ~2 s instead of up to 15 s.
 	go startLifecycleWatcher(liveCtx, *serverURL, *cmdPort)
+	// v5.46.0: refresh /var/lib/kvm-migrator/.ssh/known_hosts from
+	// the operator-curated content on the server. Once at startup
+	// (after a 30 s warm-up) and again every hour.
+	startKnownHostsSync(*serverURL)
 
 	// Collect and send telemetry immediately, then on interval.
 	sendTelemetry(*serverURL, *cmdPort)

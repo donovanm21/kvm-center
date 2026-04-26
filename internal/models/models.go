@@ -670,6 +670,22 @@ type Features struct {
 	// visible. Recommended on shared / multi-tenant networks; on a
 	// dedicated management VLAN the existing posture is acceptable.
 	SSHStrictHostKeyChecking bool `json:"ssh_strict_host_key_checking,omitempty"`
+
+	// SSHKnownHosts (v5.46.0) — operator-managed known_hosts content
+	// pushed to every agent during install + on demand. When
+	// SSHStrictHostKeyChecking is on, agents persist this verbatim
+	// to /var/lib/kvm-migrator/.ssh/known_hosts so SSH migrations
+	// pass host-key verification without manual fleet edits.
+	SSHKnownHosts string `json:"ssh_known_hosts,omitempty"`
+
+	// GRPCRequireClientCert (v5.46.0) — when true, the gRPC stream
+	// interceptor refuses streams that don't present a CA-signed
+	// client cert (rather than falling back to the metadata header
+	// the way v5.37.1+v5.44.0 do). Flip on once every agent is on
+	// v5.44.0+ AND has run install-agent.sh (which writes the leaf
+	// cert to /etc/pki/libvirt/clientcert.pem). Off by default so
+	// existing fleets don't break on upgrade.
+	GRPCRequireClientCert bool `json:"grpc_require_client_cert,omitempty"`
 }
 
 // BackupSchedule (v5.43.0) gates the in-process scheduler that
@@ -679,14 +695,16 @@ type Features struct {
 // when `time.Since(LastRunAt) >= EveryHours`. Disabled by default
 // — operator opts in from Settings → Backup.
 type BackupSchedule struct {
-	Enabled     bool      `json:"enabled"`
-	EveryHours  int       `json:"every_hours"`
-	DestPath    string    `json:"dest_path"`
-	RetainCount int       `json:"retain_count"`
-	LastRunAt   time.Time `json:"last_run_at,omitempty"`
-	LastRunErr  string    `json:"last_run_err,omitempty"`
-	LastRunSize int64     `json:"last_run_size_bytes,omitempty"`
-	NextRunAt   time.Time `json:"next_run_at,omitempty"`
+	Enabled              bool      `json:"enabled"`
+	EveryHours           int       `json:"every_hours,omitempty"`
+	CronExpr             string    `json:"cron_expr,omitempty"`
+	DestPath             string    `json:"dest_path"`
+	RetainCount          int       `json:"retain_count"`
+	EncryptionPassphrase string    `json:"encryption_passphrase,omitempty"`
+	LastRunAt            time.Time `json:"last_run_at,omitempty"`
+	LastRunErr           string    `json:"last_run_err,omitempty"`
+	LastRunSize          int64     `json:"last_run_size_bytes,omitempty"`
+	NextRunAt            time.Time `json:"next_run_at,omitempty"`
 }
 
 // Permission constants. PermAdmin is a wildcard granting everything.

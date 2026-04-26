@@ -55,13 +55,20 @@ export function StatePill({
   );
 }
 
+// HostStatusPill maps host-shaped status strings (online,
+// connected, healthy, etc.) onto the running/stopped pill styling.
+// Pre-v5.45.1 the helper only matched the literal "online", so
+// Dashboard.tsx — which passes "connected"/"disconnected" — got a
+// grey pill regardless of whether the host was up.
+const HOST_ONLINE_LABELS = new Set(['online', 'connected', 'up', 'healthy']);
+
 /**
- * HostStatusPill maps the host status (online / offline / etc.)
- * onto the same pill styling. Online → running-coloured;
- * everything else → stopped.
+ * HostStatusPill maps the host status string onto the pill
+ * styling. Recognises a small set of "up" labels so
+ * connected/online/up all render with the running color.
  */
 export function HostStatusPill({ status }: { status: string }) {
-  const isOnline = status === 'online';
+  const isOnline = HOST_ONLINE_LABELS.has(status.toLowerCase());
   return (
     <StatePill
       state={isOnline ? 'running' : 'stopped'}
