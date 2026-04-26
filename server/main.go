@@ -87,6 +87,7 @@ func main() {
 	backend := bootstrapBackend(*mongoURL, *mongoDB, *dataFile)
 	log.Printf("backend: using %s", backend.Name())
 	store := NewStoreWithBackend(backend, *dataFile)
+	serverRestorePaths.DataFile = *dataFile
 
 	// Kick off the audit-log shipper worker. Safe to call even when
 	// no shipping config exists yet — worker no-ops until the operator
@@ -103,6 +104,7 @@ func main() {
 	// TLS paths are resolved below after the -cert / -key flags and the
 	// auto-gen fallback; set the CA dir here because it's known now.
 	serverBackupPaths.CADir = *caDir
+	serverRestorePaths.CADir = *caDir
 
 	// Grant signer (v5.11). Ed25519 key used to sign per-migration
 	// authorization tokens. Stored next to the cluster CA so a single
@@ -151,6 +153,8 @@ func main() {
 		}
 		serverBackupPaths.TLSCert = certPath
 		serverBackupPaths.TLSKey = keyPath
+		serverRestorePaths.TLSCert = certPath
+		serverRestorePaths.TLSKey = keyPath
 	}
 
 	// Background: expiry watcher. Covers three certificate classes:
@@ -374,6 +378,12 @@ func main() {
 	// scripts/bootstrap.sh --restore because replacing live state
 	// in-process is hazardous.
 	mux.Handle("/api/admin/backup", requirePerm(store, "user.manage", handleBackup(store)))
+	// Restore (v5.39.0). Multipart upload of a backup tarball; the
+	// handler verifies checksums + writes files into live volumes,
+	// then expects the operator to hit /api/admin/restart so docker
+	// brings the server back against the restored state.
+	mux.Handle("/api/admin/restore", requirePerm(store, "user.manage", handleRestore(store)))
+	mux.Handle("/api/admin/restart", requirePerm(store, "user.manage", handleRestart(store)))
 	// Database backend status + migration (v5.1+). Gated on user.manage;
 	// considered a platform-ops operation alongside TLS management.
 	mux.Handle("/api/settings/database", requirePerm(store, "user.manage", handleDatabaseStatus(store)))

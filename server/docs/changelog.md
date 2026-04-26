@@ -10,6 +10,24 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.39.0 — API-driven restore + Settings → Backup tab
+
+Restore is no longer CLI-only. **Settings → Backup** has the
+download button (already worked via `/api/admin/backup`) and a
+restore upload that takes a backup `.tar.gz`, verifies SHA-256 of
+every entry against `manifest.json`, and stages files into the live
+volumes. Operator confirms with a typed "RESTORE" prompt. After the
+upload succeeds, **Restart server** triggers a clean exit; container
+restart policy brings the server back against the restored data.
+
+Endpoints (both gated on `user.manage`):
+
+- `POST /api/admin/restore` — multipart upload (`backup` field).
+- `POST /api/admin/restart` — clean Save + `os.Exit(0)`.
+
+The CLI path (`bootstrap.sh --restore`) still works unchanged for
+DR scenarios where the SPA isn't reachable.
+
 ## v5.38.0 — internal: dispatcher + store split finished
 
 Pure refactor — closes out the P2 #1 + #2 architectural cleanup
