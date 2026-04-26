@@ -27,6 +27,10 @@ func handleMigrate(w http.ResponseWriter, req models.CommandRequest, vmTarget st
 		respond(w, false, "MIGRATE requires params.destination")
 		return
 	}
+	// v5.44.0: operator can flip strict-host-key via Features. Server
+	// passes the value through; agent toggles its package-level switch
+	// before the SSH-transport paths hit `ssh -o`.
+	setSSHStrict(req.Params["strict_host_key"] == "yes")
 	// v5.11: forward the server-minted migration grant to the
 	// destination agent so the dest validates + records it before
 	// libvirtd's TLS handshake starts. Only applies to mTLS
@@ -77,6 +81,7 @@ func handleOfflineMigrate(w http.ResponseWriter, req models.CommandRequest, vmTa
 		respond(w, false, "OFFLINE_MIGRATE requires params.destination")
 		return
 	}
+	setSSHStrict(req.Params["strict_host_key"] == "yes")
 	status := getMigStatus()
 	if status.Active {
 		respond(w, false, "another migration is already in progress: "+status.VMName)

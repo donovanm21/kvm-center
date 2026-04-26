@@ -206,4 +206,5 @@ export interface Features {
   setup_complete?: boolean;
   setup_completed_at?: string;
   public_url?: string;
+  ssh_strict_host_key_checking?: boolean;
 }

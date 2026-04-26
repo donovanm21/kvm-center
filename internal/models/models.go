@@ -658,6 +658,18 @@ type Features struct {
 	// links. Empty means "fall back to window.location in the SPA and
 	// disable deep links in webhooks".
 	PublicURL string `json:"public_url,omitempty"`
+
+	// SSHStrictHostKeyChecking (v5.44.0) — when true, the agent's
+	// SSH-transport migration paths (offline SCP, fallback live
+	// migrate via qemu+ssh) dial with `StrictHostKeyChecking=yes`
+	// and `UserKnownHostsFile=/etc/kvm-center/ssh_known_hosts`.
+	// Operators must populate that file before flipping the flag —
+	// otherwise SSH migrations refuse with "host key verification
+	// failed". Default false to preserve existing behaviour while
+	// audit-trail (v5.37.1 Tier 2 #8) keeps SSH-transport choices
+	// visible. Recommended on shared / multi-tenant networks; on a
+	// dedicated management VLAN the existing posture is acceptable.
+	SSHStrictHostKeyChecking bool `json:"ssh_strict_host_key_checking,omitempty"`
 }
 
 // BackupSchedule (v5.43.0) gates the in-process scheduler that

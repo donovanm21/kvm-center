@@ -10,6 +10,32 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.44.0 — security hardening: gRPC client-cert + SSH host-key
+
+Two opt-in tighten-ups for operators on shared / multi-tenant
+networks. Both default to the legacy posture so existing
+deployments don't need to re-enroll anything.
+
+- **gRPC client-cert (mTLS) — opt-in.** Server's TLS listener now
+  accepts client certs via `tls.VerifyClientCertIfGiven`,
+  validating against the cluster CA pool. The gRPC stream
+  interceptor reads the verified cert's CN as the host_id and
+  prefers it over the v5.37.1 metadata header
+  (`x-kvmc-agent-host`). Agents present the leaf cert installed
+  by `install-agent.sh` (`/etc/pki/libvirt/clientcert.pem`) when
+  available; otherwise fall back to metadata-only. No operator
+  action required — once an agent updates and the leaf is
+  present, gRPC streams automatically authenticate via the cert.
+- **Strict SSH host-key checking — opt-in.** New
+  `Features.SSHStrictHostKeyChecking` flag (Settings → General).
+  When on, agents dial SSH-transport migrations with
+  `StrictHostKeyChecking=yes`. Operators must populate
+  `/var/lib/kvm-migrator/.ssh/known_hosts` on each agent first.
+  Off by default; the audit trail (Tier 2 #8, v5.37.1) keeps
+  SSH-transport choices visible regardless.
+
+migrations.md updated.
+
 ## v5.43.0 — scheduled backups
 
 The pre-5.43 backup endpoint was unscheduled — operators wrapped

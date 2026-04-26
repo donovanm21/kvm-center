@@ -160,6 +160,20 @@ func (c *ClusterCA) Cert() *x509.Certificate {
 	return c.cert
 }
 
+// Pool returns an *x509.CertPool containing this CA, suitable for
+// configuring tls.Config.ClientCAs / RootCAs. Used by the gRPC
+// listener (v5.44.0) to verify hypervisor leaf certs that agents
+// present on the streaming RPC.
+func (c *ClusterCA) Pool() *x509.CertPool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	pool := x509.NewCertPool()
+	if c.cert != nil {
+		pool.AddCert(c.cert)
+	}
+	return pool
+}
+
 // SignHypervisorCSR validates a CSR from a hypervisor agent, issues
 // a leaf certificate bound to hostID (CN), and returns the leaf in
 // PEM form. The CSR's subject CN is overridden with hostID so a
