@@ -112,6 +112,7 @@ func (s *Store) ExportSnapshot() ([]byte, error) {
 		APITokens:        s.apiTokens,
 		HypervisorCerts:  s.hypervisorCerts,
 		ConsoleSecret:    s.consoleSecret,
+		BackupSchedule:   s.backupSchedule,
 	}
 	d.Dirty = computeDirty(&d)
 	return json.MarshalIndent(&d, "", "  ")

@@ -45,6 +45,11 @@ type persistData struct {
 	// re-fetch after a server restart.
 	ConsoleSecret string `json:"console_secret,omitempty"`
 
+	// BackupSchedule (v5.43.0) — operator-configured periodic backup
+	// destination + retention. Nil when the feature is disabled
+	// (default). See backup_scheduler.go.
+	BackupSchedule *models.BackupSchedule `json:"backup_schedule,omitempty"`
+
 	// Dirty is a transient hint to the persistence backend listing
 	// which cold collections changed since the last save. Never
 	// serialised — mongo backend reads it to skip unchanged
@@ -87,6 +92,9 @@ type Store struct {
 	// consoleSecret is loaded from the JSON store and re-persisted on
 	// first access; see GetOrCreateConsoleSecret in console_token.go.
 	consoleSecret string
+	// backupSchedule (v5.43.0): operator-configured periodic backup.
+	// Nil when disabled. See backup_scheduler.go for the worker.
+	backupSchedule *models.BackupSchedule
 	// audit is the in-memory event ring buffer; capped at
 	// auditRetentionMax (see audit.go).
 	audit []*models.AuditEvent

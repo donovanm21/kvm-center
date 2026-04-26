@@ -111,7 +111,21 @@ volume snapshot you should have taken. Roll back by reversing step 3.
 
 ## Scheduling
 
-The v5.27 backup endpoint is unscheduled — operators run it ad-hoc or
-wrap it in their existing backup tooling (Borg, Restic, Kopia, cron).
-A future patch may add a Settings → Backup tab with a cadence + retention
-policy if operators ask for it.
+**Settings → Backup → Schedule** (v5.43.0+). Tick the **Enable**
+checkbox, set how often (`every_hours`), pick a destination path
+on the docker host, and choose how many tarballs to keep
+(`retain_count`). The server runs a once-per-minute scheduler tick
+that fires when `time.Since(last_run) >= every_hours`. Tarballs
+are written atomically (`.tmp` + rename) and rotation drops the
+oldest beyond `retain_count`.
+
+The scheduler writes to a host directory that's mounted into the
+container — pick a path under a bind-mounted volume so backups
+survive container rebuilds. The default `/var/lib/kvm-center/backups`
+follows that pattern in the shipped compose stack.
+
+Disabled by default — opt in when ready. Outcome (last-run
+timestamp, size, error) is exposed in the UI so a stuck scheduler
+is visible at a glance. Want a different cadence than a fixed
+`every_hours`? File an issue — we can add a real cron expression
+if there's demand.
