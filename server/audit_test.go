@@ -71,15 +71,17 @@ func TestAuditFilter_SuccessTristate(t *testing.T) {
 }
 
 func TestAddAuditEvent_RingBufferTrim(t *testing.T) {
-	s := NewStore(t.TempDir() + "/data.json")
+	// Use a nil backend so AsyncSave's per-call goroutines no-op
+	// inside Save. Pre-v5.41.0 this test went through a real
+	// JSONBackend and fired ~1100 saves in a hot loop, which under
+	// `-race` blew past the test deadline because each goroutine
+	// queued behind the snapshot lock. The test is about the ring
+	// buffer trim, not persistence — keep the focus tight.
+	s := NewStoreWithBackend(nil, t.TempDir()+"/data.json")
 	t.Cleanup(func() { s.saveWG.Wait() })
 	for i := 0; i < auditRetentionMax+50; i++ {
 		s.AddAuditEvent(&models.AuditEvent{Action: "test"})
 	}
-	// Drain the fire-and-forget Save goroutines before the test's
-	// TempDir teardown runs — otherwise a late rename into the
-	// already-removed directory trips the testing harness's
-	// RemoveAll cleanup with "directory not empty".
 	s.saveWG.Wait()
 	evs, _ := s.GetAuditEvents(AuditFilter{Limit: auditRetentionMax + 100})
 	if len(evs) > auditRetentionMax {

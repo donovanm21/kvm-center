@@ -90,12 +90,64 @@ func (s *Store) isSaveGated() bool {
 
 // Save persists the current store state through the configured
 // backend (JSON file or Mongo).
+//
+// Lock discipline (v5.41.0, closes feedback_async_save.md):
+// computeDirty + the whole-state JSON marshal both run under the
+// read lock so nothing iterates the live pointer-valued maps
+// without it. The marshalled bytes are deep-copied out — we
+// unmarshal back into a fresh persistData struct that the backend
+// owns end-to-end. That lets us release the lock before the
+// (potentially seconds-long) Mongo / JSON-file write.
+//
+// Pre-fix the snapshot was built under RLock and the lock released
+// before computeDirty + backend.Save iterated the same maps. The
+// race detector caught it once concurrent AsyncSave + auth writes
+// landed in the same test. The roundtrip pays one extra marshal +
+// unmarshal per Save (~hundreds of µs per MB) which is cheap
+// relative to the I/O it precedes.
 func (s *Store) Save() {
+	// Cheap pre-checks before the lock-held snapshot phase. The
+	// nil-backend short-circuit matters in tests that pump
+	// AsyncSave at high rate against an in-memory store — without
+	// it, every save still serialises through snapshotBytes' read
+	// lock, which under `-race` overhead piles up and starves
+	// concurrent writers.
+	if s.backend == nil {
+		return
+	}
 	if !s.isSaveGated() {
 		log.Printf("store: skipping Save — initial Load returned empty on a non-fresh install; resolve backend connectivity first")
 		return
 	}
+	bytes, dirty, ok := s.snapshotBytes()
+	if !ok {
+		return
+	}
+
+	// Deep copy: unmarshal back into a fresh persistData. The backend
+	// iterates ITS struct, never the live store maps.
+	var snap persistData
+	if err := json.Unmarshal(bytes, &snap); err != nil {
+		log.Printf("store: snapshot unmarshal: %v", err)
+		return
+	}
+	snap.Dirty = dirty // Dirty is `json:"-"`, reattach.
+
+	ctx, cancel := contextWithTimeout(15 * time.Second)
+	defer cancel()
+	if err := s.backend.Save(ctx, &snap); err != nil {
+		log.Printf("store: backend save error (%s): %v", s.backend.Name(), err)
+	}
+}
+
+// snapshotBytes builds a persistData under the read lock, runs
+// computeDirty, and serialises to JSON — all under the lock so
+// concurrent writers can't race the iteration. Returns the bytes,
+// the dirty set (which doesn't survive json round-trip), and a
+// success flag.
+func (s *Store) snapshotBytes() ([]byte, map[string]bool, bool) {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	d := persistData{
 		Hosts:            s.hosts,
 		VMs:              s.vms,
@@ -119,18 +171,13 @@ func (s *Store) Save() {
 		CommandLog:       s.commandLog.snapshot(),
 		ConsoleSecret:    s.consoleSecret,
 	}
-	s.mu.RUnlock()
 	d.Dirty = computeDirty(&d)
-
-	if s.backend == nil {
-		log.Printf("store: no backend configured, skipping save")
-		return
+	bytes, err := json.Marshal(&d)
+	if err != nil {
+		log.Printf("store: snapshot marshal: %v", err)
+		return nil, nil, false
 	}
-	ctx, cancel := contextWithTimeout(15 * time.Second)
-	defer cancel()
-	if err := s.backend.Save(ctx, &d); err != nil {
-		log.Printf("store: backend save error (%s): %v", s.backend.Name(), err)
-	}
+	return bytes, d.Dirty, true
 }
 
 func (s *Store) load() {

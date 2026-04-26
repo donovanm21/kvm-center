@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiGet, apiPost, apiPut } from '@/api/client';
 import { useToast } from '@/hooks/useToast';
+import { qk } from '@/queryKeys';
 
 interface MetricsConfig {
   enabled: boolean;
@@ -22,7 +23,7 @@ export function MetricsTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const q = useQuery({
-    queryKey: ['metrics-settings'],
+    queryKey: qk.metricsSettings(),
     queryFn: () => apiGet<MetricsConfig>('/api/settings/metrics'),
   });
   const [form, setForm] = useState<MetricsConfig | null>(null);
@@ -32,7 +33,7 @@ export function MetricsTab() {
     mutationFn: (cfg: MetricsConfig) => apiPut('/api/settings/metrics', cfg),
     onSuccess: () => {
       toast('success', 'Metrics settings saved');
-      qc.invalidateQueries({ queryKey: ['metrics-settings'] });
+      qc.invalidateQueries({ queryKey: qk.metricsSettings() });
     },
     onError: (e: Error) => toast('error', 'Save failed: ' + e.message),
   });
@@ -40,7 +41,7 @@ export function MetricsTab() {
     mutationFn: () => apiPost('/api/settings/metrics/test'),
     onSuccess: () => {
       toast('success', 'Test sample accepted by InfluxDB');
-      qc.invalidateQueries({ queryKey: ['metrics-settings'] });
+      qc.invalidateQueries({ queryKey: qk.metricsSettings() });
     },
     onError: (e: Error) => toast('error', 'Test failed: ' + e.message),
   });

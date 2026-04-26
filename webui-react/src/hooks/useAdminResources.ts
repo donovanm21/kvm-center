@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiDelete, apiGet, apiPost, apiPut } from '@/api/client';
 import { useToast } from './useToast';
 import type { Features } from '@/types';
+import { qk } from '@/queryKeys';
 
 /* ── Users ──────────────────────────────────────────────── */
 
@@ -85,16 +86,16 @@ export interface SAMLConfig {
 }
 
 export const useUsers = () =>
-  useQuery({ queryKey: ['users'], queryFn: () => apiGet<AdminUser[]>('/api/users') });
+  useQuery({ queryKey: qk.users(), queryFn: () => apiGet<AdminUser[]>('/api/users') });
 
 export const useGroups = () =>
-  useQuery({ queryKey: ['groups'], queryFn: () => apiGet<AdminGroup[]>('/api/groups') });
+  useQuery({ queryKey: qk.groups(), queryFn: () => apiGet<AdminGroup[]>('/api/groups') });
 
 export const useRoles = () =>
-  useQuery({ queryKey: ['roles'], queryFn: () => apiGet<AdminRolesResponse>('/api/roles') });
+  useQuery({ queryKey: qk.roles(), queryFn: () => apiGet<AdminRolesResponse>('/api/roles') });
 
 export const useIDPs = () =>
-  useQuery({ queryKey: ['idps'], queryFn: () => apiGet<AdminIDP[]>('/api/idps') });
+  useQuery({ queryKey: qk.idps(), queryFn: () => apiGet<AdminIDP[]>('/api/idps') });
 
 /* ── Feature toggles ────────────────────────────────────── */
 
@@ -104,7 +105,7 @@ export function useUpdateFeatures() {
   return useMutation({
     mutationFn: (f: Features) => apiPost<Features>('/api/settings/update', f),
     onSuccess: (data) => {
-      qc.setQueryData(['features'], data);
+      qc.setQueryData(qk.features(), data);
       toast('success', 'Settings saved');
     },
     onError: (err) => toast('error', 'Save failed: ' + (err instanceof Error ? err.message : String(err))),
@@ -137,7 +138,7 @@ export function useCreateUser() {
     mutationFn: (p: UserCreatePayload) => apiPost<AdminUser>('/api/users/new', p),
     onSuccess: () => {
       toast('success', 'User created');
-      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: qk.users() });
     },
     onError: (err) => toast('error', 'Create failed: ' + (err instanceof Error ? err.message : String(err))),
   });
@@ -151,7 +152,7 @@ export function useUpdateUser() {
       apiPut<AdminUser>(`/api/users/${encodeURIComponent(id)}`, payload),
     onSuccess: () => {
       toast('success', 'User updated');
-      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: qk.users() });
     },
     onError: (err) => toast('error', 'Update failed: ' + (err instanceof Error ? err.message : String(err))),
   });
@@ -164,7 +165,7 @@ export function useDeleteUser() {
     mutationFn: (id: string) => apiDelete(`/api/users/${encodeURIComponent(id)}`),
     onSuccess: () => {
       toast('success', 'User deleted');
-      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: qk.users() });
     },
     onError: (err) => toast('error', 'Delete failed: ' + (err instanceof Error ? err.message : String(err))),
   });
@@ -185,7 +186,7 @@ export function useCreateGroup() {
     mutationFn: (p: GroupPayload) => apiPost<AdminGroup>('/api/groups/new', p),
     onSuccess: () => {
       toast('success', 'Group created');
-      qc.invalidateQueries({ queryKey: ['groups'] });
+      qc.invalidateQueries({ queryKey: qk.groups() });
     },
     onError: (err) => toast('error', 'Create failed: ' + (err instanceof Error ? err.message : String(err))),
   });
@@ -199,8 +200,8 @@ export function useUpdateGroup() {
       apiPut<AdminGroup>(`/api/groups/${encodeURIComponent(id)}`, payload),
     onSuccess: () => {
       toast('success', 'Group updated');
-      qc.invalidateQueries({ queryKey: ['groups'] });
-      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: qk.groups() });
+      qc.invalidateQueries({ queryKey: qk.users() });
     },
     onError: (err) => toast('error', 'Update failed: ' + (err instanceof Error ? err.message : String(err))),
   });
@@ -213,8 +214,8 @@ export function useDeleteGroup() {
     mutationFn: (id: string) => apiDelete(`/api/groups/${encodeURIComponent(id)}`),
     onSuccess: () => {
       toast('success', 'Group deleted');
-      qc.invalidateQueries({ queryKey: ['groups'] });
-      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: qk.groups() });
+      qc.invalidateQueries({ queryKey: qk.users() });
     },
     onError: (err) => toast('error', 'Delete failed: ' + (err instanceof Error ? err.message : String(err))),
   });
@@ -235,7 +236,7 @@ export function useCreateRole() {
     mutationFn: (p: RolePayload) => apiPost<AdminRole>('/api/roles/new', p),
     onSuccess: () => {
       toast('success', 'Role created');
-      qc.invalidateQueries({ queryKey: ['roles'] });
+      qc.invalidateQueries({ queryKey: qk.roles() });
     },
     onError: (err) => toast('error', 'Create failed: ' + (err instanceof Error ? err.message : String(err))),
   });
@@ -249,7 +250,7 @@ export function useUpdateRole() {
       apiPut<AdminRole>(`/api/roles/${encodeURIComponent(id)}`, payload),
     onSuccess: () => {
       toast('success', 'Role updated');
-      qc.invalidateQueries({ queryKey: ['roles'] });
+      qc.invalidateQueries({ queryKey: qk.roles() });
     },
     onError: (err) => toast('error', 'Update failed: ' + (err instanceof Error ? err.message : String(err))),
   });
@@ -262,9 +263,9 @@ export function useDeleteRole() {
     mutationFn: (id: string) => apiDelete(`/api/roles/${encodeURIComponent(id)}`),
     onSuccess: () => {
       toast('success', 'Role deleted');
-      qc.invalidateQueries({ queryKey: ['roles'] });
-      qc.invalidateQueries({ queryKey: ['users'] });
-      qc.invalidateQueries({ queryKey: ['groups'] });
+      qc.invalidateQueries({ queryKey: qk.roles() });
+      qc.invalidateQueries({ queryKey: qk.users() });
+      qc.invalidateQueries({ queryKey: qk.groups() });
     },
     onError: (err) => toast('error', 'Delete failed: ' + (err instanceof Error ? err.message : String(err))),
   });
@@ -279,7 +280,7 @@ export function useCreateIDP() {
     mutationFn: (p: Partial<AdminIDP>) => apiPost<AdminIDP>('/api/idps/new', p),
     onSuccess: () => {
       toast('success', 'Provider created');
-      qc.invalidateQueries({ queryKey: ['idps'] });
+      qc.invalidateQueries({ queryKey: qk.idps() });
     },
     onError: (err) => toast('error', 'Create failed: ' + (err instanceof Error ? err.message : String(err))),
   });
@@ -294,7 +295,7 @@ export function useUpdateIDP() {
       apiPost(`/api/idps/${encodeURIComponent(id)}`, payload),
     onSuccess: () => {
       toast('success', 'Provider updated');
-      qc.invalidateQueries({ queryKey: ['idps'] });
+      qc.invalidateQueries({ queryKey: qk.idps() });
     },
     onError: (err) => toast('error', 'Update failed: ' + (err instanceof Error ? err.message : String(err))),
   });
@@ -307,7 +308,7 @@ export function useDeleteIDP() {
     mutationFn: (id: string) => apiDelete(`/api/idps/${encodeURIComponent(id)}`),
     onSuccess: () => {
       toast('success', 'Provider deleted');
-      qc.invalidateQueries({ queryKey: ['idps'] });
+      qc.invalidateQueries({ queryKey: qk.idps() });
     },
     onError: (err) => toast('error', 'Delete failed: ' + (err instanceof Error ? err.message : String(err))),
   });

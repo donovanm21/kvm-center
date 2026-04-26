@@ -1,17 +1,18 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { qk } from '@/queryKeys';
 
 // Map a server-side event type to the React Query cache keys that
 // should be invalidated. Keeping the table here — rather than inline in
 // a hook — means adding a new event type is a one-line change and keeps
 // the server ignorant of the client's cache layout.
 const INVALIDATION_MAP: Record<string, readonly (readonly string[])[]> = {
-  inventory: [['hosts'], ['vms'], ['storage']],
-  migration: [['migrations']],
-  settings: [['features']],
-  users: [['users']],
-  groups: [['groups']],
-  roles: [['roles']],
-  idps: [['idps']],
+  inventory: [qk.hosts(), qk.vms(), qk.storage()],
+  migration: [qk.migrations()],
+  settings: [qk.features()],
+  users: [qk.users()],
+  groups: [qk.groups()],
+  roles: [qk.roles()],
+  idps: [qk.idps()],
 };
 
 /**

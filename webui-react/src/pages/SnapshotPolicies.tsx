@@ -6,6 +6,7 @@ import { PaginationBar, usePagination } from '@/components/Pagination';
 import { useAuth } from '@/hooks/useAuth';
 import { useFeatures, useVMs } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
+import { qk } from '@/queryKeys';
 
 interface SnapshotPolicy {
   id?: string;
@@ -55,7 +56,7 @@ export function SnapshotPolicies() {
       : '';
 
   const policies = useQuery({
-    queryKey: ['snapshot-policies'],
+    queryKey: qk.snapshotPolicies(),
     queryFn: () => apiGet<SnapshotPolicy[]>('/api/snapshot-policies'),
     refetchInterval: 60_000,
   });
@@ -74,7 +75,7 @@ export function SnapshotPolicies() {
       }).then(async (r) => { if (!r.ok) throw new Error(await r.text()); }),
     onSuccess: () => {
       toast('success', 'Policy deleted');
-      qc.invalidateQueries({ queryKey: ['snapshot-policies'] });
+      qc.invalidateQueries({ queryKey: qk.snapshotPolicies() });
     },
     onError: (e) => toast('error', `Delete failed: ${e instanceof Error ? e.message : String(e)}`),
   });
@@ -83,7 +84,7 @@ export function SnapshotPolicies() {
     mutationFn: (id: string) => apiPost(`/api/snapshot-policies/${encodeURIComponent(id)}/run`),
     onSuccess: () => {
       toast('success', 'Policy queued — first snapshots will appear in a moment');
-      qc.invalidateQueries({ queryKey: ['snapshot-policies'] });
+      qc.invalidateQueries({ queryKey: qk.snapshotPolicies() });
     },
     onError: (e) => toast('error', `Run failed: ${e instanceof Error ? e.message : String(e)}`),
   });
@@ -187,7 +188,7 @@ export function SnapshotPolicies() {
           initial={editing}
           vms={(vms.data ?? []).map((v) => ({ uuid: v.uuid, name: v.name, host: v.host_id }))}
           onClose={() => setEditing(null)}
-          onSaved={() => qc.invalidateQueries({ queryKey: ['snapshot-policies'] })}
+          onSaved={() => qc.invalidateQueries({ queryKey: qk.snapshotPolicies() })}
         />
       )}
     </>

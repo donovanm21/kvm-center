@@ -396,49 +396,11 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		handleEditVM(w, req, vmTarget)
 		return
 	case "CHANGE_MEDIA":
-		// Live ISO swap on a CDROM target. Params:
-		//   media_action = "insert" | "eject"
-		//   target       = libvirt device name (e.g. "hda", "sdb")
-		//   path         = pool-resident ISO path (insert only)
-		action := strings.ToLower(strings.TrimSpace(req.Params["media_action"]))
-		target := strings.TrimSpace(req.Params["target"])
-		if target == "" {
-			respond(w, false, "CHANGE_MEDIA requires params.target (CDROM device name)")
-			return
-		}
-		switch action {
-		case "eject":
-			out, err = exec.Command("virsh", "change-media", vmTarget, target, "--eject", "--live", "--config").CombinedOutput()
-		case "insert":
-			path := strings.TrimSpace(req.Params["path"])
-			if path == "" {
-				respond(w, false, "CHANGE_MEDIA insert requires params.path")
-				return
-			}
-			out, err = exec.Command("virsh", "change-media", vmTarget, target, path, "--insert", "--live", "--config").CombinedOutput()
-		default:
-			respond(w, false, "CHANGE_MEDIA requires params.media_action=insert|eject")
-			return
-		}
+		handleChangeMedia(w, req, vmTarget)
+		return
 	case "DELETE_SNAPSHOT":
-		snapName := req.Params["name"]
-		if snapName == "" {
-			respond(w, false, "DELETE_SNAPSHOT requires params.name")
-			return
-		}
-		out, err = exec.Command("virsh", "snapshot-delete", vmTarget, snapName).CombinedOutput()
-		if err != nil {
-			// External snapshots with backing chains can't be fully deleted while
-			// the VM is running. Fall back to --metadata (removes the snapshot
-			// record but preserves the backing disk files).
-			metaOut, metaErr := exec.Command("virsh", "snapshot-delete", vmTarget, snapName, "--metadata").CombinedOutput()
-			if metaErr == nil {
-				msg := "Snapshot metadata removed (external snapshot — disk backing files preserved): " + strings.TrimSpace(string(metaOut))
-				log.Printf("command ok: DELETE_SNAPSHOT (metadata) vm=%s snap=%s", vmTarget, snapName)
-				respond(w, true, msg)
-				return
-			}
-		}
+		handleDeleteSnapshot(w, req, vmTarget)
+		return
 	case "MIGRATE":
 		handleMigrate(w, req, vmTarget)
 		return

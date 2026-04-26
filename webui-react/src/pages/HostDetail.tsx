@@ -16,6 +16,7 @@ import { CreateSnapshotModal } from '@/pages/VMDetail';
 import { SortableTH, useSort } from '@/components/SortableTH';
 import { PHASES_PAST_DEFINE, lockKey } from '@/pages/VMs';
 import { LockBadge, StatePill, type LockReason } from '@/components/StatePill';
+import { qk } from '@/queryKeys';
 
 /**
  * MaintenanceToggle flips a host between operational and "draining"
@@ -48,7 +49,7 @@ function MaintenanceToggle({ host }: { host: Host }) {
             ? `Host entered maintenance — draining VMs (${mode})`
             : 'Host entered maintenance mode',
       );
-      qc.invalidateQueries({ queryKey: ['hosts'] });
+      qc.invalidateQueries({ queryKey: qk.hosts() });
       setAsking(false);
       setReason('');
       setDrain(false);
@@ -154,8 +155,8 @@ function UpdateAgentButton({ host }: { host: Host }) {
       // Telemetry from the fresh binary lands 30s later; invalidate
       // hosts now + again after a short delay so the UI refresh
       // reflects any new agent-reported fields.
-      qc.invalidateQueries({ queryKey: ['hosts'] });
-      setTimeout(() => qc.invalidateQueries({ queryKey: ['hosts'] }), 10_000);
+      qc.invalidateQueries({ queryKey: qk.hosts() });
+      setTimeout(() => qc.invalidateQueries({ queryKey: qk.hosts() }), 10_000);
     },
     onError: (e) => toast('error', `Update failed: ${e instanceof Error ? e.message : String(e)}`),
   });
@@ -215,8 +216,8 @@ function DeleteHostButton({ host }: { host: Host }) {
     mutationFn: () => apiDelete(`/api/hosts/${encodeURIComponent(host.id)}`),
     onSuccess: () => {
       toast('success', `Removed ${host.id} from inventory`);
-      qc.invalidateQueries({ queryKey: ['hosts'] });
-      qc.invalidateQueries({ queryKey: ['vms'] });
+      qc.invalidateQueries({ queryKey: qk.hosts() });
+      qc.invalidateQueries({ queryKey: qk.vms() });
       setAsking(false);
       setConfirmName('');
       // Bounce back to the Hosts list since this page no longer has a subject.

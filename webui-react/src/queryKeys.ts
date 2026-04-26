@@ -1,10 +1,12 @@
-// Centralised React Query cache-key factory (P2 #3, v5.37.0).
+// Centralised React Query cache-key factory (P2 #3, v5.37.0;
+// adoption finished v5.41.0).
 //
 // Pre-v5.37 every hook spelled its own cache-key array literal —
-// `['vms']`, `['host-metrics', hostID]`, `['snapshots', hostID, vmName]`
-// etc. Consistent in practice but spread across ~25 files; a future
-// shape change (adding a tenant scope, key-namespacing for SSE
-// invalidation, switching tuple order) would mean a 25-file diff.
+// `['vms']`, `['host-metrics', hostID]`, `['snapshots', hostID,
+// vmName]` etc. Consistent in practice but spread across ~25 files;
+// a future shape change (adding a tenant scope, key-namespacing for
+// SSE invalidation, switching tuple order) would mean a 25-file
+// diff.
 //
 // This factory is the single edit point. Each function returns an
 // `as const` tuple so React Query's QueryKey constraints stay tight.

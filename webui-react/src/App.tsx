@@ -23,6 +23,7 @@ import { Deployment } from './pages/Deployment';
 import { Settings } from './pages/Settings';
 import { SystemHealth } from './pages/SystemHealth';
 import { Docs } from './pages/Docs';
+import { qk } from '@/queryKeys';
 
 // Port of each v3 view lands as its own route and replaces the stub.
 // Phase 1 ships Dashboard parity only.
@@ -53,7 +54,7 @@ function Shell() {
   // Only admins see the wizard; non-admins skip it entirely because
   // completing it requires user.manage anyway.
   const setup = useQuery({
-    queryKey: ['setup-state'],
+    queryKey: qk.setupState(),
     queryFn: () => apiGet<{ complete: boolean }>('/api/setup/state'),
     enabled: !!user,
   });

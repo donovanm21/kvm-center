@@ -10,6 +10,7 @@ import { MigrationProgressCard } from './MigrationCenter';
 import { useMigrations } from '@/hooks/useInventory';
 import { useVMCommand } from '@/hooks/useVMCommand';
 import type { Host, VM } from '@/types';
+import { qk } from '@/queryKeys';
 
 type Mode = 'offline' | 'live';
 
@@ -121,7 +122,7 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
   // shows — one source of truth, no extra agent round-trip. Telemetry
   // refreshes every 30 s, so staleness is bounded by that tick.
   const poolsQuery = useQuery({
-    queryKey: ['host-pools', effectiveTarget],
+    queryKey: qk.hostPools(effectiveTarget),
     queryFn: () => apiGet<StoragePool[]>(
       '/api/storage?host=' + encodeURIComponent(effectiveTarget || ''),
     ),

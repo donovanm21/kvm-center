@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
+import { qk } from '@/queryKeys';
 
 interface BackendInfo {
   type: 'json' | 'mongo';
@@ -28,7 +29,7 @@ export function DatabaseTab() {
   const canManage = hasPerm('user.manage');
 
   const status = useQuery({
-    queryKey: ['db-status'],
+    queryKey: qk.dbStatus(),
     queryFn: () => apiGet<BackendInfo>('/api/settings/database'),
     refetchInterval: 30_000,
   });
@@ -66,7 +67,7 @@ export function DatabaseTab() {
     ),
     onSuccess: (r) => {
       toast('success', `Migrated from ${r.from} → ${r.to}. Restart the server pointed at the new backend to cut over.`);
-      qc.invalidateQueries({ queryKey: ['db-status'] });
+      qc.invalidateQueries({ queryKey: qk.dbStatus() });
     },
     onError: (e) => toast('error', `Migrate failed: ${e instanceof Error ? e.message : String(e)}`),
   });

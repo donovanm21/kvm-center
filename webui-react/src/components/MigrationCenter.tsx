@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMigrations } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
 import type { MigrationRecord } from '@/types';
+import { qk } from '@/queryKeys';
 
 interface Props {
   open: boolean;
@@ -60,7 +61,7 @@ export function MigrationProgressCard({ m }: { m: MigrationRecord }) {
     mutationFn: () => apiPost(`/api/migrations/cancel?id=${encodeURIComponent(m.id)}`),
     onSuccess: () => {
       toast('success', `Cancelling migration of ${m.vm_name}`);
-      qc.invalidateQueries({ queryKey: ['migrations'] });
+      qc.invalidateQueries({ queryKey: qk.migrations() });
     },
     onError: (err) => {
       const msg = err instanceof Error ? err.message : String(err);

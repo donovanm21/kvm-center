@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '@/api/client';
 import { useToast } from './useToast';
 import type { Snapshot } from '@/types';
+import { qk } from '@/queryKeys';
 
 /**
  * Snapshot list for a given (host, VM). Polled manually (not on SSE)
@@ -14,7 +15,7 @@ import type { Snapshot } from '@/types';
  */
 export function useSnapshots(hostID: string, vmName: string) {
   return useQuery({
-    queryKey: ['snapshots', hostID, vmName],
+    queryKey: qk.snapshots(hostID, vmName),
     queryFn: async () => {
       const resp = await apiGet<{ snapshots?: Snapshot[] } | Snapshot[]>(
         `/api/vms/snapshots?host=${encodeURIComponent(hostID)}&vm=${encodeURIComponent(vmName)}`,
@@ -42,8 +43,8 @@ export function useCreateSnapshot() {
       }),
     onSuccess: (_d, p) => {
       toast('success', `Snapshot "${p.name}" created`);
-      qc.invalidateQueries({ queryKey: ['snapshots', p.host_id, p.vm_name] });
-      qc.invalidateQueries({ queryKey: ['vms'] });
+      qc.invalidateQueries({ queryKey: qk.snapshots(p.host_id, p.vm_name) });
+      qc.invalidateQueries({ queryKey: qk.vms() });
     },
     onError: (err) => {
       toast('error', 'Snapshot failed: ' + (err instanceof Error ? err.message : String(err)));
@@ -65,8 +66,8 @@ export function useRevertSnapshot() {
       }),
     onSuccess: (_d, p) => {
       toast('success', `Reverted to "${p.name}"`);
-      qc.invalidateQueries({ queryKey: ['snapshots', p.host_id, p.vm_name] });
-      qc.invalidateQueries({ queryKey: ['vms'] });
+      qc.invalidateQueries({ queryKey: qk.snapshots(p.host_id, p.vm_name) });
+      qc.invalidateQueries({ queryKey: qk.vms() });
     },
     onError: (err) => {
       toast('error', 'Revert failed: ' + (err instanceof Error ? err.message : String(err)));
@@ -88,7 +89,7 @@ export function useDeleteSnapshot() {
       }),
     onSuccess: (_d, p) => {
       toast('success', `Snapshot "${p.name}" deleted`);
-      qc.invalidateQueries({ queryKey: ['snapshots', p.host_id, p.vm_name] });
+      qc.invalidateQueries({ queryKey: qk.snapshots(p.host_id, p.vm_name) });
     },
     onError: (err) => {
       toast('error', 'Delete failed: ' + (err instanceof Error ? err.message : String(err)));

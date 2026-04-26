@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
+import { qk } from '@/queryKeys';
 
 interface AuditEvent {
   id: string;
@@ -117,7 +118,7 @@ function ShippingPanel() {
   const canManage = hasPerm('user.manage');
 
   const cfg = useQuery({
-    queryKey: ['audit-shipping'],
+    queryKey: qk.auditShipping(),
     queryFn: () => apiGet<AuditShippingCfg>('/api/settings/audit-shipping'),
     staleTime: 30_000,
   });
@@ -138,7 +139,7 @@ function ShippingPanel() {
       }),
     onSuccess: () => {
       toast('success', 'Shipping config saved');
-      qc.invalidateQueries({ queryKey: ['audit-shipping'] });
+      qc.invalidateQueries({ queryKey: qk.auditShipping() });
     },
     onError: (e) => toast('error', `Save failed: ${e instanceof Error ? e.message : String(e)}`),
   });

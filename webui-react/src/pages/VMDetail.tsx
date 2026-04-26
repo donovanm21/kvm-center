@@ -2,8 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, useMatch, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { z } from 'zod';
+
 import { ActionsMenu, type ActionGroup } from '@/components/ActionsMenu';
 import { StatePill } from '@/components/StatePill';
+import { useZodForm } from '@/forms/useZodForm';
+import { snapshotNameSchema } from '@/forms/schemas';
 import { MigrateModal } from '@/components/MigrateModal';
 import { Modal } from '@/components/Modal';
 import { PaginationBar, usePagination } from '@/components/Pagination';
@@ -19,6 +23,7 @@ import {
 } from '@/hooks/useSnapshots';
 import { useVMCommand, type VMAction } from '@/hooks/useVMCommand';
 import type { GuestFS, Host, Snapshot, VM, VMDisk, VMNetwork, VMPCIDevice } from '@/types';
+import { qk } from '@/queryKeys';
 
 type ModalKind = null | 'snapshot' | 'delete' | 'migrate';
 
@@ -421,7 +426,7 @@ function NotesPanel({ vm }: { vm: VM }) {
     mutationFn: (notes: string) => apiPost('/api/vms/notes', { uuid: vm.uuid, notes }),
     onSuccess: () => {
       toast('success', 'Notes saved');
-      qc.invalidateQueries({ queryKey: ['vms'] });
+      qc.invalidateQueries({ queryKey: qk.vms() });
       setDraft(null);
     },
     onError: (err) => {
@@ -1517,15 +1522,32 @@ function SnapshotsTab({ vm }: { vm: VM }) {
 }
 
 /* ── Create Snapshot modal ──────────────────────────────── */
+// CreateSnapshotModal is the reference implementation for the
+// Zod + React Hook Form pattern (v5.41.0). Future modals migrate
+// onto the same shape: declare a Zod schema, wire `useZodForm`,
+// `register` inputs, surface errors via `formState.errors`.
+const snapshotFormSchema = z.object({
+  name: snapshotNameSchema,
+});
+
 export function CreateSnapshotModal({ vm, open, onClose }: { vm: VM; open: boolean; onClose: () => void }) {
-  const [name, setName] = useState(() => defaultSnapshotName());
   const create = useCreateSnapshot();
-  const submit = async () => {
-    if (!name.trim()) return;
-    await create.mutateAsync({ host_id: vm.host_id, vm_uuid: vm.uuid, vm_name: vm.name, name: name.trim() });
+  const form = useZodForm(snapshotFormSchema, {
+    defaultValues: { name: defaultSnapshotName() },
+  });
+  // RHF retains form state across mounts — re-prime the default name
+  // every time the modal opens so the visible timestamp matches now.
+  useEffect(() => {
+    if (open) form.reset({ name: defaultSnapshotName() });
+  }, [open, form]);
+
+  const onSubmit = form.handleSubmit(async (values) => {
+    await create.mutateAsync({ host_id: vm.host_id, vm_uuid: vm.uuid, vm_name: vm.name, name: values.name.trim() });
     onClose();
-    setName(defaultSnapshotName());
-  };
+  });
+
+  const nameErr = form.formState.errors.name?.message;
+
   return (
     <Modal
       open={open}
@@ -1534,7 +1556,11 @@ export function CreateSnapshotModal({ vm, open, onClose }: { vm: VM; open: boole
       footer={
         <>
           <button className="btn-secondary-sm" onClick={onClose}>Cancel</button>
-          <button className="btn-primary-sm" onClick={submit} disabled={!name.trim() || create.isPending}>
+          <button
+            className="btn-primary-sm"
+            onClick={onSubmit}
+            disabled={!form.formState.isValid || create.isPending}
+          >
             {create.isPending ? 'Creating…' : 'Create Snapshot'}
           </button>
         </>
@@ -1546,15 +1572,19 @@ export function CreateSnapshotModal({ vm, open, onClose }: { vm: VM; open: boole
       <input
         autoFocus
         type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
+        {...form.register('name')}
         style={{
           width: '100%', marginTop: 6, height: 34,
-          padding: '0 12px', border: '1px solid var(--border)', borderRadius: 4,
-          background: 'var(--bg-input)', color: 'var(--text-body)', fontSize: 13,
-          fontFamily: "'SF Mono', monospace",
+          padding: '0 12px', border: '1px solid ' + (nameErr ? '#F85149' : 'var(--border)'),
+          borderRadius: 4, background: 'var(--bg-input)', color: 'var(--text-body)',
+          fontSize: 13, fontFamily: "'SF Mono', monospace",
         }}
       />
+      {nameErr && (
+        <div style={{ marginTop: 6, fontSize: 11, color: '#F85149' }} role="alert">
+          {nameErr}
+        </div>
+      )}
       <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-faded)' }}>
         Snapshots only work on VMs with qcow2 disks.
       </div>

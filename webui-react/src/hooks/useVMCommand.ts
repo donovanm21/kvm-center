@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { apiPost } from '@/api/client';
 import { useToast } from './useToast';
+import { qk } from '@/queryKeys';
 
 export type VMAction =
   | 'START' | 'STOP' | 'FORCESTOP' | 'RESTART' | 'POWER_CYCLE'
@@ -53,14 +54,14 @@ export function useVMCommand() {
         : `${input.action} sent to ${input.vm_name}`;
       toast('success', detail);
       // The SSE event will also land in a few ms — belt and suspenders.
-      qc.invalidateQueries({ queryKey: ['vms'] });
-      qc.invalidateQueries({ queryKey: ['hosts'] });
+      qc.invalidateQueries({ queryKey: qk.vms() });
+      qc.invalidateQueries({ queryKey: qk.hosts() });
       // Migration actions create a record server-side the moment the
       // command fires. Invalidate so the /migrations page + the
       // MigrationPill on VMDetail pick it up without waiting on the
       // 60 s refetch or an SSE round-trip.
       if (input.action === 'MIGRATE' || input.action === 'OFFLINE_MIGRATE') {
-        qc.invalidateQueries({ queryKey: ['migrations'] });
+        qc.invalidateQueries({ queryKey: qk.migrations() });
       }
     },
     onError: (err, input) => {

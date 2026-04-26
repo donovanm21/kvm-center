@@ -10,6 +10,36 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.41.0 — outstanding code-quality cleanup
+
+Closes the remaining items from the 2026-04-20 review and the
+deferred AsyncSave race.
+
+- **AsyncSave race closed.** `Save()` and `ExportSnapshot()` now do
+  the persistData snapshot via JSON-roundtrip under the read lock:
+  marshal to bytes inside the lock (single read pass over the live
+  maps), release, then unmarshal back into a fresh struct that the
+  backend owns end-to-end. Backend I/O happens entirely outside
+  the lock. `go test -race ./agent/ ./server/` now passes
+  end-to-end (was timing out at 5 min). See
+  [feedback_async_save.md](https://internal/feedback) for the
+  diagnostic trail.
+- **Form validation library**: Zod + React Hook Form added to the
+  SPA, with shared schemas at `webui-react/src/forms/schemas.ts`
+  (VM-name, hostname, snapshot-name, mem/vCPU/disk ranges, bearer
+  token, https URL) and a `useZodForm` helper. `CreateSnapshotModal`
+  is the reference adoption — typed errors render inline, the
+  submit button enables on validity. New modals use the helper
+  from day one; existing ones migrate when next touched.
+- **Cache-key factory adoption finished.** Every React Query call
+  site now spells its key via `qk.*()` from `webui-react/src/queryKeys.ts`.
+  Future shape changes are a one-file diff.
+- **Dispatcher refactor finished.** CHANGE_MEDIA + DELETE_SNAPSHOT
+  extracted to `agent/action_media_snapshot.go`. Every action in
+  `agent/commander.go` is now a one-liner delegate.
+- **Windows kvm-tools self-update**: verified resolved (v5.33.5).
+  The memory note has been updated; no new code change.
+
 ## v5.40.0 — Playwright Tier 2 E2E suite
 
 Assertion-driven SPA tests live alongside the existing walkthrough

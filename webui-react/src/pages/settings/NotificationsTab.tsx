@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiGet, apiPost, apiPut } from '@/api/client';
 import { useToast } from '@/hooks/useToast';
+import { qk } from '@/queryKeys';
 
 interface Channel {
   id: string;
@@ -53,7 +54,7 @@ export function NotificationsTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const q = useQuery({
-    queryKey: ['notifications'],
+    queryKey: qk.notifications(),
     queryFn: () => apiGet<Reply>('/api/settings/notifications'),
   });
   const [form, setForm] = useState<NotifConfig | null>(null);
@@ -71,7 +72,7 @@ export function NotificationsTab() {
     mutationFn: (cfg: NotifConfig) => apiPut('/api/settings/notifications', cfg),
     onSuccess: () => {
       toast("success", 'Notification settings saved');
-      qc.invalidateQueries({ queryKey: ['notifications'] });
+      qc.invalidateQueries({ queryKey: qk.notifications() });
     },
     onError: (e: Error) => toast("error", 'Save failed: ' + e.message),
   });
@@ -81,7 +82,7 @@ export function NotificationsTab() {
       apiPost('/api/settings/notifications/test', { channel_id: channelID }),
     onSuccess: () => {
       toast("success", 'Test notification sent');
-      qc.invalidateQueries({ queryKey: ['notifications'] });
+      qc.invalidateQueries({ queryKey: qk.notifications() });
     },
     onError: (e: Error) => toast("error", 'Test failed: ' + e.message),
   });
