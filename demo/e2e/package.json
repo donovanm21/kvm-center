@@ -1,0 +1,9 @@
+{
+  "name": "kvmc-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Playwright Tier 2 E2E tests for the kvm-center SPA. Runs against the demo stack (https://localhost:8290 by default) and asserts on UI state. Distinct from demo/walkthroughs which only navigates for recording.",
+  "devDependencies": {
+    "@playwright/test": "1.50.0"
+  }
+}
