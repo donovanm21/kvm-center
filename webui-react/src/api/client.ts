@@ -55,3 +55,29 @@ export const apiGet = <T>(path: string) => request<T>('GET', path);
 export const apiPost = <T>(path: string, body?: unknown) => request<T>('POST', path, body);
 export const apiPut = <T>(path: string, body?: unknown) => request<T>('PUT', path, body);
 export const apiDelete = <T>(path: string) => request<T>('DELETE', path);
+
+// apiPostForm POSTs a multipart/form-data body. Used by the restore
+// endpoint which uploads a backup tarball under field `backup`.
+// Browser sets the multipart boundary header automatically when we
+// pass a FormData instance and don't override Content-Type.
+export async function apiPostForm<T>(path: string, form: FormData): Promise<T> {
+  const r = await fetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    body: form,
+  });
+  if (r.status === 401) throw new UnauthorizedError();
+  if (!r.ok) {
+    let msg = r.statusText;
+    try {
+      const d = await r.json();
+      if (d?.error) msg = d.error;
+      else if (d?.message) msg = d.message;
+    } catch {
+      // swallow
+    }
+    throw new ApiError(r.status, msg);
+  }
+  const text = await r.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}

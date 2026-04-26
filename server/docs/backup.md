@@ -64,8 +64,26 @@ ssh <your-docker-host> '
 
 ## Restore
 
-Restore is a CLI-only workflow because replacing live state in-process
-is hazardous (in-flight migrations, open sessions, cached certs).
+There are two ways to restore. Both write the staged files into the
+live volumes and require a server restart to load the new state —
+the difference is whether you do that from the SPA or the host.
+
+### From the SPA (v5.39.0+)
+
+**Settings → Backup → Restore.** Pick the backup `.tar.gz`, type
+`RESTORE` to confirm, click **Apply restore**. Checksums in
+`manifest.json` are verified before any file is touched. After the
+upload succeeds the **Restart server** button enables — clicking it
+saves any pending state, exits the process, and lets the container
+restart policy bring it back against the restored data.
+
+Requires `user.manage`. Audit events: `backup.restore` for the
+upload, then again for the restart.
+
+### From the docker host (CLI)
+
+Same effect, useful when the SPA isn't reachable (DR scenarios where
+the cluster is being rebuilt from scratch).
 
 1. Stop the stack: `docker compose -f /opt/kvm-center/docker-compose.yml stop kvm-center-server`
 2. Extract the backup tarball and inspect `manifest.json` to confirm

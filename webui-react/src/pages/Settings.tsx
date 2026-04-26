@@ -11,6 +11,7 @@ import { AuditTab } from './settings/AuditTab';
 import { NotificationsTab } from './settings/NotificationsTab';
 import { TokensTab } from './settings/TokensTab';
 import { MetricsTab } from './settings/MetricsTab';
+import { BackupTab } from './settings/BackupTab';
 
 // Grouped by purpose so related tabs sit next to each other:
 //   1. Platform basics     — General, Database
@@ -29,6 +30,7 @@ const TABS = [
   { to: 'notifications', label: 'Notifications' },
   { to: 'metrics', label: 'Metrics' },
   { to: 'audit', label: 'Audit Log' },
+  { to: 'backup', label: 'Backup' },
 ] as const;
 
 export function Settings() {
@@ -67,6 +69,7 @@ export function Settings() {
         <Route path="notifications" element={<NotificationsTab />} />
         <Route path="tokens" element={<TokensTab />} />
         <Route path="metrics" element={<MetricsTab />} />
+        <Route path="backup" element={<BackupTab />} />
       </Routes>
     </>
   );
