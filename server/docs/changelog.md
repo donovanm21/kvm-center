@@ -10,6 +10,115 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.46.0 — mobile WebUI + iPhone PWA shell
+
+A first-pass app-like mobile experience for iPhone. Read-only by
+design — full operator actions stay on the desktop SPA — but the
+fleet overview, host list, VM list, and audit feed are all there.
+
+### New `/m` route tree
+
+- Parallel SPA tree under [src/mobile/](webui-react/src/mobile/)
+  with its own shell + bottom-tab nav. Mounted from
+  [App.tsx](webui-react/src/App.tsx) when `location.pathname`
+  starts with `/m`. Reuses the same `AuthProvider`, API client,
+  query keys, and React Query cache as the desktop SPA — so
+  flipping between mobile and desktop never refetches.
+- Auto-redirect: `useMobileAutoRedirect` bounces iPhone /
+  Android-mobile UAs (or any viewport ≤ 640 px) from `/` to `/m`
+  on first visit. A `🖥` button in the mobile header writes
+  `localStorage.kvmc-prefer-desktop=1` to opt out permanently.
+- Five MVP screens, all read-only:
+  - Overview: hosts-online + VMs-running + active migrations
+    tiles + recent migrations card list.
+  - Hosts list (search, status pill, CPU + memory meters) →
+    host detail (k/v facts + on-host VMs).
+  - VMs list (search + state-filter chips) → VM detail
+    (resources, guest agent block, per-filesystem usage meters).
+  - Activity: latest 50 audit events, glance-at-it stream, no
+    filters.
+
+### iOS niceties
+
+- Bottom tab bar respects `env(safe-area-inset-bottom)` so the
+  home-indicator doesn't eat tap targets.
+- Header padding uses `safe-area-inset-top` for notched displays.
+- Layout sized in `100dvh` so iOS Safari's collapsing URL bar
+  doesn't reflow the body.
+- All tap targets ≥ 38 px and styled with
+  `-webkit-tap-highlight-color: transparent`.
+
+### PWA / add-to-home-screen
+
+- [index.html](webui-react/index.html) now ships
+  `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-
+  bar-style`, and `apple-touch-icon` meta so installing to the
+  home screen launches chrome-less.
+- [manifest.json](webui-react/public/manifest.json) `start_url`
+  flipped from `/` to `/m` so the installed app boots straight
+  into the mobile shell.
+- `viewport-fit=cover` so safe-area insets work in standalone
+  mode.
+
+### Validation
+
+- New [demo/e2e/specs/mobile.spec.ts](demo/e2e/specs/mobile.spec.ts)
+  walks every MVP screen at the iPhone-15 viewport. Covers:
+  redirect + login, overview tiles render, hosts list → detail
+  → back, VMs filter + drill-in, activity feed, switch-to-
+  desktop button.
+- [playwright.config.ts](demo/e2e/playwright.config.ts) gains an
+  `iphone` project (Playwright's built-in `iPhone 15` device
+  profile). The desktop `chromium` project ignores
+  `mobile.spec.ts`; the iPhone project runs only it.
+
+## v5.45.2 — sticky topbar fix + Windows kvm-tools self-update fix
+
+Two follow-ups to the v5.45.1 layout work and the long-running
+Windows update bug.
+
+### Sticky topbar disappearing on long pages
+
+The v5.45.1 sticky-pinned topbar still vanished partway down some
+long pages (Docs, Audit log) in some browser/zoom combinations.
+Root cause was the v5.45.1 layout chain: `html`, `body`, `#root`
+all sat at `height: 100%`, and `.app-shell` was a CSS Grid with
+`grid-template-rows: 64px 1fr`. The topbar's grid row was exactly
+its own size, leaving sticky positioning no containing-block room
+to operate against. v5.45.2 switches:
+
+- root chain to `min-height: 100vh` so the document body is the
+  natural scroll container;
+- `.app-shell` from grid to `flex-direction: column` with the
+  topbar carrying its own `height: 64px` and `flex-shrink: 0`,
+  and `.app-body` taking `flex: 1` for the rest of the column.
+
+### Windows kvm-tools self-update — Gaming host fix
+
+The Gaming Windows host kept losing kvm-tools after every server-
+triggered self-update: the binary swap succeeded, but the restart
+helper that should have re-launched the new exe never fired.
+
+Root cause was the v5.33.5 helper-spawn pattern (`cmd /c start /B
+cmd /c "timeout & schtasks /End & schtasks /Run"`). Even with
+`start /B`, the helper stayed inside the dying parent's process
+tree — Task Scheduler tore it down with the rest of the task
+when our `os.Exit(0)` landed.
+
+v5.45.2 replaces the inline detached helper with a separate
+**one-shot scheduled task**:
+
+- `swapBinaryWindows` now writes `%TEMP%\kvm-tools-restart.bat`
+  and calls `schtasks /Create /SC ONCE /ST <now+30s>` to register
+  it as task `kvm-tools-restart-helper`.
+- The .bat runs `schtasks /Run /TN kvm-tools` (logging output to
+  `%TEMP%\kvm-tools-update.log`), then deletes itself.
+- Because the helper task runs under the Task Scheduler service
+  rather than our process tree, parent exit no longer kills it.
+
+If updates still misfire, `%TEMP%\kvm-tools-update.log` records
+the helper firing for diagnosis.
+
 ## v5.45.1 — sticky topbar + sidebar so nav follows long pages
 
 Long pages (Docs, Audit log, System Health) used to scroll the

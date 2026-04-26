@@ -23,6 +23,7 @@ import { Deployment } from './pages/Deployment';
 import { Settings } from './pages/Settings';
 import { SystemHealth } from './pages/SystemHealth';
 import { Docs } from './pages/Docs';
+import { MobileApp } from './mobile/MobileApp';
 import { qk } from '@/queryKeys';
 
 // Port of each v3 view lands as its own route and replaces the stub.
@@ -37,9 +38,36 @@ export function App() {
   );
 }
 
+// Auto-redirect first-time iPhone visitors from `/` to `/m`. Runs
+// once per browser (sticky via localStorage) so an operator who
+// explicitly navigates back to the desktop view isn't trapped.
+function useMobileAutoRedirect() {
+  const location = useLocation();
+  const nav = useNavigate();
+  useEffect(() => {
+    if (location.pathname.startsWith('/m')) return;
+    if (location.pathname !== '/') return;
+    try {
+      if (localStorage.getItem('kvmc-prefer-desktop') === '1') return;
+    } catch { /* private mode — fall through */ }
+    const ua = navigator.userAgent || '';
+    const isPhone = /iPhone|iPod|Android.*Mobile/.test(ua) || window.innerWidth <= 640;
+    if (isPhone) nav('/m', { replace: true });
+  }, [location.pathname, nav]);
+}
+
 function Shell() {
   const { user, loading, hasPerm } = useAuth();
   const qc = useQueryClient();
+  const location = useLocation();
+  useMobileAutoRedirect();
+
+  // The /m route tree owns its own shell + nav. Render it unwrapped
+  // by the desktop Layout so we get the bottom-tab UI all the way
+  // down. Auth-gating still happens here — MobileApp falls through
+  // to the same <Login /> when there's no user, so deep-link to
+  // /m/vms after login works.
+  const isMobileRoute = location.pathname === '/m' || location.pathname.startsWith('/m/');
 
   // Subscribe to the server push stream for the lifetime of the
   // authenticated session. Server events invalidate the matching query
@@ -58,7 +86,6 @@ function Shell() {
     queryFn: () => apiGet<{ complete: boolean }>('/api/setup/state'),
     enabled: !!user,
   });
-  const location = useLocation();
   const nav = useNavigate();
   const isAdmin = hasPerm('user.manage') || hasPerm('admin');
   useEffect(() => {
@@ -73,6 +100,9 @@ function Shell() {
   }
   if (!user) {
     return <Login />;
+  }
+  if (isMobileRoute) {
+    return <MobileApp />;
   }
   if (setup.data && !setup.data.complete && isAdmin) {
     return (
