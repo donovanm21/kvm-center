@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiGet, apiPost } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
+import { qk } from '@/queryKeys';
 
 /**
  * First-boot wizard (v5.20). Every step has a safe default so the
@@ -28,7 +29,7 @@ export function Setup() {
   const [step, setStep] = useState<StepKey>('welcome');
 
   const state = useQuery({
-    queryKey: ['setup-state'],
+    queryKey: qk.setupState(),
     queryFn: () => apiGet<{ complete: boolean; has_any_host: boolean }>('/api/setup/state'),
   });
 
@@ -42,7 +43,7 @@ export function Setup() {
   const complete = useMutation({
     mutationFn: () => apiPost<{ complete: boolean }>('/api/setup/complete', {}),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['setup-state'] });
+      qc.invalidateQueries({ queryKey: qk.setupState() });
       nav('/', { replace: true });
     },
   });
@@ -141,7 +142,7 @@ function HypervisorStep({ onNext }: { onNext: () => void }) {
   const [serverURL, setServerURL] = useState(() => location.origin);
 
   const state = useQuery({
-    queryKey: ['setup-state'],
+    queryKey: qk.setupState(),
     queryFn: () => apiGet<{ has_any_host: boolean }>('/api/setup/state'),
     refetchInterval: 5_000,
   });
@@ -227,7 +228,7 @@ function NotificationsStep({ onNext }: { onNext: () => void }) {
   const [webhookURL, setWebhookURL] = useState('');
   const save = useMutation({
     mutationFn: (body: unknown) => apiPost('/api/settings/notifications', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.notifications() }),
   });
   const submit = () => {
     if (kind === 'none') return onNext();
@@ -274,7 +275,7 @@ function MetricsStep({ onNext }: { onNext: () => void }) {
   const [token, setToken] = useState('');
   const save = useMutation({
     mutationFn: (body: unknown) => apiPost('/api/settings/metrics', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['metrics'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.metrics() }),
   });
   const hasCreds = url.trim() !== '' && org.trim() !== '' && token.trim() !== '';
   const submit = () => {

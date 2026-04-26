@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { apiGet } from '@/api/client';
 import type { Host, MigrationRecord, StoragePool, VM, Features } from '@/types';
+import { qk } from '@/queryKeys';
 
 // SSE is the primary mechanism — the server publishes "inventory" and
 // "settings" events that invalidate the matching keys in the React
@@ -12,21 +13,21 @@ import type { Host, MigrationRecord, StoragePool, VM, Features } from '@/types';
 const SAFETY_POLL_MS = 60_000;
 
 export const useHosts = () =>
-  useQuery({ queryKey: ['hosts'], queryFn: () => apiGet<Host[]>('/api/hosts'), refetchInterval: SAFETY_POLL_MS });
+  useQuery({ queryKey: qk.hosts(), queryFn: () => apiGet<Host[]>('/api/hosts'), refetchInterval: SAFETY_POLL_MS });
 
 export const useVMs = () =>
-  useQuery({ queryKey: ['vms'], queryFn: () => apiGet<VM[]>('/api/vms'), refetchInterval: SAFETY_POLL_MS });
+  useQuery({ queryKey: qk.vms(), queryFn: () => apiGet<VM[]>('/api/vms'), refetchInterval: SAFETY_POLL_MS });
 
 export const useStorage = () =>
-  useQuery({ queryKey: ['storage'], queryFn: () => apiGet<StoragePool[]>('/api/storage'), refetchInterval: SAFETY_POLL_MS });
+  useQuery({ queryKey: qk.storage(), queryFn: () => apiGet<StoragePool[]>('/api/storage'), refetchInterval: SAFETY_POLL_MS });
 
 export const useFeatures = () =>
-  useQuery({ queryKey: ['features'], queryFn: () => apiGet<Features>('/api/settings'), refetchInterval: SAFETY_POLL_MS });
+  useQuery({ queryKey: qk.features(), queryFn: () => apiGet<Features>('/api/settings'), refetchInterval: SAFETY_POLL_MS });
 
 /** Migrations are small and event-driven — SSE + a 60 s safety net. */
 export const useMigrations = () =>
   useQuery({
-    queryKey: ['migrations'],
+    queryKey: qk.migrations(),
     queryFn: () => apiGet<MigrationRecord[]>('/api/migrations'),
     refetchInterval: SAFETY_POLL_MS,
   });
@@ -34,7 +35,7 @@ export const useMigrations = () =>
 /** Latest kvm-tools version the server is shipping (== committed VERSION). */
 export const useKVMToolsLatest = () =>
   useQuery({
-    queryKey: ['kvm-tools-latest'],
+    queryKey: qk.kvmToolsLatest(),
     queryFn: () => apiGet<{ version: string; binary_url: string }>('/api/kvm-tools/version'),
     staleTime: 5 * 60_000,
   });

@@ -84,8 +84,13 @@ type backupManifest struct {
 // ExportSnapshot serialises the in-memory store to JSON bytes. Same
 // shape as JSONBackend writes on disk; a dump from here is a
 // drop-in replacement for data.json.
+//
+// Locks the store for the full marshal (v5.41.0) — same race
+// closure as Save(). Backup endpoints are infrequent so the
+// exclusive read window doesn't matter.
 func (s *Store) ExportSnapshot() ([]byte, error) {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	d := persistData{
 		Hosts:            s.hosts,
 		VMs:              s.vms,
@@ -108,7 +113,6 @@ func (s *Store) ExportSnapshot() ([]byte, error) {
 		HypervisorCerts:  s.hypervisorCerts,
 		ConsoleSecret:    s.consoleSecret,
 	}
-	s.mu.RUnlock()
 	d.Dirty = computeDirty(&d)
 	return json.MarshalIndent(&d, "", "  ")
 }

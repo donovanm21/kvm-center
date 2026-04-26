@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
 import { apiGet } from '@/api/client';
+import { qk } from '@/queryKeys';
 
 // In-app documentation (v5.14.0). Two-pane layout: sidebar nav on
 // the left, rendered markdown content on the right. Pages are
@@ -27,14 +28,14 @@ export function Docs() {
   const navigate = useNavigate();
 
   const tree = useQuery({
-    queryKey: ['docs-tree'],
+    queryKey: qk.docsTree(),
     queryFn: () => apiGet<TreeEntry[]>('/api/docs/tree'),
     staleTime: 5 * 60_000,
   });
 
   const currentSlug = slug || tree.data?.[0]?.slug || 'overview';
   const page = useQuery({
-    queryKey: ['docs-page', currentSlug],
+    queryKey: qk.docsPage(currentSlug),
     queryFn: () => apiGet<PageData>('/api/docs/page/' + encodeURIComponent(currentSlug)),
     enabled: !!currentSlug,
   });

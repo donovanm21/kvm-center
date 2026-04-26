@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { apiGet } from '@/api/client';
+import { qk } from '@/queryKeys';
 
 /**
  * Glanceable in-UI sparklines for a single hypervisor. Last hour only;
@@ -27,7 +28,7 @@ interface HostMetricsResponse {
 
 export function HostMetricsGraphs({ hostID }: { hostID: string }) {
   const { data, isLoading } = useQuery<HostMetricsResponse>({
-    queryKey: ['host-metrics', hostID],
+    queryKey: qk.hostMetrics(hostID),
     queryFn: () => apiGet<HostMetricsResponse>(`/api/hosts/${encodeURIComponent(hostID)}/metrics`),
     refetchInterval: 30_000,
     staleTime: 15_000,

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from './Modal';
 import { apiDelete, apiGet, apiPost } from '@/api/client';
 import { useToast } from '@/hooks/useToast';
+import { qk } from '@/queryKeys';
 
 interface APIToken {
   id: string;
@@ -36,7 +37,7 @@ export function MyTokensModal({ open, onClose }: { open: boolean; onClose: () =>
   const [secret, setSecret] = useState<string | null>(null);
 
   const list = useQuery({
-    queryKey: ['my-tokens'],
+    queryKey: qk.myTokens(),
     queryFn: () => apiGet<APIToken[]>('/api/tokens/me'),
     enabled: open,
   });
@@ -49,7 +50,7 @@ export function MyTokensModal({ open, onClose }: { open: boolean; onClose: () =>
     onSuccess: (r) => {
       setSecret(r.token);
       setName('');
-      qc.invalidateQueries({ queryKey: ['my-tokens'] });
+      qc.invalidateQueries({ queryKey: qk.myTokens() });
     },
     onError: (e: Error) => toast('error', 'Create failed: ' + e.message),
   });
@@ -58,7 +59,7 @@ export function MyTokensModal({ open, onClose }: { open: boolean; onClose: () =>
     mutationFn: (id: string) => apiDelete('/api/tokens/me/' + encodeURIComponent(id)),
     onSuccess: () => {
       toast('success', 'Token revoked');
-      qc.invalidateQueries({ queryKey: ['my-tokens'] });
+      qc.invalidateQueries({ queryKey: qk.myTokens() });
     },
     onError: (e: Error) => toast('error', 'Revoke failed: ' + e.message),
   });

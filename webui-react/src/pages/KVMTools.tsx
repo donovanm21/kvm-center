@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useKVMToolsLatest, useVMs } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
 import type { VM } from '@/types';
+import { qk } from '@/queryKeys';
 
 type KVMToolsSortKey = 'name' | 'host_id' | 'state' | 'kvm_tools_version' | 'status';
 
@@ -116,7 +117,7 @@ export function KVMTools() {
         for (const u of uuids) next.delete(u);
         return next;
       });
-      qc.invalidateQueries({ queryKey: ['vms'] });
+      qc.invalidateQueries({ queryKey: qk.vms() });
     },
     onError: (err) => {
       const msg = err instanceof Error ? err.message : String(err);

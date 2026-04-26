@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { CSSProperties } from 'react';
 import { apiGet } from '@/api/client';
+import { qk } from '@/queryKeys';
 
 // System Health dashboard (v5.33.1). Modelled after the Checkmk
 // Kubernetes Cluster page style — top-line status tiles, gauges,
@@ -77,7 +78,7 @@ const C: Record<Status, string> = {
 
 export function SystemHealth() {
   const q = useQuery<Health>({
-    queryKey: ['system-health'],
+    queryKey: qk.systemHealth(),
     queryFn: () => apiGet('/api/admin/system-health'),
     refetchInterval: 15_000,
     refetchOnWindowFocus: true,

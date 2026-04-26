@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
+import { qk } from '@/queryKeys';
 
 interface TLSStatus {
   enabled: boolean;
@@ -35,7 +36,7 @@ export function TLSTab() {
   const canManage = hasPerm('tls.manage');
 
   const status = useQuery({
-    queryKey: ['tls-status'],
+    queryKey: qk.tlsStatus(),
     queryFn: () => apiGet<TLSStatus>('/api/tls/status'),
     refetchInterval: 60_000,
   });
@@ -44,7 +45,7 @@ export function TLSTab() {
     mutationFn: () => apiPost('/api/tls/regenerate'),
     onSuccess: () => {
       toast('success', 'Self-signed cert regenerated — new TLS handshakes will use it immediately');
-      qc.invalidateQueries({ queryKey: ['tls-status'] });
+      qc.invalidateQueries({ queryKey: qk.tlsStatus() });
     },
     onError: (e) => toast('error', `Regenerate failed: ${e instanceof Error ? e.message : String(e)}`),
   });
@@ -78,7 +79,7 @@ export function TLSTab() {
       toast('success', 'New TLS cert installed — it is active on the next handshake');
       if (certRef.current) certRef.current.value = '';
       if (keyRef.current) keyRef.current.value = '';
-      qc.invalidateQueries({ queryKey: ['tls-status'] });
+      qc.invalidateQueries({ queryKey: qk.tlsStatus() });
     },
     onError: (e) => setUploadErr(e instanceof Error ? e.message : String(e)),
   });
@@ -212,7 +213,7 @@ function HypervisorPKI({ canManage }: { canManage: boolean }) {
   const [enrollToken, setEnrollToken] = useState<string | null>(null);
 
   const list = useQuery({
-    queryKey: ['ca-hypervisors'],
+    queryKey: qk.caHypervisors(),
     queryFn: () => apiGet<PKIList>('/api/ca/hypervisors'),
   });
 
@@ -221,7 +222,7 @@ function HypervisorPKI({ canManage }: { canManage: boolean }) {
     onSuccess: (r) => {
       setEnrollToken(r.enroll_token);
       toast('success', `Enrollment token issued — valid for ${Math.round(r.expires_in / 60)} min`);
-      qc.invalidateQueries({ queryKey: ['ca-hypervisors'] });
+      qc.invalidateQueries({ queryKey: qk.caHypervisors() });
     },
     onError: (e) => toast('error', `Enroll failed: ${e instanceof Error ? e.message : String(e)}`),
   });
@@ -231,7 +232,7 @@ function HypervisorPKI({ canManage }: { canManage: boolean }) {
       apiPost('/api/ca/hypervisors/' + encodeURIComponent(id) + '/revoke', { reason }),
     onSuccess: () => {
       toast('success', 'Certificate revoked');
-      qc.invalidateQueries({ queryKey: ['ca-hypervisors'] });
+      qc.invalidateQueries({ queryKey: qk.caHypervisors() });
     },
     onError: (e) => toast('error', `Revoke failed: ${e instanceof Error ? e.message : String(e)}`),
   });

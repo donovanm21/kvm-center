@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiDelete, apiGet } from '@/api/client';
 import { useToast } from './useToast';
 import type { StorageBrowseResponse } from '@/types';
+import { qk } from '@/queryKeys';
 
 /**
  * Directory listing for a given pool path on a host. The server proxies
@@ -11,7 +12,7 @@ import type { StorageBrowseResponse } from '@/types';
  */
 export function useStorageBrowse(hostID: string, path: string) {
   return useQuery({
-    queryKey: ['storage-browse', hostID, path],
+    queryKey: qk.storageBrowse(hostID, path),
     queryFn: () =>
       apiGet<StorageBrowseResponse>(
         `/api/storage/browse?host=${encodeURIComponent(hostID)}&path=${encodeURIComponent(path)}`,
@@ -47,8 +48,8 @@ export function useUploadFile(hostID: string, path: string) {
     },
     onSuccess: (_d, file) => {
       toast('success', `Uploaded ${file.name}`);
-      qc.invalidateQueries({ queryKey: ['storage-browse', hostID, path] });
-      qc.invalidateQueries({ queryKey: ['storage'] });
+      qc.invalidateQueries({ queryKey: qk.storageBrowse(hostID, path) });
+      qc.invalidateQueries({ queryKey: qk.storage() });
     },
     onError: (err) => {
       toast('error', 'Upload failed: ' + (err instanceof Error ? err.message : String(err)));
@@ -67,8 +68,8 @@ export function useDeleteFile(hostID: string, path: string) {
     onSuccess: (_d, filePath) => {
       const name = filePath.split('/').pop() || filePath;
       toast('success', `Deleted ${name}`);
-      qc.invalidateQueries({ queryKey: ['storage-browse', hostID, path] });
-      qc.invalidateQueries({ queryKey: ['storage'] });
+      qc.invalidateQueries({ queryKey: qk.storageBrowse(hostID, path) });
+      qc.invalidateQueries({ queryKey: qk.storage() });
     },
     onError: (err) => {
       toast('error', 'Delete failed: ' + (err instanceof Error ? err.message : String(err)));

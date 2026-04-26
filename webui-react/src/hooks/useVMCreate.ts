@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiGet, apiPost } from '@/api/client';
 import { useToast } from './useToast';
+import { qk } from '@/queryKeys';
 
 export interface VMCreateInfo {
   os_variants: string[];
@@ -35,7 +36,7 @@ interface CreateResult {
 /** Host-scoped capabilities for the wizard dropdowns. */
 export function useVMCreateInfo(hostID: string | null) {
   return useQuery({
-    queryKey: ['vm-create-info', hostID],
+    queryKey: qk.vmCreateInfo(hostID),
     queryFn: () =>
       apiGet<VMCreateInfo>(`/api/vm-create-info?host=${encodeURIComponent(hostID!)}`),
     enabled: Boolean(hostID),
@@ -60,8 +61,8 @@ export function useCreateVM(hostID: string | null) {
         return;
       }
       toast('success', `VM "${payload.name}" created`);
-      qc.invalidateQueries({ queryKey: ['vms'] });
-      qc.invalidateQueries({ queryKey: ['hosts'] });
+      qc.invalidateQueries({ queryKey: qk.vms() });
+      qc.invalidateQueries({ queryKey: qk.hosts() });
     },
     onError: (err) => {
       toast('error', 'Create failed: ' + (err instanceof Error ? err.message : String(err)));
