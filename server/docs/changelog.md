@@ -10,6 +10,28 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.42.0 — form validation adoption sweep
+
+Migrate the remaining modals onto the v5.41.0 Zod + `useZodForm`
+foundation:
+
+- **`MyTokensModal`** — full RHF migration; the create form now
+  validates name length / shape via the centralised schema.
+- **`CreateVMModal`** — the bespoke regex + `if (!name.trim())`
+  cascade replaced with a Zod `safeParse` against the shared
+  `vmName / memMB / vcpu / diskGB` schemas. State management stays
+  on `useState` because of the 16 conditional fields, but
+  validation rules are now centralised.
+- **`MigrateModal`** — the optional "Rename VM on destination"
+  field validates against `vmNameSchema` with an inline error
+  surface.
+- **`SnapshotPolicies`** — new `policyNameSchema` (allows spaces,
+  dot, underscore, hyphen) gates the policy-name field.
+
+The form-validation track is now closed: every UI form either uses
+the shared schemas or runs against fields the server itself
+validates (server-validated forms didn't need a SPA-side check).
+
 ## v5.41.0 — outstanding code-quality cleanup
 
 Closes the remaining items from the 2026-04-20 review and the

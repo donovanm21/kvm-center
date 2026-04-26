@@ -1,9 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
+import { z } from 'zod';
 
 import { ErrorBanner, Field, Select, TextInput } from '@/components/FormBits';
 import { Modal } from '@/components/Modal';
+import { diskGBSchema, memMBSchema, vcpuSchema, vmNameSchema } from '@/forms/schemas';
 import { useHosts } from '@/hooks/useInventory';
 import { useCreateVM, useVMCreateInfo, type VMCreatePayload } from '@/hooks/useVMCreate';
+
+// Zod schema covering every field that's user-editable in the
+// wizard. Centralised here so a tweak to "what's a valid VM name"
+// lands once across snapshot creation, hardware edits, and the
+// wizard. (v5.42.0)
+const createVMSchema = z.object({
+  name: vmNameSchema,
+  memory: memMBSchema,
+  vcpus: vcpuSchema,
+  diskSize: diskGBSchema,
+  source: z.enum(['iso', 'import', 'pxe']),
+  isoPath: z.string(),
+  importDisk: z.string(),
+}).superRefine((v, ctx) => {
+  if (v.source === 'iso' && !v.isoPath) {
+    ctx.addIssue({ code: 'custom', path: ['isoPath'], message: 'Pick an ISO or switch install source.' });
+  }
+  if (v.source === 'import' && !v.importDisk.trim()) {
+    ctx.addIssue({ code: 'custom', path: ['importDisk'], message: 'Provide the path to the existing disk image.' });
+  }
+});
 
 interface Props {
   open: boolean;
@@ -101,24 +124,20 @@ export function CreateVMModal({ open, onClose }: Props) {
       setErr('Pick a host first.');
       return;
     }
-    if (!name.trim()) {
-      setErr('Name is required.');
-      return;
-    }
-    if (!/^[A-Za-z0-9._-]+$/.test(name.trim())) {
-      setErr('Name may only contain letters, digits, dots, dashes, and underscores.');
-      return;
-    }
-    if (memory < 128) {
-      setErr('Memory must be at least 128 MB.');
-      return;
-    }
-    if (source === 'iso' && !isoPath) {
-      setErr('Pick an ISO or switch install source.');
-      return;
-    }
-    if (source === 'import' && !importDisk.trim()) {
-      setErr('Provide the path to the existing disk image.');
+    // Run Zod validation against the shared schemas. First failure's
+    // message becomes the error banner; refinement-level issues
+    // (ISO required when source=iso etc.) report through the same path.
+    const parsed = createVMSchema.safeParse({
+      name: name.trim(),
+      memory,
+      vcpus,
+      diskSize: source === 'import' ? 1 : diskSize, // import path skips disk size; satisfy schema
+      source,
+      isoPath,
+      importDisk,
+    });
+    if (!parsed.success) {
+      setErr(parsed.error.issues[0]?.message ?? 'Form validation failed.');
       return;
     }
 

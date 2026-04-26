@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
 import { apiGet } from '@/api/client';
+import { vmNameSchema } from '@/forms/schemas';
 import type { StoragePool } from '@/types';
 
 import { Modal } from './Modal';
@@ -221,8 +222,18 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
     );
   }, [migrations.data, vm.host_id, effectiveTarget]);
 
+  // Validate the optional rename-on-destination field via the
+  // shared vmName schema so it follows the same rules as
+  // CreateVMModal + EDIT_VM (v5.42.0).
+  const newVMNameErr = useMemo(() => {
+    if (!newVMName || newVMName === vm.name) return null;
+    const r = vmNameSchema.safeParse(newVMName);
+    return r.success ? null : r.error.issues[0]?.message ?? 'Invalid VM name';
+  }, [newVMName, vm.name]);
+
   const submit = () => {
     if (!target || !allOk) return;
+    if (newVMNameErr) return;
     const params: Record<string, string> = { destination: target.ip };
     if (mode === 'live') {
       params.copy_storage = copyStorage ? 'true' : 'false';
@@ -479,10 +490,16 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
                   placeholder={vm.name}
                   style={{
                     padding: '6px 10px', fontSize: 13,
-                    background: 'var(--bg-input)', border: '1px solid var(--border)',
+                    background: 'var(--bg-input)',
+                    border: '1px solid ' + (newVMNameErr ? '#F85149' : 'var(--border)'),
                     borderRadius: 4, color: 'var(--text-body)', fontFamily: 'inherit',
                   }}
                 />
+                {newVMNameErr && (
+                  <div style={{ marginTop: 4, fontSize: 11, color: '#F85149' }} role="alert">
+                    {newVMNameErr}
+                  </div>
+                )}
               </Field>
 
               <label style={{ ...checkboxLabel, alignSelf: 'flex-start' }}>
