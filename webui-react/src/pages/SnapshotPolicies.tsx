@@ -7,6 +7,18 @@ import { useAuth } from '@/hooks/useAuth';
 import { useFeatures, useVMs } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
 import { qk } from '@/queryKeys';
+import { z } from 'zod';
+
+// Policy-name schema: human-readable, but server stores it as-is so
+// we lock against script-injection-shaped strings + long titles. The
+// vmName regex is too tight ("Daily production snapshots" has spaces);
+// allow whitespace + a wider character set here.
+const policyNameSchema = z
+  .string()
+  .trim()
+  .min(1, 'Policy name is required')
+  .max(80, 'Policy name must be 80 characters or fewer')
+  .regex(/^[A-Za-z0-9 ._-]+$/, 'Letters, digits, space, dot, underscore, hyphen only');
 
 interface SnapshotPolicy {
   id?: string;
@@ -257,7 +269,24 @@ function PolicyEditor({
         <h2 style={{ margin: '0 0 14px 0' }}>{isEdit ? 'Edit policy' : 'New snapshot policy'}</h2>
 
         <Field label="Name">
-          <input type="text" value={form.name} onChange={(e) => update({ name: e.target.value })} style={input} placeholder="e.g. Daily production snapshots" />
+          {(() => {
+            const r = policyNameSchema.safeParse(form.name);
+            const err = !r.success && form.name.length > 0 ? r.error.issues[0]?.message : null;
+            return (
+              <>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => update({ name: e.target.value })}
+                  style={{ ...input, border: '1px solid ' + (err ? '#F85149' : 'var(--border)') }}
+                  placeholder="e.g. Daily production snapshots"
+                />
+                {err && (
+                  <div style={{ marginTop: 4, fontSize: 11, color: '#F85149' }} role="alert">{err}</div>
+                )}
+              </>
+            );
+          })()}
         </Field>
 
         <Field label="Schedule">

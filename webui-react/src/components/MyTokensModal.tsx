@@ -1,10 +1,19 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { z } from 'zod';
 
 import { Modal } from './Modal';
 import { apiDelete, apiGet, apiPost } from '@/api/client';
+import { useZodForm } from '@/forms/useZodForm';
 import { useToast } from '@/hooks/useToast';
 import { qk } from '@/queryKeys';
+
+// Token-name schema: the server stores arbitrary strings but a UI
+// limit keeps the audit log readable. Reuse vmName-like rules.
+const tokenFormSchema = z.object({
+  name: z.string().trim().min(1, 'Token name is required').max(64, '64 characters maximum'),
+  days: z.number().int().min(1).max(3650),
+});
 
 interface APIToken {
   id: string;
@@ -32,9 +41,11 @@ const PRESETS: { label: string; days: number }[] = [
 export function MyTokensModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [name, setName] = useState('');
-  const [days, setDays] = useState(30);
   const [secret, setSecret] = useState<string | null>(null);
+
+  const form = useZodForm(tokenFormSchema, {
+    defaultValues: { name: '', days: 30 },
+  });
 
   const list = useQuery({
     queryKey: qk.myTokens(),
@@ -43,17 +54,19 @@ export function MyTokensModal({ open, onClose }: { open: boolean; onClose: () =>
   });
 
   const create = useMutation({
-    mutationFn: () => {
-      const expires = new Date(Date.now() + days * 86400_000).toISOString();
-      return apiPost<CreateReply>('/api/tokens/me', { name: name.trim(), expires_at: expires });
+    mutationFn: (values: { name: string; days: number }) => {
+      const expires = new Date(Date.now() + values.days * 86400_000).toISOString();
+      return apiPost<CreateReply>('/api/tokens/me', { name: values.name, expires_at: expires });
     },
     onSuccess: (r) => {
       setSecret(r.token);
-      setName('');
+      form.reset({ name: '', days: form.getValues('days') });
       qc.invalidateQueries({ queryKey: qk.myTokens() });
     },
     onError: (e: Error) => toast('error', 'Create failed: ' + e.message),
   });
+
+  const onSubmit = form.handleSubmit((values) => create.mutate(values));
 
   const revoke = useMutation({
     mutationFn: (id: string) => apiDelete('/api/tokens/me/' + encodeURIComponent(id)),
@@ -64,7 +77,9 @@ export function MyTokensModal({ open, onClose }: { open: boolean; onClose: () =>
     onError: (e: Error) => toast('error', 'Revoke failed: ' + e.message),
   });
 
-  const close = () => { setSecret(null); setName(''); setDays(30); onClose(); };
+  const close = () => { setSecret(null); form.reset({ name: '', days: 30 }); onClose(); };
+
+  const nameErr = form.formState.errors.name?.message;
 
   return (
     <Modal
@@ -80,26 +95,25 @@ export function MyTokensModal({ open, onClose }: { open: boolean; onClose: () =>
       </p>
 
       {/* Create form */}
-      <div style={createRow}>
-        <input
-          type="text"
-          value={name}
-          placeholder="Token name (e.g. laptop-kvmctl)"
-          onChange={(e) => setName(e.target.value)}
-          style={inputStyle}
-        />
-        <select value={days} onChange={(e) => setDays(parseInt(e.target.value, 10))} style={{ ...inputStyle, width: 120 }}>
-          {PRESETS.map((p) => <option key={p.days} value={p.days}>{p.label}</option>)}
-        </select>
-        <button
-          type="button"
-          className="btn-primary-sm"
-          onClick={() => create.mutate()}
-          disabled={!name.trim() || create.isPending}
-        >
-          {create.isPending ? 'Creating…' : 'Create'}
-        </button>
-      </div>
+      <form onSubmit={onSubmit}>
+        <div style={createRow}>
+          <input
+            type="text"
+            placeholder="Token name (e.g. laptop-kvmctl)"
+            {...form.register('name')}
+            style={{ ...inputStyle, borderColor: nameErr ? '#F85149' : 'var(--border)' }}
+          />
+          <select {...form.register('days', { valueAsNumber: true })} style={{ ...inputStyle, width: 120 }}>
+            {PRESETS.map((p) => <option key={p.days} value={p.days}>{p.label}</option>)}
+          </select>
+          <button type="submit" className="btn-primary-sm" disabled={create.isPending}>
+            {create.isPending ? 'Creating…' : 'Create'}
+          </button>
+        </div>
+        {nameErr && (
+          <div style={{ marginTop: 6, fontSize: 11, color: '#F85149' }} role="alert">{nameErr}</div>
+        )}
+      </form>
 
       {/* Secret — shown once */}
       {secret && (
