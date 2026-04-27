@@ -118,12 +118,56 @@ Revoke.
 ### `GET /api/audit?action=<a>&actor=<a>&resource=<r>&since=<unix>&until=<unix>&success=true|false&limit=100&offset=0`
 Filter + paginate. Newest first.
 
+## User management
+
+All require `user.manage` (admin role by default).
+
+### `GET /api/users`
+List every account. Returns sanitised user records (no password
+hashes, no TOTP secrets).
+
+### `POST /api/users`
+Create a new local user. Body: `{"username", "email", "password",
+"role_ids": ["role_admin"], "enabled": true}`.
+
+### `PUT /api/users/<id>`
+Update name, email, enabled flag, or role list. Cannot disable
+the last enabled admin — `409` is returned in that case.
+
+### `DELETE /api/users/<id>`
+Delete a user. Same last-admin guard as `PUT`. Audit row written.
+
+### `POST /api/users/<id>/reset-password`
+Set a new password without knowing the old one. Body:
+`{"password": "..."}`. The acting user (token or session) needs
+`user.manage`; the change is audited as the acting user, not the
+target.
+
+## Group + role management
+
+### `GET/POST /api/groups`, `PUT/DELETE /api/groups/<id>`
+Groups bundle role IDs and a member list. Used by LDAP auth to
+map directory groups onto kvm-center roles.
+
+### `GET/POST /api/roles`, `PUT/DELETE /api/roles/<id>`
+A role is a name + a list of permission strings (`vm.console`,
+`host.manage`, etc.). The built-in roles (`role_admin`,
+`role_operator`, `role_viewer`) are read-only.
+
+### `GET /api/permissions`
+Static list of every permission string the server knows about,
+keyed by category. Used by the UI to populate the role editor.
+
 ## Settings
 
 - `GET/PUT /api/settings/notifications` + `POST /api/settings/notifications/test`
 - `GET/PUT /api/settings/metrics` + `POST /api/settings/metrics/test`
 - `GET/PUT /api/settings/audit-shipping` + `POST /api/settings/audit-shipping/test`
-- `GET/POST /api/settings/database/{status,test,migrate}`
+- `GET /api/settings/database/status` — backend kind (mongo / json),
+  connection state, last-write timestamp, store size in bytes
+- `POST /api/settings/database/test` — pings the configured backend
+- `POST /api/settings/database/migrate` — admin-only; trigger a
+  one-shot JSON → Mongo migration (no-op if already on Mongo)
 
 ## TLS management
 
