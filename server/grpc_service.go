@@ -58,6 +58,7 @@ type agentGRPCServer struct {
 func (s *agentGRPCServer) StreamMigrationProgress(stream agentpb.AgentService_StreamMigrationProgressServer) error {
 	var frames int32
 	var lastErr string
+	callerHostID, _ := stream.Context().Value(agentHostKey{}).(string)
 	for {
 		frame, err := stream.Recv()
 		if err == io.EOF {
@@ -70,7 +71,7 @@ func (s *agentGRPCServer) StreamMigrationProgress(stream agentpb.AgentService_St
 			return err
 		}
 		frames++
-		if err := s.applyProgressFrame(frame); err != nil {
+		if err := s.applyProgressFrame(frame, callerHostID); err != nil {
 			lastErr = err.Error()
 			log.Printf("grpc: migration progress frame apply failed: %v", err)
 		}
@@ -83,7 +84,7 @@ func (s *agentGRPCServer) StreamMigrationProgress(stream agentpb.AgentService_St
 // hasn't rehydrated yet), the frame is logged and dropped — the
 // agent's subsequent sync HTTP response + the boot reconciler
 // cover that recovery path.
-func (s *agentGRPCServer) applyProgressFrame(f *agentpb.MigrationProgress) error {
+func (s *agentGRPCServer) applyProgressFrame(f *agentpb.MigrationProgress, callerHostID string) error {
 	if f.GetMigrationId() == "" {
 		return status.Error(codes.InvalidArgument, "migration_id required")
 	}
@@ -100,6 +101,14 @@ func (s *agentGRPCServer) applyProgressFrame(f *agentpb.MigrationProgress) error
 		log.Printf("grpc: migration progress frame for unknown id=%q — agent ahead of server state, dropping",
 			f.GetMigrationId())
 		return nil
+	}
+	// Ownership check: the streaming agent must be one of the two
+	// hosts party to this migration. Stops a spoofed/compromised
+	// peer from poisoning another host's migration record.
+	if callerHostID != "" && callerHostID != rec.SourceHost && callerHostID != rec.DestHost {
+		log.Printf("grpc: refusing migration progress frame: caller host=%q is not source=%q or dest=%q for migration=%q",
+			callerHostID, rec.SourceHost, rec.DestHost, rec.ID)
+		return status.Error(codes.PermissionDenied, "caller is not a party to this migration")
 	}
 	// Terminal phases update the final status; intermediate phases
 	// only bump progress/phase fields.
