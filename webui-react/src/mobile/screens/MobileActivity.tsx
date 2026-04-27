@@ -41,23 +41,25 @@ export function MobileActivity() {
         <div className="m-placeholder">No audit events yet.</div>
       )}
 
-      {events.map((e) => (
-        <div key={e.id} className="m-card">
-          <div className="m-card-row">
-            <div style={{ minWidth: 0 }}>
-              <div className="m-card-title" style={{ fontSize: 14, fontFamily: 'SF Mono, monospace' }}>{e.action}</div>
-              <div className="m-card-meta">
-                {(e.actor_name || 'system')}{e.resource ? ` · ${e.resource}` : ''}
+      <div className="m-section">
+        {events.map((e) => (
+          <div key={e.id} className="m-card">
+            <div className="m-card-row">
+              <div style={{ minWidth: 0 }}>
+                <div className="m-card-title" style={{ fontSize: 14, fontFamily: 'SF Mono, monospace' }}>{e.action}</div>
+                <div className="m-card-meta">
+                  {(e.actor_name || 'system')}{e.resource ? ` · ${e.resource}` : ''}
+                </div>
+                <div className="m-card-meta" style={{ marginTop: 2 }}>{formatWhen(e.at)}</div>
               </div>
-              <div className="m-card-meta" style={{ marginTop: 2 }}>{formatWhen(e.at)}</div>
+              <span className={`m-pill ${e.success ? 'ok' : 'danger'}`}>{e.success ? 'ok' : 'fail'}</span>
             </div>
-            <span className={`m-pill ${e.success ? 'ok' : 'danger'}`}>{e.success ? 'ok' : 'fail'}</span>
+            {!e.success && e.error && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#F85149' }}>{e.error}</div>
+            )}
           </div>
-          {!e.success && e.error && (
-            <div style={{ marginTop: 8, fontSize: 12, color: '#F85149' }}>{e.error}</div>
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

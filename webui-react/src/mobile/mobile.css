@@ -89,6 +89,12 @@ body.light-mode .m-header { background: #FFFFFF; }
    doesn't push them apart. Each screen wraps them in `.m-screen-h`. */
 .m-screen-h { display: flex; flex-direction: column; gap: 4px; }
 
+/* Sub-section inside a screen: a section header (`.m-section-h`)
+   followed by a stack of cards or rows. Gives the same flex-column
+   gap rhythm as `.m-screen` but tighter (10 px) since cards inside
+   a section sit closer together than top-level screen blocks. */
+.m-section { display: flex; flex-direction: column; gap: 10px; }
+
 /* ── Bottom tab bar ──────────────────────────────────────── */
 /* v5.46.2: switched from `position: sticky; bottom: 0` to fixed.
    Sticky on a long page only pins after the element scrolls into
@@ -221,6 +227,9 @@ body.light-mode .m-tabbar { background: #FFFFFF; }
   justify-content: space-between;
   margin: 0 0 8px;
 }
+/* When nested inside `.m-section`, drop the margin so the parent's
+   gap is the single source of vertical spacing. */
+.m-section > .m-section-h { margin: 0; }
 .m-section-h h2 {
   font-size: 13px;
   font-weight: 600;
