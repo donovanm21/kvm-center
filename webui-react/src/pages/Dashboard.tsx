@@ -87,8 +87,11 @@ export function Dashboard() {
 
         {hosts.isLoading && <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading…</div>}
         {hostList.length === 0 && !hosts.isLoading && (
-          <div className="panel" style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-            No hypervisors have reported yet — install an agent on a hypervisor and point it at this server.
+          <div className="panel" style={{ color: 'var(--text-muted)', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <span>No hypervisors have reported yet — install an agent on a hypervisor and point it at this server.</span>
+            <Link to="/deployment" className="btn-primary-sm" style={{ textDecoration: 'none' }}>
+              Deployment guide →
+            </Link>
           </div>
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

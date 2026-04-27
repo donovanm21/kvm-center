@@ -15,12 +15,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [queue, setQueue] = useState<Toast[]>([]);
 
   const toast = useCallback((kind: ToastKind, message: string) => {
-    const id = nextId++;
-    setQueue((q) => [...q, { id, kind, message }]);
-    // Auto-dismiss. Errors linger a bit longer because they usually
-    // carry useful detail the user wants to copy/paste.
     const ttl = kind === 'error' ? 7000 : 3500;
-    setTimeout(() => setQueue((q) => q.filter((t) => t.id !== id)), ttl);
+    setQueue((q) => {
+      // Dedup: if the same kind+message is already showing, drop the
+      // duplicate. A flapping API endpoint stacking 20 identical
+      // error toasts on top of each other was real and obscured
+      // anything else on screen.
+      if (q.some((t) => t.kind === kind && t.message === message)) {
+        return q;
+      }
+      const id = nextId++;
+      setTimeout(() => setQueue((q2) => q2.filter((t) => t.id !== id)), ttl);
+      return [...q, { id, kind, message }];
+    });
   }, []);
 
   const value = useMemo(() => ({ toast }), [toast]);

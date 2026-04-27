@@ -407,6 +407,21 @@ body.light-mode .topbar-mig-badge { background: #FFF4EC; color: #C04512; border-
   50%      { opacity: 0.45; transform: scale(0.85); }
 }
 
+/* ── Focus rings (keyboard a11y) ─────────────────────────── */
+/* Keyboard users need to see which control is focused. We turn off
+   the noisy default outline (var on inputs is `outline: none` inline)
+   and replace with a subtle accent ring on :focus-visible only — so
+   mouse clicks don't paint the ring. */
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: none;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px rgba(227, 87, 30, 0.35);
+}
+button:focus-visible, [role="menuitem"]:focus-visible, [role="button"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ── Buttons ─────────────────────────────────────────────── */
 .btn-primary-sm, .btn-secondary-sm, .btn-danger-sm {
   display: inline-flex; align-items: center; gap: 6px;
@@ -429,7 +444,7 @@ body.light-mode .topbar-mig-badge { background: #FFF4EC; color: #C04512; border-
 .btn-danger-sm {
   background: #7A1C1C; border-color: #A02929; color: #FFB3B3;
 }
-.btn-danger-sm:hover:not(:disabled) { background: #A02929; color: #fff; }
+.btn-danger-sm:hover:not(:disabled) { background: #D32F2F; border-color: #E53935; color: #fff; }
 .btn-primary-sm:disabled, .btn-secondary-sm:disabled, .btn-danger-sm:disabled {
   opacity: 0.45; cursor: not-allowed;
 }
