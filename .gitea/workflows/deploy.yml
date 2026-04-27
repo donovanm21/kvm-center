@@ -37,12 +37,18 @@ jobs:
     # (b) an operator manually triggered the workflow. The commit-
     # message gate was added in v5.27 so dev RCs can flow onto main
     # for E2E testing without auto-redeploying prod.
+    # v5.46.1: Gitea Actions doesn't reliably populate
+    # `workflow_run.head_commit.message` (the field GitHub Actions
+    # exposes), so the original v5.27 gate has been silently
+    # skipping every release since. Switched to `display_title`,
+    # which Gitea does populate with the full commit subject and
+    # which GitHub also surfaces — same expression works on both.
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
        github.event.workflow_run.head_branch == 'main' &&
-       contains(github.event.workflow_run.head_commit.message, '[deploy]'))
+       contains(github.event.workflow_run.display_title, '[deploy]'))
     concurrency:
       # Serialise deploys — the host's docker compose + agent-push
       # loop isn't safe against two concurrent runs, and queueing
