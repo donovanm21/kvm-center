@@ -10,6 +10,36 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.46.1 — mobile bottom-tab bar floats permanently
+
+Operator feedback after the v5.46.0 ship: on long pages (Activity
+feed, sometimes VMs list) the bottom tab bar disappeared and only
+came back after scrolling all the way down. Root cause was
+`position: sticky; bottom: 0` — sticky only pins an element once
+its natural position scrolls into the viewport, which on a long
+page is below the fold.
+
+Fixed: tab bar now uses `position: fixed; bottom: 0`, so it floats
+permanently at the bottom of the viewport (matching native iOS app
+conventions). `.m-body` gained a `padding-bottom: calc(76px +
+env(safe-area-inset-bottom))` so the last card in any list isn't
+hidden behind the now-floating tab bar.
+
+CI hygiene from this leg, also bundled in:
+
+- `actions/setup-go@v5` defaulted to `cache: true`. The Gitea
+  Actions cache server isn't reachable from the runner's job-
+  container network, so every test run wasted ~270 s on a restore
+  timeout and another ~270 s on a save timeout. Disabled with
+  `cache: false` — test workflow time dropped from ~25 min to
+  ~3.5 min.
+- `deploy.yml` gate switched from
+  `github.event.workflow_run.head_commit.message` (which Gitea
+  doesn't populate the way GitHub does, so the `[deploy]` opt-in
+  was always evaluating to `false`) to
+  `github.event.workflow_run.display_title`, which both runners
+  surface with the full commit subject.
+
 ## v5.46.0 — mobile WebUI + iPhone PWA shell
 
 A first-pass app-like mobile experience for iPhone. Read-only by

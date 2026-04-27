@@ -68,20 +68,29 @@ body.light-mode .m-header { background: #FFFFFF; }
 /* ── Body ────────────────────────────────────────────────── */
 .m-body {
   flex: 1;
-  overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 14px 14px 24px;
+  /* Bottom padding clears the fixed-position tab bar so the last
+     card isn't hidden underneath it. 64 px tab + safe-area inset
+     for the home indicator + 12 px breathing room. */
+  padding: 14px 14px calc(76px + env(safe-area-inset-bottom));
 }
 .m-body > * + * { margin-top: 14px; }
 
 /* ── Bottom tab bar ──────────────────────────────────────── */
+/* v5.46.2: switched from `position: sticky; bottom: 0` to fixed.
+   Sticky on a long page only pins after the element scrolls into
+   view — operators were having to scroll to the bottom of the
+   Activity feed before the nav reappeared. Fixed keeps it
+   permanently floating, matching native iOS app conventions. */
 .m-tabbar {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   background: #13161D;
   border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom);
-  position: sticky;
+  position: fixed;
+  left: 0;
+  right: 0;
   bottom: 0;
   z-index: 20;
 }
