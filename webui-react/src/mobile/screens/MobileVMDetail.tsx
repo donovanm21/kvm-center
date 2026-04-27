@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { apiGet } from '@/api/client';
 import { qk } from '@/queryKeys';
-import type { VM } from '@/types';
+import type { Snapshot, VM } from '@/types';
 
 import { VMStatePill } from './MobileHostDetail';
 
@@ -13,6 +13,18 @@ export function MobileVMDetail() {
 
   const vms = useQuery({ queryKey: qk.vms(), queryFn: () => apiGet<VM[]>('/api/vms') });
   const vm = (vms.data ?? []).find((v) => v.uuid === uuid);
+
+  const snaps = useQuery({
+    queryKey: qk.snapshots(vm?.host_id ?? '', vm?.name ?? ''),
+    queryFn: async () => {
+      if (!vm) return [] as Snapshot[];
+      const resp = await apiGet<{ snapshots?: Snapshot[] } | Snapshot[]>(
+        `/api/vms/snapshots?host=${encodeURIComponent(vm.host_id)}&vm=${encodeURIComponent(vm.name)}`,
+      );
+      return Array.isArray(resp) ? resp : resp?.snapshots ?? [];
+    },
+    enabled: Boolean(vm?.host_id && vm?.name),
+  });
 
   return (
     <div className="m-screen" data-testid="mobile-vm-detail">
@@ -59,6 +71,31 @@ export function MobileVMDetail() {
             </div>
           )}
 
+          <div className="m-card" data-testid="m-vm-snapshots">
+            <div className="m-section-h" style={{ marginBottom: 10 }}><h2>Snapshots</h2></div>
+            {snaps.isLoading && <div className="m-placeholder">Loading…</div>}
+            {snaps.isError && (
+              <div className="m-error">
+                Failed to load: {(snaps.error as Error)?.message ?? 'unknown error'}
+              </div>
+            )}
+            {!snaps.isLoading && !snaps.isError && (snaps.data?.length ?? 0) === 0 && (
+              <div className="m-placeholder">No snapshots.</div>
+            )}
+            {!snaps.isError && (snaps.data ?? []).slice().sort(snapshotSort).map((s) => (
+              <div key={s.name} className="m-snap-row">
+                <div className="m-snap-name">
+                  {s.name}
+                  {s.is_current && <span className="m-snap-tag">current</span>}
+                </div>
+                <div className="m-snap-meta">
+                  <span>{formatSnapDate(s.creation_time)}</span>
+                  {s.state && <span>{s.state}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+
           {vm.guest_fs && vm.guest_fs.length > 0 && (
             <div className="m-card">
               <div className="m-section-h" style={{ marginBottom: 10 }}><h2>Filesystems</h2></div>
@@ -81,4 +118,19 @@ export function MobileVMDetail() {
       )}
     </div>
   );
+}
+
+function snapshotSort(a: Snapshot, b: Snapshot): number {
+  // Newest first, with the current pointer pinned to the top.
+  if (a.is_current && !b.is_current) return -1;
+  if (b.is_current && !a.is_current) return 1;
+  return (b.creation_time ?? '').localeCompare(a.creation_time ?? '');
+}
+
+function formatSnapDate(iso: string): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) +
+    ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
