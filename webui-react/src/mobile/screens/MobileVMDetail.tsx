@@ -15,7 +15,7 @@ export function MobileVMDetail() {
   const vm = (vms.data ?? []).find((v) => v.uuid === uuid);
 
   return (
-    <div data-testid="mobile-vm-detail">
+    <div className="m-screen" data-testid="mobile-vm-detail">
       <button type="button" className="m-back" onClick={() => nav('/m/vms')}>← VMs</button>
 
       {vms.isLoading && <div className="m-placeholder">Loading…</div>}
@@ -23,11 +23,13 @@ export function MobileVMDetail() {
 
       {vm && (
         <>
-          <h1 className="m-h1">{vm.name}</h1>
-          <p className="m-sub">
-            <VMStatePill state={vm.state} />
-            <span style={{ marginLeft: 8 }}>{vm.host_id}</span>
-          </p>
+          <div className="m-screen-h">
+            <h1 className="m-h1">{vm.name}</h1>
+            <p className="m-sub">
+              <VMStatePill state={vm.state} />
+              <span style={{ marginLeft: 8 }}>{vm.host_id}</span>
+            </p>
+          </div>
 
           <div className="m-card">
             <div className="m-section-h" style={{ marginBottom: 10 }}><h2>Resources</h2></div>

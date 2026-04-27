@@ -14,6 +14,10 @@ export function MobileVMs() {
   const [stateFilter, setStateFilter] = useState<'all' | 'running' | 'stopped'>('all');
 
   const list = (vms.data ?? [])
+    // v5.46.2: stable sort first (by name) so polling refresh
+    // doesn't shuffle the visible cards.
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
     .filter((v) => {
       if (stateFilter === 'running' && v.state !== 'running') return false;
       if (stateFilter === 'stopped' && v.state === 'running') return false;
@@ -28,9 +32,11 @@ export function MobileVMs() {
     });
 
   return (
-    <div data-testid="mobile-vms">
-      <h1 className="m-h1">VMs</h1>
-      <p className="m-sub">{vms.data ? `${vms.data.length} virtual machines` : 'Loading…'}</p>
+    <div className="m-screen" data-testid="mobile-vms">
+      <div className="m-screen-h">
+        <h1 className="m-h1">VMs</h1>
+        <p className="m-sub">{vms.data ? `${vms.data.length} virtual machines` : 'Loading…'}</p>
+      </div>
 
       <input
         className="m-search"

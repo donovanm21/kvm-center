@@ -74,7 +74,20 @@ body.light-mode .m-header { background: #FFFFFF; }
      for the home indicator + 12 px breathing room. */
   padding: 14px 14px calc(76px + env(safe-area-inset-bottom));
 }
-.m-body > * + * { margin-top: 14px; }
+
+/* v5.46.2: every mobile screen wraps its content in `.m-screen`
+   so vertical rhythm is owned by the layout, not by ad-hoc
+   margins on each section. flex column + gap handles all the
+   between-section spacing (h1 → sub → search → list → next list)
+   in one rule, and is consistent across every screen. */
+.m-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* Pair h1 + sub copy as a single block so the screen's 14 px gap
+   doesn't push them apart. Each screen wraps them in `.m-screen-h`. */
+.m-screen-h { display: flex; flex-direction: column; gap: 4px; }
 
 /* ── Bottom tab bar ──────────────────────────────────────── */
 /* v5.46.2: switched from `position: sticky; bottom: 0` to fixed.
@@ -132,7 +145,14 @@ body.light-mode .m-tabbar { background: #FFFFFF; }
   border-radius: 12px;
   padding: 14px 16px;
 }
-.m-card + .m-card { margin-top: 10px; }
+/* List sections wrap card-links in a flex-column with its own
+   tighter gap. Cards inside that container don't need additional
+   margin — the gap handles it. */
+.m-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .m-card-link {
   display: block;
   color: inherit;
