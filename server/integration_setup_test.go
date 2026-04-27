@@ -146,8 +146,11 @@ func TestIntegration_Telemetry_UpsertsHost(t *testing.T) {
 	if got == nil {
 		t.Fatal("host not created from telemetry")
 	}
-	if got.IP != "10.0.0.50" {
-		t.Fatalf("host IP: got %q", got.IP)
+	// v5.47 security hardening: telemetry handler always derives the
+	// agent IP from the connection (clientIP) and ignores the payload
+	// field. httptest serves on 127.0.0.1, so that's what we expect.
+	if got.IP != "127.0.0.1" {
+		t.Fatalf("host IP: got %q (expected connection-derived 127.0.0.1)", got.IP)
 	}
 	vms := h.Store.GetVMs("hv-telemetry")
 	if len(vms) != 1 || vms[0].Name != "t-vm-1" {

@@ -144,7 +144,7 @@ func handleOIDCCallback(store *Store) http.HandlerFunc {
 			oidcFail(w, r, "could not create session")
 			return
 		}
-		setSessionCookie(w, sess)
+		setSessionCookie(w, r, sess)
 		store.AsyncSave()
 		http.Redirect(w, r, "/", http.StatusFound)
 	}

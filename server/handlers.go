@@ -43,10 +43,10 @@ func handleTelemetry(store *Store) http.HandlerFunc {
 			return
 		}
 
-		// Derive agent IP from request if not provided in payload.
-		if payload.IP == "" {
-			payload.IP = clientIP(r)
-		}
+		// Always derive agent IP from the connection — the payload's
+		// self-reported IP is unauthenticated and could be spoofed to
+		// poison inventory entries.
+		payload.IP = clientIP(r)
 		if payload.Timestamp.IsZero() {
 			payload.Timestamp = time.Now()
 		}

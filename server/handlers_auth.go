@@ -85,7 +85,7 @@ func handleAuthRegister(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "could not create session")
 			return
 		}
-		setSessionCookie(w, sess)
+		setSessionCookie(w, r, sess)
 		store.AsyncSave()
 		writeJSON(w, http.StatusOK, map[string]any{
 			"user":        sanitizeUser(u),
@@ -110,6 +110,12 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}
+		ip := clientIP(r)
+		if remaining := loginThrottleCheck(req.Username, ip); remaining > 0 {
+			auditAs(store, r, "", req.Username, AuditLogin, "session", map[string]string{"via": "throttle"}, false, "rate-limited")
+			writeError(w, http.StatusTooManyRequests, "too many failed attempts — try again later")
+			return
+		}
 		u := store.GetUserByUsername(req.Username)
 		localOK := u != nil && u.Enabled && u.PasswordHash != "" && verifyPassword(req.Password, u.PasswordHash)
 		if !localOK {
@@ -123,8 +129,9 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 					writeError(w, http.StatusInternalServerError, "could not create session")
 					return
 				}
-				setSessionCookie(w, sess)
+				setSessionCookie(w, r, sess)
 				store.AsyncSave()
+				loginThrottleClear(req.Username, ip)
 				auditAs(store, r, ldapUser.ID, ldapUser.Username, AuditLogin, "session", map[string]string{"via": "ldap"}, true, "")
 				writeJSON(w, http.StatusOK, map[string]any{
 					"user":        sanitizeUser(ldapUser),
@@ -132,7 +139,18 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 				})
 				return
 			}
-			auditAs(store, r, "", req.Username, AuditLogin, "session", map[string]string{"via": "local"}, false, "invalid credentials")
+			loginThrottleRecordFailure(req.Username, ip)
+			// Single audit row per failed attempt. Tag it `ldap` only
+			// when LDAP was actually consulted and returned an error;
+			// "tried LDAP, no provider" still surfaces as a plain local
+			// failure so operators don't see a phantom LDAP row.
+			via := "local"
+			detail := "invalid credentials"
+			if ldapErr != nil {
+				via = "ldap"
+				detail = ldapErr.Error()
+			}
+			auditAs(store, r, "", req.Username, AuditLogin, "session", map[string]string{"via": via}, false, detail)
 			writeError(w, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
@@ -146,6 +164,7 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 				return
 			}
 			if !verifyTOTP(u.TOTPSecret, req.TOTPCode) {
+				loginThrottleRecordFailure(req.Username, ip)
 				auditAs(store, r, u.ID, u.Username, AuditLogin, "session", map[string]string{"via": "local"}, false, "invalid TOTP")
 				writeError(w, http.StatusUnauthorized, "invalid authentication code")
 				return
@@ -156,8 +175,9 @@ func handleAuthLogin(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "could not create session")
 			return
 		}
-		setSessionCookie(w, sess)
+		setSessionCookie(w, r, sess)
 		store.AsyncSave()
+		loginThrottleClear(req.Username, ip)
 		auditAs(store, r, u.ID, u.Username, AuditLogin, "session", map[string]string{"via": "local"}, true, "")
 		writeJSON(w, http.StatusOK, map[string]any{
 			"user":        sanitizeUser(u),
@@ -180,7 +200,7 @@ func handleAuthLogout(store *Store) http.HandlerFunc {
 		}
 		http.SetCookie(w, &http.Cookie{
 			Name: sessionCookieName, Value: "", Path: "/", MaxAge: -1,
-			HttpOnly: true, SameSite: http.SameSiteStrictMode,
+			HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode,
 		})
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
@@ -680,7 +700,7 @@ func authMiddleware(store *Store, next http.Handler) http.Handler {
 		}
 		// If TouchSession slid the expiration forward, refresh the cookie
 		// so the browser keeps a matching Expires/Max-Age value.
-		setSessionCookie(w, sess)
+		setSessionCookie(w, r, sess)
 		// Attach user to request context.
 		ctx := context.WithValue(r.Context(), userCtxKey, u)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -705,7 +725,11 @@ func requirePerm(store *Store, perm string, next http.Handler) http.Handler {
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-func setSessionCookie(w http.ResponseWriter, sess *models.Session) {
+// setSessionCookie sets the session cookie. The Secure flag is on
+// only when the request was served over TLS (production path); plain
+// HTTP (legacy listener, dev/test harness) drops Secure so the cookie
+// still works there. Browsers reject Secure cookies on http://.
+func setSessionCookie(w http.ResponseWriter, r *http.Request, sess *models.Session) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    sess.Token,
@@ -713,6 +737,7 @@ func setSessionCookie(w http.ResponseWriter, sess *models.Session) {
 		Expires:  sess.ExpiresAt,
 		MaxAge:   int(time.Until(sess.ExpiresAt).Seconds()),
 		HttpOnly: true,
+		Secure:   r != nil && r.TLS != nil,
 		SameSite: http.SameSiteStrictMode,
 	})
 }
