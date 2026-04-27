@@ -14,14 +14,9 @@ export function MobileShell() {
 
   async function onLogout() {
     await logout();
-    // Send the user back to the desktop login (which our root
-    // redirect will bounce back to /m on iPhone next sign-in).
+    // Send the user back to the login screen via the mobile route
+    // so the next sign-in lands them straight on /m.
     nav('/m', { replace: true });
-  }
-
-  function preferDesktop() {
-    try { localStorage.setItem('kvmc-prefer-desktop', '1'); } catch { /* ignore */ }
-    nav('/', { replace: true });
   }
 
   return (
@@ -35,13 +30,6 @@ export function MobileShell() {
           </span>
         </Link>
         <div className="m-header-actions">
-          <button
-            type="button"
-            className="m-icon-btn"
-            onClick={preferDesktop}
-            title="Switch to desktop view"
-            aria-label="Switch to desktop view"
-          >🖥</button>
           <button
             type="button"
             className="m-icon-btn"

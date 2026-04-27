@@ -10,6 +10,48 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.46.4 — Windows kvm-tools update + mobile-only iPhone UX
+
+### Windows kvm-tools self-update — actually-fixed-this-time
+
+The v5.45.2 helper-task pattern (write a `.bat` to `%TEMP%`,
+register a one-shot scheduled task that runs it 30 s later) didn't
+fix the Gaming-host bug. Forensic diff after a failed update:
+
+- `LastRunTime` on the `kvm-tools` task: stale at the moment of
+  the update — no relaunch fired.
+- No `.bat` file in `C:\Windows\Temp` — the helper task never got
+  created.
+- No `kvm-tools-update.log` — `scheduleRestartHelper()` either
+  never returned or silently failed mid-flight.
+
+Root cause: the `schtasks /Create` call to register the helper
+runs *inside* the dying parent's Windows Job object. Task
+Scheduler tears the whole job down when the action exits, and on
+a busy host the create call can be killed before the new task is
+persisted to disk.
+
+Fixed by skipping Task Scheduler for the relaunch:
+`swapBinaryWindows` now spawns the helper directly with
+`CREATE_BREAKAWAY_FROM_JOB | DETACHED_PROCESS |
+CREATE_NEW_PROCESS_GROUP`. The child escapes the parent's Job
+entirely — Task Scheduler can't kill it when our action exits —
+waits 5 s, then runs `schtasks /Run /TN kvm-tools` to relaunch
+the task on the freshly-swapped binary. Output goes to
+`%TEMP%\kvm-tools-update.log` for post-mortem.
+
+The Windows-specific `SysProcAttr.CreationFlags` lives in a build-
+tagged file (`spawn_restart_helper_windows.go`) with a no-op stub
+for non-Windows builds.
+
+### Mobile UX — drop the desktop-toggle button
+
+Operator decision: mobile is canonical on phone-class devices, no
+in-UI escape hatch. Removed the 🖥 button from the mobile header.
+The auto-redirect from `/` to `/m` for mobile UAs is unchanged;
+the `localStorage.kvmc-prefer-desktop` flag is still honoured for
+power users who set it manually via dev tools, but no UI sets it.
+
 ## v5.46.3 — mobile section rhythm restored
 
 v5.46.2's `.m-screen` flex-gap covered top-level sections, but the
