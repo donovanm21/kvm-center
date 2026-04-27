@@ -10,6 +10,21 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.46.5 — mobile zoomed-in first paint
+
+iPhone reload landed at zoom < 1: every screen looked slightly
+shrunk, content drifted past the right edge, and the user had to
+pinch-out to read. Cause was a horizontal-overflow at first
+paint — a long string in `.m-card-meta` or the audit action path
+measured wider than `100vw`, and iOS Safari shrunk the layout to
+fit instead of clipping.
+
+Fixed by clamping `.m-shell` + `html`/`body` with `max-width:
+100vw; overflow-x: hidden`, and adding `overflow-wrap: anywhere`
+to `.m-card-title`, `.m-card-meta`, and `.m-kv dd` so long
+unbreakable strings wrap mid-token. Zoom now stays at 1:1 on
+load.
+
 ## v5.46.4 — Windows kvm-tools update + mobile-only iPhone UX
 
 ### Windows kvm-tools self-update — actually-fixed-this-time

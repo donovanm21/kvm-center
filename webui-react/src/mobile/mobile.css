@@ -19,7 +19,25 @@
   color: var(--text-body);
   font-size: 15px;
   line-height: 1.4;
+  /* v5.46.5: clamp the layout to the device width and forbid
+     horizontal overflow. The page used to land slightly zoomed-
+     out because some descendant (a long .m-card-meta string, the
+     `kvmc_…` token chip, etc.) measured wider than 100vw at first
+     paint, and iOS Safari shrunk the page to fit. Hard-clipping
+     here means zoom-1 always equals device width. */
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
+/* Same defence at the document root so any rogue child element
+   in a future screen can't push the body wider than the viewport
+   either. Doesn't affect the desktop SPA — its own .app-shell
+   already uses min-width: 0 inside flex children. */
+html, body { overflow-x: hidden; }
+/* Long inline strings (host_id, vm.name, audit action paths,
+   guest IPs) wrap mid-string instead of pushing the card wider
+   than the viewport. */
+.m-card-title, .m-card-meta, .m-kv dd { overflow-wrap: anywhere; }
 
 /* ── Header ──────────────────────────────────────────────── */
 .m-header {
