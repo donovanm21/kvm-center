@@ -128,6 +128,55 @@ kvmctl login --server https://<server>:8190 --token kvmc_…
 kvmctl hosts
 ```
 
+## Upgrading
+
+Routine: pull the latest commit and re-run the deploy. The build
+is idempotent — the `GIT_SHA` build arg invalidates Docker layers
+on every commit so tests always re-run, and the volume holding
+your Mongo data is never touched by `--deploy`.
+
+```sh
+cd /opt/kvm-center
+scripts/bootstrap.sh --deploy
+```
+
+What happens:
+
+1. `git fetch && git reset --hard origin/main` (you've committed
+   any local edits, right?)
+2. `docker compose build` — fresh server + agent binaries.
+3. `docker compose up -d` — rolling restart; Mongo + the JSON
+   volume survive intact.
+4. Agents on known hypervisors are pushed the new binary on next
+   telemetry tick.
+
+Time budget on a warm cache: ~90 s for the rebuild, ~30 s for the
+restart. First-ever build with no Docker cache: 5–8 min.
+
+**Before a major release** — read the changelog for any
+operator-action notes. The PR workflow keeps `main` deployable at
+all times, but a release that requires (e.g.) a one-off
+`install.ps1` re-run on Windows guests will say so.
+
+## TLS certificate lifecycle
+
+The control plane bootstraps a self-signed leaf cert into
+`/var/lib/kvm-center/tls/` on first boot. Defaults:
+
+- **Server leaf:** 1 year, auto-renewed silently when the
+  remaining lifetime drops below 30 days.
+- **Cluster CA** (`/var/lib/kvm-center/ca/`): 10 years, signs all
+  hypervisor leaves.
+- **Hypervisor leaves:** 1 year, agents request renewal at the
+  90-day mark via the same enrollment endpoint.
+
+The expiry watcher (System Health → TLS) warns ~30 days out for
+each class. **Replacing a self-signed leaf with an operator cert**
+means setting `KVM_CENTER_TLS_CERT` + `KVM_CENTER_TLS_KEY` in
+`.env`, restarting the server, and re-accepting the cert in any
+browser bookmarks. Agents trust the server's cert via the cluster
+CA only, so a leaf rotation does not require fleet action.
+
 ## 5. Configure notifications + metrics (optional)
 
 - **Settings → Notifications** — webhook (Discord / Slack / generic)

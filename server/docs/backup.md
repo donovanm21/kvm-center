@@ -103,6 +103,44 @@ the cluster is being rebuilt from scratch).
 6. Confirm: `/api/version` returns, login works, the Hosts page
    shows the expected inventory.
 
+## Mongo notes
+
+Since v5.1 the canonical state lives in MongoDB, not the
+`data.json` file. The API export above (`/api/admin/backup`)
+serializes the in-memory store — which has been hydrated from
+Mongo at boot — so you get a consistent snapshot regardless of
+backend. **You do not need to dump Mongo separately for a
+control-plane restore.** The legacy JSON file is kept on disk as
+a parallel cache and the migration path; if Mongo goes empty on
+restart, the server hydrates from the JSON file.
+
+For a Mongo-level point-in-time backup (e.g. against a
+filesystem-corruption scenario), use mongodump:
+
+```sh
+docker compose -f /opt/kvm-center/docker-compose.yml exec kvm-center-mongo \
+  mongodump --uri "mongodb://kvmc:$KVM_MONGO_PASSWORD@localhost:27017/kvm-center" \
+  --archive=/tmp/kvmc.archive --gzip
+docker compose -f /opt/kvm-center/docker-compose.yml cp \
+  kvm-center-mongo:/tmp/kvmc.archive ./kvmc-mongo-$(date +%Y%m%d).archive
+```
+
+Pair with the `/api/admin/backup` export and you cover both the
+"app state corrupt" and "DB-volume corrupt" scenarios.
+
+## Safety during active migrations
+
+Both scheduled and ad-hoc backups serialize the in-memory store
+under a read lock — they are safe to run concurrently with a
+migration. The migration's progress frames update the
+MigrationRecord under a write lock that blocks the export
+momentarily; the export resumes once the writer releases. Worst
+case: the export takes a few seconds longer than usual.
+
+A *restore* (`POST /api/admin/restore`) refuses to run while any
+migration is in `running` state — the server returns 409 with a
+list of in-flight IDs. Cancel or wait for them before restoring.
+
 ## Rollback
 
 If restore goes wrong, the previous `store.json` is still in Mongo's

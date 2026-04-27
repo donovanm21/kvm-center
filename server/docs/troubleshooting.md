@@ -45,3 +45,86 @@ order: 80
 |---------|-----|
 | Discord rejects with 400 | Pre-v5.4.2 agent shipped raw event JSON. Upgrade — the auto-detect maps Discord URLs to the chat envelope. |
 | Webhook never fires on migration | Pre-v5.4.3 pointer-aliasing bug — upgrade. Also check Settings → Notifications → event subscriptions include the relevant type. |
+
+## Runbooks
+
+### Patching a hypervisor — entering maintenance mode
+
+Use maintenance mode whenever you're about to reboot, kernel-patch,
+or hardware-touch a hypervisor. Workflow:
+
+1. **Hosts → click the host → Maintenance**. Optional: tick
+   *Drain VMs* to live-migrate every running guest off before
+   the host enters maintenance.
+2. The host reports `maintenance=true` to the placement gate. New
+   VM creation targeting it is refused, and any `MIGRATE` whose
+   destination is the host is refused. Migrations *off* the host
+   are still allowed — that's the point of draining.
+3. Watch the Migrations view. Drain runs sequentially (one VM at
+   a time) so the existing concurrent-migration gate stays clean;
+   each VM picks the least-loaded online host as its target.
+4. Once the host is empty / patched / rebooted, **Maintenance →
+   Exit**. The host returns to the placement pool on its next
+   telemetry tick (≤ 30 s).
+
+What if a drain VM has no eligible target? It's skipped (the
+audit row says `skipped: no eligible target`) and the drain
+continues to the next VM. Non-draining patches still work — exit
+maintenance after the reboot and the host catches back up.
+
+### Hypervisor agent offline
+
+The dashboard marks a host **OFFLINE** after 90 s without a
+telemetry tick (the host-mark loop runs every 30 s). Effects:
+
+- Inventory data goes stale but is preserved — VM rows linger so
+  the operator still sees what *was* there.
+- Commands targeting the host (start, stop, snapshot, console)
+  return *agent unreachable* immediately rather than blocking.
+- Migrations whose source is the offline host **fail** and are
+  marked terminal so they don't sit in `running` forever.
+
+Recovery checklist:
+
+1. SSH to the hypervisor, `systemctl status kvm-center-agent`. If
+   the unit is running, the issue is network — confirm
+   `curl -k https://<server>:8190/health` responds.
+2. If the unit is stopped, `journalctl -u kvm-center-agent -n 100`
+   usually names the cause (cert expired, libvirtd offline,
+   binary segv).
+3. **Cert expired** is by far the most common: re-run the install
+   one-liner with a fresh enrollment token from Settings → TLS →
+   Hypervisor PKI. The new cert replaces the old in place; the
+   agent restarts cleanly.
+
+The "phantom prune" sweep removes hosts with no telemetry for >
+24 h *and* zero VMs — it never deletes a host whose VM rows are
+still being reported by another path. So a stale-but-lived-in
+host stays visible until you explicitly remove it.
+
+### Resetting a forgotten admin password
+
+Three escape hatches in priority order:
+
+1. **System token** — any user with `admin` on a system token can
+   reset another user's password via Settings → Users → Edit →
+   Reset password. Tokens never carry TOTP, so this works even if
+   the human admin lost their authenticator.
+2. **`--recovery-admin` flag** (v5.15+) — start the server once
+   with this flag set and an `admin` / `recovery` account is
+   created (or its password reset, if it already exists) at boot.
+   Log in, change the password, and remove the flag. Audit row is
+   written so the action is visible afterwards.
+3. **Restore from backup** — last resort if you don't have a
+   system token *and* can't restart the server with new flags.
+   See `backup.md` for the import path; the restored snapshot
+   carries the admin user's old password hash so you'd need a
+   backup taken when the password was known.
+
+## Database
+
+| Symptom | Fix |
+|---------|-----|
+| `mongo connection refused` at boot | The `kvm-center-mongo` container exited or didn't reach Ready. `docker compose logs kvm-center-mongo` — disk-full and OOM are the usual suspects. |
+| `mongo exit 14` after a fresh install | Disk pressure on the docker host. Free space before the next start; the `feedback_async_save.md` memory has the long story. |
+| Slow startup, telemetry stalls | Mongo working-set is too big for available RAM. Default deploys are sized for ~50 hosts; bump container memory or migrate to a dedicated DB host. |
