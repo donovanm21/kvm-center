@@ -31,6 +31,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.9'
+          # v5.46.1: disable the GHA cache layer. setup-go@v5 defaults
+          # to `cache: true`, which probes a Gitea cache server that
+          # isn't reachable from this runner's job-container network
+          # — every run wasted ~270 s on the restore timeout and
+          # another ~270 s on the save timeout. ~9 min reclaimed per
+          # test run.
+          cache: false
 
       # go.sum is generated on-demand in Dockerfile.build via `go mod
       # tidy` and isn't committed, so the CI job has to materialise
