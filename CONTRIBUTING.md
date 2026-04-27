@@ -45,6 +45,36 @@ also TLS-only since v5.32.5.
 
 ## Pull requests
 
+**As of v5.46.6, `main` is a protected branch.** Direct pushes are
+blocked except for the `admin` escape hatch; every change reaches
+`main` through a pull request whose required status checks are
+green.
+
+Required status checks (configured in Gitea branch protection on
+`main`):
+
+- `test / lint-test` — `gofmt`, `go vet`, `go test`, `govulncheck`
+- `test / webui-audit` — `npm ci`, `tsc -b --noEmit && vite build`,
+  `npm audit --audit-level=critical`
+- `test / gitleaks` — full-history secret scan
+- `test / summary` — aggregator step that fails if any of the above
+  fail
+- `e2e / e2e` — Playwright Tier-2 SPA suite + the iPhone walkthrough
+
+Workflow:
+
+1. Branch off `main` (`feature/<short-name>` or `fix/<short-name>`).
+2. Push to your branch — `test.yml` and `e2e.yml` run automatically.
+3. Open a PR against `main`. Gitea won't let you merge until every
+   required check is green.
+4. After merge, tag `[deploy]` in a commit message on `main` to
+   trigger production deploy (see *Release cadence* below) — or
+   skip the tag if the change is dev-only.
+
+The deploy workflow only ever fires on `main` (`deploy.yml` gates
+on `workflow_run.head_branch == 'main'`), so feature branches can
+never accidentally ship to production.
+
 - **One concern per PR.** A bug fix and an unrelated refactor belong
   in separate PRs.
 - **Tests.** New behaviour needs a test; fixed bugs should get a
@@ -87,6 +117,14 @@ also TLS-only since v5.32.5.
 
 Maintainers tag a release after merging changes they want to deploy.
 There's no fixed schedule; releases are cut when they're ready.
+
+Production deploys are opt-in: include `[deploy]` somewhere in the
+merge commit subject or body and the `deploy` workflow will pick
+it up after `test` passes. Without `[deploy]`, the change lands on
+`main` for downstream branches to build on but stays out of prod
+until the next release commit. `workflow_dispatch` from the Gitea
+Actions UI is the manual escape hatch (no commit required) — also
+restricted to `main`.
 
 ## Questions
 
