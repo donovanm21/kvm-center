@@ -42,11 +42,11 @@ import (
 
 // restoreSummary is what /api/admin/restore returns on success.
 type restoreSummary struct {
-	OK              bool      `json:"ok"`
+	OK              bool           `json:"ok"`
 	Manifest        backupManifest `json:"manifest"`
-	FilesRestored   []string  `json:"files_restored"`
-	RestartRequired bool      `json:"restart_required"`
-	StagedAt        time.Time `json:"staged_at"`
+	FilesRestored   []string       `json:"files_restored"`
+	RestartRequired bool           `json:"restart_required"`
+	StagedAt        time.Time      `json:"staged_at"`
 }
 
 // restorePaths overlays serverBackupPaths so we know where to put
@@ -225,10 +225,10 @@ func handleRestore(store *Store) http.HandlerFunc {
 			actor = u.ID
 		}
 		audit(store, r, AuditBackupRestore, "backup", map[string]string{
-			"upload":      hdr.Filename,
-			"files":       fmt.Sprintf("%d", len(placed)),
-			"actor":       actor,
-			"manifest_v":  manifest.Version,
+			"upload":     hdr.Filename,
+			"files":      fmt.Sprintf("%d", len(placed)),
+			"actor":      actor,
+			"manifest_v": manifest.Version,
 		}, true, "")
 
 		writeJSON(w, http.StatusOK, summary)

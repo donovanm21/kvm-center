@@ -657,4 +657,3 @@ func (s *Store) resolveCanonicalUUID(p *models.GuestTelemetryPayload) string {
 	// reported them.
 	return p.VMUUID
 }
-

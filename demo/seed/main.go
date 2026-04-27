@@ -544,7 +544,7 @@ func buildTokens(fx *fixtures) {
 	// Fixed token so the demo is predictable. Format:
 	// kvmc_<id:8hex>.<secret:48hex>
 	id := "demo0001"
-	secret := "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+	secret := "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff" //gitleaks:allow — fixed demo token, never used outside throwaway demo Mongo
 	sum := sha256.Sum256([]byte(secret))
 	fx.tokens[id] = &models.APIToken{
 		ID:         id,
