@@ -275,6 +275,40 @@ body.light-mode .m-tabbar { background: #FFFFFF; }
 }
 .m-search:focus { border-color: var(--accent); box-shadow: 0 0 0 2px #E3571E33; }
 
+/* ── Snapshot rows ───────────────────────────────────────── */
+.m-snap-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.m-snap-row:last-child { border-bottom: none; padding-bottom: 0; }
+.m-snap-row:first-child { padding-top: 0; }
+.m-snap-name {
+  font-size: 13px;
+  color: var(--text-strong);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.m-snap-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #1E3D23;
+  color: #3FB950;
+}
+.m-snap-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 10px;
+}
+
 /* ── Detail key/value rows ───────────────────────────────── */
 .m-kv {
   display: grid;
