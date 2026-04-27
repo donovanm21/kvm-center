@@ -42,6 +42,7 @@ export function MobileHosts() {
         <div className="m-placeholder">No hosts match.</div>
       )}
 
+      <div className="m-section">
       {list.map((h) => {
         const memUsedPct = h.mem_total_mb > 0
           ? Math.round(((h.mem_total_mb - h.mem_free_mb) / h.mem_total_mb) * 100)
@@ -67,6 +68,7 @@ export function MobileHosts() {
           </Link>
         );
       })}
+      </div>
     </div>
   );
 }

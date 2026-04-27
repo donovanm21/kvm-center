@@ -38,7 +38,7 @@ export function MobileDashboard() {
         <Stat label="Total VMs" value={String(vmList.length)} foot="across cluster" />
       </div>
 
-      <div>
+      <div className="m-section">
         <div className="m-section-h">
           <h2>Recent migrations</h2>
           {recentMigs.length > 0 && <Link to="/m/activity">View all</Link>}

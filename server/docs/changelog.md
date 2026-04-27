@@ -10,6 +10,21 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.46.3 — mobile section rhythm restored
+
+v5.46.2's `.m-screen` flex-gap covered top-level sections, but the
+Recent migrations card list on the Overview tab (and the card
+lists on Hosts/VMs/Activity) ended up flush — they were direct
+children of an unstyled `<div>` wrapper, not of `.m-screen`, so
+the gap rule didn't reach them.
+
+Introduced `.m-section` (flex column + `gap: 10px`) for any
+sub-section with a header followed by a stack of cards. Applied
+to the Recent migrations block on Overview, the on-host VM list
+on Host Detail, and the card lists on Hosts / VMs / Activity.
+Cards now space at 10 px inside a section, sections at 14 px on
+the screen — same rhythm as Overview's stat tiles.
+
 ## v5.46.2 — mobile list sort + consistent screen vertical rhythm
 
 Two operator nits from the v5.46.x ship:

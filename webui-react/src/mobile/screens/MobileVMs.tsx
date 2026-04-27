@@ -65,21 +65,23 @@ export function MobileVMs() {
         <div className="m-placeholder">No VMs match.</div>
       )}
 
-      {list.map((v) => (
-        <Link key={v.uuid} to={`/m/vms/${encodeURIComponent(v.uuid)}`} className="m-card-link">
-          <div className="m-card">
-            <div className="m-card-row">
-              <div style={{ minWidth: 0 }}>
-                <div className="m-card-title">{v.name}</div>
-                <div className="m-card-meta">
-                  {v.host_id} · {v.cpu_count} vCPU · {(v.mem_total_mb / 1024).toFixed(1)} GiB
+      <div className="m-section">
+        {list.map((v) => (
+          <Link key={v.uuid} to={`/m/vms/${encodeURIComponent(v.uuid)}`} className="m-card-link">
+            <div className="m-card">
+              <div className="m-card-row">
+                <div style={{ minWidth: 0 }}>
+                  <div className="m-card-title">{v.name}</div>
+                  <div className="m-card-meta">
+                    {v.host_id} · {v.cpu_count} vCPU · {(v.mem_total_mb / 1024).toFixed(1)} GiB
+                  </div>
                 </div>
+                <VMStatePill state={v.state} />
               </div>
-              <VMStatePill state={v.state} />
             </div>
-          </div>
-        </Link>
-      ))}
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
