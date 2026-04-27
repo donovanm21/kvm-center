@@ -22,6 +22,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build kvm-center-server image
+        # demo-up.sh only builds the server image when it's missing
+        # — in CI the runner host caches the image from prior runs,
+        # so a fresh checkout would otherwise test against the
+        # previous release's binary + SPA. Always rebuild.
+        env:
+          KVM_MONGO_PASSWORD: ci-throwaway
+        run: |
+          docker compose -f docker-compose.yml build kvm-center-server
+
       - name: Bring up the demo stack
         run: |
           ./scripts/demo-up.sh
