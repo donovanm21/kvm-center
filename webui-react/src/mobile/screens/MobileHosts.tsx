@@ -9,16 +9,23 @@ import type { Host } from '@/types';
 export function MobileHosts() {
   const hosts = useQuery({ queryKey: qk.hosts(), queryFn: () => apiGet<Host[]>('/api/hosts') });
   const [filter, setFilter] = useState('');
-  const list = (hosts.data ?? []).filter((h) => {
-    if (!filter) return true;
-    const q = filter.toLowerCase();
-    return h.id.toLowerCase().includes(q) || h.ip.toLowerCase().includes(q);
-  });
+  const list = (hosts.data ?? [])
+    // v5.46.2: stable sort first so the list doesn't reorder on
+    // every 10s React Query poll / SSE invalidation.
+    .slice()
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .filter((h) => {
+      if (!filter) return true;
+      const q = filter.toLowerCase();
+      return h.id.toLowerCase().includes(q) || h.ip.toLowerCase().includes(q);
+    });
 
   return (
-    <div data-testid="mobile-hosts">
-      <h1 className="m-h1">Hosts</h1>
-      <p className="m-sub">{hosts.data ? `${hosts.data.length} in cluster` : 'Loading…'}</p>
+    <div className="m-screen" data-testid="mobile-hosts">
+      <div className="m-screen-h">
+        <h1 className="m-h1">Hosts</h1>
+        <p className="m-sub">{hosts.data ? `${hosts.data.length} in cluster` : 'Loading…'}</p>
+      </div>
 
       <input
         className="m-search"

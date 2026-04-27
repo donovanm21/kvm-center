@@ -29,9 +29,11 @@ export function MobileActivity() {
   const events = q.data?.events ?? [];
 
   return (
-    <div data-testid="mobile-activity">
-      <h1 className="m-h1">Activity</h1>
-      <p className="m-sub">Most recent {events.length} of {q.data?.total ?? 0} events.</p>
+    <div className="m-screen" data-testid="mobile-activity">
+      <div className="m-screen-h">
+        <h1 className="m-h1">Activity</h1>
+        <p className="m-sub">Most recent {events.length} of {q.data?.total ?? 0} events.</p>
+      </div>
 
       {q.isLoading && <div className="m-placeholder">Loading…</div>}
       {q.error && <div className="m-error">Failed to load audit log.</div>}

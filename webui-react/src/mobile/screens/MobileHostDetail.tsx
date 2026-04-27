@@ -13,10 +13,12 @@ export function MobileHostDetail() {
   const vms = useQuery({ queryKey: qk.vms(), queryFn: () => apiGet<VM[]>('/api/vms') });
 
   const host = (hosts.data ?? []).find((h) => h.id === id);
-  const hostVMs = (vms.data ?? []).filter((v) => v.host_id === id);
+  const hostVMs = (vms.data ?? [])
+    .filter((v) => v.host_id === id)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div data-testid="mobile-host-detail">
+    <div className="m-screen" data-testid="mobile-host-detail">
       <button type="button" className="m-back" onClick={() => nav('/m/hosts')}>← Hosts</button>
 
       {hosts.isLoading && <div className="m-placeholder">Loading…</div>}
@@ -24,11 +26,13 @@ export function MobileHostDetail() {
 
       {host && (
         <>
-          <h1 className="m-h1">{host.id}</h1>
-          <p className="m-sub">
-            <span className={`m-pill ${host.status === 'online' ? 'ok' : 'danger'}`}>{host.status}</span>
-            <span style={{ marginLeft: 8 }}>{host.ip}</span>
-          </p>
+          <div className="m-screen-h">
+            <h1 className="m-h1">{host.id}</h1>
+            <p className="m-sub">
+              <span className={`m-pill ${host.status === 'online' ? 'ok' : 'danger'}`}>{host.status}</span>
+              <span style={{ marginLeft: 8 }}>{host.ip}</span>
+            </p>
+          </div>
 
           <div className="m-card">
             <dl className="m-kv">

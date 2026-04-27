@@ -25,9 +25,11 @@ export function MobileDashboard() {
     .slice(0, 5);
 
   return (
-    <div data-testid="mobile-dashboard">
-      <h1 className="m-h1">Overview</h1>
-      <p className="m-sub">Read-only fleet snapshot.</p>
+    <div className="m-screen" data-testid="mobile-dashboard">
+      <div className="m-screen-h">
+        <h1 className="m-h1">Overview</h1>
+        <p className="m-sub">Read-only fleet snapshot.</p>
+      </div>
 
       <div className="m-stats">
         <Stat label="Hosts online" value={`${onlineHosts}/${hostList.length}`} foot={`${hostList.length - onlineHosts} offline`} />

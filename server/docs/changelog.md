@@ -10,6 +10,27 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.46.2 — mobile list sort + consistent screen vertical rhythm
+
+Two operator nits from the v5.46.x ship:
+
+**Lists shuffled on every poll.** `MobileHosts` and `MobileVMs`
+mapped over the React Query cache directly. Every 10 s the data
+refreshes (poll + SSE invalidations) and the visible cards
+reordered if the server's array order shifted. Now both screens
+sort by their natural key (`host.id`, `vm.name`) before filtering.
+`MobileHostDetail`'s on-host VM list got the same treatment.
+Server-sorted feeds (`MobileActivity` audit, `MobileDashboard`
+recent migrations) keep their existing ordering.
+
+**Inconsistent spacing across screens.** The Overview tab had nice
+vertical rhythm (because `m-stats` is a CSS-grid with internal
+gap), but the rest of the screens stacked tight. Introduced a
+`.m-screen` flex-column wrapper with `gap: 14px` that every screen
+applies on its root `<div>`. Header + sub-copy pair up in a
+matching `.m-screen-h` so they stay tight against each other while
+everything else gets the same 14 px between sections.
+
 ## v5.46.1 — mobile bottom-tab bar floats permanently
 
 Operator feedback after the v5.46.0 ship: on long pages (Activity
