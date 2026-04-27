@@ -38,9 +38,10 @@ export function App() {
   );
 }
 
-// Auto-redirect first-time iPhone visitors from `/` to `/m`. Runs
-// once per browser (sticky via localStorage) so an operator who
-// explicitly navigates back to the desktop view isn't trapped.
+// Auto-redirect mobile visitors from `/` to `/m`. Mobile is the
+// canonical experience on iPhone — no opt-out via UI. Power users
+// can still set `localStorage.kvmc-prefer-desktop = '1'` via dev
+// tools if they need the desktop SPA on a phone-class device.
 function useMobileAutoRedirect() {
   const location = useLocation();
   const nav = useNavigate();

@@ -336,59 +336,26 @@ func swapBinaryWindows(exe, newPath string) error {
 		_ = os.Rename(oldPath, exe)
 		return fmt.Errorf("rename new binary to exe: %w", err)
 	}
-	// Step 3: schedule a one-shot helper task to restart the
-	// kvm-tools task ~30 s from now. v5.33.5 used `cmd /c start /B`
-	// to spawn a detached helper, but Task Scheduler tore the
-	// helper down with its parent's process tree on the Gaming
-	// host — the binary swapped, the helper never fired, and the
-	// VM was left with no running tools. Running the restart as
-	// its own scheduled task means it executes under the Task
-	// Scheduler service, not as a child of our dying process.
-	if err := scheduleRestartHelper(); err != nil {
-		log.Printf("kvm-tools: schedule restart-helper failed: %v — Task Scheduler will restart at next RestartInterval", err)
+	// Step 3: spawn a detached helper that waits, then runs
+	// `schtasks /Run /TN kvm-tools` to relaunch this task on the
+	// new binary. v5.33.5 used `cmd /c start /B` (helper inherited
+	// the parent's Job object — Task Scheduler killed the whole
+	// job when our action exited). v5.45.2 tried a one-shot
+	// scheduled task (also failed because spawning `schtasks
+	// /Create` happens *inside* the dying job, and the create call
+	// itself can be killed mid-flight on the Gaming host —
+	// observed on prod: no helper task ever materialised, no
+	// .bat file in C:\Windows\Temp). v5.46.4 spawns directly with
+	// CREATE_BREAKAWAY_FROM_JOB | DETACHED_PROCESS so the child
+	// truly escapes our Job and survives our os.Exit.
+	logPath := filepath.Join(os.TempDir(), "kvm-tools-update.log")
+	if err := spawnRestartHelper(logPath); err != nil {
+		log.Printf("kvm-tools: spawn restart helper failed: %v — task may stay Ready until reboot", err)
 	} else {
-		log.Printf("kvm-tools: swapped binary (old→%s, new→%s); restart-helper task scheduled", oldPath, exe)
+		log.Printf("kvm-tools: swapped binary (old→%s, new→%s); detached restart helper spawned, log=%s", oldPath, exe, logPath)
 	}
 	time.Sleep(300 * time.Millisecond)
 	os.Exit(0)
-	return nil
-}
-
-// scheduleRestartHelper writes a small .bat file to %TEMP% and
-// registers a one-shot scheduled task that runs it ~30 s from now.
-// The .bat issues `schtasks /Run /TN kvm-tools` to bring the (now-
-// exited) main task back online on the freshly-swapped binary,
-// then deletes the helper task so it doesn't accumulate.
-func scheduleRestartHelper() error {
-	tmp := os.TempDir()
-	batPath := filepath.Join(tmp, "kvm-tools-restart.bat")
-	logPath := filepath.Join(tmp, "kvm-tools-update.log")
-	helperName := "kvm-tools-restart-helper"
-
-	bat := "@echo off\r\n" +
-		"echo [%DATE% %TIME%] kvm-tools restart helper firing >> \"" + logPath + "\"\r\n" +
-		"schtasks /Run /TN kvm-tools >> \"" + logPath + "\" 2>&1\r\n" +
-		"schtasks /Delete /TN " + helperName + " /F >nul 2>&1\r\n"
-	if err := os.WriteFile(batPath, []byte(bat), 0o644); err != nil {
-		return fmt.Errorf("write helper bat: %w", err)
-	}
-
-	// Best-effort cleanup of any leftover helper from a prior run.
-	_ = exec.Command("schtasks", "/Delete", "/TN", helperName, "/F").Run()
-
-	when := time.Now().Add(30 * time.Second).Format("15:04:05")
-	create := exec.Command(
-		"schtasks", "/Create",
-		"/TN", helperName,
-		"/SC", "ONCE",
-		"/ST", when,
-		"/TR", batPath,
-		"/RL", "HIGHEST",
-		"/F",
-	)
-	if out, err := create.CombinedOutput(); err != nil {
-		return fmt.Errorf("schtasks /Create: %w (%s)", err, strings.TrimSpace(string(out)))
-	}
 	return nil
 }
 

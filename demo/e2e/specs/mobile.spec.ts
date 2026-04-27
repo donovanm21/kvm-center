@@ -64,12 +64,10 @@ test.describe('mobile (/m)', () => {
     await expect(page.locator('.m-card').first()).toBeVisible();
   });
 
-  test('switch-to-desktop button writes the preference + navigates to /', async ({ page }) => {
+  test('header has no switch-to-desktop button — mobile is canonical', async ({ page }) => {
     await loginAsAdminMobile(page);
-    await page.getByRole('button', { name: /switch to desktop/i }).click();
-    // Desktop sidebar's Dashboard link is the post-redirect marker.
-    await expect(page.getByRole('link', { name: /dashboard/i }).first()).toBeVisible();
-    const stuck = await page.evaluate(() => localStorage.getItem('kvmc-prefer-desktop'));
-    expect(stuck).toBe('1');
+    await expect(page.getByRole('button', { name: /switch to desktop/i })).toHaveCount(0);
+    // Sign-out remains.
+    await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible();
   });
 });
