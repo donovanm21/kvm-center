@@ -28,7 +28,10 @@ services:
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ping:1}).ok"]
       interval: 10s
-      timeout: 5s
+      # 10s tolerates a slow first-boot on small docker hosts; mongo's
+      # ping is sub-second once it's up. Keeping this generous avoids
+      # spurious "unhealthy" cycles that delay server start.
+      timeout: 10s
       retries: 10
 
   kvm-center-server:

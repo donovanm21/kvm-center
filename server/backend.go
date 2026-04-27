@@ -103,10 +103,23 @@ func (b *JSONBackend) Save(_ context.Context, d *persistData) error {
 	if err != nil {
 		return err
 	}
-	// Write to a sibling temp + rename so an interrupted Save never
-	// leaves the data file half-written.
+	// Write to a sibling temp, fsync, then rename so an interrupted
+	// Save never leaves the data file half-written and a power loss
+	// after the rename still finds the bytes durably on disk.
 	tmp := b.Path + ".tmp"
-	if err := os.WriteFile(tmp, buf, 0o644); err != nil {
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(buf); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
 		return err
 	}
 	return os.Rename(tmp, b.Path)

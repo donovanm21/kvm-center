@@ -45,10 +45,11 @@ const (
 	// it. Drops mean the 32-entry channel buffer is full; three in a
 	// row signals the consumer has stalled, not merely paused.
 	sseMaxConsecutiveDrops = 3
-	// sseBufferSize is the per-subscriber channel backlog. Matches
-	// the pre-5.32.17 default; also sized to 1 round of fan-out
-	// across all event types plus a pair of heartbeats.
-	sseBufferSize = 32
+	// sseBufferSize is the per-subscriber channel backlog. Sized for
+	// two full rounds of fan-out across every event type plus a few
+	// heartbeats, so a momentary GC pause or React render storm on a
+	// browser tab doesn't immediately trip sseMaxConsecutiveDrops.
+	sseBufferSize = 64
 )
 
 type sseEvent struct {
