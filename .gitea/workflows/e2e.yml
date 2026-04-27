@@ -32,7 +32,13 @@ jobs:
 
       - name: Run Playwright E2E
         run: |
-          KVMC_DEMO_URL=https://localhost:8290 ./scripts/run-e2e.sh
+          # Playwright runs inside a separate container that
+          # run-e2e.sh launches with --add-host=host-gateway, so
+          # host.docker.internal reaches the demo-server's published
+          # port on the docker host's loopback. Inside the runner
+          # job container the same alias may or may not resolve —
+          # demo-up.sh's wait loop uses `docker exec` to dodge that.
+          KVMC_DEMO_URL=https://host.docker.internal:8290 ./scripts/run-e2e.sh
         # Capture artefacts even when tests pass — the trace is
         # cheap and useful for debugging flake.
         continue-on-error: false

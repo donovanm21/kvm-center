@@ -23,6 +23,18 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEMO_COMPOSE="$REPO_ROOT/demo/docker-compose.demo.yml"
 DEMO_PORT="${DEMO_PORT:-8290}"
 
+# Pick a probe that survives docker-in-docker. `localhost:8290`
+# reaches the demo server when this script runs on the docker host
+# (the dev workflow); inside a CI job container it points at the
+# runner's own empty loopback. The server container is always
+# reachable to whoever spoke to the docker daemon to start it, so
+# `docker exec` on the container is the universally-correct probe.
+probe_server() {
+  docker compose -f "$DEMO_COMPOSE" exec -T kvm-center-demo-server \
+    wget -qO- --no-check-certificate "https://localhost:8190/api/version" 2>/dev/null \
+    | grep -q version
+}
+
 echo "==> tearing down any existing demo stack"
 docker compose -f "$DEMO_COMPOSE" down -v --remove-orphans 2>&1 | grep -v "^$" || true
 
@@ -40,7 +52,7 @@ docker compose -f "$DEMO_COMPOSE" up -d kvm-center-demo-mongo kvm-center-demo-se
 
 echo "==> waiting for server on :$DEMO_PORT"
 for i in $(seq 1 60); do
-  if curl -sk "https://localhost:$DEMO_PORT/api/version" 2>/dev/null | grep -q version; then
+  if probe_server; then
     echo "    server responding"
     break
   fi
@@ -65,7 +77,7 @@ docker compose -f "$DEMO_COMPOSE" restart kvm-center-demo-server >/dev/null
 
 # Wait until the post-restart server answers again.
 for i in $(seq 1 30); do
-  if curl -sk "https://localhost:$DEMO_PORT/api/version" 2>/dev/null | grep -q version; then
+  if probe_server; then
     break
   fi
   sleep 1
