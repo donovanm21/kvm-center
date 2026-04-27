@@ -29,6 +29,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -153,6 +154,39 @@ func handleRestore(store *Store) http.HandlerFunc {
 				writeError(w, http.StatusBadRequest,
 					fmt.Sprintf("checksum mismatch for %s (want %s..., got %s...)", rel, want[:12], got[:12]))
 				return
+			}
+		}
+
+		// Refuse to restore while any migration is in flight: the
+		// destination agent is still updating its MigrationRecord and
+		// our overwrite would race the next persist tick. Operators
+		// can cancel the migrations or wait them out.
+		var inFlight []string
+		for _, m := range store.GetMigrations() {
+			if m != nil && m.Status == "running" {
+				inFlight = append(inFlight, m.ID)
+			}
+		}
+		if len(inFlight) > 0 {
+			writeError(w, http.StatusConflict,
+				fmt.Sprintf("refusing to restore — %d migration(s) in flight: %s. Cancel or wait, then retry.",
+					len(inFlight), strings.Join(inFlight, ", ")))
+			return
+		}
+
+		// Validate any staged TLS material before we overwrite the live
+		// files. A backup with an expired or mismatched cert/key pair
+		// would brick the HTTPS listener on next restart; bail with a
+		// clear error instead.
+		if _, ok := manifest.Files["tls/server.crt"]; ok {
+			if _, ok2 := manifest.Files["tls/server.key"]; ok2 {
+				certPath := filepath.Join(stage, "tls/server.crt")
+				keyPath := filepath.Join(stage, "tls/server.key")
+				if _, err := tls.LoadX509KeyPair(certPath, keyPath); err != nil {
+					writeError(w, http.StatusBadRequest,
+						"staged TLS cert/key would not load (expired or mismatched): "+err.Error())
+					return
+				}
 			}
 		}
 

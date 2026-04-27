@@ -305,7 +305,11 @@ func StartCommandServer(addr string) {
 	mux.HandleFunc("/refresh-telemetry", handleRefreshTelemetry)
 	log.Printf("agent command server listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("commander: %v", err)
+		// Bail loud — without the command server the agent can still
+		// post telemetry but not accept any operator commands, which
+		// will manifest as silent timeouts in the WebUI. Better to
+		// crash so systemd restarts and surfaces the issue.
+		log.Fatalf("commander: listen %s failed (port already in use?): %v", addr, err)
 	}
 }
 

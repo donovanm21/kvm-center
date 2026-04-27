@@ -55,8 +55,14 @@ func handleTelemetry(store *Store) http.HandlerFunc {
 		}
 
 		store.ApplyTelemetry(&payload)
-		log.Printf("telemetry: %s  host=%s  vms=%d  cpu=%.1f%%  mem=%.1f%%",
-			payload.IP, payload.HostID, len(payload.VMs), payload.CPUUsage, payload.MemUsage)
+		// Log once every 5 minutes per host instead of every tick, so
+		// large fleets don't drown the log shipper. The audit log
+		// captures the per-tick state machine; this log line is just
+		// for human-eyeballing.
+		if shouldLogTelemetry(payload.HostID) {
+			log.Printf("telemetry: %s  host=%s  vms=%d  cpu=%.1f%%  mem=%.1f%%",
+				payload.IP, payload.HostID, len(payload.VMs), payload.CPUUsage, payload.MemUsage)
+		}
 
 		// Gossip the shared console-token secret so agents can verify
 		// signatures minted by /api/vms/console-token. Ships on every
@@ -1312,6 +1318,28 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // clientIP extracts the real client IP, honouring X-Forwarded-For.
+// telemetryLogState tracks the last log time per host so we don't spam
+// the log file once a tick per agent — that scales linearly with fleet
+// size and crowds out actual signal. 5 min cadence per host gives
+// enough resolution to debug agent connectivity without a flood.
+var (
+	telemetryLogMu   sync.Mutex
+	telemetryLogLast = map[string]time.Time{}
+)
+
+const telemetryLogInterval = 5 * time.Minute
+
+func shouldLogTelemetry(hostID string) bool {
+	telemetryLogMu.Lock()
+	defer telemetryLogMu.Unlock()
+	now := time.Now()
+	if last, ok := telemetryLogLast[hostID]; ok && now.Sub(last) < telemetryLogInterval {
+		return false
+	}
+	telemetryLogLast[hostID] = now
+	return true
+}
+
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		return strings.SplitN(xff, ",", 2)[0]
