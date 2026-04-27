@@ -129,23 +129,47 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
 }
 
 $action    = New-ScheduledTaskAction -Execute $BinPath -Argument "-server $Server -interval $Interval"
-$trigger   = New-ScheduledTaskTrigger -AtStartup
+
+# v5.46.6: dual trigger. AtStartup gets the daemon up at boot;
+# the repeating trigger acts as a 60 s watchdog so Task Scheduler
+# always re-fires the action within a minute of a clean self-
+# update exit. Earlier versions (v5.33.5, v5.45.2, v5.46.4) tried
+# to spawn an in-process detached helper from inside swapBinary-
+# Windows to call `schtasks /Run` after os.Exit — every variant
+# eventually died inside the parent's Job (start /B, scheduled
+# helper-task that didn't persist, CREATE_BREAKAWAY_FROM_JOB
+# that the parent Job didn't permit). Task Scheduler is allowed
+# to restart its own task; just lean on it.
+$atStartup    = New-ScheduledTaskTrigger -AtStartup
+# RepetitionInterval needs a base trigger; -Once with -At in the
+# past works fine and Task Scheduler ignores the past start time.
+$repeatBase   = New-ScheduledTaskTrigger -Once -At ([DateTime]::Today.AddHours(0))
+$repeatBase.Repetition = (New-CimInstance -ClientOnly `
+    -ClassName MSFT_TaskRepetitionPattern `
+    -Namespace Root/Microsoft/Windows/TaskScheduler `
+    -Property @{
+        Interval = 'PT1M'
+        Duration = ''   # empty string = "indefinite"
+    })
+$triggers     = @($atStartup, $repeatBase)
+
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest -LogonType ServiceAccount
 $settings  = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
     -StartWhenAvailable `
     -ExecutionTimeLimit ([TimeSpan]::Zero) `
+    -MultipleInstances IgnoreNew `
     -RestartCount 99 `
     -RestartInterval (New-TimeSpan -Minutes 1)
 
 Register-ScheduledTask -TaskName $TaskName `
     -Action $action `
-    -Trigger $trigger `
+    -Trigger $triggers `
     -Principal $principal `
     -Settings $settings `
     -Description "KVM Center Guest Tools - reports guest telemetry to kvm-center" | Out-Null
-Write-Info "Scheduled task '$TaskName' registered (runs as SYSTEM at boot)"
+Write-Info "Scheduled task '$TaskName' registered (AtStartup + 1-minute watchdog repeat)"
 
 Start-ScheduledTask -TaskName $TaskName
 Start-Sleep -Seconds 2

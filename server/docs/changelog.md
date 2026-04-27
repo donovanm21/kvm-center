@@ -10,6 +10,44 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.46.6 — Windows kvm-tools: 60 s watchdog trigger (third try)
+
+The v5.46.4 fix used `CREATE_BREAKAWAY_FROM_JOB | DETACHED_PROCESS`
+to escape the parent's Windows Job before `os.Exit(0)`. On the
+Gaming host that path *also* failed silently — the helper never
+created `%TEMP%\kvm-tools-update.log`. Forensic: Task Scheduler's
+default Job for the action does **not** set
+`JOB_OBJECT_LIMIT_BREAKAWAY_OK`, so `CreateProcess` rejected the
+flag with `ERROR_ACCESS_DENIED`. Three different in-process
+helper variants (start /B, schtasks /Create, breakaway-from-job)
+have now all bumped into the same wall.
+
+Stopped fighting the Job. v5.46.6 hands the relaunch back to Task
+Scheduler itself: `install.ps1` now registers the kvm-tools task
+with **two triggers**:
+
+- `AtStartup` (boot the daemon at machine start, unchanged)
+- A `Once + RepetitionInterval = PT1M, Duration = indefinite`
+  trigger that fires every minute forever. Combined with
+  `MultipleInstances = IgnoreNew`, this is a benign no-op while
+  kvm-tools is running, and a within-60-s relaunch when the
+  process has self-exited after a binary swap.
+
+Net effect: the next time kvm-tools self-updates, it `os.Exit(0)`s
+as before. Within ≤ 60 s the watchdog trigger fires, the new
+binary boots, telemetry resumes. No in-process detachment
+gymnastics; no helper scripts; nothing that has to outlive the
+parent Job.
+
+The v5.46.4 `spawnRestartHelper` is kept (with `CREATE_BREAKAWAY_
+FROM_JOB`) as a fast-path for the rare case where it *does* work
+(manual runs from a console outside any Job) — when it fails the
+watchdog still picks up.
+
+**Operator action required:** Windows hosts pinned to v5.46.4 or
+earlier need to re-run `install.ps1` once for the new triggers to
+register. After that, every future auto-update flows on its own.
+
 ## v5.46.5 — mobile zoomed-in first paint
 
 iPhone reload landed at zoom < 1: every screen looked slightly
