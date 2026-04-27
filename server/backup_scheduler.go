@@ -40,10 +40,11 @@ import (
 const backupSchedulerTick = 1 * time.Minute
 
 // Encrypted-tarball envelope (v5.45.0):
-//   "KVMCB1\n" magic    (7 bytes — "KVMC Backup v1\n")
-//   16-byte salt        (PBKDF2)
-//   12-byte AES-GCM nonce
-//   ciphertext + tag    (rest of file)
+//
+//	"KVMCB1\n" magic    (7 bytes — "KVMC Backup v1\n")
+//	16-byte salt        (PBKDF2)
+//	12-byte AES-GCM nonce
+//	ciphertext + tag    (rest of file)
 //
 // PBKDF2-SHA256 / 200 000 iters / 32-byte key derived from the
 // operator-supplied passphrase. The full plaintext tarball is the

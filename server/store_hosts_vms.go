@@ -366,4 +366,3 @@ func (s *Store) PrunePhantomHosts() {
 		}, true, "")
 	}
 }
-

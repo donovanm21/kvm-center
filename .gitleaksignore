@@ -13,3 +13,17 @@
 # gone); this entry silences the old blob that filter-repo would
 # otherwise have to rewrite.
 849d3143c3b540716d0f10661c1ce50bd73f51e0:server/docs/authentication.md:generic-api-key:81
+
+# v5.46.0: demo/seed/main.go embeds a fixed 64-hex API token literal
+# so the demo stack is reproducible (the seed only ever runs against
+# the throwaway demo Mongo container — no real cluster touches it).
+# gitleaks' generic-api-key rule catches the high-entropy literal;
+# this fingerprint silences it for the historical commit. If the
+# secret moves to a new line/commit gitleaks will re-flag it.
+a4364fa318daf40ee87a0354134d746eceb6810b:demo/seed/main.go:generic-api-key:357
+
+# Historical curl-auth-header doc placeholder. The literal token is
+# `kvmc_YOUR_TOKEN_HERE`, an obvious placeholder, but gitleaks'
+# curl-auth-header rule fires on the bearer-prefix shape regardless.
+# HEAD has been rewritten; this entry quiets the old blob.
+676a2b079533e236636e77acf7c6e728ac91359f:server/docs/authentication.md:curl-auth-header:83

@@ -15,9 +15,10 @@ import (
 
 // handleChangeMedia performs a live ISO swap on a CDROM target.
 // Params:
-//   media_action = "insert" | "eject"
-//   target       = libvirt device name (e.g. "hda", "sdb")
-//   path         = pool-resident ISO path (insert only)
+//
+//	media_action = "insert" | "eject"
+//	target       = libvirt device name (e.g. "hda", "sdb")
+//	path         = pool-resident ISO path (insert only)
 func handleChangeMedia(w http.ResponseWriter, req models.CommandRequest, vmTarget string) {
 	action := strings.ToLower(strings.TrimSpace(req.Params["media_action"]))
 	target := strings.TrimSpace(req.Params["target"])

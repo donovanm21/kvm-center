@@ -211,4 +211,3 @@ func (s *Store) GetMigrations() []*models.MigrationRecord {
 	}
 	return out
 }
-
