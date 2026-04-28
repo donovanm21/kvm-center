@@ -52,7 +52,9 @@ services:
     environment:
       - KVM_CENTER_ADDR=:8090
       - KVM_CENTER_TLS_ADDR=:8190
-      - KVM_CENTER_DISABLE_HTTP=1
+      # v5.47+ disables the plain-HTTP listener by default. If you have
+      # pre-v5.32 kvm-tools still in the fleet that can't reach :8190,
+      # set KVM_CENTER_LEGACY_HTTP=1 to opt the listener back on.
       - KVM_CENTER_TLS_DIR=/var/lib/kvm-center/tls
       - KVM_CENTER_CA_DIR=/var/lib/kvm-center/ca
       # Optional cluster DNS domain — hypervisor certs get a SAN at
