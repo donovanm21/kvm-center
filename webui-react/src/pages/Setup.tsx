@@ -323,12 +323,23 @@ function DoneStep({ onFinish, pending }: { onFinish: () => void; pending: boolea
       <h3 style={h3}>All set.</h3>
       <p style={p}>
         Click below to finish the wizard and open your dashboard. You can revisit
-        every step at any time through <code style={kbd}>Settings</code>, including{' '}
-        <Link to="/settings/tls" style={linkStyle}>TLS</Link>,{' '}
-        <Link to="/settings/tokens" style={linkStyle}>API tokens</Link>, and{' '}
-        <Link to="/settings/providers" style={linkStyle}>identity providers</Link>.
+        every step at any time through <code style={kbd}>Settings</code>.
       </p>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+
+      <div style={{ marginTop: 14, padding: 14, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface-2)' }}>
+        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-faded)', marginBottom: 8 }}>
+          What you might want next
+        </div>
+        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.7, color: 'var(--text-body)' }}>
+          <li><Link to="/deployment" style={linkStyle}>Enrol another hypervisor</Link> — same install one-liner with a fresh token.</li>
+          <li><Link to="/settings/backup" style={linkStyle}>Schedule backups</Link> — once a day or on a cron, encrypted at rest.</li>
+          <li><Link to="/settings/tls" style={linkStyle}>Replace the self-signed cert</Link> with your own once you have a real DNS name.</li>
+          <li><Link to="/settings/tokens" style={linkStyle}>Mint a kvmctl token</Link> for CLI / CI use.</li>
+          <li><Link to="/docs/getting-started" style={linkStyle}>Read the operator guide</Link> for the full upgrade + DR flow.</li>
+        </ul>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
         <button type="button" className="btn-primary-sm" onClick={onFinish} disabled={pending}>
           {pending ? 'Finishing…' : 'Open the dashboard →'}
         </button>
