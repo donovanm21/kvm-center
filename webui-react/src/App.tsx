@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
@@ -12,19 +12,23 @@ import { Login } from './pages/Login';
 import { Setup } from './pages/Setup';
 import { Dashboard } from './pages/Dashboard';
 import { VMs } from './pages/VMs';
-import { VMDetail } from './pages/VMDetail';
 import { Hosts } from './pages/Hosts';
-import { HostDetail } from './pages/HostDetail';
 import { Storage } from './pages/Storage';
 import { Snapshots } from './pages/Snapshots';
 import { KVMTools } from './pages/KVMTools';
 import { Migrations } from './pages/Migrations';
-import { Deployment } from './pages/Deployment';
-import { Settings } from './pages/Settings';
-import { SystemHealth } from './pages/SystemHealth';
-import { Docs } from './pages/Docs';
 import { MobileApp } from './mobile/MobileApp';
 import { qk } from '@/queryKeys';
+
+// v5.47.0 bundle code-split: heavy/admin-only routes ride their own
+// chunk so first-paint on the dashboard doesn't pay for the audit
+// table, settings forms, system-health gauges, doc renderer, etc.
+const VMDetail = lazy(() => import('./pages/VMDetail').then((m) => ({ default: m.VMDetail })));
+const HostDetail = lazy(() => import('./pages/HostDetail').then((m) => ({ default: m.HostDetail })));
+const Deployment = lazy(() => import('./pages/Deployment').then((m) => ({ default: m.Deployment })));
+const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })));
+const SystemHealth = lazy(() => import('./pages/SystemHealth').then((m) => ({ default: m.SystemHealth })));
+const Docs = lazy(() => import('./pages/Docs').then((m) => ({ default: m.Docs })));
 
 // Port of each v3 view lands as its own route and replaces the stub.
 // Phase 1 ships Dashboard parity only.
@@ -115,25 +119,27 @@ function Shell() {
   }
   return (
     <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/vms" element={<VMs />} />
-        <Route path="/vms/:uuid" element={<VMDetail />} />
-        <Route path="/vms/:uuid/:tab" element={<VMDetail />} />
-        <Route path="/hosts" element={<Hosts />} />
-        <Route path="/hosts/:id" element={<HostDetail />} />
-        <Route path="/hosts/:id/:tab" element={<HostDetail />} />
-        <Route path="/storage" element={<Storage />} />
-        <Route path="/snapshots/*" element={<Snapshots />} />
-        <Route path="/migrations" element={<Migrations />} />
-        <Route path="/kvm-tools" element={<KVMTools />} />
-        <Route path="/deployment" element={<Deployment />} />
-        <Route path="/system-health" element={<SystemHealth />} />
-        <Route path="/settings/*" element={<Settings />} />
-        <Route path="/docs" element={<Docs />} />
-        <Route path="/docs/:slug" element={<Docs />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Suspense fallback={<div className="loading-screen" style={{ padding: 24 }}>Loading…</div>}>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/vms" element={<VMs />} />
+          <Route path="/vms/:uuid" element={<VMDetail />} />
+          <Route path="/vms/:uuid/:tab" element={<VMDetail />} />
+          <Route path="/hosts" element={<Hosts />} />
+          <Route path="/hosts/:id" element={<HostDetail />} />
+          <Route path="/hosts/:id/:tab" element={<HostDetail />} />
+          <Route path="/storage" element={<Storage />} />
+          <Route path="/snapshots/*" element={<Snapshots />} />
+          <Route path="/migrations" element={<Migrations />} />
+          <Route path="/kvm-tools" element={<KVMTools />} />
+          <Route path="/deployment" element={<Deployment />} />
+          <Route path="/system-health" element={<SystemHealth />} />
+          <Route path="/settings/*" element={<Settings />} />
+          <Route path="/docs" element={<Docs />} />
+          <Route path="/docs/:slug" element={<Docs />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </Layout>
   );
 }
