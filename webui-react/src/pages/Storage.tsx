@@ -19,7 +19,7 @@ export function Storage() {
   const [query, setQuery] = useState('');
   const [browse, setBrowse] = useState<BrowseTarget | null>(null);
 
-  const { sort, onToggle, compare } = useSort<PoolSortKey>('name');
+  const { sort, onToggle, compare } = useSort<PoolSortKey>('name', 'asc', 'storage');
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

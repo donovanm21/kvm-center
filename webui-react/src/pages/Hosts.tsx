@@ -25,7 +25,7 @@ export function Hosts() {
     return out;
   }, [vms.data]);
 
-  const { sort, onToggle, compare } = useSort<HostSortKey>('id');
+  const { sort, onToggle, compare } = useSort<HostSortKey>('id', 'asc', 'hosts');
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

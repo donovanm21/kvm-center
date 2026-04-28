@@ -33,7 +33,7 @@ export function VMs() {
   const { hasPerm } = useAuth();
   const [query, setQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
-  const { sort, onToggle, compare } = useSort<VMSortKey>('name');
+  const { sort, onToggle, compare } = useSort<VMSortKey>('name', 'asc', 'vms');
 
   // Build a host|vm → lock-reason map from the migrations list. While a
   // migration is running we lock the source row to prevent a duplicate

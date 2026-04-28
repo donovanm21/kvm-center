@@ -36,7 +36,7 @@ export function KVMTools() {
   // User-clickable sort; defaults to the operationally useful
   // "status ascending" which pushes warnings to the top since
   // STATUS_ORDER below buckets outdated/missing/no-tools before current.
-  const { sort, onToggle, compare } = useSort<KVMToolsSortKey>('status');
+  const { sort, onToggle, compare } = useSort<KVMToolsSortKey>('status', 'asc', 'tools');
 
   const latestVer = latest.data?.version ?? '';
 

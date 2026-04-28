@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 export type SortDir = 'asc' | 'desc';
 export interface SortState<K extends string> {
@@ -10,16 +11,52 @@ export interface SortState<K extends string> {
  * Thin sort-state hook: tracks a (key, direction) pair and exposes a
  * toggle that cycles asc → desc → asc when the same header is clicked
  * twice, or snaps to the new header's default direction when switching.
+ *
+ * When `urlKey` is supplied, the (key, dir) pair is mirrored to the
+ * URL's search params as `?<urlKey>Sort=<key>&<urlKey>Dir=<asc|desc>`
+ * so the operator's choice survives navigation + browser refresh.
+ * The URL form is opt-in: existing callsites that pass only the
+ * initial key keep their pre-v5.47 component-local state behaviour.
  */
-export function useSort<K extends string>(initialKey: K, initialDir: SortDir = 'asc'): {
+export function useSort<K extends string>(
+  initialKey: K,
+  initialDir: SortDir = 'asc',
+  urlKey?: string,
+): {
   sort: SortState<K>;
   onToggle: (key: K) => void;
   compare: (a: unknown, b: unknown) => number;
 } {
-  const [sort, setSort] = useState<SortState<K>>({ key: initialKey, dir: initialDir });
+  const [params, setParams] = useSearchParams();
+
+  // Local-state branch (no urlKey): pre-v5.47 behaviour, unchanged.
+  const [localSort, setLocalSort] = useState<SortState<K>>({ key: initialKey, dir: initialDir });
+
+  const sort: SortState<K> = useMemo(() => {
+    if (!urlKey) return localSort;
+    const k = (params.get(`${urlKey}Sort`) as K) || initialKey;
+    const d = (params.get(`${urlKey}Dir`) as SortDir) || initialDir;
+    return { key: k, dir: d === 'desc' ? 'desc' : 'asc' };
+  }, [urlKey, params, initialKey, initialDir, localSort]);
+
   const onToggle = useCallback((key: K) => {
-    setSort((cur) => (cur.key === key ? { key, dir: cur.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
-  }, []);
+    if (!urlKey) {
+      setLocalSort((cur) => (cur.key === key ? { key, dir: cur.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
+      return;
+    }
+    setParams(
+      (cur) => {
+        const next = new URLSearchParams(cur);
+        const curKey = (next.get(`${urlKey}Sort`) as K) || initialKey;
+        const curDir = (next.get(`${urlKey}Dir`) as SortDir) || initialDir;
+        const dir: SortDir = curKey === key ? (curDir === 'asc' ? 'desc' : 'asc') : 'asc';
+        next.set(`${urlKey}Sort`, key);
+        next.set(`${urlKey}Dir`, dir);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [urlKey, setParams, initialKey, initialDir]);
   // Type-aware compare. Pre-v5.37 every non-numeric value coerced to
   // string, which broke (a) booleans (true/false sorted alphabetically:
   // false ahead of true on asc, regardless of intent), and (b) "small
