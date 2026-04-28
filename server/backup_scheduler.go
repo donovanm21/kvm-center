@@ -17,6 +17,7 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -138,14 +139,20 @@ func backupIsDue(sc *models.BackupSchedule, now time.Time) (bool, error) {
 	return time.Since(sc.LastRunAt) >= time.Duration(sc.EveryHours)*time.Hour, nil
 }
 
-// startBackupScheduler launches the once-a-minute tick. Cancel via
-// the surrounding context (server's main lifetime).
-func (s *Store) startBackupScheduler() {
+// startBackupScheduler launches the once-a-minute tick. Honours
+// the supplied context — when it's cancelled the goroutine exits
+// promptly so no tick fires during shutdown.
+func (s *Store) startBackupScheduler(ctx context.Context) {
 	go func() {
 		t := time.NewTicker(backupSchedulerTick)
 		defer t.Stop()
-		for range t.C {
-			s.runBackupSchedulerTick()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				s.runBackupSchedulerTick()
+			}
 		}
 	}()
 }
