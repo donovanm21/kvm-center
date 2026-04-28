@@ -214,7 +214,27 @@ func NewStoreWithBackend(backend Backend, dataFile string) *Store {
 	}
 	s.load()
 	s.ensureBuiltInRoles()
+	s.ensureSecurityDefaults()
 	return s
+}
+
+// ensureSecurityDefaults flips defaults that v5.47+ wants on by
+// default for fresh installs — but doesn't touch an existing store
+// (operator may have explicitly opted out of mTLS for a partial
+// fleet rollout, and an upgrade flip would brick those agents).
+//
+// "Fresh install" = no users yet. By the time the first user
+// exists the operator has had a chance to enrol agents and can
+// flip the feature manually if they want it back off.
+func (s *Store) ensureSecurityDefaults() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.users) > 0 {
+		return // existing install — preserve operator preference
+	}
+	if !s.features.GRPCRequireClientCert {
+		s.features.GRPCRequireClientCert = true
+	}
 }
 
 // ensureBuiltInRoles creates the Administrator / Operator / Viewer roles if

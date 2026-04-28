@@ -24,11 +24,25 @@ func authedGRPCContext(parent context.Context, hostID string) context.Context {
 	return metadata.AppendToOutgoingContext(parent, "x-kvmc-agent-host", hostID)
 }
 
+// disableMTLSDefault opts out of v5.47's default-on
+// GRPCRequireClientCert for fresh stores so tests that exercise
+// the metadata-header path (no TLS, no client cert) keep working.
+func disableMTLSDefault(s *Store) {
+	f := s.GetFeatures()
+	f.GRPCRequireClientCert = false
+	s.SetFeatures(f)
+}
+
 // TestIntegration_GRPC_MigrationProgress: agent streams a burst of
 // progress frames; server updates MigrationRecord in real time;
 // a "complete" terminal frame finalises the record.
 func TestIntegration_GRPC_MigrationProgress(t *testing.T) {
 	h := newIntegrationHarness(t)
+	// v5.47.0 flipped GRPCRequireClientCert default ON for fresh
+	// installs. These tests exercise the metadata-header fallback
+	// path (no TLS, no client cert) so we explicitly opt the
+	// feature back off.
+	disableMTLSDefault(h.Store)
 	// Seed the host the gRPC interceptor will validate against
 	// (Tier 2 #9). ApplyTelemetry is enough to make GetHost return
 	// non-nil.
@@ -109,6 +123,7 @@ func TestIntegration_GRPC_MigrationProgress(t *testing.T) {
 // agent's sync HTTP response will still carry the final outcome).
 func TestIntegration_GRPC_MigrationProgress_UnknownID(t *testing.T) {
 	h := newIntegrationHarness(t)
+	disableMTLSDefault(h.Store)
 	h.Store.ApplyTelemetry(&models.TelemetryPayload{HostID: "hv01"})
 
 	lis, _ := net.Listen("tcp", "127.0.0.1:0")
