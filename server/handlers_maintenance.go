@@ -72,7 +72,9 @@ func handleMaintenanceEnter(store *Store) http.HandlerFunc {
 			if mode != "live" && mode != "offline" {
 				mode = "live"
 			}
-			go drainHost(context.Background(), store, hostID, mode, actorID)
+			// Use the server-wide context so a clean shutdown stops the
+			// drain mid-VM rather than leaving an orphan migration in flight.
+			go drainHost(serverCtx, store, hostID, mode, actorID)
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
@@ -170,9 +172,13 @@ func drainOneVM(ctx context.Context, store *Store, sourceID string, vm *models.V
 		VMUUID: vm.UUID,
 		Params: map[string]string{"destination": dest.IP},
 	})
-	timeout := 30 * time.Minute
-	client := &http.Client{Timeout: timeout}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+agentAddr+"/command", bytes.NewReader(body))
+	// Bound the migration call with a context-based deadline so a
+	// caller-cancellation (e.g. server shutdown) propagates promptly
+	// instead of waiting for the full 30 min Client.Timeout floor.
+	reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Minute)
+	defer reqCancel()
+	client := &http.Client{}
+	req, _ := http.NewRequestWithContext(reqCtx, http.MethodPost, "http://"+agentAddr+"/command", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {

@@ -39,9 +39,11 @@ func (s *Store) GetOrCreateConsoleSecret() string {
 	}
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
-		// Cannot realistically happen on any supported OS; crash hard
-		// so the operator knows the server is starting up broken.
-		panic("console-secret: rand.Read: " + err.Error())
+		// Cannot realistically happen on any supported OS; if it does,
+		// the entropy source is broken and we can't safely mint console
+		// tokens. Fatalf hard-stops the process — better an obvious
+		// crash at boot than silently serving unsigned consoles.
+		log.Fatalf("console-secret: rand.Read failed (entropy broken): %v", err)
 	}
 	s.consoleSecret = hex.EncodeToString(buf)
 	s.AsyncSave()

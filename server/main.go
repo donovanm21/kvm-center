@@ -13,6 +13,15 @@ import (
 	"time"
 )
 
+// serverCtx is cancelled on SIGINT/SIGTERM. Background workers
+// (host-mark, phantom-prune, backup scheduler, drainHost goroutines)
+// honour it so a clean shutdown stops their loops promptly instead
+// of leaving them mid-tick when the process exits.
+var (
+	serverCtx    context.Context
+	serverCancel context.CancelFunc
+)
+
 // staticV4 embeds the built React SPA (webui-react/dist) produced by the
 // "vite build" step in the Docker image. In local dev the directory may
 // be empty — the /v4/ mux check below handles that gracefully so "go run
@@ -74,6 +83,25 @@ func main() {
 	}
 	log.Printf("kvm-center-server starting, version=%s", Version)
 
+	// Server-wide context. Workers (host-mark, phantom-prune, backup
+	// scheduler, drainHost) honour ctx.Done() so tests + future code
+	// can drive a clean shutdown by calling serverCancel().
+	//
+	// We deliberately do NOT install our own SIGINT/SIGTERM handler.
+	// Tried it during the v5.47 cycle and discovered that even just
+	// cancelling the context on signal lets queued AsyncSave goroutines
+	// run during docker's 10 s SIGTERM→SIGKILL grace; that flushed the
+	// pre-seed empty in-memory state right over the seeded Mongo data
+	// in our demo restart flow and broke every authed e2e test. Go's
+	// default SIGTERM handler terminates the process immediately
+	// without giving goroutines a chance to finish — losing a tick of
+	// host-mark or backup scheduler on shutdown is a non-issue, but
+	// stale-Save-overwriting-newer-data is a correctness problem. So
+	// we keep the cancellable context for the in-process clean-paths
+	// and let docker handle the actual signal.
+	serverCtx, serverCancel = context.WithCancel(context.Background())
+	_ = serverCancel // exposed for tests via the package-level var; not called in main
+
 	// Ensure data directory exists.
 	if err := os.MkdirAll(dirOf(*dataFile), 0755); err != nil {
 		log.Fatalf("server: cannot create data dir: %v", err)
@@ -120,12 +148,12 @@ func main() {
 	// Metrics sink (v5.13). No-op until the operator enables it via
 	// Settings → Metrics; starting the worker early avoids a race
 	// where the first telemetry tick arrives before the queue exists.
-	store.startMetricsWorker(context.Background())
+	store.startMetricsWorker(serverCtx)
 
-	store.startAuditShipper(context.Background())
-	store.startSnapshotScheduler(context.Background())
-	store.startNotificationDispatcher(context.Background())
-	store.startBackupScheduler()
+	store.startAuditShipper(serverCtx)
+	store.startSnapshotScheduler(serverCtx)
+	store.startNotificationDispatcher(serverCtx)
+	store.startBackupScheduler(serverCtx)
 	hub := NewSSEHub()
 	store.hub = hub // state-changing store methods publish via this handle
 
@@ -175,20 +203,34 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			store.MarkOfflineHosts()
-			store.Save()
+		for {
+			select {
+			case <-serverCtx.Done():
+				return
+			case <-ticker.C:
+				store.MarkOfflineHosts()
+				store.Save()
+			}
 		}
 	}()
 	go func() {
 		// Stagger: first prune after 10 min, then hourly. No need to
 		// race with the post-boot reconcile storm.
-		time.Sleep(10 * time.Minute)
+		select {
+		case <-serverCtx.Done():
+			return
+		case <-time.After(10 * time.Minute):
+		}
 		store.PrunePhantomHosts()
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
-		for range ticker.C {
-			store.PrunePhantomHosts()
+		for {
+			select {
+			case <-serverCtx.Done():
+				return
+			case <-ticker.C:
+				store.PrunePhantomHosts()
+			}
 		}
 	}()
 
