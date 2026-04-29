@@ -10,6 +10,114 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.47.0 — security defaults, server hardening, UX polish, mobile snapshots, lazy bundle
+
+A focused hardening + polish release driven by a multi-cycle code
+review. Eleven PRs across security, stability, UX, mobile, docs,
+resilience, performance, and onboarding.
+
+**Security defaults flipped** (post-fleet rotation) —
+
+- Plain-HTTP `:8090` listener now defaults **OFF**. Opt back in with
+  `KVM_CENTER_LEGACY_HTTP=1` if you have pre-v5.32 kvm-tools that
+  still dial `http://`. The previous `KVM_CENTER_DISABLE_HTTP=1`
+  env stays valid as an off-switch alias for compose stacks.
+- gRPC `GRPCRequireClientCert` defaults **ON for fresh installs**
+  (no users yet). Existing fleets preserve operator preference so
+  an upgrade can't brick agents that haven't been re-enrolled with
+  a leaf cert.
+
+**Auth hardening** —
+
+- Session cookie now sets `Secure` when the request is over TLS.
+- Per-(username, IP) login throttle — 5 failures in 15 min triggers
+  a 15 min lockout. Cleared on success.
+- gRPC `StreamMigrationProgress` now refuses progress frames whose
+  caller host_id is neither source nor destination of the named
+  migration.
+- Telemetry handler always derives the agent IP from the
+  connection — payload IP was unauthenticated and could be spoofed.
+- Single audit row per failed login; tagged with the actual reason
+  (LDAP error vs invalid credentials).
+
+**Server stability + resilience** —
+
+- Server-wide cancellable context plumbed through host-mark,
+  phantom-prune, backup scheduler, and drain workers so explicit
+  shutdown stops them mid-tick.
+- Migration HTTP request bounded by `context.WithTimeout` instead
+  of relying on the 30 min `Client.Timeout` floor.
+- Restore handler refuses while any migration is in flight, and
+  validates staged TLS cert/key with `tls.LoadX509KeyPair` before
+  overwriting the live volume — a backup with an expired cert can
+  no longer brick the HTTPS listener on next restart.
+- JSON backend `Sync()`s the `.tmp` file before the atomic
+  `Rename`, so a power loss after the rename still finds the bytes
+  durably on disk.
+- Console-token entropy failure now `log.Fatalf` (was `panic` —
+  net/http swallowed it and left the request handler in undefined
+  state).
+
+**WebUI polish** —
+
+- Global `:focus-visible` rings on inputs, textareas, selects,
+  buttons. Keyboard nav becomes legible.
+- ActionsMenu now supports full keyboard navigation
+  (Arrow Up/Down/Home/End, Enter/Space, Escape) plus ARIA labels.
+- Toast deduplication by (kind, message) — a flapping endpoint no
+  longer stacks 20 identical errors.
+- Dashboard empty state shows a "Deployment guide" CTA so
+  first-run operators have a clear next step.
+- Destructive-button hover bumped to `#D32F2F` for legible contrast.
+- Sortable table state persists in URL params on Hosts, VMs,
+  Storage, and KVM-tools pages — sort order survives navigation.
+- Setup wizard's "Done" step adds a "What's next" panel with deep
+  links to the five most-common follow-up actions.
+
+**Mobile** —
+
+- Read-only Snapshots block on the mobile VM detail screen — newest
+  first, current pinned to the top, with empty + error states.
+
+**Performance** —
+
+- Heavy/admin-only routes lazy-loaded — main bundle drops 618 KB →
+  425 KB before gzip (-31 %). Settings, VMDetail, HostDetail,
+  Deployment, SystemHealth, Docs each ride their own chunk.
+- SSE per-subscriber buffer 32 → 64 so a momentary GC pause on a
+  browser tab doesn't trip the 3-consecutive-drops eviction.
+- Telemetry log-line throttled to once per 5 min per host (was
+  per-tick) — at 50 agents this drops log volume from 6000
+  lines/hour to 600.
+- Mongo healthcheck timeout 5 s → 10 s so small docker hosts don't
+  cycle through "unhealthy" on first boot.
+
+**Documentation** —
+
+- New runbooks in troubleshooting.md: maintenance-mode patching,
+  agent-offline recovery, three escape hatches for a forgotten
+  admin password, plus a Database symptoms table.
+- Getting-started.md gains an "Upgrading" section and a TLS
+  certificate-lifecycle note.
+- API reference documents the user / group / role / permission
+  endpoints (every UI Settings → Users action has a reference).
+- Backup docs explain the Mongo-vs-JSON snapshot relationship and
+  add a `mongodump` one-liner for DB-volume DR.
+
+**Test coverage** —
+
+- New integration tests for user management (create, list, RBAC,
+  last-admin guard, partial PUT) and host maintenance (enter, exit,
+  RBAC, unknown host).
+- Login throttle has its own test file covering lock-after-limit,
+  success clears bucket, per-(user, IP) isolation, case
+  insensitivity, window reset, expired lock.
+
+**Operator action required:** none. Existing deploys upgrade
+cleanly — the gRPC mTLS default only flips for fresh installs;
+existing operators keep their current setting and can opt in via
+Settings → Features when ready.
+
 ## v5.46.6 — Windows kvm-tools: 60 s watchdog trigger (third try)
 
 The v5.46.4 fix used `CREATE_BREAKAWAY_FROM_JOB | DETACHED_PROCESS`
