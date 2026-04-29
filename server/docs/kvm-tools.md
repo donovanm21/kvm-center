@@ -17,15 +17,19 @@ WebUI fills in the *Guest* block on each VM detail page.
 
 ## Install — Linux guests
 
-systemd-managed; one-liner:
+systemd-managed; one-liner (v5.47.1+ unified installer):
 
 ```sh
-curl -fsSL https://<your-server>:8190/downloads/install-kvm-tools.sh | \
-  sudo bash -s -- --server https://<your-server>:8190
+curl -fsSLk https://<your-server>:8190/downloads/install.sh | \
+  sudo bash -s -- --mode tools --server https://<your-server>:8190
 ```
 
+`--mode` is optional — the installer auto-detects guest vs hypervisor
+from libvirt presence. `install-kvm-tools.sh` still works as a
+symlink alias for older operator notes.
+
 The script downloads the `kvm-tools-linux-amd64` binary, drops it
-at `/usr/local/bin/kvm-tools`, registers a `systemd` unit with
+at `/opt/kvm-tools/kvm-tools`, registers a `systemd` unit with
 `Restart=always`, and starts it. Self-update is straightforward —
 new binary written, `os.Exit(0)`, systemd brings it back up.
 

@@ -41,14 +41,19 @@ RUN VERSION=$(cat /src/server/VERSION) && \
     CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-darwin-amd64      ./cmd/kvmctl && \
     CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-darwin-arm64      ./cmd/kvmctl && \
     CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-windows-amd64.exe ./cmd/kvmctl && \
-    cp /src/scripts/install-agent.sh      /dist/ && \
+    # v5.47.1: unified Linux installer. install.sh is the canonical
+    # entry point; install-agent.sh + install-kvm-tools.sh are kept as
+    # symlinks so existing one-liners in operator notes keep working —
+    # the unified script auto-detects mode from the invocation name.
+    cp /src/scripts/install.sh            /dist/install.sh && \
+    ln -sf install.sh                     /dist/install-agent.sh && \
+    ln -sf install.sh                     /dist/install-kvm-tools.sh && \
     cp /src/scripts/update-agent.sh       /dist/ && \
-    cp /src/kvm-tools/install.sh          /dist/install-kvm-tools.sh && \
     cp /src/kvm-tools/install.ps1         /dist/install-kvm-tools.ps1 && \
     cp /src/scripts/install-kvmctl.sh     /dist/install-kvmctl.sh && \
     cp /src/scripts/install-kvmctl.ps1    /dist/install-kvmctl.ps1 && \
     cp /src/scripts/libvirt-hooks-qemu.sh /dist/libvirt-hooks-qemu.sh && \
-    chmod +x /dist/install-agent.sh /dist/update-agent.sh /dist/install-kvm-tools.sh \
+    chmod +x /dist/install.sh /dist/update-agent.sh \
              /dist/install-kvmctl.sh /dist/libvirt-hooks-qemu.sh && \
     ln -sf kvm-tools-linux-amd64 /dist/kvm-tools-amd64 && \
     ln -sf kvm-tools-linux-arm64 /dist/kvm-tools-arm64 && \
