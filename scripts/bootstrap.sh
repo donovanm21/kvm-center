@@ -555,14 +555,14 @@ PYEOF
     mkdir -p dist
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/kvm-center-agent-amd64 ./agent
     CGO_ENABLED=0 GOOS=linux GOARCH=arm64  go build -ldflags="-s -w" -o dist/kvm-center-agent-arm64  ./agent
-    cp scripts/install-agent.sh dist/
+    cp scripts/install.sh dist/
 
     echo ""
     echo "Binaries ready in dist/"
     echo ""
     echo "On each hypervisor, run:"
-    echo "  scp dist/kvm-center-agent-amd64 dist/install-agent.sh root@<hypervisor>:/tmp/"
-    echo "  ssh root@<hypervisor> 'chmod +x /tmp/kvm-center-agent-amd64 /tmp/install-agent.sh && /tmp/install-agent.sh --server https://<server-ip>:8190'"
+    echo "  scp dist/kvm-center-agent-amd64 dist/install.sh root@<hypervisor>:/tmp/"
+    echo "  ssh root@<hypervisor> 'chmod +x /tmp/kvm-center-agent-amd64 /tmp/install.sh && /tmp/install.sh --mode agent --server https://<server-ip>:8190'"
     ;;
 
   --help|-h)

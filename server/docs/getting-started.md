@@ -94,11 +94,16 @@ CA. Two steps:
 2. **Run the installer** on the hypervisor:
 
    ```sh
-   curl -fsSLk https://<server>:8190/downloads/install-agent.sh | bash -s -- \
-     --server https://<server>:8190 \
+   curl -fsSLk https://<server>:8190/downloads/install.sh | sudo bash -s -- \
+     --mode agent --server https://<server>:8190 \
      --host-id hv01.example.com \
      --enroll-token enroll_…
    ```
+
+   v5.47.1+ ships a single unified installer at `install.sh`. Mode is
+   auto-detected from libvirt presence when `--mode` is omitted, and
+   the legacy `install-agent.sh` / `install-kvm-tools.sh` URLs keep
+   working as symlinks for existing operator notes.
 
    The script drops the binary into `/opt/kvm-center`, creates a
    systemd unit, exchanges a CSR for the signed leaf cert, installs

@@ -10,6 +10,29 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.47.1 — unified Linux installer
+
+One Bash script (`install.sh`) replaces the two previous Linux
+installers (`install-agent.sh` for hypervisors, `install-kvm-tools.sh`
+for guest VMs). The new entry point is on the Deployment page and at
+`https://<server>:8190/downloads/install.sh`.
+
+**Mode resolution** (first match wins):
+
+1. Explicit `--mode {agent,tools}` flag.
+2. Script invocation name — the legacy URLs `install-agent.sh` and
+   `install-kvm-tools.sh` keep working as symlinks; the unified
+   script reads its own filename.
+3. Auto-detect: `virsh` + `libvirtd.service` present → agent, else tools.
+
+**Operator-visible:** the Deployment page snippets are now true
+one-liners again — no separate `curl` for the binary, no `chmod +x`
+dance. The unified script pulls the right binary from `/downloads/`
+itself.
+
+Windows install (`install-kvm-tools.ps1`) is unchanged — the system
+primitives are too different to fold into the same file cleanly.
+
 ## v5.47.0 — security defaults, server hardening, UX polish, mobile snapshots, lazy bundle
 
 A focused hardening + polish release driven by a multi-cycle code

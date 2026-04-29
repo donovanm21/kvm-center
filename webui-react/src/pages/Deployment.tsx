@@ -52,22 +52,16 @@ export function Deployment() {
           rhel: {
             label: 'RHEL / Rocky',
             body:
-              `# Run as root on the guest VM (Rocky / RHEL / CentOS / Fedora)
-curl -fsSLk ${downloads}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
-curl -fsSLk ${downloads}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
-chmod +x /tmp/install-kvm-tools.sh /tmp/kvm-tools-amd64
-sudo /tmp/install-kvm-tools.sh --server ${installURL}`,
-            footer: 'Installs /opt/kvm-tools/kvm-tools and a systemd unit. Requires root.',
+              `# Run on the guest VM (Rocky / RHEL / CentOS / Fedora). One line, no scp.
+curl -fsSLk ${downloads}/install.sh | sudo bash -s -- --mode tools --server ${installURL}`,
+            footer: 'Installs /opt/kvm-tools/kvm-tools and a systemd unit. Auto-detects mode if --mode is omitted.',
           },
           debian: {
             label: 'Debian / Ubuntu',
             body:
-              `# Run as root on the guest VM (Debian / Ubuntu / Mint)
-curl -fsSLk ${downloads}/kvm-tools-linux-amd64 -o /tmp/kvm-tools-amd64
-curl -fsSLk ${downloads}/install-kvm-tools.sh -o /tmp/install-kvm-tools.sh
-chmod +x /tmp/install-kvm-tools.sh /tmp/kvm-tools-amd64
-sudo /tmp/install-kvm-tools.sh --server ${installURL}`,
-            footer: 'Installs /opt/kvm-tools/kvm-tools and a systemd unit. Requires root.',
+              `# Run on the guest VM (Debian / Ubuntu / Mint). One line, no scp.
+curl -fsSLk ${downloads}/install.sh | sudo bash -s -- --mode tools --server ${installURL}`,
+            footer: 'Installs /opt/kvm-tools/kvm-tools and a systemd unit. Auto-detects mode if --mode is omitted.',
           },
           windows: {
             label: 'Windows (PowerShell)',
@@ -106,28 +100,26 @@ Set-Location $tmp
           rhel: {
             label: 'RHEL / Rocky',
             body:
-              `# Run as root on the new KVM hypervisor (Rocky / RHEL / CentOS)
-curl -fsSLk ${downloads}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
-curl -fsSLk ${downloads}/install-agent.sh       -o /tmp/install-agent.sh
-chmod +x /tmp/install-agent.sh /tmp/kvm-center-agent-amd64
-# Open the agent command port (only required if firewalld is active)
-sudo firewall-cmd --add-port=8081/tcp --permanent && sudo firewall-cmd --reload
-sudo /tmp/install-agent.sh --server ${installURL}`,
+              `# Run on the new KVM hypervisor (Rocky / RHEL / CentOS). One line, no scp.
+# Mint --enroll-token from Settings → TLS → Hypervisor PKI; --host-id must match.
+curl -fsSLk ${downloads}/install.sh | sudo bash -s -- \\
+  --mode agent --server ${installURL} \\
+  --host-id <host-fqdn> --enroll-token <enroll_…>`,
             footer:
-              'Requires libvirtd running and virsh in PATH. The installer writes /etc/systemd/system/kvm-center-agent.service and enables it at boot.',
+              'Requires libvirtd running and virsh in PATH. The installer opens 8081/16514/49152-49215 in firewalld, registers the systemd unit, and configures qemu+tls migration if --enroll-token is supplied.',
           },
           debian: {
             label: 'Debian / Ubuntu',
             body:
-              `# Run as root on the new KVM hypervisor (Debian / Ubuntu)
-curl -fsSLk ${downloads}/kvm-center-agent-amd64 -o /tmp/kvm-center-agent-amd64
-curl -fsSLk ${downloads}/install-agent.sh       -o /tmp/install-agent.sh
-chmod +x /tmp/install-agent.sh /tmp/kvm-center-agent-amd64
-# Open the agent command port (only required if ufw is active)
-sudo ufw allow 8081/tcp
-sudo /tmp/install-agent.sh --server ${installURL}`,
+              `# Run on the new KVM hypervisor (Debian / Ubuntu). One line, no scp.
+# Mint --enroll-token from Settings → TLS → Hypervisor PKI; --host-id must match.
+curl -fsSLk ${downloads}/install.sh | sudo bash -s -- \\
+  --mode agent --server ${installURL} \\
+  --host-id <host-fqdn> --enroll-token <enroll_…>
+# Debian/Ubuntu use ufw; if active, open the agent command port:
+sudo ufw allow 8081/tcp 2>/dev/null || true`,
             footer:
-              'Requires libvirtd running and virsh in PATH. The installer writes /etc/systemd/system/kvm-center-agent.service and enables it at boot.',
+              'Requires libvirtd running and virsh in PATH. The installer registers the systemd unit and configures qemu+tls migration if --enroll-token is supplied.',
           },
         }}
       />
