@@ -24,11 +24,17 @@ import (
 const (
 	EventInventory = "inventory" // host / VM / storage set updated by agent telemetry
 	EventMigration = "migration" // migration record started / progressed / finished
-	EventSettings  = "settings"  // global feature flags changed
-	EventUsers     = "users"     // user CRUD (admin console changes)
-	EventGroups    = "groups"
-	EventRoles     = "roles"
-	EventIDPs      = "idps"
+	// EventCommand (v5.47.2+): a command_log entry transitioned. The
+	// reconciler emits one of these when it resolves a pending entry
+	// to a terminal state by polling the agent's outcome cache, so
+	// the SPA can refresh badges + Recent Tasks (Phase 3) views
+	// without re-fetching the whole command log.
+	EventCommand  = "command"
+	EventSettings = "settings" // global feature flags changed
+	EventUsers    = "users"    // user CRUD (admin console changes)
+	EventGroups   = "groups"
+	EventRoles    = "roles"
+	EventIDPs     = "idps"
 )
 
 // Subscriber hygiene — belt + braces against a stuck reverse proxy

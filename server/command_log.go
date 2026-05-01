@@ -138,6 +138,34 @@ func (l *CommandLog) Pending(minAge time.Duration) []*models.CommandLogEntry {
 	return out
 }
 
+// InflightForReconcile (v5.47.2+) returns the entries the live
+// reconciler should poll right now: pending, with InflightUntil set
+// and not yet expired, where the last poll (if any) is older than
+// pollInterval. The caller iterates this set, hits each agent's
+// /command-outcome endpoint, and either Updates the entry or calls
+// RecordPoll. Entries past InflightUntil are deliberately excluded
+// — the periodic stranded sweep handles those.
+func (l *CommandLog) InflightForReconcile(now time.Time, pollInterval time.Duration) []*models.CommandLogEntry {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []*models.CommandLogEntry
+	for _, e := range l.entries {
+		if e.Outcome != "pending" {
+			continue
+		}
+		if e.InflightUntil.IsZero() || !now.Before(e.InflightUntil) {
+			continue
+		}
+		if !e.LastPolledAt.IsZero() && now.Sub(e.LastPolledAt) < pollInterval {
+			continue
+		}
+		cp := *e
+		out = append(out, &cp)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].SubmittedAt.Before(out[j].SubmittedAt) })
+	return out
+}
+
 // MarkPending (v5.47.2+) keeps an entry in the "pending" outcome
 // after its initial HTTP call to the agent failed (transport error /
 // deadline exceeded / 5xx). It records the deadline at which the

@@ -10,6 +10,53 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.47.2 — long-running commands no longer lie about failure
+
+A focused salvage release. When the server's HTTP call to an agent
+times out (or hits a transport error / 5xx), we used to mark the
+command-log entry **failed** even when the agent had completed the
+underlying libvirt action successfully. The 2026-04-30 hvnode01
+incident exposed two of these — `DELETE_SNAPSHOT` and live
+`MIGRATE` — both showing as failed in the SPA while libvirt had
+quietly finished the work.
+
+This release introduces a server-side reconciler that polls a new
+agent endpoint to recover the actual outcome.
+
+**Operator-visible behaviour change:**
+
+- Long actions whose initial `POST /api/command` response was lost
+  show as **pending** in the command-log + admin UI for up to 30
+  minutes, transitioning to `success` / `failed` once the agent
+  reports it. (Previously: locked in `failed`.)
+- Pending entries that pass the 30-minute window without a
+  resolution flip to `unknown` so the operator sees them in the
+  admin UI — same final state as the legacy 45-minute stranded
+  sweep, just sooner.
+- Entries left pending across a server restart are now picked up
+  by the reconciler on the next 30-second tick instead of waiting
+  for the boot sweep.
+
+**Wire compatibility:** pre-5.47.2 agents return 404 to the new
+`/command-outcome` lookup; the server treats that as "no opinion"
+and the entry transitions to `unknown` after 30 minutes (no worse
+than today). Mixed fleets work without coordination.
+
+**New SSE event** `command` (payload `{request_id, outcome,
+host_id, action}`) fires whenever the reconciler resolves an entry
+to a terminal state, so the SPA can refresh badges without
+re-fetching.
+
+**New audit event** `command.reconciled` for terminal transitions.
+Per-poll attempts are *not* audited — would be loud and unhelpful.
+
+This is Phase 1 of the v5.48 plan
+(`docs/design/v5.48-async-commands.md`). Phase 2 (v5.48.0) replaces
+the agent's in-memory outcome cache with a SQLite ops.db on disk,
+adds a per-action watchdog, async dispatch for slow actions, and a
+cancellation API. Phase 3 (v5.48.1) adds the vSphere-parity Tasks
+pane, per-object indicators, and notifications.
+
 ## v5.47.1 — unified Linux installer
 
 One Bash script (`install.sh`) replaces the two previous Linux
