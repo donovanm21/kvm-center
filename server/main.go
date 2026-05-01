@@ -336,6 +336,11 @@ func main() {
 	mux.Handle("/api/vm-create-info", requirePerm(store, "vm.create", http.HandlerFunc(handleVMCreateInfo(store))))
 	mux.Handle("/api/vm-create", requirePerm(store, "vm.create", http.HandlerFunc(handleVMCreate(store))))
 	mux.HandleFunc("/api/command", handleCommand(store))
+	// v5.48.1 (PR-3a): agents POST progress frames here while an
+	// in-flight command runs. Server persists onto command_log +
+	// fans out as SSE `command_progress` so the SPA's Recent Tasks
+	// pane (PR-3b) can render real-time progress bars.
+	mux.HandleFunc("/api/agent/command-progress", handleAgentCommandProgress(store))
 	// v5.48 (PR-2f): operator cancel endpoint. Proxies to the
 	// agent's /command/cancel and updates the server-side
 	// command_log row to "cancelled" so the SPA reflects intent
