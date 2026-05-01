@@ -15,6 +15,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"kvm-center/internal/models"
 )
 
 func handleCommandCancel(store *Store) http.HandlerFunc {
@@ -97,6 +99,14 @@ func handleCommandCancel(store *Store) http.HandlerFunc {
 			"vm_name":    target.VMName,
 			"reason":     reason,
 		}, true, "")
+		// PR-3d: deliver cancel notification.
+		notifyTaskOutcome(store, &models.CommandLogEntry{
+			RequestID: id,
+			Action:    target.Action,
+			HostID:    target.HostID,
+			VMUUID:    target.VMUUID,
+			VMName:    target.VMName,
+		}, "cancelled", reason)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(respBody)

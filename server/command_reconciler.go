@@ -127,6 +127,7 @@ func reconcileOne(ctx context.Context, store *Store, client reconcileHTTPDoer, e
 			"outcome":    "unknown",
 			"reason":     "host_removed",
 		}, true, "")
+		notifyTaskOutcome(store, e, "unknown", "host removed from inventory while command pending")
 		return
 	}
 
@@ -191,6 +192,8 @@ func reconcileOne(ctx context.Context, store *Store, client reconcileHTTPDoer, e
 			"outcome":    parsed.Outcome,
 			"source":     "agent_outcome_cache",
 		}, parsed.Outcome == "success", msg)
+		// PR-3d: deliver outcome notification to operator channels.
+		notifyTaskOutcome(store, e, parsed.Outcome, msg)
 	default:
 		// "running" / "unknown" — agent has a row but no terminal
 		// answer yet. Stay pending, try again next tick.
