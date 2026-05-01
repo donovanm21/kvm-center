@@ -113,22 +113,24 @@ a:hover { color: var(--accent-hover); }
 #root { display: flex; flex-direction: column; }
 
 .app-shell {
-  /* v5.45.2: flex column instead of grid. Sticky descendants pin
-     to their containing block; with the previous grid-template-
-     rows: 64px 1fr layout, the topbar's row was exactly its own
-     height, leaving sticky no room to operate in some browsers
-     and the header disappeared as the page scrolled. Flex column
-     puts the topbar in normal flow with a contentful sibling
-     below — sticky now anchors to the .app-shell flex container,
-     which grows with content. */
+  /* v5.48.2: fixed viewport — only the main content area scrolls.
+     The previous v5.45.1/v5.45.2 sticky topbar+sidebar pattern
+     used the document as the scroll context (so sticky pinning
+     worked); flipping to a fixed-viewport shell with an
+     overflow:auto inner container is the cleaner mobile-app
+     pattern and makes the bottom-pinned Recent Tasks pane
+     (v5.48.1) play nicely with content scroll. */
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 .app-body {
   display: grid;
   grid-template-columns: 240px 1fr;
   flex: 1;
+  min-height: 0; /* flex children need this for overflow:auto on a child to actually scroll */
+  overflow: hidden;
 }
 
 /* ── Topbar ──────────────────────────────────────────────── */
@@ -141,13 +143,10 @@ a:hover { color: var(--accent-hover); }
   flex-shrink: 0;
   background: #13161D;
   border-bottom: 1px solid var(--border);
-  /* v5.45.2: pin so the brand + version + user-menu stay visible
-     while the page below scrolls. Pairs with .sidebar's sticky.
-     Explicit height since .app-shell is no longer a grid that
-     defines the row size. */
-  position: sticky;
-  top: 0;
   z-index: 30;
+  /* v5.48.2: with the fixed-viewport .app-shell, the topbar is
+     simply the first row in the column flex — no sticky needed,
+     it stays put because the page below has its own scroll. */
 }
 body.light-mode .topbar { background: #FFFFFF; }
 .topbar .logo { display: flex; align-items: center; gap: 12px; }
@@ -178,15 +177,10 @@ body.light-mode .version-badge { background: #FFF4EC; color: #C04512; border-col
   border-right: 1px solid var(--border);
   padding: 14px 10px;
   overflow-y: auto;
-  /* v5.45.1: sticky-pin under the topbar so the nav stays
-     visible while .main scrolls (long pages: docs, audit log,
-     system health). Topbar is the 64 px first grid row of
-     .app-shell. align-self: start keeps the cell from stretching
-     so sticky's containing block is the viewport. */
-  position: sticky;
-  top: 64px;
-  align-self: start;
-  max-height: calc(100vh - 64px);
+  /* v5.48.2: with the fixed-viewport .app-shell, the sidebar is
+     just the left grid cell of .app-body — it fills the cell,
+     scrolls internally if the nav is taller than the viewport,
+     and stays visible because the page below is what scrolls. */
 }
 body.light-mode .sidebar { background: #FFFFFF; }
 .sidebar-section-title {
@@ -214,12 +208,14 @@ body.light-mode .nav-item.active { background: #FFF4EC; color: #C04512; }
 /* ── Main content ────────────────────────────────────────── */
 .main {
   display: flex; flex-direction: column;
-  /* v5.45.1: removed `overflow-y: auto` so the document scrolls
-     as the scroll container instead of `.main`. Sticky-pinned
-     `.topbar` + `.sidebar` rely on the window being the scroll
-     context — otherwise they'd anchor to `.main`'s internal
-     scroll and disappear with it. */
   padding: 20px;
+  /* v5.48.2: this is now the scroll container. Topbar + sidebar
+     stay fixed by virtue of being siblings in a height:100vh
+     overflow:hidden shell. Padding-bottom keeps page content
+     clear of the collapsed Recent Tasks pane (~40px header). */
+  overflow-y: auto;
+  min-height: 0;
+  padding-bottom: 60px;
 }
 .breadcrumb {
   font-size: 11px; color: var(--text-muted); margin-bottom: 14px;
@@ -632,13 +628,11 @@ body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
  * mimics vCenter's task panel; mobile gets a drawer-style overlay. */
 .recent-tasks {
   position: fixed;
-  right: 16px;
+  left: 0;
+  right: 0;
   bottom: 0;
-  width: min(680px, calc(100% - 32px));
   background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
+  border-top: 1px solid var(--border-subtle);
   box-shadow: 0 -4px 16px rgba(0,0,0,0.18);
   z-index: 80;
   font-size: 13px;

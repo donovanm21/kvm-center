@@ -10,6 +10,27 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.48.2 — fixed-viewport shell + full-width Recent Tasks
+
+Layout polish on top of the v5.48.1 Tasks UX. Topbar and sidebar
+are now fixed in the viewport — only the main content area scrolls
+— and the Recent Tasks pane spans the full width of the screen
+along the bottom (previously a 680 px right-anchored panel).
+
+The previous v5.45.1/v5.45.2 layout used document-scroll +
+sticky-pinned topbar/sidebar so the brand + nav stayed visible on
+long pages. That worked but interacted awkwardly with the
+v5.48.1 bottom-pinned Tasks pane (which would either cover content
+or make the pane feel disconnected from the rest of the chrome).
+Switching to a fixed-viewport `.app-shell` (`height: 100vh;
+overflow: hidden`) with `.main` as the scroll container resolves
+both: chrome stays put because it's outside the scroll container,
+and the bottom pane has the full document width to render across.
+
+Mobile drawer behaviour is unchanged.
+
+No API changes.
+
 ## v5.48.1 — vSphere-parity Tasks UX
 
 Phase 3 of the v5.48 design — the operator-facing layer on top of
