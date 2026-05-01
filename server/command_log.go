@@ -35,10 +35,17 @@ const (
 	commandLogSliceCap      = 5000
 	// pendingReconcileAge is how long a "pending" entry must sit
 	// before the boot reconciler gives up and marks it "unknown".
-	// Longer than the longest realistic synchronous command (a
-	// storage-copy migration can run 30+ minutes), shorter than a
-	// full day.
+	// Used as the fallback when InflightUntil is unset (pre-5.47.2
+	// entries persisted across an upgrade). Longer than the longest
+	// realistic synchronous command (a storage-copy migration can run
+	// 30+ minutes), shorter than a full day.
 	pendingReconcileAge = 45 * time.Minute
+	// outcomeReconcileWindow (v5.47.2+) is how long after submission
+	// the server should keep polling an agent for the outcome of a
+	// command whose initial HTTP call timed out. Once this elapses
+	// without a terminal answer, the entry transitions pending →
+	// unknown so the operator can resolve it manually.
+	outcomeReconcileWindow = 30 * time.Minute
 )
 
 // NewRequestID returns a 128-bit random token encoded as 32 hex
@@ -103,19 +110,68 @@ func (l *CommandLog) Update(requestID, outcome, message string, statusCode int, 
 
 // Pending returns the entries still in-flight older than minAge.
 // Boot reconciler iterates this set to resolve stale records.
+//
+// Entries with InflightUntil set (v5.47.2+) are only returned if the
+// deadline has passed — these are tracked by the live reconciler, so
+// the boot/stranded sweep should leave them alone until they expire.
 func (l *CommandLog) Pending(minAge time.Duration) []*models.CommandLogEntry {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	cutoff := time.Now().Add(-minAge)
+	now := time.Now()
+	cutoff := now.Add(-minAge)
 	var out []*models.CommandLogEntry
 	for _, e := range l.entries {
-		if e.Outcome == "pending" && e.SubmittedAt.Before(cutoff) {
-			cp := *e
-			out = append(out, &cp)
+		if e.Outcome != "pending" {
+			continue
 		}
+		if !e.InflightUntil.IsZero() {
+			if now.Before(e.InflightUntil) {
+				continue
+			}
+		} else if !e.SubmittedAt.Before(cutoff) {
+			continue
+		}
+		cp := *e
+		out = append(out, &cp)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].SubmittedAt.Before(out[j].SubmittedAt) })
 	return out
+}
+
+// MarkPending (v5.47.2+) keeps an entry in the "pending" outcome
+// after its initial HTTP call to the agent failed (transport error /
+// deadline exceeded / 5xx). It records the deadline at which the
+// reconciler should give up if it still hasn't reached a terminal
+// answer, plus a human-readable message describing the timeout.
+//
+// No-op if the entry isn't currently pending — callers don't need to
+// guard against the agent racing the reconciler to a terminal state.
+func (l *CommandLog) MarkPending(requestID string, inflightUntil time.Time, message string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	e, ok := l.entries[requestID]
+	if !ok {
+		return
+	}
+	if e.Outcome != "pending" {
+		return
+	}
+	e.InflightUntil = inflightUntil
+	if message != "" {
+		e.Message = message
+	}
+}
+
+// RecordPoll (v5.47.2+) bumps an entry's LastPolledAt without
+// changing any other field. The reconciler calls this after a
+// non-terminal poll (network error or 404 from the agent) to
+// rate-limit the next attempt.
+func (l *CommandLog) RecordPoll(requestID string, at time.Time) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if e, ok := l.entries[requestID]; ok {
+		e.LastPolledAt = at
+	}
 }
 
 // List returns the most recent entries, newest first, capped at

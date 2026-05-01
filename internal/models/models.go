@@ -832,4 +832,17 @@ type CommandLogEntry struct {
 	Message    string     `json:"message,omitempty" bson:"message,omitempty"`
 	Replayed   bool       `json:"replayed,omitempty" bson:"replayed,omitempty"`
 	ExpiresAt  *time.Time `json:"-" bson:"expires_at,omitempty"`
+	// InflightUntil (v5.47.2+) is the deadline by which a "pending"
+	// entry must reach a terminal state. Set when the server's HTTP
+	// call to the agent times out or hits a transport error: instead
+	// of marking the entry failed (which lies when the agent actually
+	// finished the work), we leave it pending until either the
+	// reconciler resolves it or this deadline passes — at which point
+	// the boot/periodic reconciler flips it to "unknown".
+	InflightUntil time.Time `json:"inflight_until,omitempty" bson:"inflight_until,omitempty"`
+	// LastPolledAt (v5.47.2+) is the last time the reconciler queried
+	// the agent's /command-outcome endpoint for this entry. Used to
+	// rate-limit polling without holding the command-log mutex across
+	// HTTP calls.
+	LastPolledAt time.Time `json:"last_polled_at,omitempty" bson:"last_polled_at,omitempty"`
 }
