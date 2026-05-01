@@ -435,6 +435,25 @@ func handleCommand(store *Store) http.HandlerFunc {
 		if u != nil {
 			actorID = u.ID
 		}
+		// v5.48.1 (PR-3c): refuse a second mutating action on the
+		// same VM while one is still in flight. Same request_id
+		// (idempotent retry) is allowed through to the Record call
+		// below where the cache short-circuits replay; only a
+		// genuinely-different request_id targeting the same VM
+		// triggers 409 Conflict. Skip when both UUID and name are
+		// empty (some commands operate fleet-wide rather than on a
+		// specific VM and shouldn't gate each other).
+		if conflict := findInflightConflict(store.commandLog, action, req.VMUUID, req.VMName, req.RequestID); conflict != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":                  "another action is already in flight for this target",
+				"conflicting_request_id": conflict.RequestID,
+				"conflicting_action":     conflict.Action,
+				"submitted_at":           conflict.SubmittedAt,
+			})
+			return
+		}
 		existing, replay := store.commandLog.Record(&models.CommandLogEntry{
 			RequestID:   req.RequestID,
 			Action:      action,

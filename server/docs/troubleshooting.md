@@ -48,6 +48,7 @@ order: 80
 | Same long action lands as `failed` in admin UI but the VM is in the expected state (pre-5.47.2) | Known bug pre-v5.47.2: HTTP timeouts to the agent locked in a `failed` verdict even when libvirt completed the action. Upgrade. |
 | Pending command never resolves (v5.47.2+) | Check the agent is reachable on `:8081` from the server (`curl -k https://<host>:8081/health`). The reconciler logs `command-reconciler: poll …: <err>` every 30 s on connection failure. If the agent is reachable, the request_id may have aged out of its 35-min outcome cache — entry will flip to `unknown` after 30 min. |
 | Admin UI shows `command.reconciled` audit events flooding | Symptom of an agent in a permanent error loop returning 5xx for every command. Check the agent log on the host. |
+| `409 Conflict — another action is already in flight for this target` (v5.48.1+) | Expected; one of the operator's tabs already has a pending action on this VM. The response carries the `conflicting_request_id` — find it in the Recent Tasks pane. Cancel it first if you want to override. |
 
 ### Boot reconciliation (v5.48+)
 

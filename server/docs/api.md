@@ -123,6 +123,27 @@ The 202 path requires ops.db (v5.48+); on agents where ops.db
 failed to open, the agent falls back to the synchronous v5.47.2
 behaviour automatically.
 
+### `409 Conflict` on `/api/command` (v5.48.1+)
+
+When an action is already in flight on the target VM, the
+server refuses a second mutating call:
+
+```json
+POST /api/command  {"vm_uuid": "...", "action": "STOP", ...}
+409 Conflict
+{
+  "error": "another action is already in flight for this target",
+  "conflicting_request_id": "req_abc",
+  "conflicting_action": "MIGRATE",
+  "submitted_at": "..."
+}
+```
+
+The SPA disables conflicting buttons + links to the in-flight
+task in the Recent Tasks pane. An idempotent retry with the same
+`request_id` short-circuits to the cached outcome (v5.32.17
+behaviour) and does NOT trigger 409.
+
 ### `POST /api/command/cancel?request_id=<id>` (v5.48+)
 
 Cancel a running command. Body (optional): `{"reason": "..."}`
