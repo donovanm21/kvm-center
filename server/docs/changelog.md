@@ -10,6 +10,29 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.48.4 — slim overlay scrollbar applied globally
+
+The v5.45 global scrollbar style had a 2 px inset border painted
+with `var(--bg)` so the thumb would blend with the document
+background. With v5.48.2's switch to `.main` as the scroll
+container — and on every inner scroll wrapper (data tables,
+sidebars) where the parent surface doesn't match document
+`--bg` — that inset border read as a chunky pale channel along
+the right edge. Worse in light mode where `var(--bg)` is
+near-white.
+
+Replaced globally with a 6 px translucent-grey overlay-style
+thumb (`rgba(139,148,158,0.28)`, hover `0.55`) and zero border.
+Theme-agnostic; fades cleanly into every panel without
+per-container tuning. Dropped the `.data-table-scroll`
+per-container override (no longer needed).
+
+(v5.48.3 was a half-fix that scoped the new style to `.main` +
+`.sidebar` only; it never deployed because main raced ahead and
+the PR became unmergeable. v5.48.4 supersedes it.)
+
+No API changes.
+
 ## v5.48.2 — fixed-viewport shell + full-width Recent Tasks
 
 Layout polish on top of the v5.48.1 Tasks UX. Topbar and sidebar
