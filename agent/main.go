@@ -97,7 +97,17 @@ func main() {
 	} else {
 		ops = store
 		log.Printf("ops.db: opened %s", opsDBPath)
+		// PR-2d: resolve any rows the previous agent process left in
+		// `running` state by querying libvirt reality. Runs early
+		// during agent startup; the command server is already
+		// accepting new requests by this point but new requests use
+		// fresh request_ids, so there's no collision with the
+		// in-flight set being reconciled.
+		bootCtx, bootCancel := context.WithTimeout(liveCtx, 30*time.Second)
+		reconcileBoot(bootCtx, store)
+		bootCancel()
 		go runOpsGC(liveCtx, store)
+		go runOpsHeartbeat(liveCtx, store)
 	}
 
 	// v5.29.0: watch VM power-state transitions and fire an immediate

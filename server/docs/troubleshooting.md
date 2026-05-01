@@ -49,6 +49,26 @@ order: 80
 | Pending command never resolves (v5.47.2+) | Check the agent is reachable on `:8081` from the server (`curl -k https://<host>:8081/health`). The reconciler logs `command-reconciler: poll …: <err>` every 30 s on connection failure. If the agent is reachable, the request_id may have aged out of its 35-min outcome cache — entry will flip to `unknown` after 30 min. |
 | Admin UI shows `command.reconciled` audit events flooding | Symptom of an agent in a permanent error loop returning 5xx for every command. Check the agent log on the host. |
 
+### Boot reconciliation (v5.48+)
+
+When the agent restarts, any action that was in flight is in
+ops.db with `state=running`. The agent resolves these on startup
+by querying libvirt:
+
+| Action | Resolution rule |
+|---|---|
+| START | `virsh domstate` running → success; else failed. |
+| STOP / FORCESTOP | running → failed; stopped/missing → success. |
+| DELETE_VM | VM missing → success; else unknown. |
+| SNAPSHOT | snapshot present → success; else failed. |
+| DELETE_SNAPSHOT | snapshot gone → success; else failed. |
+| MIGRATE / OFFLINE_MIGRATE / EDIT_VM / CHANGE_MEDIA / REVERT_SNAPSHOT / POWER_CYCLE | unknown — manual review (libvirt's instantaneous state can't tell us whether the action applied). |
+
+If the recorded `child_pid` is still alive in `/proc` at startup
+(rare; usually the parent's `Pdeathsig` SIGKILL takes the child
+with it), the row is marked `unknown` with the PID in the error
+field. The action may complete on its own; the operator decides.
+
 ### Per-action watchdog matrix (v5.48+)
 
 The agent kills any virsh / qemu-img child that runs longer than
