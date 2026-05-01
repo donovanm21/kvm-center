@@ -579,6 +579,99 @@ body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
   border: 1px solid var(--border-subtle);
 }
 
+/* ── Recent Tasks pane (v5.48.1, PR-3b) ────────────────────── */
+/* vSphere-parity bottom-of-screen pane. Pinned to viewport bottom,
+ * collapses on click of the header. Bottom-of-screen position
+ * mimics vCenter's task panel; mobile gets a drawer-style overlay. */
+.recent-tasks {
+  position: fixed;
+  right: 16px;
+  bottom: 0;
+  width: min(680px, calc(100% - 32px));
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.18);
+  z-index: 80;
+  font-size: 13px;
+}
+.recent-tasks-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.recent-tasks-header:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.recent-tasks-badge {
+  background: var(--accent-soft, rgba(31,119,255,0.15));
+  color: var(--accent, #2a7df9);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+  font-size: 11px;
+}
+.recent-tasks-toggle { margin-left: auto; opacity: 0.6; }
+.recent-tasks.collapsed .recent-tasks-list { display: none; }
+.recent-tasks-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.recent-task-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 1.4fr 80px 60px;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+.recent-task-row:hover { background: var(--surface-hover, rgba(255,255,255,0.03)); }
+.recent-task-row .task-action { font-weight: 600; }
+.recent-task-row .task-target { font-family: var(--font-mono, monospace); font-size: 12px; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-task-row .task-progress {
+  position: relative;
+  height: 14px;
+  background: var(--surface-alt, rgba(255,255,255,0.05));
+  border-radius: 3px;
+  overflow: hidden;
+}
+.task-progress-bar {
+  display: block;
+  height: 100%;
+  background: var(--accent, #2a7df9);
+  transition: width 0.3s ease-out;
+}
+.task-progress-label {
+  position: absolute;
+  left: 6px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--fg);
+  text-shadow: 0 0 2px rgba(0,0,0,0.5);
+}
+.task-outcome { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; opacity: 0.85; }
+.task-duration { font-size: 11px; opacity: 0.7; text-align: right; }
+.recent-task-row.task-pending .task-outcome { color: var(--accent, #2a7df9); }
+.recent-task-row.task-success .task-outcome { color: var(--ok, #2ea043); }
+.recent-task-row.task-failed .task-outcome { color: var(--err, #f85149); }
+.recent-task-row.task-cancelled .task-outcome { color: var(--warn, #d29922); }
+.recent-task-row.task-unknown .task-outcome { color: var(--fg-soft, #888); }
+.task-detail { display: grid; grid-template-columns: 130px 1fr; gap: 8px 16px; }
+.task-detail dt { font-weight: 600; opacity: 0.7; }
+.task-detail dd { margin: 0; }
+.task-progress-detail { font-size: 12px; opacity: 0.7; margin-top: 4px; font-family: var(--font-mono, monospace); }
+
 /* ── Responsive mobile (v5.33.0, P1.2) ─────────────────────── */
 /* Breakpoints:
  *   ≤ 640 px  — phone: sidebar → drawer, tables → card list.

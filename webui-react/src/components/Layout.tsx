@@ -4,6 +4,7 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import { apiGet } from '@/api/client';
 import { BrandLogo } from './Brand';
 import { MigrationCenter } from './MigrationCenter';
+import { RecentTasks } from './RecentTasks';
 import { UserMenu } from './UserMenu';
 import { useAuth } from '@/hooks/useAuth';
 import { useMigrations } from '@/hooks/useInventory';
@@ -91,6 +92,7 @@ export function Layout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+      <RecentTasks />
     </div>
   );
 }

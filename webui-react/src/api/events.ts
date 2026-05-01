@@ -13,6 +13,13 @@ const INVALIDATION_MAP: Record<string, readonly (readonly string[])[]> = {
   groups: [qk.groups()],
   roles: [qk.roles()],
   idps: [qk.idps()],
+  // v5.48.1 (PR-3a/3b): a command transitioned or streamed a
+  // progress frame. Both invalidate the tasks list so the Recent
+  // Tasks pane redraws. Keep the list small — high-frequency
+  // command_progress events can fire several times per second on
+  // a busy fleet.
+  command: [qk.tasks()],
+  command_progress: [qk.tasks()],
 };
 
 /**
