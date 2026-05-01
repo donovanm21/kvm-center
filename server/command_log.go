@@ -190,6 +190,28 @@ func (l *CommandLog) MarkPending(requestID string, inflightUntil time.Time, mess
 	}
 }
 
+// RecordProgress (v5.48.1+) updates the LastProgress field on an
+// entry. Used by the /api/agent/command-progress endpoint when the
+// agent streams an in-flight progress frame. Updates only when the
+// row is still in `pending` outcome — terminal entries shouldn't
+// retroactively grow progress bars.
+func (l *CommandLog) RecordProgress(requestID string, frame *models.CommandProgressFrame) {
+	if requestID == "" || frame == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	e, ok := l.entries[requestID]
+	if !ok {
+		return
+	}
+	if e.Outcome != "pending" {
+		return
+	}
+	cp := *frame
+	e.LastProgress = &cp
+}
+
 // RecordPoll (v5.47.2+) bumps an entry's LastPolledAt without
 // changing any other field. The reconciler calls this after a
 // non-terminal poll (network error or 404 from the agent) to

@@ -143,6 +143,39 @@ agent SIGTERMs the child, waits 5 s, SIGKILLs. For
 Idempotent: a cancel against an already-terminal row returns
 200 with the existing state.
 
+### `POST /api/agent/command-progress` (v5.48.1+, internal)
+
+Agents POST `CommandProgressFrame` payloads while a long-running
+action is in flight. Server persists `last_progress` on the
+command_log entry + emits `command_progress` SSE event.
+
+```json
+POST /api/agent/command-progress
+{
+  "request_id": "req_abc",
+  "host_id":    "hv01",
+  "action":     "DELETE_SNAPSHOT",
+  "vm_name":    "web01",
+  "phase":      "commit",
+  "progress_pct": 42,
+  "detail":     "qemu-img commit running"
+}
+
+200 OK
+{"ok": true}
+```
+
+`progress_pct` is clamped to `[0, 100]`. Frames for unknown or
+already-terminal `request_id`s are accepted but dropped (idempotent
+"agent ahead of server" tolerance).
+
+### SSE event `command_progress` (v5.48.1+)
+
+Fired on every accepted progress frame. Payload mirrors the POST
+body; clients use it to render real-time progress bars in the
+Recent Tasks pane. High-frequency by design — frames are throttled
+agent-side to every few seconds.
+
 ### SSE event `command` (v5.47.2+)
 
 The server's live command reconciler emits this event whenever it

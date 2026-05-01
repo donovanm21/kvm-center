@@ -29,12 +29,18 @@ const (
 	// to a terminal state by polling the agent's outcome cache, so
 	// the SPA can refresh badges + Recent Tasks (Phase 3) views
 	// without re-fetching the whole command log.
-	EventCommand  = "command"
-	EventSettings = "settings" // global feature flags changed
-	EventUsers    = "users"    // user CRUD (admin console changes)
-	EventGroups   = "groups"
-	EventRoles    = "roles"
-	EventIDPs     = "idps"
+	EventCommand = "command"
+	// EventCommandProgress (v5.48.1+): an in-flight command frame.
+	// Agents POST progress to /api/agent/command-progress; server
+	// persists last_progress on the command_log entry and fans the
+	// payload out under this event type so the SPA can render a
+	// real-time progress bar.
+	EventCommandProgress = "command_progress"
+	EventSettings        = "settings" // global feature flags changed
+	EventUsers           = "users"    // user CRUD (admin console changes)
+	EventGroups          = "groups"
+	EventRoles           = "roles"
+	EventIDPs            = "idps"
 )
 
 // Subscriber hygiene — belt + braces against a stuck reverse proxy

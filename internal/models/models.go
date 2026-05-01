@@ -794,6 +794,30 @@ type CommandResponse struct {
 	UpdatedFields map[string]any `json:"updated_fields,omitempty"`
 }
 
+// CommandProgressFrame (v5.48.1+) is the body the agent POSTs to
+// the server's /api/agent/command-progress endpoint while a long-
+// running command is in flight. Server persists the latest frame
+// per request_id into the command_log entry's LastProgress field
+// (so a fresh page load shows current state without an SSE warm-
+// up) AND fans the same payload out as an SSE `command_progress`
+// event so already-connected SPAs update in real time.
+//
+// Phase strings are free-form per action: MIGRATE uses the
+// existing virsh phases ("prepare"/"transfer"/"complete"/etc.);
+// DELETE_SNAPSHOT uses "commit"/"refresh"; CREATE_SNAPSHOT and
+// EDIT_VM+shutdown emit a single "in-progress" mid-action.
+type CommandProgressFrame struct {
+	RequestID   string `json:"request_id"`
+	HostID      string `json:"host_id,omitempty"`
+	Action      string `json:"action,omitempty"`
+	VMUUID      string `json:"vm_uuid,omitempty"`
+	VMName      string `json:"vm_name,omitempty"`
+	Phase       string `json:"phase,omitempty"`
+	ProgressPct int32  `json:"progress_pct"`
+	Detail      string `json:"detail,omitempty"`
+	ReportedAt  int64  `json:"reported_at,omitempty"` // unix seconds; server clocks if 0
+}
+
 // CommandOutcomeResponse is the body returned by the agent's
 // `GET /command-outcome?request_id=<id>` endpoint (v5.47.2+). The
 // server's reconciler polls this when its initial /command POST
@@ -869,4 +893,10 @@ type CommandLogEntry struct {
 	// rate-limit polling without holding the command-log mutex across
 	// HTTP calls.
 	LastPolledAt time.Time `json:"last_polled_at,omitempty" bson:"last_polled_at,omitempty"`
+	// LastProgress (v5.48.1+) is the most recent in-flight progress
+	// frame the agent has reported for this command. Lets a fresh
+	// page load show the current phase + percent without waiting on
+	// an SSE warm-up. Zero-valued (Pct=0, Phase="") on rows that
+	// haven't streamed any progress.
+	LastProgress *CommandProgressFrame `json:"last_progress,omitempty" bson:"last_progress,omitempty"`
 }
