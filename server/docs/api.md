@@ -61,6 +61,44 @@ Actions: `START`, `STOP`, `RESTART`, `FORCESTOP`, `SNAPSHOT`,
 - `keep_raw`: `"true"` to round-trip raw → qcow2 → raw
 - `copy_storage`: `"true"` to include disks in live migrations
 
+### Agent endpoints (internal)
+
+These endpoints live on the agent's command port (`:8081`). Operators
+do not normally call them directly — they exist for the server's
+control loop. They are documented here because operators sometimes
+script against them when debugging or building tooling.
+
+#### `GET /command-outcome?request_id=<id>` (v5.47.2+)
+
+Read-only lookup against the agent's outcome cache. Used by the
+server's reconciler when an initial `POST /command` response was
+lost (transport error, timeout, or 5xx). The cache holds the agent's
+reply for 35 minutes; pre-5.47.2 agents do not implement this path
+and return 404.
+
+```json
+GET /command-outcome?request_id=req_abc123
+200 OK
+{
+  "request_id": "req_abc123",
+  "outcome": "success",
+  "status_code": 200,
+  "message": "VM started",
+  "cached_at": "2026-04-30T22:45:01Z"
+}
+```
+
+`outcome` is `"success"` for 2xx, `"failed"` for 4xx, `"unknown"`
+for unexpected codes. On `failed`, `error` carries the agent's
+error string (extracted from the cached body's `error` or `message`
+field). `cached_at` is when the agent finished the action and stored
+its reply.
+
+`404` is returned when the `request_id` is not in cache (never
+reached the agent, or the agent restarted, or the 35-minute window
+elapsed). The reconciler treats 404 as "no opinion, keep waiting"
+until its own deadline expires.
+
 ## Migrations
 
 ### `GET /api/migrations`

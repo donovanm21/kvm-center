@@ -21,7 +21,12 @@ import (
 )
 
 const (
-	outcomeCacheTTL    = 10 * time.Minute
+	// outcomeCacheTTL must outlive the server's outcomeReconcileWindow
+	// (30 m, command_log.go) so the reconciler can always recover an
+	// agent-side outcome before the cached entry is evicted. PR-2a
+	// replaces this in-memory cache with a SQLite ops.db on disk;
+	// until then we hold cached replies for 35 m.
+	outcomeCacheTTL    = 35 * time.Minute
 	outcomeCacheMaxLen = 1024
 )
 
@@ -90,6 +95,19 @@ func (c *outcomeCache) sweepLocked() {
 			delete(c.entries, k)
 		}
 	}
+}
+
+// lookup (v5.47.2+) returns a structured view of a cached outcome
+// for the server's reconciler. Returns ok=false if the entry isn't
+// in cache or has expired. The agent's HTTP body shape for /command
+// is `{success, message, ...}` so we surface those alongside the
+// raw status code and the body for callers that want to re-parse.
+func (c *outcomeCache) lookup(id string) (status int, body []byte, cachedAt time.Time, ok bool) {
+	e, hit := c.get(id)
+	if !hit {
+		return 0, nil, time.Time{}, false
+	}
+	return e.status, e.body, e.at, true
 }
 
 // recorderWriter captures the response bytes + status so the outcome

@@ -274,6 +274,11 @@ func SetSelfUpdateConfig(serverURL, binaryPath string) {
 func StartCommandServer(addr string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/command", handleCommand)
+	// v5.47.2: read-only lookup for the server's reconciler. When the
+	// initial POST /command response is lost (transport error /
+	// timeout / 5xx), the server polls this endpoint to recover the
+	// actual outcome from the agent's outcome cache.
+	mux.HandleFunc("/command-outcome", handleCommandOutcome)
 	mux.HandleFunc("/console/", handleConsolePage)
 	mux.HandleFunc("/ws/", handleConsoleWS)
 	mux.HandleFunc("/screenshot/", handleVMScreenshot)
@@ -505,6 +510,79 @@ func removeDiskFile(path string) error {
 		return fmt.Errorf("refusing to remove %q: outside allowed libvirt image paths", path)
 	}
 	return os.Remove(path)
+}
+
+// handleCommandOutcome is the read-only lookup the server's
+// reconciler hits when its POST /command call timed out or got a
+// 5xx. We answer from the in-memory outcome cache (10 m TTL pre-
+// 5.47.2; bumped to 35 m in this release so the cache always
+// outlives the server's 30 m reconcile window).
+//
+// 200 → cached outcome; 404 → request_id not in cache (either it
+// never reached us, the agent restarted, or the cache window passed
+// — the server's reconciler keeps the entry pending until its own
+// deadline expires, then transitions to "unknown").
+//
+// Note: this endpoint is mounted on the existing :8081 mux and so
+// inherits whatever auth posture that mux has. The mux is bound to
+// the management LAN today; once the gRPC mTLS rollout completes
+// (Tier A2 in the v5.47 roadmap proposals), this endpoint inherits
+// the same authn/authz.
+func handleCommandOutcome(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET only", http.StatusMethodNotAllowed)
+		return
+	}
+	id := r.URL.Query().Get("request_id")
+	if id == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing request_id"})
+		return
+	}
+	status, body, cachedAt, ok := outcomes.lookup(id)
+	if !ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error":      "unknown request_id",
+			"request_id": id,
+		})
+		return
+	}
+	resp := models.CommandOutcomeResponse{
+		RequestID:  id,
+		StatusCode: status,
+		CachedAt:   cachedAt,
+	}
+	switch {
+	case status >= 200 && status < 300:
+		resp.Outcome = "success"
+	case status >= 400:
+		resp.Outcome = "failed"
+	default:
+		resp.Outcome = "unknown"
+	}
+	// Best-effort: extract Message from the cached body so the
+	// reconciler doesn't have to re-parse the agent's response shape.
+	var parsed struct {
+		Message string `json:"message"`
+		Error   string `json:"error"`
+	}
+	_ = json.Unmarshal(body, &parsed)
+	resp.Message = parsed.Message
+	if resp.Outcome == "failed" {
+		if parsed.Error != "" {
+			resp.Error = parsed.Error
+		} else if parsed.Message != "" {
+			resp.Error = parsed.Message
+		} else {
+			resp.Error = strings.TrimSpace(string(body))
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func respond(w http.ResponseWriter, success bool, message string) {
