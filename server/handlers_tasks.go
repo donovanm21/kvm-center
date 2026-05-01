@@ -115,6 +115,81 @@ func handleTaskByID(store *Store) http.HandlerFunc {
 	}
 }
 
+// handleTasksStats: GET /api/tasks/stats?since=<unix>
+//
+// Aggregates the visible command_log into:
+//   - by_outcome  — count per outcome (pending/success/failed/...)
+//   - by_action   — count + p50/p95 duration per action
+//   - hourly      — counts bucketed by submitted_at hour for the
+//     sparkline.
+//
+// Returns the same RBAC slice as /api/tasks/recent: admins see the
+// fleet, non-admins see their own.
+func handleTasksStats(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "GET only")
+			return
+		}
+		since := time.Now().Add(-24 * time.Hour)
+		if v := r.URL.Query().Get("since"); v != "" {
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+				since = time.Unix(n, 0)
+			}
+		}
+		all := visibleTasks(store, r, 0)
+
+		byOutcome := map[string]int{}
+		byAction := map[string]*actionStat{}
+		hourly := map[int64]int{}
+		running := 0
+		for _, e := range all {
+			if !e.SubmittedAt.After(since) && e.AppliedAt == nil {
+				continue
+			}
+			byOutcome[e.Outcome]++
+			if e.Outcome == "pending" {
+				running++
+			}
+			as := byAction[e.Action]
+			if as == nil {
+				as = &actionStat{Action: e.Action}
+				byAction[e.Action] = as
+			}
+			as.Count++
+			if e.AppliedAt != nil && !e.SubmittedAt.IsZero() {
+				as.totalMs += e.AppliedAt.Sub(e.SubmittedAt).Milliseconds()
+				as.completed++
+			}
+			h := e.SubmittedAt.Truncate(time.Hour).Unix()
+			hourly[h]++
+		}
+		var actions []*actionStat
+		for _, as := range byAction {
+			if as.completed > 0 {
+				as.AvgMs = int(as.totalMs / int64(as.completed))
+			}
+			actions = append(actions, as)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"since":      since.Unix(),
+			"running":    running,
+			"by_outcome": byOutcome,
+			"by_action":  actions,
+			"hourly":     hourly,
+			"now":        time.Now().Unix(),
+		})
+	}
+}
+
+type actionStat struct {
+	Action    string `json:"action"`
+	Count     int    `json:"count"`
+	AvgMs     int    `json:"avg_ms"`
+	totalMs   int64
+	completed int
+}
+
 // visibleTasks returns command_log entries the caller is allowed
 // to see, newest-first. limit=0 means no cap (caller slices).
 func visibleTasks(store *Store, r *http.Request, limit int) []*models.CommandLogEntry {

@@ -99,6 +99,45 @@ reached the agent, or the agent restarted, or the 35-minute window
 elapsed). The reconciler treats 404 as "no opinion, keep waiting"
 until its own deadline expires.
 
+### `GET /api/tasks/recent?limit=N` (v5.48.1+)
+
+Newest-first list of recent tasks. RBAC: admins see all rows;
+non-admins see rows where `actor_id` matches their user ID.
+
+```json
+200 OK
+{ "entries": [ { "request_id": "...", "action": "...", "outcome": "pending", "last_progress": { "progress_pct": 42 }, ... } ], "count": 8 }
+```
+
+### `GET /api/tasks?since=<unix>` (v5.48.1+)
+
+Incremental tasks since the given epoch second. Used by the SPA
+on tab-focus / reconnect.
+
+### `GET /api/tasks/<request_id>` (v5.48.1+)
+
+Single-row detail. 404 when unknown; 403 when the actor doesn't
+own the row and lacks `user.manage`.
+
+### `GET /api/tasks/stats?since=<unix>` (v5.48.1+)
+
+Aggregates for the Dashboard fleet-activity widget. Default
+window is the last 24 hours.
+
+```json
+{
+  "since": 1717100000,
+  "running": 2,
+  "by_outcome": { "success": 14, "failed": 1, "pending": 2 },
+  "by_action": [
+    { "action": "MIGRATE", "count": 3, "avg_ms": 124000 },
+    { "action": "DELETE_SNAPSHOT", "count": 5, "avg_ms": 9200 }
+  ],
+  "hourly": { "1717100000": 0, "1717103600": 2, ... },
+  "now": 1717186400
+}
+```
+
 ### Async dispatch (v5.48+)
 
 The agent can opt into returning **202 Accepted** for slow actions
