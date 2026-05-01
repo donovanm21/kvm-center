@@ -123,6 +123,26 @@ The 202 path requires ops.db (v5.48+); on agents where ops.db
 failed to open, the agent falls back to the synchronous v5.47.2
 behaviour automatically.
 
+### `POST /api/command/cancel?request_id=<id>` (v5.48+)
+
+Cancel a running command. Body (optional): `{"reason": "..."}`
+becomes the cancel reason in audit + ops.db. Requires
+`vm.lifecycle`.
+
+```json
+POST /api/command/cancel?request_id=req_abc
+{"reason": "convergence stalled"}
+
+200 OK
+{"request_id": "req_abc", "state": "cancelled", "reason": "convergence stalled"}
+```
+
+The server proxies to the owning agent's `/command/cancel`. The
+agent SIGTERMs the child, waits 5 s, SIGKILLs. For
+`MIGRATE`/`OFFLINE_MIGRATE` it also invokes `virsh domjobabort`.
+Idempotent: a cancel against an already-terminal row returns
+200 with the existing state.
+
 ### SSE event `command` (v5.47.2+)
 
 The server's live command reconciler emits this event whenever it

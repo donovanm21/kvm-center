@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"kvm-center/internal/models"
 )
 
 // serverCtx is cancelled on SIGINT/SIGTERM. Background workers
@@ -334,6 +336,11 @@ func main() {
 	mux.Handle("/api/vm-create-info", requirePerm(store, "vm.create", http.HandlerFunc(handleVMCreateInfo(store))))
 	mux.Handle("/api/vm-create", requirePerm(store, "vm.create", http.HandlerFunc(handleVMCreate(store))))
 	mux.HandleFunc("/api/command", handleCommand(store))
+	// v5.48 (PR-2f): operator cancel endpoint. Proxies to the
+	// agent's /command/cancel and updates the server-side
+	// command_log row to "cancelled" so the SPA reflects intent
+	// even if the agent's reconciliation hasn't landed yet.
+	mux.Handle("/api/command/cancel", requirePerm(store, models.PermVMLifecycle, http.HandlerFunc(handleCommandCancel(store))))
 	mux.HandleFunc("/api/guest-telemetry", handleGuestTelemetry(store))
 	mux.HandleFunc("/api/migrations", handleGetMigrations(store))
 	mux.HandleFunc("/api/migrations/record", handlePostMigration(store))

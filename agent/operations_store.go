@@ -550,6 +550,12 @@ func recordOpsLifecycleStart(req models.CommandRequest) {
 // Status code → state mapping:
 //   - 2xx → OpStateSuccess
 //   - 4xx/5xx → OpStateFailed
+//
+// PR-2f guard: if the row is already in a terminal state when we
+// arrive here (e.g. the operator cancelled it while the goroutine
+// was still running), we leave the cancelled outcome in place and
+// don't overwrite. Same goes for any race where another writer
+// got there first.
 func recordOpsLifecycleEnd(requestID string, status int, body []byte) {
 	if ops == nil || requestID == "" {
 		return
@@ -558,10 +564,14 @@ func recordOpsLifecycleEnd(requestID string, status int, body []byte) {
 	if status >= 400 {
 		state = OpStateFailed
 	}
-	now := time.Now()
-	output, errMsg := parseLifecycleBody(body, state)
 	ctx, cancel := context.WithTimeout(context.Background(), opsLookupDeadline)
 	defer cancel()
+	if cur, err := ops.Get(ctx, requestID); err == nil && cur != nil && IsTerminalOpState(cur.State) {
+		log.Printf("ops.db: req_id=%s already %s; not overwriting with %s", requestID, cur.State, state)
+		return
+	}
+	now := time.Now()
+	output, errMsg := parseLifecycleBody(body, state)
 	opts := UpdateStateOpts{
 		State:         state,
 		Output:        output,
@@ -570,9 +580,6 @@ func recordOpsLifecycleEnd(requestID string, status int, body []byte) {
 		CompletedAt:   &now,
 	}
 	if err := ops.UpdateState(ctx, requestID, opts); err != nil {
-		// sql.ErrNoRows would be unusual — start always inserts —
-		// but tolerate it (a parallel GC could only have evicted a
-		// terminal row, not a running one).
 		if !errors.Is(err, sql.ErrNoRows) {
 			log.Printf("ops.db: update terminal state req_id=%s: %v", requestID, err)
 		}
