@@ -377,36 +377,38 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		err error
 	)
 
+	bgCtx := context.Background()
 	switch strings.ToUpper(req.Action) {
 	case "START":
-		out, err = exec.Command("virsh", "start", vmTarget).CombinedOutput()
+		out, err = runWithWatchdog(bgCtx, req, "START", "virsh", "start", vmTarget)
 	case "STOP":
 		// Prefer graceful shutdown; fall back to destroy after 30s (handled by the caller).
-		out, err = exec.Command("virsh", "shutdown", vmTarget).CombinedOutput()
+		out, err = runWithWatchdog(bgCtx, req, "STOP", "virsh", "shutdown", vmTarget)
 	case "FORCESTOP":
-		out, err = exec.Command("virsh", "destroy", vmTarget).CombinedOutput()
+		out, err = runWithWatchdog(bgCtx, req, "FORCESTOP", "virsh", "destroy", vmTarget)
 	case "RESTART":
-		out, err = exec.Command("virsh", "reboot", vmTarget).CombinedOutput()
+		out, err = runWithWatchdog(bgCtx, req, "RESTART", "virsh", "reboot", vmTarget)
 	case "POWER_CYCLE":
 		// v5.30.0: full power-cycle — shutdown + wait + start. Unlike
 		// `virsh reboot` (RESTART) this actually re-spawns qemu so
 		// EDIT_VM config changes like the memory cap and vCPU max take
 		// effect. RESTART maps to an in-guest ACPI reboot which keeps
 		// the same qemu process, so setmaxmem/--config never applied.
+		// Watchdog applies to the whole sequence (shutdown + wait + start).
 		out, err = powerCycleVM(vmTarget)
 	case "SNAPSHOT":
 		snapName := req.Params["name"]
 		if snapName == "" {
 			snapName = fmt.Sprintf("snap-%d", timeNow())
 		}
-		out, err = exec.Command("virsh", "snapshot-create-as", vmTarget, snapName).CombinedOutput()
+		out, err = runWithWatchdog(bgCtx, req, "SNAPSHOT", "virsh", "snapshot-create-as", vmTarget, snapName)
 	case "REVERT_SNAPSHOT":
 		snapName := req.Params["name"]
 		if snapName == "" {
 			respond(w, false, "REVERT_SNAPSHOT requires params.name")
 			return
 		}
-		out, err = exec.Command("virsh", "snapshot-revert", vmTarget, snapName, "--force").CombinedOutput()
+		out, err = runWithWatchdog(bgCtx, req, "REVERT_SNAPSHOT", "virsh", "snapshot-revert", vmTarget, snapName, "--force")
 	case "EDIT_VM":
 		handleEditVM(w, req, vmTarget)
 		return

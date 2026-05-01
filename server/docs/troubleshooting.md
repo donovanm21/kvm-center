@@ -43,10 +43,32 @@ order: 80
 
 | Symptom | Fix |
 |---------|-----|
+| Action returns `failed` with `error: watchdog: <action> did not complete within Ns` (v5.48+) | The action's per-action watchdog killed the underlying virsh / qemu-img process. Look at the matrix below before assuming a bug — large VMs sometimes need a manual override. |
 | Long action shows as `pending` in command-log for several minutes (v5.47.2+) | Expected. The server's POST /command timed out (or got a 5xx) so we don't yet know whether the agent finished. The reconciler polls each agent every 30 s and resolves the entry once the agent reports back. The deadline before pending → `unknown` is 30 minutes. |
 | Same long action lands as `failed` in admin UI but the VM is in the expected state (pre-5.47.2) | Known bug pre-v5.47.2: HTTP timeouts to the agent locked in a `failed` verdict even when libvirt completed the action. Upgrade. |
 | Pending command never resolves (v5.47.2+) | Check the agent is reachable on `:8081` from the server (`curl -k https://<host>:8081/health`). The reconciler logs `command-reconciler: poll …: <err>` every 30 s on connection failure. If the agent is reachable, the request_id may have aged out of its 35-min outcome cache — entry will flip to `unknown` after 30 min. |
 | Admin UI shows `command.reconciled` audit events flooding | Symptom of an agent in a permanent error loop returning 5xx for every command. Check the agent log on the host. |
+
+### Per-action watchdog matrix (v5.48+)
+
+The agent kills any virsh / qemu-img child that runs longer than
+the cap below, marks the operation `failed` with
+`error="watchdog: …"`, and clears the child PID. Override per-call
+via `params.watchdog_seconds=<int>`.
+
+| Action | Cap | Notes |
+|---|---|---|
+| `START`, `STOP`, `RESTART`, `FORCESTOP` | 60 s | Catches a wedged libvirtd. |
+| `POWER_CYCLE` | 90 s | Shutdown + start; ACPI shutdown can take ~30 s. |
+| `SNAPSHOT` | 5 min | qcow2 snapshot is metadata-only. |
+| `DELETE_SNAPSHOT` | 30 min | qemu-img commit can be slow on big VMs. |
+| `REVERT_SNAPSHOT` | 5 min | Rare slow case. |
+| `MIGRATE` (live) | 60 min | Includes convergence loop. |
+| `OFFLINE_MIGRATE` | 90 min | Disk transfer; huge VMs need headroom. |
+| `EDIT_VM` (no shutdown) | 30 s | Pure XML edit. |
+| `EDIT_VM` (`allow_shutdown=true`) | 5 min | Includes ACPI shutdown + restart. |
+| `CHANGE_MEDIA`, `DELETE_VM` | 30–60 s | |
+| anything else | 60 s | Default fallback. |
 
 ## Notifications
 
