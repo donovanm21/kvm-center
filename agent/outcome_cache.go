@@ -15,6 +15,7 @@ package main
 // changes semantics.
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"time"
@@ -102,12 +103,30 @@ func (c *outcomeCache) sweepLocked() {
 // in cache or has expired. The agent's HTTP body shape for /command
 // is `{success, message, ...}` so we surface those alongside the
 // raw status code and the body for callers that want to re-parse.
+//
+// v5.48 (PR-2a): read-through to ops.db on in-memory miss. The
+// in-memory cache only knows about outcomes since the last agent
+// restart; ops.db retains them for 7 days, which lets the server's
+// reconciler resolve commands even after an agent restart blew the
+// cache. Only terminal rows (success/failed/cancelled/unknown)
+// surface from the DB — pending/running rows aren't an outcome.
 func (c *outcomeCache) lookup(id string) (status int, body []byte, cachedAt time.Time, ok bool) {
-	e, hit := c.get(id)
-	if !hit {
+	if e, hit := c.get(id); hit {
+		return e.status, e.body, e.at, true
+	}
+	if ops == nil || id == "" {
 		return 0, nil, time.Time{}, false
 	}
-	return e.status, e.body, e.at, true
+	ctx, cancel := context.WithTimeout(context.Background(), opsLookupDeadline)
+	defer cancel()
+	op, err := ops.Get(ctx, id)
+	if err != nil || op == nil {
+		return 0, nil, time.Time{}, false
+	}
+	if !IsTerminalOpState(op.State) {
+		return 0, nil, time.Time{}, false
+	}
+	return synthesizeOutcomeFromOp(op)
 }
 
 // recorderWriter captures the response bytes + status so the outcome
