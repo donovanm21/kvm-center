@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
-import { apiGet } from '@/api/client';
+import { apiGet, apiPost } from '@/api/client';
+import { useAuth } from '@/hooks/useAuth';
 import { qk } from '@/queryKeys';
 import { Modal } from './Modal';
 
@@ -75,10 +76,30 @@ function outcomeClass(outcome: string): string {
   }
 }
 
+// CANCELLABLE_ACTIONS mirrors the agent's async-eligible set
+// (PR-2e) — only async / long actions can be meaningfully
+// cancelled. START / RESTART / SNAPSHOT etc. are sub-second.
+const CANCELLABLE_ACTIONS = new Set([
+  'DELETE_SNAPSHOT',
+  'OFFLINE_MIGRATE',
+  'MIGRATE',
+  'DELETE_VM',
+  'POWER_CYCLE',
+]);
+
 export function RecentTasks() {
+  const qc = useQueryClient();
+  const { hasPerm } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [openTask, setOpenTask] = useState<TaskEntry | null>(null);
   const [resumeBanner, setResumeBanner] = useState<TaskEntry[] | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState<TaskEntry | null>(null);
+
+  const cancelMut = useMutation({
+    mutationFn: (req: { id: string; reason: string }) =>
+      apiPost(`/api/command/cancel?request_id=${encodeURIComponent(req.id)}`, { reason: req.reason }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.tasks() }),
+  });
   // Track the set of request_ids we've already shown a banner for
   // — so reopening the tab a second time doesn't re-toast the same
   // completions. Persists across renders but not across reloads
@@ -183,11 +204,66 @@ export function RecentTasks() {
                 <span className="task-duration">
                   {fmtDuration(e.submitted_at, e.applied_at)}
                 </span>
+                {e.outcome === 'pending' &&
+                CANCELLABLE_ACTIONS.has(e.action) &&
+                hasPerm('vm.lifecycle') ? (
+                  <button
+                    className="task-cancel-btn"
+                    aria-label={`Cancel ${e.action}`}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      setConfirmCancel(e);
+                    }}
+                  >
+                    ×
+                  </button>
+                ) : (
+                  <span className="task-cancel-spacer" />
+                )}
               </li>
             ))}
           </ul>
         )}
       </aside>
+      {confirmCancel && (
+        <Modal
+          open
+          title="Cancel running task?"
+          onClose={() => setConfirmCancel(null)}
+          width={400}
+          footer={
+            <>
+              <button onClick={() => setConfirmCancel(null)}>Keep running</button>
+              <button
+                className="btn-danger"
+                disabled={cancelMut.isPending}
+                onClick={() => {
+                  if (!confirmCancel) return;
+                  cancelMut.mutate(
+                    { id: confirmCancel.request_id, reason: 'cancelled from Recent Tasks pane' },
+                    {
+                      onSettled: () => setConfirmCancel(null),
+                    },
+                  );
+                }}
+              >
+                {cancelMut.isPending ? 'Cancelling…' : `Cancel ${confirmCancel.action}`}
+              </button>
+            </>
+          }
+        >
+          <p>
+            Cancel <strong>{confirmCancel.action}</strong> on{' '}
+            <strong>{confirmCancel.vm_name ?? confirmCancel.host_id}</strong>?
+          </p>
+          <p style={{ opacity: 0.75, fontSize: 12 }}>
+            The agent will SIGTERM the running process (with 5 s grace, then SIGKILL).
+            For migrations, <code>virsh domjobabort</code> is also invoked so libvirtd
+            can clean up its state machine. The task's outcome will be marked{' '}
+            <code>cancelled</code>.
+          </p>
+        </Modal>
+      )}
       {openTask && (
         <Modal
           open

@@ -654,13 +654,27 @@ body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
 }
 .recent-task-row {
   display: grid;
-  grid-template-columns: 110px 1fr 1.4fr 80px 60px;
+  grid-template-columns: 110px 1fr 1.4fr 80px 60px 24px;
   gap: 10px;
   align-items: center;
   padding: 6px 14px;
   border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
 }
+.task-cancel-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--err, #f85149);
+  border-radius: 3px;
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+.task-cancel-btn:hover { background: rgba(248,81,73,0.12); }
+.task-cancel-spacer { display: block; width: 22px; }
 .recent-task-row:hover { background: var(--surface-hover, rgba(255,255,255,0.03)); }
 .recent-task-row .task-action { font-weight: 600; }
 .recent-task-row .task-target { font-family: var(--font-mono, monospace); font-size: 12px; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
