@@ -37,6 +37,8 @@ import (
 	"strings"
 	"time"
 
+	"kvm-center/internal/models"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -499,6 +501,109 @@ func synthesizeOutcomeFromOp(op *Operation) (status int, body []byte, cachedAt t
 		at = *op.CompletedAt
 	}
 	return status, b, at, true
+}
+
+// recordOpsLifecycleStart inserts a "running" row in ops.db at the
+// start of every command (v5.48 PR-2b). Best-effort: a failure here
+// shouldn't block the command — degraded durability is preferable
+// to refusing operator actions.
+//
+// Each command gets one row keyed on request_id. Insert is
+// idempotent so a retry against a brand-new agent (cache lost,
+// db row already exists) is a no-op.
+func recordOpsLifecycleStart(req models.CommandRequest) {
+	if ops == nil || req.RequestID == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), opsLookupDeadline)
+	defer cancel()
+	now := time.Now()
+	op := Operation{
+		RequestID:   req.RequestID,
+		Action:      strings.ToUpper(req.Action),
+		VMUUID:      req.VMUUID,
+		VMName:      req.VMName,
+		Params:      req.Params,
+		State:       OpStateRunning,
+		SubmittedAt: now,
+	}
+	if err := ops.Insert(ctx, op); err != nil {
+		log.Printf("ops.db: insert lifecycle row req_id=%s action=%s: %v", req.RequestID, req.Action, err)
+		return
+	}
+	if err := ops.UpdateState(ctx, req.RequestID, UpdateStateOpts{
+		State:     OpStateRunning,
+		StartedAt: &now,
+	}); err != nil {
+		// Insert succeeded but the second update failed — log and
+		// move on. The row is at least visible.
+		log.Printf("ops.db: stamp started_at req_id=%s: %v", req.RequestID, err)
+	}
+}
+
+// recordOpsLifecycleEnd is the deferred counterpart to
+// recordOpsLifecycleStart — runs after the action body returns,
+// derives a terminal state from the HTTP status + body, and
+// records it in ops.db. Best-effort: silent on success, logged on
+// failure, never blocks the deferred response cache write.
+//
+// Status code → state mapping:
+//   - 2xx → OpStateSuccess
+//   - 4xx/5xx → OpStateFailed
+func recordOpsLifecycleEnd(requestID string, status int, body []byte) {
+	if ops == nil || requestID == "" {
+		return
+	}
+	state := OpStateSuccess
+	if status >= 400 {
+		state = OpStateFailed
+	}
+	now := time.Now()
+	output, errMsg := parseLifecycleBody(body, state)
+	ctx, cancel := context.WithTimeout(context.Background(), opsLookupDeadline)
+	defer cancel()
+	opts := UpdateStateOpts{
+		State:         state,
+		Output:        output,
+		Error:         errMsg,
+		ClearChildPID: true,
+		CompletedAt:   &now,
+	}
+	if err := ops.UpdateState(ctx, requestID, opts); err != nil {
+		// sql.ErrNoRows would be unusual — start always inserts —
+		// but tolerate it (a parallel GC could only have evicted a
+		// terminal row, not a running one).
+		if !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("ops.db: update terminal state req_id=%s: %v", requestID, err)
+		}
+	}
+}
+
+// parseLifecycleBody extracts the message + error fields from the
+// agent's standard CommandResponse JSON body. Falls back to the
+// raw body when JSON parsing fails so the row still has something
+// useful for forensics.
+func parseLifecycleBody(body []byte, state string) (output, errMsg string) {
+	var parsed struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+		Error   string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		// Non-JSON response (curl, malformed). Stash the raw bytes.
+		raw := strings.TrimSpace(string(body))
+		if state == OpStateSuccess {
+			return raw, ""
+		}
+		return "", raw
+	}
+	if state == OpStateSuccess {
+		return parsed.Message, ""
+	}
+	if parsed.Error != "" {
+		return parsed.Message, parsed.Error
+	}
+	return parsed.Message, parsed.Message
 }
 
 // runOpsGC is the periodic GC goroutine started from agent main.
