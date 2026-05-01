@@ -24,6 +24,8 @@ export const qk = {
   snapshots: (hostID: string, vmName: string) => ['snapshots', hostID, vmName] as const,
   snapshotPolicies: () => ['snapshot-policies'] as const,
   systemHealth: () => ['system-health'] as const,
+  tasks: () => ['tasks'] as const,
+  task: (id: string) => ['tasks', id] as const,
 
   // --- Identity / RBAC --------------------------------------------
   users: () => ['users'] as const,

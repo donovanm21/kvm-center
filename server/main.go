@@ -341,6 +341,11 @@ func main() {
 	// fans out as SSE `command_progress` so the SPA's Recent Tasks
 	// pane (PR-3b) can render real-time progress bars.
 	mux.HandleFunc("/api/agent/command-progress", handleAgentCommandProgress(store))
+	// v5.48.1 (PR-3b): Tasks API for the Recent Tasks pane.
+	// Operators see their own tasks; admins (user.manage) see all.
+	mux.HandleFunc("/api/tasks/recent", handleTasksRecent(store))
+	mux.HandleFunc("/api/tasks/", handleTaskByID(store))
+	mux.HandleFunc("/api/tasks", handleTasksSince(store))
 	// v5.48 (PR-2f): operator cancel endpoint. Proxies to the
 	// agent's /command/cancel and updates the server-side
 	// command_log row to "cancelled" so the SPA reflects intent
