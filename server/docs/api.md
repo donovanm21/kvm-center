@@ -99,6 +99,28 @@ reached the agent, or the agent restarted, or the 35-minute window
 elapsed). The reconciler treats 404 as "no opinion, keep waiting"
 until its own deadline expires.
 
+### SSE event `command` (v5.47.2+)
+
+The server's live command reconciler emits this event whenever it
+resolves a pending command-log entry to a terminal state. Clients
+subscribed to `/api/events` (the existing SSE stream) receive:
+
+```json
+{
+  "type": "command",
+  "payload": {
+    "request_id": "req_abc123",
+    "outcome": "success",
+    "host_id": "hv01",
+    "action": "DELETE_SNAPSHOT"
+  }
+}
+```
+
+Use it to refresh the command-log page or per-VM badges without
+re-polling. Per-poll attempts (404, network errors) are *not*
+emitted — the event fires only on terminal transitions.
+
 ## Migrations
 
 ### `GET /api/migrations`

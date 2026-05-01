@@ -412,6 +412,11 @@ func main() {
 	// whether the agent actually ran them — hence "unknown", not
 	// "failed". Tier S #4, v5.32.17.
 	go reconcileStrandedCommands(store)
+	// v5.47.2 (PR-1c): live reconciler that polls each agent's
+	// /command-outcome cache to recover the actual outcome of
+	// commands left "pending" by HTTP-call timeouts. Resolves the
+	// bookkeeping divergence salvage from the 2026-04-30 incident.
+	go runCommandReconciler(serverCtx, store)
 	seedPublicURLFromEnv(store)
 	notifyStore = store
 	mux.HandleFunc("/api/setup/state", handleSetupState(store))
