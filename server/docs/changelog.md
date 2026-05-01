@@ -10,6 +10,29 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.48.5 — Recent Tasks pane polish + hidden chrome scrollbars
+
+- **Recent Tasks pane** now reads as a distinct sheet hovering
+  above `.main`. Lighter `--surface-2` background (was
+  `--surface`, indistinguishable from the page bg in dark mode),
+  2 px top border, stronger drop shadow. Header gets uppercase /
+  muted treatment with `--surface-3` background so it reads as a
+  chrome strip rather than another row. Light-mode overrides
+  preserve contrast.
+- **Row layout fix:** the action column was 110 px which
+  truncated `DELETE_SNAPSHOT` / `OFFLINE_MIGRATE` and let the
+  target name visually merge with it. Widened to 180 px, added
+  16 px gaps, `minmax(0, …)` columns + ellipsis on overflow so
+  long values truncate cleanly instead of pushing siblings
+  off-grid. Subtle zebra striping for vertical scanability.
+- **Chrome scrollbars hidden** on `.main`, `.sidebar`, and the
+  Recent Tasks list — the always-on scrollables. macOS draws
+  its own overlay during scroll; Windows / Linux keep
+  wheel/keyboard scroll without a visible track. Data tables
+  and modals keep the v5.48.4 slim overlay style.
+
+No API changes.
+
 ## v5.48.4 — slim overlay scrollbar applied globally
 
 The v5.45 global scrollbar style had a 2 px inset border painted
