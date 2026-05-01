@@ -348,8 +348,20 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		// for the boot reconciler (PR-2d) to resolve. Best-effort —
 		// failure to insert is logged but doesn't block the action.
 		recordOpsLifecycleStart(req)
-		// Wrap the writer so the outcome cache records the response
-		// when the handler returns.
+
+		// v5.48 PR-2e: async dispatch for slow actions. Reply 202
+		// Accepted within ~100 ms, run the body in a goroutine, and
+		// rely on the server's PR-1c reconciler to resolve outcome
+		// when the agent finishes. Gated by KVM_AGENT_ASYNC_COMMANDS
+		// so the operator can opt-in per fleet during rollout.
+		if asyncEnabled() && asyncEligibleAction(req.Action) {
+			respondAccepted(w, req.RequestID)
+			go runCommandBodyAsync(req)
+			return
+		}
+
+		// Sync path: wrap the writer so the outcome cache records
+		// the response when the handler returns.
 		rec := &recorderWriter{ResponseWriter: w}
 		defer func() {
 			if rec.status == 0 {
@@ -361,6 +373,13 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		w = rec
 	}
 
+	runCommandBody(w, req)
+}
+
+// runCommandBody is the action dispatcher — vmTarget validation +
+// the per-action switch. Extracted so the async path (PR-2e) can
+// drive it from a goroutine against a captureResponseWriter.
+func runCommandBody(w http.ResponseWriter, req models.CommandRequest) {
 	vmTarget := req.VMName
 	if vmTarget == "" {
 		vmTarget = req.VMUUID
