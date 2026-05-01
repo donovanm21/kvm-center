@@ -446,6 +446,14 @@ type User struct {
 	// Each entry is the (provider_id, subject) pair returned by the IdP and
 	// lets the same local account sign in via multiple sources.
 	ExternalIDs []ExternalIdentity `json:"external_ids,omitempty"`
+
+	// NotifyTaskSuccessActions (v5.48.1+) gates per-operator
+	// notifications on successful task outcomes. The deployment-
+	// default channel always receives failures (gated by
+	// Features.NotifyOnTaskFailure); this list opts the user in to
+	// receiving successes for specific actions, e.g.
+	// ["MIGRATE", "OFFLINE_MIGRATE"]. Empty = no success notifications.
+	NotifyTaskSuccessActions []string `json:"notify_task_success_actions,omitempty"`
 }
 
 // ExternalIdentity is a single federated-login binding.
@@ -677,6 +685,15 @@ type Features struct {
 	// to /var/lib/kvm-migrator/.ssh/known_hosts so SSH migrations
 	// pass host-key verification without manual fleet edits.
 	SSHKnownHosts string `json:"ssh_known_hosts,omitempty"`
+
+	// NotifyOnTaskFailure (v5.48.1+) — when true (default), failed,
+	// cancelled, and unknown command-log transitions fire a
+	// notification on the deployment-default channel. Successes are
+	// always opt-in per-operator (User.NotifyTaskSuccessActions);
+	// this flag only controls the failure path. Operators who
+	// already pipe failures through Audit (Settings → Audit
+	// shipping) can flip this off to deduplicate.
+	NotifyOnTaskFailure bool `json:"notify_on_task_failure"`
 
 	// GRPCRequireClientCert (v5.46.0) — when true, the gRPC stream
 	// interceptor refuses streams that don't present a CA-signed

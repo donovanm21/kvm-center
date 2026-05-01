@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { apiGet } from '@/api/client';
 import { qk } from '@/queryKeys';
@@ -78,6 +78,14 @@ function outcomeClass(outcome: string): string {
 export function RecentTasks() {
   const [collapsed, setCollapsed] = useState(false);
   const [openTask, setOpenTask] = useState<TaskEntry | null>(null);
+  const [resumeBanner, setResumeBanner] = useState<TaskEntry[] | null>(null);
+  // Track the set of request_ids we've already shown a banner for
+  // — so reopening the tab a second time doesn't re-toast the same
+  // completions. Persists across renders but not across reloads
+  // (page refresh re-reads /api/tasks/recent which is the
+  // intentional "what happened while I was away" view).
+  const seenTerminalIDs = useRef<Set<string>>(new Set());
+
   const { data, isError } = useQuery<RecentTasksResponse>({
     queryKey: qk.tasks(),
     queryFn: () => apiGet<RecentTasksResponse>('/api/tasks/recent?limit=20'),
@@ -86,15 +94,52 @@ export function RecentTasks() {
     // task transitions; the poll is a safety net.
   });
 
+  // PR-3d auto-resume: when the tab regains focus, surface any
+  // tasks that completed since the last time the user looked.
+  useEffect(() => {
+    const onFocus = () => {
+      const newlyTerminal = (data?.entries ?? [])
+        .filter((e) => e.outcome !== 'pending')
+        .filter((e) => !seenTerminalIDs.current.has(e.request_id));
+      // First focus after mount — populate the seen set without
+      // banner-spamming the user with everything in their recent
+      // history. Subsequent focuses surface only NEW completions.
+      if (seenTerminalIDs.current.size === 0) {
+        for (const e of data?.entries ?? []) seenTerminalIDs.current.add(e.request_id);
+        return;
+      }
+      if (newlyTerminal.length > 0) {
+        for (const e of newlyTerminal) seenTerminalIDs.current.add(e.request_id);
+        setResumeBanner(newlyTerminal);
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    // Run once on mount to seed seenTerminalIDs.
+    onFocus();
+    return () => window.removeEventListener('focus', onFocus);
+  }, [data]);
+
   if (isError) return null; // gracefully hide on auth issues
 
   const entries = data?.entries ?? [];
   const inFlight = entries.filter((e) => e.outcome === 'pending');
 
-  if (entries.length === 0) return null;
+  if (entries.length === 0 && !resumeBanner) return null;
 
   return (
     <>
+      {resumeBanner && resumeBanner.length > 0 && (
+        <div className="task-resume-banner" role="status">
+          <span>
+            {resumeBanner.length === 1
+              ? `Task ${resumeBanner[0].action} on ${resumeBanner[0].vm_name ?? resumeBanner[0].host_id} ${resumeBanner[0].outcome} while you were away.`
+              : `${resumeBanner.length} tasks completed while you were away.`}
+          </span>
+          <button onClick={() => setResumeBanner(null)} aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+      )}
       <aside className={'recent-tasks' + (collapsed ? ' collapsed' : '')}>
         <header
           className="recent-tasks-header"

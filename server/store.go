@@ -235,6 +235,13 @@ func (s *Store) ensureSecurityDefaults() {
 	if !s.features.GRPCRequireClientCert {
 		s.features.GRPCRequireClientCert = true
 	}
+	// v5.48.1 (PR-3d): notify on task failures by default for fresh
+	// installs. Existing fleets stay opt-in until the operator
+	// flips it from Settings → Features (informational change; can
+	// always be turned back off).
+	if !s.features.NotifyOnTaskFailure {
+		s.features.NotifyOnTaskFailure = true
+	}
 }
 
 // ensureBuiltInRoles creates the Administrator / Operator / Viewer roles if

@@ -624,8 +624,10 @@ func handleCommand(store *Store) http.HandlerFunc {
 			store.commandLog.MarkPending(req.RequestID, deadline, "agent returned "+strconv.Itoa(resp.StatusCode)+": "+msg+"; outcome will be reconciled")
 		case resp.StatusCode >= 400:
 			store.commandLog.Update(req.RequestID, "failed", msg, resp.StatusCode, replayed)
+			notifyTaskOutcome(store, existing, "failed", msg)
 		default:
 			store.commandLog.Update(req.RequestID, "success", msg, resp.StatusCode, replayed)
+			notifyTaskOutcome(store, existing, "success", msg)
 		}
 		if replayed {
 			w.Header().Set("X-Command-Replayed", "true")
