@@ -593,6 +593,13 @@ func handleCommand(store *Store) http.HandlerFunc {
 		}
 		replayed := resp.Header.Get("X-Command-Replayed") == "true"
 		switch {
+		case resp.StatusCode == http.StatusAccepted:
+			// v5.48 PR-2e: agent accepted the action and will run
+			// it asynchronously. Server treats this as pending; the
+			// PR-1c reconciler polls /command-outcome to recover
+			// the terminal state once the agent completes.
+			deadline := time.Now().Add(outcomeReconcileWindow)
+			store.commandLog.MarkPending(req.RequestID, deadline, "agent accepted async (202); outcome will be reconciled")
 		case resp.StatusCode >= 500:
 			deadline := time.Now().Add(outcomeReconcileWindow)
 			store.commandLog.MarkPending(req.RequestID, deadline, "agent returned "+strconv.Itoa(resp.StatusCode)+": "+msg+"; outcome will be reconciled")

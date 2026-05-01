@@ -99,6 +99,30 @@ reached the agent, or the agent restarted, or the 35-minute window
 elapsed). The reconciler treats 404 as "no opinion, keep waiting"
 until its own deadline expires.
 
+### Async dispatch (v5.48+)
+
+The agent can opt into returning **202 Accepted** for slow actions
+when `KVM_AGENT_ASYNC_COMMANDS=true` in its environment. Response:
+
+```json
+202 Accepted
+{
+  "request_id": "req_abc123",
+  "status": "running",
+  "async": "true"
+}
+```
+
+The action runs in a goroutine on the agent; the server's
+reconciler polls `/command-outcome` to recover the terminal state.
+Eligible actions: `DELETE_SNAPSHOT`, `OFFLINE_MIGRATE`, `DELETE_VM`,
+`POWER_CYCLE`. Live `MIGRATE` is intentionally synchronous-only
+until its migration-record lifecycle is async-aware too.
+
+The 202 path requires ops.db (v5.48+); on agents where ops.db
+failed to open, the agent falls back to the synchronous v5.47.2
+behaviour automatically.
+
 ### SSE event `command` (v5.47.2+)
 
 The server's live command reconciler emits this event whenever it
