@@ -84,6 +84,22 @@ func main() {
 	defer liveCancel()
 	go startLiveMetricsStreamer(liveCtx, *serverURL)
 
+	// v5.48 (PR-2a): persistent ops.db at
+	// /var/lib/kvm-center/operations.db (override KVM_AGENT_OPS_DB).
+	// Replaces the in-memory outcome cache so command outcomes survive
+	// agent restarts and the boot reconciler (PR-2d) can resolve any
+	// in-flight rows against libvirt reality. Failure to open is
+	// non-fatal — the agent keeps running, but slow-action durability
+	// degrades to the v5.32.17 in-memory cache.
+	opsDBPath := envOrDefault("KVM_AGENT_OPS_DB", DefaultOpsDBPath)
+	if store, err := OpenOperationsStore(opsDBPath); err != nil {
+		log.Printf("ops.db: open %s failed: %v — falling back to in-memory cache only", opsDBPath, err)
+	} else {
+		ops = store
+		log.Printf("ops.db: opened %s", opsDBPath)
+		go runOpsGC(liveCtx, store)
+	}
+
 	// v5.29.0: watch VM power-state transitions and fire an immediate
 	// telemetry POST when anything flips, so the SPA reflects a VM
 	// going running↔shutoff within ~2 s instead of up to 15 s.
