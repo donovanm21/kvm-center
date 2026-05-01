@@ -279,6 +279,13 @@ func StartCommandServer(addr string) {
 	// timeout / 5xx), the server polls this endpoint to recover the
 	// actual outcome from the agent's outcome cache.
 	mux.HandleFunc("/command-outcome", handleCommandOutcome)
+	// v5.48 (PR-2f): operator-driven cancellation. POST with
+	// ?request_id=<id> + optional `{"reason":"..."}` body. SIGTERM
+	// child, 5 s grace, SIGKILL. For MIGRATE/OFFLINE_MIGRATE we
+	// also call `virsh domjobabort` so libvirtd can wind its state
+	// machine down cleanly. Idempotent — already-terminal rows
+	// return their existing state.
+	mux.HandleFunc("/command/cancel", handleCancelCommand)
 	mux.HandleFunc("/console/", handleConsolePage)
 	mux.HandleFunc("/ws/", handleConsoleWS)
 	mux.HandleFunc("/screenshot/", handleVMScreenshot)

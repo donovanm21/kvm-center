@@ -10,6 +10,63 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.48.0 — bullet-proof async commands
+
+Phase 2 of the v5.48 design. The agent grows a persistent operation
+store, a per-action watchdog, async dispatch for slow actions, boot
+reconciliation against libvirt, and an operator cancellation API.
+
+**What this means in practice:**
+
+- A `DELETE_SNAPSHOT` that takes 25 minutes no longer holds the
+  server's HTTP call open — the agent returns `202 Accepted` in
+  under 100 ms (when `KVM_AGENT_ASYNC_COMMANDS=true`) and the
+  reconciler resolves the outcome when the agent finishes.
+- A wedged `virsh` or `qemu-img` is killed by the per-action
+  watchdog (matrix in `operations.md`); operators see a clean
+  `failed` outcome with `error="watchdog: …"` instead of an
+  apparently-stuck process.
+- An agent crash mid-operation is recovered on next start by
+  querying libvirt for the action's expected post-state; the
+  ops.db row resolves to `success`/`failed`/`unknown` accordingly
+  rather than sitting in pending forever.
+- An operator can cancel a long-running action via
+  `POST /api/command/cancel?request_id=<id>`; the agent SIGTERMs
+  the child (5 s grace, then SIGKILL) and, for migrations,
+  `virsh domjobabort`s libvirtd. Idempotent.
+
+**ops.db** lives at `/var/lib/kvm-center/operations.db` (see
+`operations.md` for schema, useful queries, retention semantics).
+Pure-Go SQLite (`modernc.org/sqlite`); no CGO; WAL journal,
+NORMAL sync. 7-day retention for terminal rows, hourly GC.
+
+**Failure-mode highlights** (full matrix in the design spec):
+
+| Failure | Today | After v5.48 |
+|---|---|---|
+| Agent crash mid-DELETE_SNAPSHOT after libvirt finished | bookkeeping diverges | boot reconciler queries libvirt → snapshot is gone → mark `success` |
+| Stuck virsh migrate | hangs forever | watchdog SIGKILLs at action timeout |
+| Operator cancels mid-flight | no recourse | `POST /api/command/cancel`; SIGTERM → 5 s → SIGKILL; idempotent |
+| Operator double-submits same request_id | in-memory cache returns first outcome | persistent across restarts up to 7-day retention |
+
+**Wire-compat:** `Features.AgentAsyncCommands` is *not* a server-
+side feature flag; the gate is on the agent
+(`KVM_AGENT_ASYNC_COMMANDS=true`). Pre-v5.48 agents continue to
+return synchronous `200`s; the server treats `202` as pending the
+same way it treats a 5xx since v5.47.2.
+
+**New endpoints:**
+- `GET /command-outcome?request_id=...` (agent, v5.47.2; broadened
+  to read through ops.db in v5.48).
+- `POST /command/cancel?request_id=...` (agent, v5.48).
+- `POST /api/command/cancel?request_id=...` (server proxy, v5.48).
+
+**New audit event:** `command.cancelled`.
+
+Phase 3 (v5.48.1) layers the vSphere-parity Tasks UX on top —
+Recent Tasks pane, per-object indicators, auto-resume,
+notifications, cancel buttons in the SPA, dashboard widget.
+
 ## v5.47.2 — long-running commands no longer lie about failure
 
 A focused salvage release. When the server's HTTP call to an agent
