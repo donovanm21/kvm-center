@@ -794,6 +794,30 @@ type CommandResponse struct {
 	UpdatedFields map[string]any `json:"updated_fields,omitempty"`
 }
 
+// CommandOutcomeResponse is the body returned by the agent's
+// `GET /command-outcome?request_id=<id>` endpoint (v5.47.2+). The
+// server's reconciler polls this when its initial /command POST
+// timed out, to recover the actual outcome from the agent's outcome
+// cache without re-executing the command.
+//
+// Outcome values mirror the command-log: "success", "failed",
+// "running" (Phase 2+, when async dispatch lands), or "unknown" if
+// the cached entry's HTTP body is malformed.
+//
+// Pre-5.47.2 agents respond 404 to this path; the reconciler treats
+// that as "no opinion, keep waiting" and falls back to the boot-
+// reconcile timer (45 min) after the deadline passes.
+type CommandOutcomeResponse struct {
+	RequestID  string `json:"request_id"`
+	Outcome    string `json:"outcome"`
+	StatusCode int    `json:"status_code,omitempty"`
+	Message    string `json:"message,omitempty"`
+	Error      string `json:"error,omitempty"`
+	// CachedAt is when the agent finished the action and stored its
+	// reply. Server uses this to attribute the outcome's duration.
+	CachedAt time.Time `json:"cached_at,omitempty"`
+}
+
 // APICommandRequest is sent by the web UI to POST /api/command on the server.
 // RequestID is optional: the client may supply one to turn a sequence
 // of retries into a single logical operation; when empty, the server
