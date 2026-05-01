@@ -343,6 +343,11 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 			log.Printf("command: replay req_id=%s action=%s status=%d", req.RequestID, req.Action, e.status)
 			return
 		}
+		// v5.48 PR-2b: open the ops.db lifecycle row before running
+		// the action so a crash mid-execution leaves a "running" row
+		// for the boot reconciler (PR-2d) to resolve. Best-effort —
+		// failure to insert is logged but doesn't block the action.
+		recordOpsLifecycleStart(req)
 		// Wrap the writer so the outcome cache records the response
 		// when the handler returns.
 		rec := &recorderWriter{ResponseWriter: w}
@@ -351,6 +356,7 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 				rec.status = http.StatusOK
 			}
 			outcomes.put(req.RequestID, rec.status, rec.body)
+			recordOpsLifecycleEnd(req.RequestID, rec.status, rec.body)
 		}()
 		w = rec
 	}
