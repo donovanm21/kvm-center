@@ -10,6 +10,60 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.48.1 — vSphere-parity Tasks UX
+
+Phase 3 of the v5.48 design — the operator-facing layer on top of
+the bullet-proof substrate from v5.48.0. Long-running actions
+finally feel like vCenter Tasks: real-time progress, in-flight
+indicators, conflict detection, notifications, cancellation, and
+a fleet-activity widget on the Dashboard.
+
+**What's visible:**
+
+- **Recent Tasks pane** at the bottom-right of every screen.
+  Shows the last 8 actions with action / target / progress bar /
+  outcome / duration. Click a row → full detail modal. Collapses
+  on header click; self-hides when there's nothing to show.
+- **Real-time progress.** Agents stream progress frames to
+  `/api/agent/command-progress`; the SPA renders a moving bar
+  inside the row + the corresponding command-log entry's
+  `last_progress` field reflects current phase + percent.
+- **Per-VM indicators.** A 409 Conflict from `/api/command` when
+  another action is already in flight on the target. Body
+  carries the conflicting `request_id` so the UI can link to it.
+- **Cancel from the SPA.** Click the × on a running row →
+  confirm → `POST /api/command/cancel`. SIGTERM (5 s grace,
+  SIGKILL); `virsh domjobabort` for migrations.
+- **Notifications.** Failures / cancelled / unknown notify the
+  default channel (gated by `Features.NotifyOnTaskFailure`,
+  default on). Successes opt-in per-operator via
+  `User.NotifyTaskSuccessActions`.
+- **Auto-resume.** When a hidden tab regains focus, any tasks
+  that completed while you were away surface in a top-right
+  banner so you don't miss the outcome.
+- **Dashboard widget.** Last-24-h sparkline, currently-running
+  count, failed count, and average duration per action across
+  the top-5 most-frequent verbs.
+
+**New endpoints:**
+
+- `GET /api/tasks/recent`, `?since=`, `/api/tasks/<id>` — Recent
+  Tasks pane data + history page. RBAC: admins see all,
+  operators see their own.
+- `GET /api/tasks/stats` — aggregated counts for the dashboard
+  widget (by-outcome, by-action, hourly).
+- `POST /api/agent/command-progress` — agents stream progress
+  frames here.
+
+**New SSE events:** `command` (terminal transition), `command_progress`
+(every accepted frame).
+
+**Wire-compat:** unchanged. All behaviour requires no fleet
+coordination — server features are additive; agents that don't
+emit progress simply show no progress bar; agents that don't
+support cancel via `/command/cancel` will fall back to whatever
+the current behaviour is.
+
 ## v5.48.0 — bullet-proof async commands
 
 Phase 2 of the v5.48 design. The agent grows a persistent operation

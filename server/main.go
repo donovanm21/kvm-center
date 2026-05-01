@@ -344,6 +344,7 @@ func main() {
 	// v5.48.1 (PR-3b): Tasks API for the Recent Tasks pane.
 	// Operators see their own tasks; admins (user.manage) see all.
 	mux.HandleFunc("/api/tasks/recent", handleTasksRecent(store))
+	mux.HandleFunc("/api/tasks/stats", handleTasksStats(store))
 	mux.HandleFunc("/api/tasks/", handleTaskByID(store))
 	mux.HandleFunc("/api/tasks", handleTasksSince(store))
 	// v5.48 (PR-2f): operator cancel endpoint. Proxies to the

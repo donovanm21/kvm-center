@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { FleetActivityWidget } from '@/components/FleetActivityWidget';
 import { Pagination } from '@/components/Pagination';
 import { HostStatusPill } from '@/components/StatePill';
 import { useHosts, useStorage, useVMs } from '@/hooks/useInventory';
@@ -77,6 +78,10 @@ export function Dashboard() {
           value={`${avgCPU.toFixed(1)}%`}
           sub={`${onlineHosts.length} online host${onlineHosts.length === 1 ? '' : 's'}`}
         />
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <FleetActivityWidget />
       </div>
 
       <div style={{ marginTop: 18 }}>

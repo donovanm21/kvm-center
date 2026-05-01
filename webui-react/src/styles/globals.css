@@ -579,6 +579,25 @@ body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
   border: 1px solid var(--border-subtle);
 }
 
+/* ── Fleet activity widget (v5.48.1, PR-3f) ───────────────── */
+.fleet-activity-widget { padding: 14px 16px; }
+.fleet-activity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.fleet-activity-stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.fleet-activity-stat-value { font-size: 24px; font-weight: 600; line-height: 1.1; }
+.fleet-activity-sparkline { display: block; width: 100%; max-width: 120px; height: 24px; margin-top: 6px; color: var(--accent, #2a7df9); opacity: 0.65; }
+.fleet-activity-actions { width: 100%; font-size: 12px; border-collapse: collapse; }
+.fleet-activity-actions th, .fleet-activity-actions td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); }
+.fleet-activity-actions th { font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; font-size: 10px; }
+.fleet-activity-actions td:first-child { font-family: var(--font-mono, monospace); }
+@media (max-width: 640px) {
+  .fleet-activity-grid { grid-template-columns: 1fr; gap: 8px; }
+}
+
 /* ── Task auto-resume banner (v5.48.1, PR-3d) ─────────────── */
 .task-resume-banner {
   position: fixed;
