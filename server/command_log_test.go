@@ -54,6 +54,92 @@ func TestCommandLog_UpdateOutcome(t *testing.T) {
 	}
 }
 
+// TestMarkPendingOnTimeout (v5.47.2): an in-flight entry whose HTTP
+// call to the agent times out is kept "pending" with InflightUntil
+// set, not flipped to "failed". The boot reconciler then leaves it
+// alone until the deadline passes, at which point Pending() returns
+// it for resolution.
+func TestMarkPendingOnTimeout(t *testing.T) {
+	l := NewCommandLog()
+	id := "req_timeout"
+	l.Record(&models.CommandLogEntry{RequestID: id, Outcome: "pending", SubmittedAt: time.Now()})
+
+	deadline := time.Now().Add(outcomeReconcileWindow)
+	l.MarkPending(id, deadline, "agent call timed out: deadline exceeded")
+
+	list := l.List(0)
+	if len(list) != 1 {
+		t.Fatalf("List len = %d, want 1", len(list))
+	}
+	e := list[0]
+	if e.Outcome != "pending" {
+		t.Fatalf("outcome = %q, want pending (transport error must not lie about failure)", e.Outcome)
+	}
+	if e.InflightUntil.IsZero() {
+		t.Fatal("InflightUntil should be set on a timed-out entry")
+	}
+	if !strings.Contains(e.Message, "timed out") {
+		t.Fatalf("message should describe timeout, got %q", e.Message)
+	}
+	if e.AppliedAt != nil {
+		t.Fatal("AppliedAt should not be set on still-pending entry")
+	}
+	if e.ExpiresAt != nil {
+		t.Fatal("ExpiresAt should not be set on still-pending entry")
+	}
+
+	// Boot reconciler with the legacy 45-min cutoff should NOT pick
+	// this up — the live reconciler owns it until the deadline passes.
+	if got := l.Pending(pendingReconcileAge); len(got) != 0 {
+		t.Fatalf("Pending() returned %d entries before deadline; want 0", len(got))
+	}
+
+	// Once the deadline passes, the entry surfaces for resolution.
+	l.mu.Lock()
+	l.entries[id].InflightUntil = time.Now().Add(-time.Second)
+	l.entries[id].SubmittedAt = time.Now().Add(-time.Hour)
+	l.mu.Unlock()
+	if got := l.Pending(pendingReconcileAge); len(got) != 1 {
+		t.Fatalf("Pending() after deadline returned %d entries; want 1", len(got))
+	}
+}
+
+// TestMarkPending_NoOpAfterTerminal: if the agent races the
+// reconciler and reports a terminal state first, MarkPending must
+// not regress the entry back to pending.
+func TestMarkPending_NoOpAfterTerminal(t *testing.T) {
+	l := NewCommandLog()
+	id := "req_done"
+	l.Record(&models.CommandLogEntry{RequestID: id, Outcome: "pending", SubmittedAt: time.Now()})
+	l.Update(id, "success", "ok", 200, false)
+	l.MarkPending(id, time.Now().Add(time.Hour), "should be ignored")
+
+	list := l.List(0)
+	if list[0].Outcome != "success" {
+		t.Fatalf("MarkPending regressed terminal entry: outcome=%s", list[0].Outcome)
+	}
+	if !list[0].InflightUntil.IsZero() {
+		t.Fatal("InflightUntil should not be set on a terminal entry")
+	}
+}
+
+// TestRecordPoll bumps LastPolledAt without touching anything else.
+func TestRecordPoll(t *testing.T) {
+	l := NewCommandLog()
+	id := "req_p"
+	l.Record(&models.CommandLogEntry{RequestID: id, Outcome: "pending", SubmittedAt: time.Now()})
+	l.MarkPending(id, time.Now().Add(time.Hour), "polling")
+	at := time.Now()
+	l.RecordPoll(id, at)
+	got := l.List(0)[0]
+	if !got.LastPolledAt.Equal(at) {
+		t.Fatalf("LastPolledAt = %v, want %v", got.LastPolledAt, at)
+	}
+	if got.Outcome != "pending" {
+		t.Fatalf("RecordPoll changed outcome to %s", got.Outcome)
+	}
+}
+
 // TestCommandLog_PendingAge: Pending returns only entries older than
 // the cutoff.
 func TestCommandLog_PendingAge(t *testing.T) {

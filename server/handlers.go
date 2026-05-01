@@ -555,23 +555,34 @@ func handleCommand(store *Store) http.HandlerFunc {
 		client := &http.Client{Timeout: timeout}
 		resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 		if err != nil {
+			// Transport / deadline failures don't tell us whether the
+			// agent applied the command — we just lost the response.
+			// Migration records still flip to failed (their separate
+			// /migrate-status feed is the authoritative signal), but
+			// the command-log entry stays "pending" with InflightUntil
+			// set so the v5.47.2+ reconciler can resolve it from the
+			// agent's outcome cache. Pre-5.47.2 agents respond 404 on
+			// /command-outcome → we fall back to the existing 45-min
+			// stranded sweep.
 			if migRec != nil {
 				finalizeMigration(store, migRec, "failed", "agent unreachable: "+err.Error())
 			}
-			store.commandLog.Update(req.RequestID, "failed", "agent unreachable: "+err.Error(), http.StatusBadGateway, false)
+			deadline := time.Now().Add(outcomeReconcileWindow)
+			store.commandLog.MarkPending(req.RequestID, deadline, "agent call timed out: "+err.Error()+"; outcome will be reconciled")
 			writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
 			return
 		}
 		defer resp.Body.Close()
 
 		respBody, _ := io.ReadAll(resp.Body)
-		// Resolve the command log outcome. Any 2xx is success; 4xx/5xx
-		// is failed. Agent signals cache-replay via X-Command-Replayed
-		// header; mirror onto the log + response for the audit trail.
-		outcome := "success"
-		if resp.StatusCode >= 400 {
-			outcome = "failed"
-		}
+		// Resolve the command log outcome. 2xx → success. 4xx →
+		// failed (agent intentionally rejected the request). 5xx →
+		// pending: agent had an internal error, which doesn't tell us
+		// whether the underlying libvirt operation actually applied,
+		// so we let the reconciler resolve it the same way as a
+		// transport error. Agent signals cache-replay via
+		// X-Command-Replayed header; mirror onto the log + response
+		// for the audit trail.
 		var parsedResp struct {
 			Message string `json:"message"`
 		}
@@ -581,7 +592,15 @@ func handleCommand(store *Store) http.HandlerFunc {
 			msg = strings.TrimSpace(string(respBody))
 		}
 		replayed := resp.Header.Get("X-Command-Replayed") == "true"
-		store.commandLog.Update(req.RequestID, outcome, msg, resp.StatusCode, replayed)
+		switch {
+		case resp.StatusCode >= 500:
+			deadline := time.Now().Add(outcomeReconcileWindow)
+			store.commandLog.MarkPending(req.RequestID, deadline, "agent returned "+strconv.Itoa(resp.StatusCode)+": "+msg+"; outcome will be reconciled")
+		case resp.StatusCode >= 400:
+			store.commandLog.Update(req.RequestID, "failed", msg, resp.StatusCode, replayed)
+		default:
+			store.commandLog.Update(req.RequestID, "success", msg, resp.StatusCode, replayed)
+		}
 		if replayed {
 			w.Header().Set("X-Command-Replayed", "true")
 		}
