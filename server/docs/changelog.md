@@ -10,6 +10,29 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.48.6 — scrollbars hidden globally + Recent Tasks default-collapsed
+
+Two operator asks against v5.48.5:
+
+- **Scrollbars hidden everywhere.** v5.48.4's slim translucent
+  thumb still showed as a 6 px strip on every scrollable surface.
+  macOS already paints its own overlay scrollbar during active
+  scroll; Windows / Linux keep wheel + keyboard scroll without a
+  visible track. Global `::-webkit-scrollbar*` set to
+  `display: none; width: 0` + `scrollbar-width: none` so no
+  chrome ever paints — applies to data tables, modals, and
+  shell containers alike.
+- **Recent Tasks pane default-collapsed.** Was opening
+  automatically on every page load, covering content the
+  operator was trying to read. Now starts collapsed; only
+  expands on explicit header click. A click anywhere outside
+  the pane collapses it again so it can't get left open
+  accidentally. Modal portals are excluded from the
+  click-outside handler so detail / cancel-confirm modals don't
+  dismiss the pane behind them.
+
+No API changes.
+
 ## v5.48.5 — Recent Tasks pane polish + hidden chrome scrollbars
 
 - **Recent Tasks pane** now reads as a distinct sheet hovering

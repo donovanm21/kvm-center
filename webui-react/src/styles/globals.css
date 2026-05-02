@@ -92,38 +92,19 @@ select:focus-visible {
    here makes Chrome on Linux honour the dark treatment. */
 select option { background: var(--bg-input); color: var(--text-body); }
 
-/* Scrollbars — Firefox. Translucent grey thumb that fades into
-   either theme; track stays transparent so the parent's surface
-   shows through. */
-* { scrollbar-width: thin; scrollbar-color: rgba(139, 148, 158, 0.28) transparent; }
-
-/* Scrollbars — WebKit (Chrome, Safari, Edge). Slim, overlay-style.
-   v5.48.3+: dropped the 2 px inset-border-against-var(--bg) from
-   the v5.45 era — it read as a chunky pale channel on inner
-   scroll containers (data tables, .main, sidebars) where the
-   parent surface didn't match the document body. The translucent
-   grey blends cleanly into every panel without per-container
-   tuning. */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-  background: rgba(139, 148, 158, 0.28);
-  border: none;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover { background: rgba(139, 148, 158, 0.55); }
-::-webkit-scrollbar-corner { background: transparent; }
-
-/* v5.48.5: fully hide scrollbars on the always-on shell containers
-   (.main, .sidebar, .recent-tasks-list). macOS draws its own
-   overlay during scroll; Windows/Linux keep wheel + keyboard
-   scroll without a visible track. The slim overlay style above
-   still applies to on-demand scrollables (data tables, modals)
-   where the user benefits from a thumb position cue. */
-.main::-webkit-scrollbar,
-.sidebar::-webkit-scrollbar,
-.recent-tasks-list::-webkit-scrollbar { display: none; }
-.main, .sidebar, .recent-tasks-list { scrollbar-width: none; }
+/* Scrollbars — fully hidden everywhere (v5.48.6).
+   The slim translucent style we shipped in v5.48.4 still showed
+   as a 6 px strip on every scrollable surface, which the user
+   reported as visual noise. macOS already draws its own overlay
+   scrollbar during active scroll; Windows / Linux keep
+   wheel + keyboard + drag-scroll without a visible track. Apply
+   globally so data tables, modals, and shell containers all
+   lose the chrome. */
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { width: 0; height: 0; display: none; }
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-corner { display: none; }
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { color: var(--accent-hover); }
