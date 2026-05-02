@@ -90,10 +90,14 @@ const CANCELLABLE_ACTIONS = new Set([
 export function RecentTasks() {
   const qc = useQueryClient();
   const { hasPerm } = useAuth();
-  const [collapsed, setCollapsed] = useState(false);
+  // v5.48.6: default collapsed — pane only opens on explicit
+  // header click. Click-outside collapses it again so it's never
+  // unexpectedly covering content.
+  const [collapsed, setCollapsed] = useState(true);
   const [openTask, setOpenTask] = useState<TaskEntry | null>(null);
   const [resumeBanner, setResumeBanner] = useState<TaskEntry[] | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<TaskEntry | null>(null);
+  const paneRef = useRef<HTMLElement | null>(null);
 
   const cancelMut = useMutation({
     mutationFn: (req: { id: string; reason: string }) =>
@@ -140,6 +144,24 @@ export function RecentTasks() {
     return () => window.removeEventListener('focus', onFocus);
   }, [data]);
 
+  // v5.48.6: click-outside the expanded pane collapses it. Skipped
+  // while collapsed (no listener overhead). Modal portals are
+  // excluded so detail / cancel-confirm modals don't dismiss the
+  // pane behind them.
+  useEffect(() => {
+    if (collapsed) return;
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (paneRef.current && paneRef.current.contains(target)) return;
+      const modal = (target as Element).closest?.('.modal, .modal-content, .kvm-modal');
+      if (modal) return;
+      setCollapsed(true);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [collapsed]);
+
   if (isError) return null; // gracefully hide on auth issues
 
   const entries = data?.entries ?? [];
@@ -161,7 +183,10 @@ export function RecentTasks() {
           </button>
         </div>
       )}
-      <aside className={'recent-tasks' + (collapsed ? ' collapsed' : '')}>
+      <aside
+        ref={paneRef}
+        className={'recent-tasks' + (collapsed ? ' collapsed' : '')}
+      >
         <header
           className="recent-tasks-header"
           onClick={() => setCollapsed((v) => !v)}
