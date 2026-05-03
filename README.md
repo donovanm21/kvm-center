@@ -51,6 +51,35 @@ without the licensing, and without the footprint.
 
 ## Quick start
 
+Three ways to get kvm-center running. Pick on convenience.
+
+### 1. Docker (one minute)
+
+> ⚠ The `thedon21/kvm-center` repo is private during development —
+> `docker login -u thedon21` first. Will be public in a future
+> release.
+
+```sh
+docker login -u thedon21
+docker run -d --name kvm-center -p 8190:8190 \
+  -v kvm-center-data:/var/lib/kvm-center \
+  -e KVM_CENTER_PUBLIC_URL=https://localhost:8190 \
+  thedon21/kvm-center:latest
+```
+
+Open `https://localhost:8190`, accept the cert, walk the captive
+setup wizard. For the docker-compose recipe with MongoDB persistence
++ image-signing verification, see [Deployment](server/docs/deployment.md#docker).
+
+### 2. KVM appliance (three minutes, v5.49.1+)
+
+Prebuilt qcow2 + cloud-init firstboot — operator just runs
+`virt-install --import` and gets a working kvm-center on a dedicated
+control-plane VM. Lands in v5.49.1; recipe will appear in
+[Deployment](server/docs/deployment.md#kvm-appliance) when it ships.
+
+### 3. Bare metal — `bootstrap.sh --interactive`
+
 Interactive installer (recommended for fresh hosts — walks you
 through Mongo creds and the cluster DNS domain, writes `.env`
 with mode `0600`, then deploys):

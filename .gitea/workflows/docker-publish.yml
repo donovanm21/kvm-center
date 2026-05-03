@@ -145,6 +145,19 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
+      - name: Update Docker Hub repo description
+        # PR-1c (v5.49): mirror docs/dockerhub-description.md to the
+        # Hub repo's README so users landing on the Hub page see the
+        # quickstart inline. Visible publicly even while the image
+        # itself is private.
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: thedon21/kvm-center
+          short-description: "Central control plane for KVM/libvirt hypervisors"
+          readme-filepath: ./docs/dockerhub-description.md
+
       - name: Cosign sign (version-tagged manifest)
         env:
           COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
