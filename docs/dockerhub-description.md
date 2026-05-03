@@ -13,7 +13,7 @@ persistence; SQLite for the agent's per-host operation store.
 
 ```sh
 docker login -u thedon21
-docker run -d --name kvm-center -p 8190:8190 \
+docker run -d --name kvm-center -p 8190:8443 \
   -v kvm-center-data:/var/lib/kvm-center \
   -e KVM_CENTER_PUBLIC_URL=https://localhost:8190 \
   thedon21/kvm-center:latest
@@ -34,7 +34,7 @@ services:
   server:
     image: thedon21/kvm-center:latest
     depends_on: [mongo]
-    ports: ["8190:8190"]
+    ports: ["8190:8443"]
     environment:
       KVM_CENTER_MONGO_URL: mongodb://root:${MONGO_PASSWORD}@mongo:27017
       KVM_CENTER_PUBLIC_URL: https://localhost:8190

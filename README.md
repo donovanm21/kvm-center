@@ -61,7 +61,7 @@ Three ways to get kvm-center running. Pick on convenience.
 
 ```sh
 docker login -u thedon21
-docker run -d --name kvm-center -p 8190:8190 \
+docker run -d --name kvm-center -p 8190:8443 \
   -v kvm-center-data:/var/lib/kvm-center \
   -e KVM_CENTER_PUBLIC_URL=https://localhost:8190 \
   thedon21/kvm-center:latest

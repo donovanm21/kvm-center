@@ -100,9 +100,14 @@ COPY --from=artifacts /dist ./dist
 
 RUN mkdir -p /var/lib/kvm-center
 
-EXPOSE 8090
+# 8443 is the TLS listener (always on; the only listener since v5.47.0
+# disabled plain HTTP by default). 8090 stays exposed for operators
+# who explicitly opt back in via KVM_CENTER_LEGACY_HTTP=1 for legacy
+# pre-v5.32 kvm-tools that hard-coded http://…:8090.
+EXPOSE 8443 8090
 
 ENV KVM_CENTER_ADDR=:8090
+ENV KVM_CENTER_TLS_ADDR=:8443
 ENV KVM_CENTER_DATA=/var/lib/kvm-center/data.json
 ENV KVM_CENTER_DOWNLOADS_DIR=/app/dist
 

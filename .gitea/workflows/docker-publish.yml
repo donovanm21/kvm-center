@@ -101,13 +101,16 @@ jobs:
           set -e
           # Pull the freshly-pushed amd64 manifest explicitly (CI runner is amd64).
           docker pull --platform linux/amd64 "$IMAGE"
-          docker run --rm -d --name kvmc-smoke -p 18190:8090 \
-            -e KVM_CENTER_PUBLIC_URL=http://localhost:18190 \
+          # The image listens on :8443 (TLS) — plain HTTP is disabled
+          # since v5.47.0. Map host:18190 → container:8443 and poll
+          # the HTTPS endpoint with -k for the auto-generated
+          # self-signed cert.
+          docker run --rm -d --name kvmc-smoke -p 18190:8443 \
+            -e KVM_CENTER_PUBLIC_URL=https://localhost:18190 \
             "$IMAGE"
-          # Poll /api/version for up to 60s (server boot + cert generation)
           ok=0
-          for i in $(seq 1 60); do
-            got=$(curl -fs http://localhost:18190/api/version 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('version',''))" 2>/dev/null || true)
+          for i in $(seq 1 90); do
+            got=$(curl -fsk https://localhost:18190/api/version 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('version',''))" 2>/dev/null || true)
             if [ "$got" = "$VERSION" ]; then
               ok=1
               echo "::notice::smoke ok after ${i}s — image returns $got"
@@ -115,10 +118,12 @@ jobs:
             fi
             sleep 1
           done
-          docker logs kvmc-smoke 2>&1 | tail -30 || true
+          echo "::group::container logs"
+          docker logs kvmc-smoke 2>&1 | tail -40 || true
+          echo "::endgroup::"
           docker rm -f kvmc-smoke || true
           if [ "$ok" -ne 1 ]; then
-            echo "::error::smoke test FAILED — image $IMAGE did not return $VERSION on /api/version within 60s"
+            echo "::error::smoke test FAILED — image $IMAGE did not return $VERSION on /api/version within 90s"
             exit 1
           fi
 

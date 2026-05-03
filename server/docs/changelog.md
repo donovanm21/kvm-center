@@ -10,6 +10,35 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.49.1 — fix Docker image port exposure + smoke-test TLS
+
+The v5.49.0 docker-publish workflow built and pushed the
+multi-arch image, but its smoke test failed: it polled
+`http://localhost:18190/api/version` against a container that
+listens on `:8443 (TLS)` (plain HTTP has been disabled by
+default since v5.47.0). Result: rolling tags `:latest`, `:5.49`,
+`:5` got untagged automatically and `:v5.49.0` was left as the
+only Hub artifact for the v5.49.0 release.
+
+Three fixes in this patch:
+
+- **Dockerfile.server** — `EXPOSE 8443 8090` (was `8090` only),
+  `ENV KVM_CENTER_TLS_ADDR=:8443` so operators don't have to
+  guess the port.
+- **`.gitea/workflows/docker-publish.yml`** — smoke test now
+  maps `host:18190 → container:8443` and polls
+  `https://localhost:18190/api/version` with `-k`. Boot deadline
+  bumped 60 → 90 s for TLS handshake + first-run cert generation.
+  Container logs collapsed inside an `::group::` block.
+- **Quickstart docs (deployment.md, README, Hub description)**
+  — port mappings updated from `8190:8190` → `8190:8443` so
+  `docker run -p 8190:8443 thedon21/kvm-center:latest` actually
+  reaches the server on `https://localhost:8190`.
+
+Carries `[publish]` to override the patch-bump skip, so the
+fixed image actually ships to Docker Hub. The original v5.49.1
+slot (KVM appliance) shifts to v5.49.2; polish to v5.49.3.
+
 ## v5.49.0 — Docker Hub publish path
 
 First minor release of the v5.49 line. kvm-center is now
