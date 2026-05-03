@@ -10,6 +10,23 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.48.8 — data tables grow naturally; clipped rows no longer hidden
+
+The `.data-table-scroll` wrapper had `overflow: auto` +
+`max-height: 60vh` from the v5.45 era — back when the document
+was the scroll context and the table needed its own scroll
+region to keep sticky thead anchored to the table top. With
+v5.48.2's switch to `.main` as the scroll container, that cap
+kept long tables under 60% of viewport height — the Migrations
+page showed "1 - 15" but only rendered 12 rows.
+
+Dropped both rules. The table renders at natural height and
+`.main` is the single scroll container. Sticky thead anchors to
+`.main`'s top edge instead of the table's, so column headers
+stay visible while scrolling a long list.
+
+No API changes.
+
 ## v5.48.7 — themed scrollbars (visible cue, brand palette)
 
 v5.48.6 hid all scrollbars; operators reported they couldn't tell
