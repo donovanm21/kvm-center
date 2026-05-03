@@ -10,6 +10,30 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.49.2 — smoke test via docker exec + curl in image
+
+v5.49.1 fixed the smoke test's port-mapping but it still couldn't
+reach the container — the Gitea Actions runner is itself a
+container, so `docker run -p 18190:8443` binds on the runner's
+host network rather than the step's shell namespace. Result:
+:v5.49.1 image actually pushed to Hub fine but the rolling tags
+got auto-untagged anyway because smoke "failed".
+
+Two fixes:
+
+- **`.gitea/workflows/docker-publish.yml`** — smoke test no
+  longer publishes a port. Instead `docker exec`s into the
+  container and curls `https://localhost:8443/api/version` from
+  the container's own network namespace. Avoids the
+  Docker-in-Docker port-forwarding hop entirely.
+- **Dockerfile.server** — `apk add curl` (alpine's busybox wget
+  doesn't support `--no-check-certificate` so curl is the
+  simpler path). Adds ~10 KB to the runtime image; useful for
+  in-container diagnostics anyway.
+
+Carries `[publish]` to ship the rebuilt image. Renumber:
+appliance → v5.49.3; polish → v5.49.4.
+
 ## v5.49.1 — fix Docker image port exposure + smoke-test TLS
 
 The v5.49.0 docker-publish workflow built and pushed the

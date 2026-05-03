@@ -101,16 +101,22 @@ jobs:
           set -e
           # Pull the freshly-pushed amd64 manifest explicitly (CI runner is amd64).
           docker pull --platform linux/amd64 "$IMAGE"
-          # The image listens on :8443 (TLS) — plain HTTP is disabled
-          # since v5.47.0. Map host:18190 → container:8443 and poll
-          # the HTTPS endpoint with -k for the auto-generated
-          # self-signed cert.
-          docker run --rm -d --name kvmc-smoke -p 18190:8443 \
-            -e KVM_CENTER_PUBLIC_URL=https://localhost:18190 \
-            "$IMAGE"
+          # Run the container detached. The Gitea Actions runner is
+          # itself a Docker container (act-style), so a published port
+          # `-p 18190:8443` binds on the runner's host network — not
+          # reachable from the step's shell, which is in a sibling
+          # container. Solution: skip port publishing entirely and
+          # talk to the container via `docker exec`. The image listens
+          # on :8443 (TLS) since v5.47.0; we curl that internally
+          # against the alpine base's installed toolchain.
+          docker run --rm -d --name kvmc-smoke "$IMAGE"
+          # The runtime stage is `alpine:latest` with curl added by
+          # Dockerfile.server (busybox wget doesn't support
+          # --no-check-certificate, so curl is simpler). `-k` accepts
+          # the auto-generated self-signed cert.
           ok=0
           for i in $(seq 1 90); do
-            got=$(curl -fsk https://localhost:18190/api/version 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('version',''))" 2>/dev/null || true)
+            got=$(docker exec kvmc-smoke sh -c 'curl -fsk https://localhost:8443/api/version 2>/dev/null' | python3 -c "import json,sys; print(json.load(sys.stdin).get('version',''))" 2>/dev/null || true)
             if [ "$got" = "$VERSION" ]; then
               ok=1
               echo "::notice::smoke ok after ${i}s — image returns $got"

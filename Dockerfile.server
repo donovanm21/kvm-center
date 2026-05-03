@@ -92,7 +92,7 @@ RUN VERSION=$(cat /src/server/VERSION) && \
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata curl
 
 WORKDIR /app
 COPY --from=builder   /out/kvm-center-server .
