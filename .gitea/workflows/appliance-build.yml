@@ -62,13 +62,23 @@ jobs:
 
       - name: Install build toolchain
         run: |
-          sudo apt-get update -qq
+          # apt-get update can soft-fail on a single repo (saw a
+          # transient ppa.launchpadcontent.net timeout on v5.49.4's
+          # build); tolerate via `|| true` so a stale cache is still
+          # usable. The required packages live in the main archive,
+          # which is reliable.
+          sudo apt-get update -qq || true
+          # Required packages — must succeed.
           sudo apt-get install -y --no-install-recommends \
-            libguestfs-tools libguestfs-tools-c \
+            libguestfs-tools \
             qemu-utils qemu-system-x86 \
             cloud-image-utils \
             ovmf
-          # libguestfs-tools-c isn't in older Ubuntu repos; tolerate.
+          # libguestfs-tools-c is a thinner alternative shipped on
+          # some Ubuntus and absent on others (notably 24.04 noble).
+          # Try it; a miss is a no-op.
+          sudo apt-get install -y --no-install-recommends libguestfs-tools-c || \
+            echo "::notice::libguestfs-tools-c not available on this runner — using libguestfs-tools alone"
           # Detect /dev/kvm — if present we'll use accel=kvm:tcg.
           if [ -e /dev/kvm ]; then
             echo "::notice::/dev/kvm present — KVM acceleration available"

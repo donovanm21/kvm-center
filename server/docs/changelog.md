@@ -10,6 +10,30 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.49.5 — appliance-build fix + Hub README polish
+
+v5.49.4 corrected the publish gate but its appliance-build failed on
+the apt step: `libguestfs-tools-c` doesn't exist on Ubuntu 24.04
+(noble) and a transient ppa.launchpadcontent.net timeout broke
+`apt-get update`. v5.49.5 makes the install more tolerant:
+
+- `apt-get update` is allowed to soft-fail (stale cache still
+  usable).
+- Required packages (`libguestfs-tools`, `qemu-utils`,
+  `qemu-system-x86`, `cloud-image-utils`, `ovmf`) install in one
+  group that must succeed.
+- The optional `libguestfs-tools-c` is attempted in a separate
+  call that's allowed to fail.
+
+Plus a Docker Hub repository overview rewrite (`docs/dockerhub-description.md`)
+mirroring the GitHub README style — logo, wordmark, tour
+screenshot, badges, "Why kvm-center", feature table, architecture
+diagram, signing instructions, multi-arch note, license. Renders on
+the Hub repo page next time `docker-publish` runs (this release).
+
+Carries `[publish]` and `[deploy]` so the gate fires and the new
+Hub README + a working appliance qcow2 both ship for v5.49.5.
+
 ## v5.49.4 — publish-gate fix + deployment polish
 
 First v5.49.x release that actually exercises the publish pipeline
