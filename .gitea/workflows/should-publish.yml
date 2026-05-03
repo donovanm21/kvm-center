@@ -1,0 +1,64 @@
+name: should-publish
+
+# Reusable gate for the v5.49 publish pipeline. Decides whether
+# the downstream docker-publish.yml + appliance-build.yml
+# workflows should fire for a given commit, based on the trigger
+# rules locked in v5.49-deployment-strategies.md §"Decisions
+# log" #1:
+#
+#   - VERSION unchanged → skip.
+#   - Minor / major version bump → publish.
+#   - Patch bump → publish only if commit subject contains
+#     [publish].
+#   - workflow_dispatch caller bypasses entirely (sets publish=true).
+#
+# All real logic lives in scripts/should-publish.sh so it can be
+# unit-tested locally (scripts/should-publish_test.sh, 9 cases).
+#
+# Other workflows consume the verdict via:
+#   gate:
+#     uses: ./.gitea/workflows/should-publish.yml
+#   downstream:
+#     needs: gate
+#     if: needs.gate.outputs.publish == 'true'
+
+on:
+  workflow_call:
+    outputs:
+      publish:
+        description: "true if downstream publish workflows should run; false otherwise"
+        value: ${{ jobs.evaluate.outputs.publish }}
+  workflow_dispatch:
+    outputs:
+      publish:
+        description: "always true on manual dispatch"
+        value: "true"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # need HEAD~1 for VERSION diff
+
+      - name: Evaluate publish gate
+        id: gate
+        run: |
+          set -eu
+          # On manual dispatch we always publish — see workflow_dispatch
+          # output above. This job still runs for telemetry but the
+          # downstream caller already short-circuits.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::publish=true (workflow_dispatch override)"
+            exit 0
+          fi
+          prev=$(git show HEAD~1:server/VERSION 2>/dev/null | tr -d '[:space:]' || echo "")
+          cur=$(cat server/VERSION | tr -d '[:space:]')
+          subject=$(git log -1 --format=%s HEAD)
+          verdict=$(scripts/should-publish.sh "$prev" "$cur" "$subject")
+          echo "publish=$verdict" >> "$GITHUB_OUTPUT"
+          echo "::notice::prev=$prev cur=$cur subject=$subject → publish=$verdict"

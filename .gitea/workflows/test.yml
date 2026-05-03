@@ -61,6 +61,19 @@ jobs:
       - name: go test
         run: go test ./...
 
+      # v5.49 (PR-1a): tiny shell-script unit-test runner for the
+      # publish-gate logic. Cheap (sub-second) and catches regressions
+      # in the version-comparison + [publish] handling. Add other shell
+      # tests here as the scripts/ tree grows.
+      - name: shell tests
+        run: |
+          set -e
+          for t in scripts/*_test.sh; do
+            echo "::group::$t"
+            bash "$t"
+            echo "::endgroup::"
+          done
+
       # govulncheck reports ONLY reachable vulnerabilities (symbols the
       # code actually imports + calls), so a non-zero exit is always
       # worth failing on. Upgrade / patch / suppress with an inline
