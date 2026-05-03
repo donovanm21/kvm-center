@@ -508,10 +508,21 @@ body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
 /* Match the Audit tab pattern: native scrollbar, sticky dark header,
    no custom ::-webkit-scrollbar treatment. */
 .data-table-scroll {
-  overflow: auto;
-  max-height: 60vh;
+  /* v5.48.8: pre-v5.48.2 the document was the scroll context, so
+     the table needed its own internal scroll (max-height: 60vh)
+     to keep the sticky thead anchored to the table top. With
+     v5.48.2's switch to .main as the scroll container, that
+     internal cap clipped long lists — operator reported a 15-row
+     Migrations page only showing 12. Drop both rules so the
+     table grows naturally; .main is now the only scroll
+     container in play. */
+  overflow: visible;
+  max-height: none;
 }
 .data-table-scroll .data-table thead th {
+  /* Sticky anchors to the nearest scroll container = .main, so
+     the column header bar pins to the top of .main's viewport
+     instead of the table's. Same UX, correct anchor. */
   position: sticky;
   top: 0;
   background: var(--bg-input);
