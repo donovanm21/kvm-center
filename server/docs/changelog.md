@@ -10,6 +10,30 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.48.7 — themed scrollbars (visible cue, brand palette)
+
+v5.48.6 hid all scrollbars; operators reported they couldn't tell
+when content was clipped. Bringing them back, themed:
+
+- **10 px** track on `--bg-input` with a 1 px subtle left border
+  so it reads as a sunken rail.
+- **8 px** effective thumb on `--border`, rounded 6 px, floats
+  inside the track via a 1 px inset border painted in the track
+  colour. `min-height: 30px` so a tall content area still gets
+  a grippable thumb.
+- **Hover / active** states tint the thumb `--accent-dim` then
+  `--accent` so it lights up under the cursor — same orange the
+  rest of the chrome uses.
+- **`scrollbar-gutter: stable`** on `.main`, `.sidebar`, and
+  `.recent-tasks-list` so content layout doesn't reflow when
+  the scrollbar appears or hides on those always-on containers.
+- **Firefox** gets matching `scrollbar-color` (border +
+  bg-input) with a `:hover` swap to `--accent-dim`.
+
+Light-mode picks up the same tokens automatically.
+
+No API changes.
+
 ## v5.48.6 — scrollbars hidden globally + Recent Tasks default-collapsed
 
 Two operator asks against v5.48.5:
