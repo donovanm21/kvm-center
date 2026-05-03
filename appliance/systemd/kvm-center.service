@@ -1,0 +1,25 @@
+[Unit]
+Description=kvm-center central control plane
+After=network-online.target mongod.service kvm-center-firstboot.service
+Wants=network-online.target mongod.service
+Requires=kvm-center-firstboot.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/kvm-center-server
+Restart=on-failure
+RestartSec=5
+# Persist data, TLS material, and the embedded download portal.
+Environment=KVM_CENTER_DATA=/var/lib/kvm-center/data.json
+Environment=KVM_CENTER_DOWNLOADS_DIR=/app/dist
+Environment=KVM_CENTER_TLS_ADDR=:8190
+Environment=KVM_CENTER_MONGO_URL=mongodb://localhost:27017
+# Hardening — running as root (we don't open privileged ports
+# but want write access to /var/lib/kvm-center). Tighten with
+# DynamicUser= if we ever need it.
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

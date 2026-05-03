@@ -1,0 +1,14 @@
+[Unit]
+Description=kvm-center first-boot setup (admin password + cert + console banner)
+ConditionPathExists=!/var/lib/kvm-center/.firstboot-done
+After=network-online.target
+Wants=network-online.target
+Before=kvm-center.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/kvm-center-firstboot.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
