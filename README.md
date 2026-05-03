@@ -71,12 +71,28 @@ Open `https://localhost:8190`, accept the cert, walk the captive
 setup wizard. For the docker-compose recipe with MongoDB persistence
 + image-signing verification, see [Deployment](server/docs/deployment.md#docker).
 
-### 2. KVM appliance (three minutes, v5.49.1+)
+### 2. KVM appliance (three minutes, v5.49.3+)
 
-Prebuilt qcow2 + cloud-init firstboot — operator just runs
-`virt-install --import` and gets a working kvm-center on a dedicated
-control-plane VM. Lands in v5.49.1; recipe will appear in
-[Deployment](server/docs/deployment.md#kvm-appliance) when it ships.
+Pre-built qcow2 + GPG-signed checksums on
+[GitHub Releases](https://github.com/donovanm21/kvmcenter/releases).
+Download, verify, `virt-install --import`, read the auto-generated
+admin password from the libvirt console:
+
+```sh
+V=v5.49.3
+gh release download "$V" --repo donovanm21/kvmcenter \
+  --pattern 'kvm-center-appliance-*.qcow2' --pattern 'SHA256SUMS*'
+gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS
+
+sudo cp kvm-center-appliance-${V}.qcow2 /var/lib/libvirt/images/
+sudo virt-install --name kvm-center --memory 2048 --vcpus 2 \
+  --disk path=/var/lib/libvirt/images/kvm-center-appliance-${V}.qcow2,bus=virtio \
+  --import --os-variant rocky9 --network bridge=virbr0 --noautoconsole
+sudo virsh console kvm-center   # banner shows URL + admin password
+```
+
+Full flow (incl. signature import, sizing, upgrade) in
+[Deployment → KVM appliance](server/docs/deployment.md#kvm-appliance).
 
 ### 3. Bare metal — `bootstrap.sh --interactive`
 

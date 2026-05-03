@@ -27,3 +27,10 @@ a4364fa318daf40ee87a0354134d746eceb6810b:demo/seed/main.go:generic-api-key:357
 # curl-auth-header rule fires on the bearer-prefix shape regardless.
 # HEAD has been rewritten; this entry quiets the old blob.
 676a2b079533e236636e77acf7c6e728ac91359f:server/docs/authentication.md:curl-auth-header:83
+
+# v5.49 PR-2d: deployment.md initially shipped a 32-char base64
+# sample admin password to illustrate the appliance firstboot
+# banner shape. That sample tripped gitleaks' generic-api-key rule.
+# HEAD was fixed in the next commit (placeholder text); this
+# fingerprint silences the historical blob.
+b7236e8f11155cb1b14291c821b5301892289cf2:server/docs/deployment.md:generic-api-key:194
