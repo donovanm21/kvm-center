@@ -1,0 +1,181 @@
+name: docker-publish
+
+# v5.49 PR-1b. Multi-arch (linux/amd64 + linux/arm64) Docker Hub
+# publish workflow for thedon21/kvm-center. Gated by the v5.49
+# publish-gate (PR-1a): only runs on minor/major version bumps,
+# patch bumps with [publish] in the commit subject, or a manual
+# workflow_dispatch.
+#
+# Pipeline shape (per spec §"Strategy B"):
+#   1. should-publish gate (workflow_call) → publish=true|false
+#   2. buildx + qemu setup
+#   3. docker login (DOCKERHUB_TOKEN scoped to push)
+#   4. multi-arch build + push with tags
+#        :vX.Y.Z (immutable)
+#        :X.Y    (minor channel)
+#        :X      (major channel)
+#        :latest (rolling)
+#   5. cosign sign (--key COSIGN_KEY) the version-tagged manifest
+#   6. smoke test: docker run the new image, poll /api/version,
+#      assert response matches $VERSION. If the test fails, untag
+#      :latest, :X, :X.Y so consumers don't get a broken rolling
+#      pointer.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  gate:
+    uses: ./.gitea/workflows/should-publish.yml
+
+  publish:
+    needs: gate
+    if: needs.gate.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: ver
+        run: |
+          v=$(cat server/VERSION | tr -d '[:space:]')
+          # Strip leading v for parsing; preserve original for tag construction.
+          bare=${v#v}
+          major=${bare%%.*}
+          rest=${bare#*.}
+          minor=${rest%%.*}
+          patch=${rest#*.}
+          echo "version=$v"          >> "$GITHUB_OUTPUT"
+          echo "version_bare=$bare"  >> "$GITHUB_OUTPUT"
+          echo "major=$major"        >> "$GITHUB_OUTPUT"
+          echo "minor=$minor"        >> "$GITHUB_OUTPUT"
+          echo "patch=$patch"        >> "$GITHUB_OUTPUT"
+          echo "::notice::publishing kvm-center $v ($major.$minor.$patch)"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Docker Hub login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Multi-arch build + push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.server
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          # build-push-action expects newline-separated tags.
+          tags: |
+            thedon21/kvm-center:${{ steps.ver.outputs.version }}
+            thedon21/kvm-center:${{ steps.ver.outputs.major }}.${{ steps.ver.outputs.minor }}
+            thedon21/kvm-center:${{ steps.ver.outputs.major }}
+            thedon21/kvm-center:latest
+          # Re-use the host runner's git sha so the artifacts stage
+          # cache busts (matches what bootstrap.sh --deploy passes).
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.title=kvm-center
+            org.opencontainers.image.description=Central control plane for KVM/libvirt hypervisors
+            org.opencontainers.image.url=https://github.com/donovanm21/kvmcenter
+            org.opencontainers.image.source=https://github.com/donovanm21/kvmcenter
+            org.opencontainers.image.version=${{ steps.ver.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Smoke test (amd64)
+        id: smoke
+        env:
+          IMAGE: thedon21/kvm-center:${{ steps.ver.outputs.version }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -e
+          # Pull the freshly-pushed amd64 manifest explicitly (CI runner is amd64).
+          docker pull --platform linux/amd64 "$IMAGE"
+          docker run --rm -d --name kvmc-smoke -p 18190:8090 \
+            -e KVM_CENTER_PUBLIC_URL=http://localhost:18190 \
+            "$IMAGE"
+          # Poll /api/version for up to 60s (server boot + cert generation)
+          ok=0
+          for i in $(seq 1 60); do
+            got=$(curl -fs http://localhost:18190/api/version 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('version',''))" 2>/dev/null || true)
+            if [ "$got" = "$VERSION" ]; then
+              ok=1
+              echo "::notice::smoke ok after ${i}s — image returns $got"
+              break
+            fi
+            sleep 1
+          done
+          docker logs kvmc-smoke 2>&1 | tail -30 || true
+          docker rm -f kvmc-smoke || true
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::smoke test FAILED — image $IMAGE did not return $VERSION on /api/version within 60s"
+            exit 1
+          fi
+
+      - name: Untag rolling tags on smoke failure
+        if: failure() && steps.smoke.outcome == 'failure'
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          # Don't poison rolling tags pointing at a broken manifest.
+          # The version-tagged push (:vX.Y.Z) stays so the operator can
+          # debug; latest / minor / major roll back to the prior pointer.
+          TOKEN=$(curl -s -u "$DOCKERHUB_USERNAME:$DOCKERHUB_TOKEN" \
+            "https://hub.docker.com/v2/users/login/" \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"$DOCKERHUB_USERNAME\",\"password\":\"$DOCKERHUB_TOKEN\"}" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])")
+          for tag in latest ${{ steps.ver.outputs.major }} ${{ steps.ver.outputs.major }}.${{ steps.ver.outputs.minor }}; do
+            curl -s -X DELETE -H "Authorization: JWT $TOKEN" \
+              "https://hub.docker.com/v2/repositories/thedon21/kvm-center/tags/$tag/" \
+              -w "untag $tag → HTTP %{http_code}\n" || true
+          done
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Cosign sign (version-tagged manifest)
+        env:
+          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          IMAGE: thedon21/kvm-center:${{ steps.ver.outputs.version }}
+        run: |
+          # cosign --key supports `env://VAR` to load the PEM from
+          # environment without ever touching disk.
+          cosign sign --yes --key env://COSIGN_KEY "$IMAGE"
+
+      - name: Summary
+        if: always()
+        env:
+          V: ${{ steps.ver.outputs.version }}
+          MM: ${{ steps.ver.outputs.major }}.${{ steps.ver.outputs.minor }}
+          MAJ: ${{ steps.ver.outputs.major }}
+        run: |
+          cat <<EOF
+          ────────────────────────────────
+          docker-publish summary
+          ────────────────────────────────
+          tags pushed:
+            thedon21/kvm-center:$V
+            thedon21/kvm-center:$MM
+            thedon21/kvm-center:$MAJ
+            thedon21/kvm-center:latest
+          arches:   linux/amd64, linux/arm64
+          smoke:    ${{ steps.smoke.outcome }}
+          cosign:   signed thedon21/kvm-center:$V
+
+          verify:
+            cosign verify --key https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/security/cosign.pub thedon21/kvm-center:$V
+          ────────────────────────────────
+          EOF
