@@ -7,7 +7,7 @@ version: v5.33.0
 # kvm-center
 
 You have access to a kvm-center control plane that manages a fleet of
-KVM/libvirt hypervisors. It is the operator's vCenter-lite.
+KVM/libvirt hypervisors. It is the operator's central management plane.
 
 ## When to invoke
 

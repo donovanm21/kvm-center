@@ -654,9 +654,11 @@ body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
 .task-resume-banner button:hover { opacity: 0.7; }
 
 /* ── Recent Tasks pane (v5.48.1, PR-3b) ────────────────────── */
-/* vSphere-parity bottom-of-screen pane. Pinned to viewport bottom,
- * collapses on click of the header. Bottom-of-screen position
- * mimics vCenter's task panel; mobile gets a drawer-style overlay. */
+/* Bottom-of-screen Recent Tasks pane. Pinned to viewport bottom,
+ * collapses on click of the header. The bottom-pinned position
+ * is the standard "recent activity" surface familiar from any
+ * central hypervisor management UI; mobile gets a drawer-style
+ * overlay. */
 .recent-tasks {
   position: fixed;
   left: 0;

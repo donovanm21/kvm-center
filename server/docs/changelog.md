@@ -141,13 +141,13 @@ Mobile drawer behaviour is unchanged.
 
 No API changes.
 
-## v5.48.1 — vSphere-parity Tasks UX
+## v5.48.1 — central Tasks UX
 
 Phase 3 of the v5.48 design — the operator-facing layer on top of
-the bullet-proof substrate from v5.48.0. Long-running actions
-finally feel like vCenter Tasks: real-time progress, in-flight
-indicators, conflict detection, notifications, cancellation, and
-a fleet-activity widget on the Dashboard.
+the bullet-proof substrate from v5.48.0. Long-running actions now
+get the central-task-panel treatment: real-time progress,
+in-flight indicators, conflict detection, notifications,
+cancellation, and a fleet-activity widget on the Dashboard.
 
 **What's visible:**
 
@@ -248,9 +248,9 @@ same way it treats a 5xx since v5.47.2.
 
 **New audit event:** `command.cancelled`.
 
-Phase 3 (v5.48.1) layers the vSphere-parity Tasks UX on top —
-Recent Tasks pane, per-object indicators, auto-resume,
-notifications, cancel buttons in the SPA, dashboard widget.
+Phase 3 (v5.48.1) layers the central Tasks UX on top — Recent
+Tasks pane, per-object indicators, auto-resume, notifications,
+cancel buttons in the SPA, dashboard widget.
 
 ## v5.47.2 — long-running commands no longer lie about failure
 
@@ -296,8 +296,8 @@ This is Phase 1 of the v5.48 plan
 (`docs/design/v5.48-async-commands.md`). Phase 2 (v5.48.0) replaces
 the agent's in-memory outcome cache with a SQLite ops.db on disk,
 adds a per-action watchdog, async dispatch for slow actions, and a
-cancellation API. Phase 3 (v5.48.1) adds the vSphere-parity Tasks
-pane, per-object indicators, and notifications.
+cancellation API. Phase 3 (v5.48.1) adds the central Tasks pane,
+per-object indicators, and notifications.
 
 ## v5.47.1 — unified Linux installer
 

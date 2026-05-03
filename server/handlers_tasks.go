@@ -2,7 +2,7 @@ package main
 
 // Tasks API (v5.48.1 PR-3b).
 //
-// vSphere-parity Recent Tasks. The SPA's bottom-of-screen pane
+// Recent Tasks pane data. The SPA's bottom-of-screen pane
 // reads from these endpoints + subscribes to SSE `command` and
 // `command_progress` events for live updates.
 //

@@ -30,7 +30,7 @@ Influx-backed metrics — all in one Go binary and a tiny agent.
 Running KVM directly is great. Running ten of them is a chore —
 SSHing between hosts, juggling `virsh`, hand-copying disks,
 remembering which pool lives where. kvm-center gives you the
-vCenter-style control surface KVM deserves, without the appliance,
+central control surface KVM deserves, without the appliance,
 without the licensing, and without the footprint.
 
 - **One server, many hypervisors.** A stateless Go control plane

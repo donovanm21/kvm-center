@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { qk } from '@/queryKeys';
 import { Modal } from './Modal';
 
-// vSphere-parity Recent Tasks pane (v5.48.1 PR-3b).
+// Recent Tasks pane (v5.48.1 PR-3b).
 //
 // Pinned to the bottom of every screen via the Layout. Subscribes
 // to SSE `command` + `command_progress` events (wired through the
