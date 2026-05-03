@@ -1,0 +1,76 @@
+name: dockerhub-probe
+
+# One-shot manual workflow that validates the Docker Hub credentials
+# in Gitea secrets (DOCKERHUB_USERNAME + DOCKERHUB_TOKEN) before the
+# real publish workflow (PR-1b) burns 10 minutes of multi-arch
+# buildx only to discover the token can't push. Builds a 1-line
+# placeholder image, pushes as `:v0.0.1-bootstrap`, deletes the tag
+# from the Hub via the v2 registry API. Pure dispatch — never runs
+# on push so it can't accidentally fire.
+#
+# Delete this file once PR-1b's first successful run proves the
+# credentials work end-to-end (PR-3a polish).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to Docker Hub
+        run: echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+      - name: Build placeholder image
+        run: |
+          mkdir /tmp/probe && cd /tmp/probe
+          cat > Dockerfile <<'EOF'
+          FROM alpine:3.20
+          LABEL org.opencontainers.image.title="kvm-center probe"
+          LABEL org.opencontainers.image.description="Throwaway image to validate Docker Hub publish credentials. Delete on sight."
+          CMD ["echo", "kvm-center probe — delete me"]
+          EOF
+          docker build -t thedon21/kvm-center:v0.0.1-bootstrap .
+
+      - name: Push probe tag
+        run: docker push thedon21/kvm-center:v0.0.1-bootstrap
+
+      - name: Verify tag exists via Hub v2 API
+        run: |
+          set -e
+          TOKEN=$(curl -s -u "$DOCKERHUB_USERNAME:$DOCKERHUB_TOKEN" \
+            "https://hub.docker.com/v2/users/login/" \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"$DOCKERHUB_USERNAME\",\"password\":\"$DOCKERHUB_TOKEN\"}" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])")
+          curl -s -H "Authorization: JWT $TOKEN" \
+            "https://hub.docker.com/v2/repositories/thedon21/kvm-center/tags/v0.0.1-bootstrap/" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print('tag:',d.get('name'),'last_updated:',d.get('last_updated'))"
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+      - name: Delete probe tag (cleanup)
+        if: always()
+        run: |
+          TOKEN=$(curl -s -u "$DOCKERHUB_USERNAME:$DOCKERHUB_TOKEN" \
+            "https://hub.docker.com/v2/users/login/" \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"$DOCKERHUB_USERNAME\",\"password\":\"$DOCKERHUB_TOKEN\"}" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])")
+          curl -s -X DELETE -H "Authorization: JWT $TOKEN" \
+            "https://hub.docker.com/v2/repositories/thedon21/kvm-center/tags/v0.0.1-bootstrap/" \
+            -w "delete probe tag → HTTP %{http_code}\n"
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "::notice::dockerhub-probe complete. If all steps green,"
+          echo "::notice::DOCKERHUB_USERNAME + DOCKERHUB_TOKEN secrets are good"
+          echo "::notice::for PR-1b's real publish workflow."
