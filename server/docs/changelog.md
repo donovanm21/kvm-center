@@ -10,6 +10,67 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.49.0 — Docker Hub publish path
+
+First minor release of the v5.49 line. kvm-center is now
+distributed on Docker Hub as a multi-arch image
+(`linux/amd64` + `linux/arm64`), signed with cosign, with a
+themed quickstart on the Hub repo page.
+
+### What's new
+
+- **`thedon21/kvm-center` on Docker Hub** — pull and run in one
+  line:
+
+  ```sh
+  docker login -u thedon21
+  docker run -d --name kvm-center -p 8190:8190 \
+    -v kvm-center-data:/var/lib/kvm-center \
+    -e KVM_CENTER_PUBLIC_URL=https://localhost:8190 \
+    thedon21/kvm-center:latest
+  ```
+
+  Repo is **private during development**; the `docker login` is
+  required for now. A future release flips it public when the
+  maintainer is ready for unauthenticated pulls.
+
+- **Tag channels** — `:latest` rolls on minor / major releases;
+  `:5.49` floats on patches; `:5` floats on majors;
+  `:vX.Y.Z` is immutable per release.
+
+- **Multi-arch** — `linux/amd64` + `linux/arm64` so M-series Mac
+  users can `docker run` to try kvm-center locally without an
+  emulator layer.
+
+- **Cosign-signed images** — every published manifest is signed
+  with the maintainer-held cosign key. Public verification key
+  at `docs/security/cosign.pub`. Verify with:
+
+  ```sh
+  cosign verify \
+    --key https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/security/cosign.pub \
+    thedon21/kvm-center:v5.49.0
+  ```
+
+- **Smarter publish gate** — minor / major version bumps
+  auto-publish; patch bumps stay private unless the commit
+  subject carries `[publish]`. `workflow_dispatch` overrides
+  for manual re-publishes.
+
+### What's coming in v5.49
+
+- **v5.49.1** — KVM appliance qcow2 on GitHub Releases. Operator
+  runs `virt-install --import` and gets a working kvm-center on
+  a dedicated control-plane VM. cloud-init firstboot generates
+  the admin password + TLS cert; visible at the libvirt console.
+- **v5.49.2** — consolidated deployment page with comparison
+  table + verifying-releases section + the private-during-
+  development banner removed if the operator has flipped the
+  Hub repo public by then.
+
+No API or behaviour changes in v5.49.0 itself; this release is
+purely about the new distribution channel.
+
 ## v5.48.8 — data tables grow naturally; clipped rows no longer hidden
 
 The `.data-table-scroll` wrapper had `overflow: auto` +
