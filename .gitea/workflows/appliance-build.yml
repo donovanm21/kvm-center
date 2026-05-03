@@ -17,10 +17,12 @@ name: appliance-build
 #      /api/version for up to 120 s; uses TCG if /dev/kvm absent
 #      — slower but correct)
 #   5. sha256sum + gpg --detach-sign over SHA256SUMS
-#   6. gh release upload to donovanm21/kvmcenter at the version tag
-#      (PR-2c) — that step is added in the next PR; this PR ships
-#      build + smoke only so we can iterate on the build flakiness
-#      without churning the release pipeline.
+#   6. sha256sum + gpg --detach-sign SHA256SUMS using the
+#      APPLIANCE_SIGNING_KEY secret (PR-0b's GPG keypair).
+#   7. gh release upload to donovanm21/kvmcenter at the version
+#      tag (qcow2 + SHA256SUMS + SHA256SUMS.asc). PR-0a's mirror
+#      catch-up made the tags exist on GitHub; the docker-publish
+#      [deploy] flow keeps them current.
 #
 # Runner requirements: ubuntu-latest. /dev/kvm is preferred
 # (massive speed-up for both virt-builder + smoke) but not
@@ -89,11 +91,11 @@ jobs:
           cd appliance
           make smoke
 
-      - name: Upload qcow2 as workflow artifact
-        # PR-2c will replace this with `gh release upload` to GitHub
-        # Releases. Keeping the workflow-artifact upload for now so
-        # the operator can download + import locally to validate
-        # before committing to publish.
+      - name: Upload qcow2 as workflow artifact (debug copy)
+        # 14-day retention so operators can download + boot it
+        # locally to investigate if the published release looks
+        # off. Not the canonical artifact — that's the GitHub
+        # Releases upload below.
         if: steps.smoke.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
@@ -101,6 +103,74 @@ jobs:
           path: appliance/out/kvm-center-appliance-*.qcow2
           if-no-files-found: error
           retention-days: 14
+
+      # PR-2c: sign + publish to GitHub Releases.
+      - name: Compute checksums + GPG-sign
+        if: steps.smoke.outcome == 'success'
+        env:
+          APPLIANCE_SIGNING_KEY: ${{ secrets.APPLIANCE_SIGNING_KEY }}
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          set -e
+          cd appliance/out
+          # SHA256 over just the qcow2 — single line, machine-parseable.
+          sha256sum "kvm-center-appliance-${V}.qcow2" > SHA256SUMS
+          cat SHA256SUMS
+          # Import the maintainer GPG key from secret store.
+          export GNUPGHOME=$(mktemp -d)
+          chmod 700 "$GNUPGHOME"
+          echo "$APPLIANCE_SIGNING_KEY" | gpg --batch --import
+          KEYID=$(gpg --list-secret-keys --with-colons \
+                  | awk -F: '/^sec:/{print $5; exit}')
+          echo "::notice::signing with key $KEYID"
+          gpg --batch --yes --pinentry-mode loopback \
+              --local-user "$KEYID" \
+              --detach-sign --armor \
+              --output SHA256SUMS.asc SHA256SUMS
+          gpg --verify SHA256SUMS.asc SHA256SUMS
+          rm -rf "$GNUPGHOME"
+
+      - name: Install gh CLI
+        if: steps.smoke.outcome == 'success'
+        run: |
+          # Ubuntu image often ships gh; install if missing.
+          which gh >/dev/null 2>&1 || {
+            type -p curl >/dev/null || sudo apt-get install -y curl
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list
+            sudo apt-get update -qq
+            sudo apt-get install -y gh
+          }
+
+      - name: Publish to GitHub Releases
+        # The git tag (e.g. v5.49.3) must already exist on the GitHub
+        # mirror. PR-0a's catch-up brought the mirror current; the
+        # subsequent docker-publish workflow's [deploy] CD pushes
+        # new tags as part of the deploy flow. If the tag is
+        # missing here we surface that loudly instead of creating
+        # a release on a non-existent tag.
+        if: steps.smoke.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASES_TOKEN }}
+          GH_REPO: donovanm21/kvmcenter
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          set -e
+          cd appliance/out
+          # Verify the tag exists on the mirror.
+          if ! gh release view "$V" >/dev/null 2>&1; then
+            echo "::warning::release $V not found on GitHub — creating it (placeholder; the docker-publish [deploy] flow normally creates the tag)"
+            gh release create "$V" \
+              --title "$V" \
+              --notes "kvm-center release $V. See server/docs/changelog.md for details."
+          fi
+          gh release upload "$V" \
+            "kvm-center-appliance-${V}.qcow2" \
+            "SHA256SUMS" \
+            "SHA256SUMS.asc" \
+            --clobber
+          echo "::notice::uploaded qcow2 + SHA256SUMS + .asc to https://github.com/donovanm21/kvmcenter/releases/tag/$V"
 
       - name: Summary
         if: always()
@@ -114,7 +184,8 @@ jobs:
           version:  $V
           build:    ${{ steps.smoke.outcome == 'success' && 'ok' || 'see logs' }}
           smoke:    ${{ steps.smoke.outcome }}
-          artifact: appliance/out/kvm-center-appliance-$V.qcow2
-                    (workflow artifact — PR-2c uploads to GitHub Releases)
+          artifact: kvm-center-appliance-$V.qcow2 + SHA256SUMS + SHA256SUMS.asc
+          release:  https://github.com/donovanm21/kvmcenter/releases/tag/$V
+          verify:   gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS
           ────────────────────────────────
           EOF
