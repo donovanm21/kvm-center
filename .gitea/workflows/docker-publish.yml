@@ -32,7 +32,12 @@ jobs:
 
   publish:
     needs: gate
-    if: needs.gate.outputs.publish == 'true'
+    # The gate runs in workflow_call context when reached via `uses:`,
+    # so its `workflow_dispatch` short-circuit never fires for callers
+    # that are themselves manually dispatched. Honour the dispatch
+    # event here instead so the operator's "re-run publish manually"
+    # path actually executes.
+    if: needs.gate.outputs.publish == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

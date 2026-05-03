@@ -41,7 +41,11 @@ jobs:
 
   build:
     needs: gate
-    if: needs.gate.outputs.publish == 'true'
+    # See docker-publish.yml for the rationale: the gate's
+    # workflow_dispatch short-circuit only fires when the gate workflow
+    # itself is dispatched, not when a caller is. Honouring the
+    # dispatch event here keeps "re-run publish manually" working.
+    if: needs.gate.outputs.publish == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

@@ -10,7 +10,12 @@ name: should-publish
 #   - Minor / major version bump → publish.
 #   - Patch bump → publish only if commit subject contains
 #     [publish].
-#   - workflow_dispatch caller bypasses entirely (sets publish=true).
+#   - workflow_dispatch overrides: each caller workflow's publish-job
+#     `if:` honours `github.event_name == 'workflow_dispatch'` so that
+#     a manual re-run forces publish regardless of gate verdict. The
+#     hard-coded "true" output below only applies if THIS workflow is
+#     dispatched directly — when invoked via `uses:` (workflow_call)
+#     the gate runs in workflow_call context and evaluates the script.
 #
 # All real logic lives in scripts/should-publish.sh so it can be
 # unit-tested locally (scripts/should-publish_test.sh, 9 cases).
@@ -48,9 +53,11 @@ jobs:
         id: gate
         run: |
           set -eu
-          # On manual dispatch we always publish — see workflow_dispatch
-          # output above. This job still runs for telemetry but the
-          # downstream caller already short-circuits.
+          # If THIS workflow is dispatched directly (rare — usually the
+          # operator dispatches docker-publish or appliance-build), short
+          # the gate and emit publish=true. Callers reach us via
+          # workflow_call, so for them this branch never fires; their
+          # publish-job `if:` handles the dispatch override instead.
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
             echo "::notice::publish=true (workflow_dispatch override)"

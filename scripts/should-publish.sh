@@ -8,15 +8,18 @@
 # Logic (per design spec §"Trigger logic detail"):
 #   - VERSION unchanged → skip.
 #   - Minor / major bump → publish.
-#   - Patch bump → publish only if commit subject contains [publish].
+#   - Patch bump → publish only if commit subject contains [publish]
+#     OR [deploy]. Deploys imply we want public artifacts; the two
+#     gate tags are coupled for patch releases.
 #   - workflow_dispatch path bypasses this entirely (caller checks).
 #
 # Usage:
 #   should-publish.sh <prev-version> <cur-version> <commit-subject>
 #
 # Examples (covered by should-publish_test.sh):
-#   v5.48.7 v5.48.8 "fix(...)"               → false  (patch, no [publish])
-#   v5.48.7 v5.48.8 "fix(...) [publish]"     → true   (patch, override)
+#   v5.48.7 v5.48.8 "fix(...)"               → false  (patch, no tag)
+#   v5.48.7 v5.48.8 "fix(...) [publish]"     → true   (patch, [publish])
+#   v5.48.7 v5.48.8 "fix(...) [deploy]"      → true   (patch, [deploy])
 #   v5.48.8 v5.49.0 "release(...)"           → true   (minor bump)
 #   v5.48.8 v6.0.0  "release(...)"           → true   (major bump)
 #   v5.48.8 v5.48.8 "..."                    → false  (no change)
@@ -44,8 +47,11 @@ prev_minor=$(printf '%s' "$prev" | sed 's/^v//' | cut -d. -f1-2)
 cur_minor=$(printf '%s' "$cur"  | sed 's/^v//' | cut -d. -f1-2)
 
 # Same major.minor → patch bump → publish only if subject says so.
+# Either [publish] or [deploy] satisfies the gate: a [deploy] commit
+# is shipping to prod, so the matching public artifacts (Docker Hub
+# image, appliance qcow2) should ship in lockstep.
 if [ "$prev_minor" = "$cur_minor" ]; then
-  if printf '%s' "$subject" | grep -q '\[publish\]'; then
+  if printf '%s' "$subject" | grep -Eq '\[(publish|deploy)\]'; then
     echo "true"
   else
     echo "false"

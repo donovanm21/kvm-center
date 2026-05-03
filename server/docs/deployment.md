@@ -83,6 +83,35 @@ docker compose logs -f server
 docker compose pull && docker compose up -d
 ```
 
+#### Auto-update with Watchtower
+
+If you're tracking a rolling tag (`:latest`, `:5`, `:5.49`) and want
+the host to pick up new pushes automatically, add Watchtower:
+
+```yaml
+services:
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --label-enable --cleanup --interval 3600
+```
+
+…and label your kvm-center service so Watchtower opts it in:
+
+```yaml
+  server:
+    image: thedon21/kvm-center:5.49
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+```
+
+Watchtower polls Docker Hub once an hour, pulls a newer manifest if
+the rolling tag has moved, and restarts the container with the same
+mounts/env. Pin `:vX.Y.Z` instead of a rolling tag if you don't want
+automatic upgrades.
+
 ### Tag channels
 
 | Tag | Tracks |
@@ -238,6 +267,41 @@ release will land an in-place upgrade flow that swaps just the
 binary; for now, use the Docker path if you want zero-downtime
 upgrades.
 
+#### Notify-on-release (atom feed)
+
+There's no in-place auto-upgrade for the appliance yet, but you can
+have a host poll the GitHub Releases atom feed and ping you when a
+newer version is published. Drop this in `/etc/systemd/system`:
+
+```ini
+# kvm-center-release-check.service
+[Unit]
+Description=Check for new kvm-center releases
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c '\
+  latest=$(curl -fsSL https://api.github.com/repos/donovanm21/kvmcenter/releases/latest | sed -n "s/.*\"tag_name\": \"\\([^\"]*\\)\".*/\\1/p"); \
+  current=$(kvm-center-server --version | awk "{print \\$NF}"); \
+  [ "$latest" = "$current" ] || logger -t kvm-center "new release available: $latest (running $current)"'
+
+# kvm-center-release-check.timer
+[Unit]
+Description=Hourly kvm-center release-check
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+`systemctl enable --now kvm-center-release-check.timer`. New releases
+land in `journalctl -t kvm-center`; from there, run the upgrade
+recipe above.
+
 ### Verifying the qcow2 boots what it claims
 
 ```sh
@@ -258,6 +322,42 @@ curl -fsSLk https://<your-kvm-center-server>:8190/downloads/install.sh | sudo ba
 The script auto-detects whether you're on a hypervisor (installs
 the agent) or a guest VM (installs kvm-tools). Custom flags + the
 full inventory are documented in [Getting started](getting-started).
+
+## Verifying releases
+
+Every release ships with a chain-of-custody artifact:
+
+| Artefact | Signed by | Verified with |
+|---|---|---|
+| Docker image (`thedon21/kvm-center:vX.Y.Z`) | cosign keyless + key-pair | [`cosign verify`](#docker) |
+| Appliance qcow2 + `SHA256SUMS` | maintainer GPG key | [`gpg --verify`](#kvm-appliance) + `sha256sum -c` |
+| Bare-metal `kvm-center-server` binary | embedded build SHA | `kvm-center-server --version` matches the release tag |
+
+The two public keys live in the repo so they're versioned alongside
+the code that signed against them:
+
+- cosign public key: [`docs/security/cosign.pub`](https://github.com/donovanm21/kvmcenter/blob/main/docs/security/cosign.pub)
+- maintainer GPG key: [`docs/security/maintainer.pub.asc`](https://github.com/donovanm21/kvmcenter/blob/main/docs/security/maintainer.pub.asc)
+
+Quick reference (the install-path sections above also include these
+inline so you don't have to scroll):
+
+```sh
+# Docker image
+cosign verify \
+  --key https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/security/cosign.pub \
+  thedon21/kvm-center:vX.Y.Z
+
+# Appliance qcow2
+curl -fsSL https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/security/maintainer.pub.asc \
+  | gpg --import
+gpg --verify SHA256SUMS.asc SHA256SUMS
+sha256sum -c SHA256SUMS
+```
+
+If either check fails, treat the artefact as compromised — don't
+install it, file an issue with the failing output, and pull again
+from a different network path.
 
 ## Choosing a path
 

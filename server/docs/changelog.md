@@ -10,6 +10,42 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.49.4 — publish-gate fix + deployment polish
+
+First v5.49.x release that actually exercises the publish pipeline
+end-to-end: v5.49.3's `[deploy]` commit was rejected by the gate
+(patch bumps required `[publish]` literally), so v5.49.3 deployed
+to prod but its Docker Hub image and appliance qcow2 never
+shipped. v5.49.4 fixes the gate and ships those artefacts under the
+corrected logic.
+
+Gate changes:
+
+- `[deploy]` in a patch-bump commit subject now implies `[publish]`.
+  Deploys ship to prod; the matching public artefacts (Hub image,
+  appliance qcow2) ship alongside. Either tag — or both — works.
+- `workflow_dispatch` re-runs of `docker-publish` and
+  `appliance-build` now bypass the gate verdict (previously the
+  gate's dispatch override fired only when the gate workflow itself
+  was dispatched, which never happens for callers).
+- `scripts/should-publish_test.sh` covers both new paths.
+
+Deployment-doc polish:
+
+- **Watchtower snippet** for Docker users on a rolling tag —
+  drop-in compose service + the opt-in label that lets it pull
+  fresh kvm-center images automatically.
+- **Notify-on-release timer** for appliance users — systemd
+  oneshot + timer that polls the GitHub Releases atom feed once an
+  hour and logs to `journalctl -t kvm-center` when a newer tag
+  drops.
+- **Verifying releases** subsection consolidates cosign + GPG flows
+  in one place, with a chain-of-custody table for each artefact
+  type.
+
+Carries `[publish]` and `[deploy]` so the publish gate fires under
+its own corrected rules.
+
 ## v5.49.3 — KVM appliance qcow2 on GitHub Releases
 
 Operators can now stand up a kvm-center control plane in three

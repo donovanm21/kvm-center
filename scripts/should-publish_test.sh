@@ -35,6 +35,14 @@ assert "patch bump, with [publish]" "true" "$got"
 got=$("$SCRIPT" v5.48.7 v5.48.8 "fix(...): X [deploy] [publish]")
 assert "patch bump, [deploy] + [publish]" "true" "$got"
 
+# Patch bump with [deploy] only → true ([deploy] implies [publish]).
+got=$("$SCRIPT" v5.48.7 v5.48.8 "release(v5.48.8): hotfix [deploy]")
+assert "patch bump, [deploy] alone implies [publish]" "true" "$got"
+
+# Patch bump with [deploy] embedded in a larger subject → true.
+got=$("$SCRIPT" v5.49.3 v5.49.4 "release(v5.49.4): publish-gate fix [deploy]")
+assert "patch bump, [deploy] tail of subject" "true" "$got"
+
 # Minor bump → true.
 got=$("$SCRIPT" v5.48.8 v5.49.0 "release(v5.49.0): docker hub publish")
 assert "minor bump" "true" "$got"
