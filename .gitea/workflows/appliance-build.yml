@@ -1,0 +1,120 @@
+name: appliance-build
+
+# v5.49 PR-2b. Builds the kvm-center qcow2 appliance and uploads
+# it to GitHub Releases for the published version. Gated by the
+# v5.49 publish-gate (PR-1a) — same trigger logic as
+# docker-publish.yml: minor / major bumps fire automatically;
+# patch bumps need [publish] in the subject; workflow_dispatch
+# overrides.
+#
+# Pipeline:
+#   1. should-publish gate
+#   2. apt install libguestfs-tools qemu-utils cloud-image-utils
+#      qemu-system-x86 ovmf
+#   3. make -C appliance build  (calls appliance/build.sh; ~15 min
+#      with TCG fallback when the runner has no /dev/kvm)
+#   4. make -C appliance smoke  (boots the qcow2; polls
+#      /api/version for up to 120 s; uses TCG if /dev/kvm absent
+#      — slower but correct)
+#   5. sha256sum + gpg --detach-sign over SHA256SUMS
+#   6. gh release upload to donovanm21/kvmcenter at the version tag
+#      (PR-2c) — that step is added in the next PR; this PR ships
+#      build + smoke only so we can iterate on the build flakiness
+#      without churning the release pipeline.
+#
+# Runner requirements: ubuntu-latest. /dev/kvm is preferred
+# (massive speed-up for both virt-builder + smoke) but not
+# strictly required — the workflow falls back to TCG. Set
+# `runs-on: [self-hosted, kvm]` in operator-managed CI infra if
+# you have a runner with /dev/kvm passthrough.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  gate:
+    uses: ./.gitea/workflows/should-publish.yml
+
+  build:
+    needs: gate
+    if: needs.gate.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: ver
+        run: |
+          v=$(cat server/VERSION | tr -d '[:space:]')
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "::notice::building appliance $v"
+
+      - name: Install build toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libguestfs-tools libguestfs-tools-c \
+            qemu-utils qemu-system-x86 \
+            cloud-image-utils \
+            ovmf
+          # libguestfs-tools-c isn't in older Ubuntu repos; tolerate.
+          # Detect /dev/kvm — if present we'll use accel=kvm:tcg.
+          if [ -e /dev/kvm ]; then
+            echo "::notice::/dev/kvm present — KVM acceleration available"
+          else
+            echo "::warning::/dev/kvm absent — falling back to TCG (~3-5x slower)"
+            # libguestfs respects this; qemu uses accel=kvm:tcg fallback.
+            echo "LIBGUESTFS_BACKEND_SETTINGS=force_tcg" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up Docker buildx
+        uses: docker/setup-buildx-action@v3
+        # The appliance build re-uses Dockerfile.server to extract the
+        # binary + dist; needs Docker available.
+
+      - name: Build appliance qcow2
+        run: |
+          cd appliance
+          make build
+          ls -lh out/
+
+      - name: Smoke test the qcow2
+        id: smoke
+        run: |
+          cd appliance
+          make smoke
+
+      - name: Upload qcow2 as workflow artifact
+        # PR-2c will replace this with `gh release upload` to GitHub
+        # Releases. Keeping the workflow-artifact upload for now so
+        # the operator can download + import locally to validate
+        # before committing to publish.
+        if: steps.smoke.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kvm-center-appliance-${{ steps.ver.outputs.version }}
+          path: appliance/out/kvm-center-appliance-*.qcow2
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Summary
+        if: always()
+        env:
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          cat <<EOF
+          ────────────────────────────────
+          appliance-build summary
+          ────────────────────────────────
+          version:  $V
+          build:    ${{ steps.smoke.outcome == 'success' && 'ok' || 'see logs' }}
+          smoke:    ${{ steps.smoke.outcome }}
+          artifact: appliance/out/kvm-center-appliance-$V.qcow2
+                    (workflow artifact — PR-2c uploads to GitHub Releases)
+          ────────────────────────────────
+          EOF
