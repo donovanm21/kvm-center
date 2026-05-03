@@ -92,19 +92,37 @@ select:focus-visible {
    here makes Chrome on Linux honour the dark treatment. */
 select option { background: var(--bg-input); color: var(--text-body); }
 
-/* Scrollbars — fully hidden everywhere (v5.48.6).
-   The slim translucent style we shipped in v5.48.4 still showed
-   as a 6 px strip on every scrollable surface, which the user
-   reported as visual noise. macOS already draws its own overlay
-   scrollbar during active scroll; Windows / Linux keep
-   wheel + keyboard + drag-scroll without a visible track. Apply
-   globally so data tables, modals, and shell containers all
-   lose the chrome. */
-* { scrollbar-width: none; }
-*::-webkit-scrollbar { width: 0; height: 0; display: none; }
-*::-webkit-scrollbar-track,
-*::-webkit-scrollbar-thumb,
-*::-webkit-scrollbar-corner { display: none; }
+/* Scrollbars — themed (v5.48.7).
+   v5.48.6 hid all scrollbars; the operator reported that without
+   any visual cue users couldn't tell content was clipped. Bring
+   them back in the brand palette: 10 px track on --bg-input,
+   8 px effective thumb on --border (rounded; 1 px inset border
+   painted in the track colour so the thumb floats), accent on
+   hover. scroll-gutter: stable on the always-on shell containers
+   reserves the lane so content doesn't reflow when the scrollbar
+   appears or hides. */
+* { scrollbar-width: thin; scrollbar-color: var(--border) var(--bg-input); }
+*:hover { scrollbar-color: var(--accent-dim) var(--bg-input); }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track {
+  background: var(--bg-input);
+  border-left: 1px solid var(--border-subtle);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 1px solid var(--bg-input);  /* 1 px inset painted in track colour so thumb floats */
+  border-radius: 6px;
+  min-height: 30px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+::-webkit-scrollbar-thumb:active { background: var(--accent); }
+::-webkit-scrollbar-corner { background: var(--bg-input); }
+
+/* Reserve gutter on shell containers so content layout doesn't
+   reflow when the scrollbar paints. Modals and data tables
+   stay gutter-less so a brief overflow doesn't widen them. */
+.main, .sidebar, .recent-tasks-list { scrollbar-gutter: stable; }
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { color: var(--accent-hover); }
