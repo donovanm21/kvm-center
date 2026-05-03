@@ -10,6 +10,44 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.49.3 — KVM appliance qcow2 on GitHub Releases
+
+Operators can now stand up a kvm-center control plane in three
+minutes by importing a pre-built, signed qcow2 — no Docker, no
+distro picks, no TLS bootstrap. Same kvm-center as the bare-metal
+and Docker paths; the appliance is just packaging.
+
+What ships:
+
+- **Pre-built qcow2** on every release: Rocky Linux 9 minimal,
+  MongoDB + kvm-center pre-installed, a one-shot first-boot
+  service that generates a random admin password and prints it to
+  the libvirt console + SSH MOTD. `virt-install --import` and
+  you're up.
+- **Signed releases on GitHub** — every qcow2 ships with a
+  `SHA256SUMS` file plus a GPG-detached signature
+  (`SHA256SUMS.asc`). Maintainer public key is at
+  [`docs/security/maintainer.pub.asc`](https://github.com/donovanm21/kvmcenter/blob/main/docs/security/maintainer.pub.asc);
+  verify with `gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS`.
+- **Auto-publish pipeline** — the v5.49 publish-gate from PR-1a
+  now drives both the Docker Hub publish and the appliance build
+  on the same commit. Minor / major bumps fire automatically;
+  patches need `[publish]` in the subject; `workflow_dispatch`
+  always works.
+- **Operator quickstart** in [Deployment](deployment#kvm-appliance)
+  and the front-page README — copy-paste recipe from download
+  through `virsh console`.
+
+CI built the qcow2 with libguestfs + virt-builder against
+Rocky 9.4 cloud, smoke-tested it with cloud-init + qemu user-mode
+networking, and published it to
+[`donovanm21/kvmcenter` releases](https://github.com/donovanm21/kvmcenter/releases)
+alongside the existing Docker Hub `:latest` / `:5.49` / `:v5.49.3`
+tags.
+
+Carries `[deploy]` to ship the appliance + Docker images on the
+same commit.
+
 ## v5.49.2 — smoke test via docker exec + curl in image
 
 v5.49.1 fixed the smoke test's port-mapping but it still couldn't
