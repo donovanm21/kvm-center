@@ -10,6 +10,22 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.49.8 — rebake with install.sh stdout-leak fix
+
+The install.sh fix from PR #66 landed on `main` after the v5.49.7
+binary was already built, so the `/downloads/install.sh` endpoint kept
+serving the broken (pre-fix) version. Guest VMs trying to install
+kvm-tools saw `cp: cannot stat '<colored-progress-text>...': No such
+file or directory` because `info()`'s ANSI output was leaking into
+the `$(fetch_or_local …)` capture.
+
+v5.49.8 rebuilds the binary + image so the embedded install.sh in
+`/app/dist/` matches main. No code changes vs v5.49.7 outside of
+`scripts/install.sh` itself.
+
+Carries `[publish]` and `[deploy]` so the publish gate fires and
+prod rolls forward.
+
 ## v5.49.7 — UI polish: migration toast + VM-list dedup + kvm-tools guard
 
 Fixes three small UI rough edges caught during a live OFFLINE_MIGRATE
