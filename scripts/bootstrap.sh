@@ -517,26 +517,44 @@ print(f"  OK — {len(files)} files verified")
 PYEOF
     echo "==> stopping stack"
     docker compose down || true
-    DATA_DIR="/var/lib/kvm-center"
-    TLS_DIR="$DATA_DIR/tls"
-    CA_DIR="$DATA_DIR/ca"
-    mkdir -p "$TLS_DIR" "$CA_DIR"
-    if [[ -d "$STAGE/tls" ]]; then
-      echo "==> restoring TLS material to $TLS_DIR"
-      cp -a "$STAGE/tls/." "$TLS_DIR/"
-      chmod 0600 "$TLS_DIR"/*.key 2>/dev/null || true
+    # The server reads from the named volume `kvm-center-data` (mounted at
+    # /var/lib/kvm-center inside the container), NOT from the host's
+    # /var/lib/kvm-center. v5.49.x and earlier wrote to the host path —
+    # that path is read by no-one and the restore looked successful while
+    # changing nothing. Restore now stages files into a one-shot helper
+    # container that mounts the actual volume.
+    PROJECT_NAME="$(basename "$(pwd)")"
+    DATA_VOL="${PROJECT_NAME}_kvm-center-data"
+    if ! docker volume inspect "$DATA_VOL" >/dev/null 2>&1; then
+      echo "==> creating $DATA_VOL (fresh restore target)"
+      docker volume create "$DATA_VOL" >/dev/null
     fi
-    if [[ -d "$STAGE/ca" ]]; then
-      echo "==> restoring CA + grant-signer to $CA_DIR"
-      cp -a "$STAGE/ca/." "$CA_DIR/"
-      chmod 0600 "$CA_DIR"/*.key  2>/dev/null || true
-      chmod 0600 "$CA_DIR"/*.seed 2>/dev/null || true
-    fi
-    if [[ -f "$STAGE/store.json" ]]; then
-      echo "==> restoring store.json to $DATA_DIR/data.json"
-      cp "$STAGE/store.json" "$DATA_DIR/data.json"
-      chmod 0600 "$DATA_DIR/data.json"
-    fi
+    echo "==> restoring into volume $DATA_VOL"
+    # Mount STAGE read-only at /restore and the data volume read-write at /target,
+    # then copy each piece in. Permissions match what the server expects.
+    docker run --rm \
+      -v "$STAGE:/restore:ro" \
+      -v "$DATA_VOL:/target" \
+      alpine:3.21 sh -c '
+        set -e
+        mkdir -p /target/tls /target/ca
+        if [ -d /restore/tls ]; then
+          echo "  restoring TLS material"
+          cp -a /restore/tls/. /target/tls/
+          chmod 0600 /target/tls/*.key 2>/dev/null || true
+        fi
+        if [ -d /restore/ca ]; then
+          echo "  restoring CA + grant-signer"
+          cp -a /restore/ca/. /target/ca/
+          chmod 0600 /target/ca/*.key  2>/dev/null || true
+          chmod 0600 /target/ca/*.seed 2>/dev/null || true
+        fi
+        if [ -f /restore/store.json ]; then
+          echo "  restoring store.json -> data.json"
+          cp /restore/store.json /target/data.json
+          chmod 0600 /target/data.json
+        fi
+      '
     echo ""
     echo "Restore complete. Next steps:"
     echo "  1. If you're using Mongo and want the restored store to be"
