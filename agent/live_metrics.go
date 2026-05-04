@@ -64,11 +64,10 @@ func startLiveMetricsStreamer(ctx context.Context, serverURL string) {
 }
 
 func runOneLiveMetricsStream(ctx context.Context, grpcAddr, hostID string) error {
-	// Server multiplexes gRPC on its TLS port (:8190) — same self-signed
-	// cert that makes the HTTP client run with InsecureSkipVerify. Match
-	// that trust model here; operator upgrades to a trusted cert via
-	// Settings → TLS when they're ready.
-	tlsCfg := &tls.Config{InsecureSkipVerify: true} //nolint:gosec // homelab trust model, see agent/main.go
+	// Server multiplexes gRPC on its TLS port (:8190). Use the shared
+	// trust config so KVM_CENTER_AGENT_VERIFY_TLS / KVM_CENTER_SERVER_CA
+	// apply uniformly across HTTP + gRPC.
+	tlsCfg := agentServerTLSConfig()
 	if leaf, ok := agentClientCert(); ok {
 		tlsCfg.Certificates = []tls.Certificate{leaf}
 	}

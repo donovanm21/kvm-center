@@ -11,7 +11,6 @@ package main
 // install, operator hasn't curated yet).
 
 import (
-	"crypto/tls"
 	"io"
 	"log"
 	"net/http"
@@ -49,7 +48,7 @@ func startKnownHostsSync(serverURL string) {
 func pullKnownHosts(serverURL string) error {
 	client := &http.Client{
 		Timeout:   10 * time.Second,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, //nolint:gosec
+		Transport: &http.Transport{TLSClientConfig: agentServerTLSConfig()},
 	}
 	resp, err := client.Get(serverURL + "/api/agents/ssh-known-hosts")
 	if err != nil {

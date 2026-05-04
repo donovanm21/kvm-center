@@ -385,3 +385,63 @@ from a different network path.
 All four paths give you the same kvm-center; switching later is just
 "point the new install at the same Mongo (or restore a backup) and
 shut down the old one."
+
+## Production trust model — agent TLS verification
+
+The default agent build trusts any TLS certificate the server presents.
+That's intentional for first-boot homelab pairing: the server's auto-
+generated self-signed cert lands at `/var/lib/kvm-center/ca/server.crt`
+on first run, and a fleet of agents reaching it via `https://kvm-center:8190`
+can pair without needing the operator to push the CA out-of-band.
+
+For any deployment where the server has a real CA-signed certificate
+(public Let's Encrypt cert, internal corporate CA, ACME-issued cert
+from a private root), you should flip agents to verifying mode:
+
+```ini
+# /etc/kvm-center/agent.env  (read by the systemd unit)
+KVM_CENTER_SERVER=https://kvm-center.example.com:8190
+KVM_CENTER_AGENT_VERIFY_TLS=1
+# Optional — point at a CA bundle if the cert chain isn't in the
+# system trust store (most internal CAs):
+KVM_CENTER_SERVER_CA=/etc/kvm-center/server-ca.pem
+```
+
+Restart the agent (`systemctl restart kvm-center-agent`) and check the
+journal — you should see:
+
+```
+kvm-center-agent: TLS verification ENABLED for https://kvm-center.example.com:8190 (system trust store)
+```
+
+instead of the default
+
+```
+⚠ kvm-center-agent: TLS verification DISABLED for ...
+```
+
+This applies uniformly to the agent's HTTP telemetry POSTs, gRPC
+migration-progress stream, gRPC live-metrics stream, and known-hosts
+sync — the trust decision is made once at startup and cached in
+`agent/tls_trust.go`.
+
+### What this protects against
+
+A passive attacker on the network between agent and server cannot
+read telemetry payloads — that's true even with the homelab default,
+because the channel is TLS, just unverified. Verification specifically
+defends against an **active** attacker who can intercept TCP and present
+their own certificate (BGP hijack, ARP poison on a shared LAN segment,
+malicious switch/router). With `InsecureSkipVerify: true`, the agent
+would silently trust the impostor and stream telemetry, console-token
+secrets, and (in future versions) command outcomes to it.
+
+### What's still on the agent's :8081 plain-HTTP listener
+
+The reverse direction — server→agent commands — currently uses plain
+HTTP on the agent's `:8081` listener. For PCI/HIPAA/SOC2 deployments
+that need TLS in both directions today, the supported pattern is to
+front each agent with stunnel/nginx/Caddy on the same hypervisor,
+terminate TLS, forward to localhost:8081, and put the agent's :8081
+on the loopback interface only. Native TLS on the agent listener is
+tracked as future work.

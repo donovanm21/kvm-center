@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -140,11 +139,19 @@ func main() {
 }
 
 // httpClient is the shared client used for all outbound posts to the
-// kvm-center control plane. When the server URL is https:// we set
-// InsecureSkipVerify so agents can reach the server's auto-generated
-// self-signed cert without per-agent CA provisioning — necessary for
-// homelab convenience but logged at startup (and on every send) as
-// INSECURE so the operator can upgrade to a trusted cert deliberately.
+// kvm-center control plane.
+//
+// Default trust model (homelab convenience): when the server URL is
+// https:// we set InsecureSkipVerify so agents can reach the server's
+// auto-generated self-signed cert without per-agent CA provisioning.
+// Logged at startup as INSECURE.
+//
+// Production trust model (opt-in): when KVM_CENTER_AGENT_VERIFY_TLS=1
+// the agent verifies the server cert against either the system trust
+// store (default) or the PEM bundle at $KVM_CENTER_SERVER_CA. Use this
+// in any deployment where the server has a real CA-signed cert (Let's
+// Encrypt, internal corporate CA, etc.) — gives you man-in-the-middle
+// protection on the telemetry channel.
 var httpClient = &http.Client{}
 var tlsInsecureWarningShown bool
 
@@ -153,16 +160,23 @@ func initHTTPClient(serverURL string) {
 		httpClient = &http.Client{Timeout: 10 * time.Second}
 		return
 	}
+	tlsCfg := agentServerTLSConfig()
 	httpClient = &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // homelab trust model: see comment above
-		},
+		Timeout:   10 * time.Second,
+		Transport: &http.Transport{TLSClientConfig: tlsCfg},
 	}
-	if !tlsInsecureWarningShown {
+	if !tlsCfg.InsecureSkipVerify {
+		if caPath := os.Getenv("KVM_CENTER_SERVER_CA"); caPath != "" {
+			log.Printf("kvm-center-agent: TLS verification ENABLED for %s (CA: %s)", serverURL, caPath)
+		} else {
+			log.Printf("kvm-center-agent: TLS verification ENABLED for %s (system trust store)", serverURL)
+		}
+	}
+	if tlsCfg.InsecureSkipVerify && !tlsInsecureWarningShown {
 		log.Printf("⚠ kvm-center-agent: TLS verification DISABLED for %s — trusting any certificate. "+
 			"Acceptable for a homelab where the server uses the auto-generated self-signed cert; "+
-			"install a trusted cert via Settings → TLS and swap the URL when you're ready.", serverURL)
+			"set KVM_CENTER_AGENT_VERIFY_TLS=1 (and KVM_CENTER_SERVER_CA=/path/to/ca.pem if needed) "+
+			"to enable verification.", serverURL)
 		tlsInsecureWarningShown = true
 	}
 }

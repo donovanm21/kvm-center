@@ -60,10 +60,10 @@ func OpenMigrationProgressReporter(parent context.Context, grpcAddr string) (*Mi
 	}
 	// Same TLS trust model as the HTTP client + live metrics stream:
 	// server multiplexes gRPC on its TLS port (:8190) under the
-	// auto-generated self-signed cert. InsecureSkipVerify matches
-	// the homelab pairing story; operator swaps to a trusted cert
-	// via Settings → TLS when ready.
-	tlsCfg := &tls.Config{InsecureSkipVerify: true} //nolint:gosec // see agent/main.go
+	// auto-generated self-signed cert. InsecureSkipVerify is the
+	// homelab default; KVM_CENTER_AGENT_VERIFY_TLS=1 flips it to
+	// strict verification (with optional KVM_CENTER_SERVER_CA bundle).
+	tlsCfg := agentServerTLSConfig() //nolint:gosec // see agent/main.go
 	if leaf, ok := agentClientCert(); ok {
 		tlsCfg.Certificates = []tls.Certificate{leaf}
 	}
