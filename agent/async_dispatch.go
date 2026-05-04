@@ -5,7 +5,7 @@ package main
 // Slow actions (DELETE_SNAPSHOT, MIGRATE, OFFLINE_MIGRATE, etc.)
 // previously held the server's HTTP call open for the duration —
 // minutes for migrations, occasionally tens of minutes for big
-// snapshots. The 2026-04-30 hvnode01 incident showed this is the
+// snapshots. The 2026-04-30 host-a incident showed this is the
 // architectural fault line: anything taking longer than the
 // server's per-action HTTP timeout looked like a failure even
 // when libvirt completed the work.

@@ -55,7 +55,7 @@ a migration target.
 **Body:**
 ```json
 {
-  "host_id":   "hvnode02",
+  "host_id":   "host-b",
   "vm_uuid":   "uuid-...",
   "vm_name":   "VM1",
   "action":    "START|STOP|FORCESTOP|RESTART|POWER_CYCLE|

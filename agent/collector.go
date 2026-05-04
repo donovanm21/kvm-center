@@ -676,7 +676,7 @@ func virshDomInfo(name string) map[string]string {
 //
 // Before reading, we set --period 5 on the domain so the virtio-balloon
 // driver refreshes its stats every 5 s. Without this, `dommemstat` can
-// return cache values many DAYS old (ark-srv01 was reading 137 MB on a
+// return cache values many DAYS old (a long-running VM was reading 137 MB on a
 // 10 GB-used VM because the last_update was 6 days in the past).
 // Setting period is idempotent and cheap; calling it every telemetry
 // tick is fine.
@@ -725,7 +725,7 @@ func virshDomMemUsed(name string) (uint64, bool) {
 	// Preferred formula: active (non-cache) usage — matches what
 	// monitoring dashboards and `free -h | awk '{used-buff/cache}'`
 	// show. The previous (available - unused) double-counted page
-	// cache: ark-srv01 with 18 GB of reclaimable cache reported 45%
+	// cache: a long-running VM with 18 GB of reclaimable cache reported 45%
 	// usage when the real working set was ~20%.
 	if hasActual && hasUnused && hasDiskCaches && actual >= unused+diskCaches {
 		return (actual - unused - diskCaches) / 1024, true

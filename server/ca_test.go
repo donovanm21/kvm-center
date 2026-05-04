@@ -82,8 +82,8 @@ func TestSignHypervisorCSR_OverridesCNAndAddsSANs(t *testing.T) {
 	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
 
 	leafPEM, _, _, _, _, err := ca.SignHypervisorCSR(csrPEM,
-		"hvnode01.example",
-		[]string{"hvnode01"}, // extra DNS
+		"host-a.example",
+		[]string{"host-a"},   // extra DNS
 		[]string{"10.0.0.5"}, // IP SAN
 	)
 	if err != nil {
@@ -95,8 +95,8 @@ func TestSignHypervisorCSR_OverridesCNAndAddsSANs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if leaf.Subject.CommonName != "hvnode01.example" {
-		t.Errorf("CN override failed: got %q want %q", leaf.Subject.CommonName, "hvnode01.example")
+	if leaf.Subject.CommonName != "host-a.example" {
+		t.Errorf("CN override failed: got %q want %q", leaf.Subject.CommonName, "host-a.example")
 	}
 	// Subject override means the "attacker" CN is NOT present.
 	if leaf.Subject.CommonName == "attacker" {
@@ -105,7 +105,7 @@ func TestSignHypervisorCSR_OverridesCNAndAddsSANs(t *testing.T) {
 	// Host ID must appear as a DNS SAN in addition to the CN.
 	foundHostID := false
 	for _, d := range leaf.DNSNames {
-		if d == "hvnode01.example" || d == "hvnode01" {
+		if d == "host-a.example" || d == "host-a" {
 			foundHostID = true
 			break
 		}

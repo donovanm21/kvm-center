@@ -31,7 +31,7 @@ func TestAuditFilter_ResourceIsSubstring(t *testing.T) {
 	if !(AuditFilter{Resource: "0913b752"}).matches(ev) {
 		t.Error("substring resource match failed")
 	}
-	if (AuditFilter{Resource: "hvnode02"}).matches(ev) {
+	if (AuditFilter{Resource: "host-b"}).matches(ev) {
 		t.Error("unrelated substring matched")
 	}
 }

@@ -17,14 +17,14 @@ func TestLineProtocol_HostSample(t *testing.T) {
 	var buf bytes.Buffer
 	writeLineProtocol(&buf, metricSample{
 		Measurement: "kvm_center_host",
-		Tags:        map[string]string{"host_id": "hvnode01", "status": "online"},
+		Tags:        map[string]string{"host_id": "host-a", "status": "online"},
 		Fields: map[string]any{
 			"cpu_usage": 12.34,
 			"vm_count":  int64(4),
 		},
 		Timestamp: time.Unix(1_700_000_000, 0),
 	})
-	want := "kvm_center_host,host_id=hvnode01,status=online cpu_usage=12.34,vm_count=4i 1700000000000000000\n"
+	want := "kvm_center_host,host_id=host-a,status=online cpu_usage=12.34,vm_count=4i 1700000000000000000\n"
 	if got := buf.String(); got != want {
 		t.Errorf("line protocol mismatch:\n got: %q\nwant: %q", got, want)
 	}

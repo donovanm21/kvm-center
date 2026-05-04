@@ -48,7 +48,7 @@ const (
 	DefaultOpsDBPath = "/var/lib/kvm-center/operations.db"
 
 	// OpsRetentionTerminal is how long terminal rows are kept before
-	// GC. Long enough to investigate "what happened on hvnode01 last
+	// GC. Long enough to investigate "what happened on host-a last
 	// Friday" without bloating the file. ~100 KB across a busy
 	// fleet-week.
 	OpsRetentionTerminal = 7 * 24 * time.Hour

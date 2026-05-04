@@ -76,15 +76,15 @@ func TestEvaluate_PerIdentity(t *testing.T) {
 		return func(sev string) { fires = append(fires, tag+"/"+sev) }
 	}
 
-	evaluate(state, "hypervisor-cert", "hvnode01", 20, 30, 7, record("hv01"))
-	evaluate(state, "hypervisor-cert", "hvnode02", 60, 30, 7, record("hv02"))
+	evaluate(state, "hypervisor-cert", "host-a", 20, 30, 7, record("hv01"))
+	evaluate(state, "hypervisor-cert", "host-b", 60, 30, 7, record("hv02"))
 	if len(fires) != 1 || fires[0] != "hv01/warning" {
 		t.Fatalf("per-identity fires = %v", fires)
 	}
 
-	// hvnode01 stays warn, hvnode02 enters critical.
-	evaluate(state, "hypervisor-cert", "hvnode01", 20, 30, 7, record("hv01"))
-	evaluate(state, "hypervisor-cert", "hvnode02", 5, 30, 7, record("hv02"))
+	// host-a stays warn, host-b enters critical.
+	evaluate(state, "hypervisor-cert", "host-a", 20, 30, 7, record("hv01"))
+	evaluate(state, "hypervisor-cert", "host-b", 5, 30, 7, record("hv02"))
 	if len(fires) != 2 || fires[1] != "hv02/critical" {
 		t.Fatalf("independent transitions fires = %v", fires)
 	}

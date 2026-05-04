@@ -70,8 +70,8 @@ Full schemas are in TOOL.md; quick reference:
 
 ## Examples
 
-**"Show me VMs on hvnode02 that aren't running"**
-→ `list_vms` with `host=hvnode02`, filter `state != running` client-side,
+**"Show me VMs on host-b that aren't running"**
+→ `list_vms` with `host=host-b`, filter `state != running` client-side,
 print a short table.
 
 **"Power-cycle VM1 and watch"**

@@ -19,7 +19,7 @@ the deploy:
 
 ```sh
 # On the docker host
-git clone <repo> /opt/kvm-center
+git clone https://github.com/donovanm21/kvm-center /opt/kvm-center
 cd /opt/kvm-center
 scripts/bootstrap.sh --interactive
 ```

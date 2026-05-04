@@ -91,7 +91,7 @@ func LoadCachedConsoleSecret() {
 
 // SetHostIDForToken records this agent's host ID so the console-token
 // verifier can enforce that the token was issued FOR this host — a
-// token valid on hvnode01 shouldn't be accepted by hvnode02.
+// token valid on host-a shouldn't be accepted by host-b.
 func SetHostIDForToken(id string) {
 	consoleSecMu.Lock()
 	hostIDForToken = id

@@ -5,7 +5,7 @@
 # Otherwise falls back to the bundled docker image (Playwright + ffmpeg).
 #
 # Usage:
-#   KVMC_DEMO_URL=https://10.10.100.8:8290 scripts/record-walkthroughs.sh
+#   KVMC_DEMO_URL=https://demo.example.com:8290 scripts/record-walkthroughs.sh
 #   scripts/record-walkthroughs.sh 01-login-dashboard   # single flow
 #
 # Output: server/docs/media/<flow>.webp

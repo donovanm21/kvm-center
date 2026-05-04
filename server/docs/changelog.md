@@ -537,7 +537,7 @@ cancel buttons in the SPA, dashboard widget.
 A focused salvage release. When the server's HTTP call to an agent
 times out (or hits a transport error / 5xx), we used to mark the
 command-log entry **failed** even when the agent had completed the
-underlying libvirt action successfully. The 2026-04-30 hvnode01
+underlying libvirt action successfully. A 2026-04-30 production
 incident exposed two of these — `DELETE_SNAPSHOT` and live
 `MIGRATE` — both showing as failed in the SPA while libvirt had
 quietly finished the work.
@@ -2169,7 +2169,7 @@ Fixes:
 ## v5.31.x — polish + operator UX
 - **Balloon-stat freshness (v5.31.4).** kvm-center now calls `virsh
   dommemstat --period 5 --live` before reading so the cache refreshes
-  every 5 s. Prior behaviour returned week-stale numbers (ark-srv01
+  every 5 s. Prior behaviour returned week-stale numbers (one VM
   reported 137 MB used while the guest was at 10 GB because the
   `last_update` field was 6 days old).
 - **Memory formula (v5.31.5).** VM "used memory" = `actual − unused −

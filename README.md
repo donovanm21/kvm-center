@@ -51,7 +51,7 @@ without the licensing, and without the footprint.
 
 ## Quick start
 
-Three ways to get kvm-center running. Pick on convenience.
+Three ways to get kvm-center running. Pick whichever fits your existing infra.
 
 ### 1. Docker (one minute)
 
@@ -101,7 +101,7 @@ through Mongo creds and the cluster DNS domain, writes `.env`
 with mode `0600`, then deploys):
 
 ```sh
-git clone <repo> /opt/kvm-center
+git clone https://github.com/donovanm21/kvm-center /opt/kvm-center
 cd /opt/kvm-center
 scripts/bootstrap.sh --interactive
 ```

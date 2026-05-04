@@ -557,7 +557,7 @@ func (s *Store) QueuedKVMToolsUpdates() []string {
 // ApplyGuestTelemetry stores a kvm-tools report and re-merges it onto any
 // live VM. Returns the canonical libvirt UUID the telemetry was stored
 // under — if the guest's reported DMI UUID collided with another VM
-// (classic cloned-VM footgun, ark-srv01 vs LLM) the server resolves by
+// (classic cloned-VM footgun where two VMs share UUID + MAC) the server resolves by
 // NIC MAC and returns the corrected UUID so the guest can pin itself
 // for subsequent reports.
 func (s *Store) ApplyGuestTelemetry(p *models.GuestTelemetryPayload) string {
@@ -618,7 +618,7 @@ func clearStaleGuestData(v *models.VM) {
 //	Pass 0: exact payload UUID match against a libvirt VM → trust the
 //	        client. This respects operators who pinned /var/lib/kvm-tools/
 //	        uuid via install --uuid and prevents the server from oscillating
-//	        a cache file when both UUID and MAC were cloned (e.g. ark-srv01
+//	        a cache file when both UUID and MAC were cloned (e.g.
 //	        whose guest NIC MAC was cloned along with the DMI UUID — MAC
 //	        match would point to the wrong VM every time).
 //	Pass 1: no UUID match — fall back to MAC match. NIC MACs are

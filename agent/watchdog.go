@@ -8,7 +8,7 @@ package main
 // updated with `state=failed` and `error="watchdog: …"`.
 //
 // Why this matters: the v5.48 design explicitly addresses the
-// 2026-04-30 hvnode01 incident where virsh and qemu-img both
+// 2026-04-30 host-a incident where virsh and qemu-img both
 // stalled inside libvirtd well beyond the server's 30-min HTTP
 // timeout. Without a watchdog the only recourse was SSH + kill -9,
 // and the bookkeeping diverged. With the watchdog the agent owns

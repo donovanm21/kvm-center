@@ -4,7 +4,7 @@
 #
 # Usage:
 #   scripts/run-e2e.sh                    # all specs, default demo URL
-#   KVMC_DEMO_URL=https://10.10.100.8:8290 scripts/run-e2e.sh
+#   KVMC_DEMO_URL=https://demo.example.com:8290 scripts/run-e2e.sh
 #   scripts/run-e2e.sh specs/auth.spec.ts # one spec
 #
 # Output: standard Playwright list reporter; failures land in

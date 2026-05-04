@@ -7,7 +7,7 @@ package main
 // hit a transport error / timeout / 5xx. We poll the agent's
 // GET /command-outcome (PR-1b) to recover the actual outcome from
 // its in-memory cache. Salvages the bookkeeping-divergence bug
-// surfaced by the 2026-04-30 hvnode01 incident, where a long
+// surfaced by the 2026-04-30 host-a incident, where a long
 // DELETE_SNAPSHOT and a live MIGRATE both reported "failed" in the
 // SPA while libvirt happily completed both operations.
 //

@@ -129,7 +129,7 @@ func usage() {
 	fmt.Fprintf(w, "\n  %sExamples%s\n", cBold, cReset)
 	fmt.Fprintf(w, "    %skvmctl login%s --server %shttps://kvm.example.com:8190%s --token %skvmc_…%s\n", cCmd, cReset, cArg, cReset, cArg, cReset)
 	fmt.Fprintf(w, "    %skvmctl hosts%s\n", cCmd, cReset)
-	fmt.Fprintf(w, "    %skvmctl vm migrate%s %s<uuid>%s --to %shvnode02%s --mode %slive%s\n", cCmd, cReset, cArg, cReset, cArg, cReset, cArg, cReset)
+	fmt.Fprintf(w, "    %skvmctl vm migrate%s %s<uuid>%s --to %shost-b%s --mode %slive%s\n", cCmd, cReset, cArg, cReset, cArg, cReset, cArg, cReset)
 	fmt.Fprintf(w, "    %skvmctl snapshot create%s %s<uuid>%s --name %spre-patch%s\n\n", cCmd, cReset, cArg, cReset, cArg, cReset)
 }
 
