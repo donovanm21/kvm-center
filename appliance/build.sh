@@ -4,7 +4,7 @@
 # Pipeline:
 #   1. Build kvm-center-server binary locally via Dockerfile.server
 #      (multi-stage build; we only want the final /app/kvm-center-server).
-#   2. virt-builder rocky-9.4 base with our customisations:
+#   2. virt-builder centosstream-9 base with our customisations:
 #        - dnf install mongodb (so MongoDB is bundled, not pulled at boot)
 #        - copy the binary + /downloads/dist tree into the image
 #        - install systemd units (kvm-center.service, mongod is upstream
@@ -22,7 +22,11 @@
 # Usage:
 #   ./build.sh [output-dir]
 # Env vars:
-#   APPLIANCE_BASE_OS  override of virt-builder OS slug (default: rockylinux-9.4)
+#   APPLIANCE_BASE_OS  override of virt-builder OS slug (default: centosstream-9)
+#                      The libguestfs upstream index dropped Rocky entirely in
+#                      early 2026; centosstream-9 is the rolling RHEL-9 entry
+#                      and shares packaging with Rocky 9. v5.49.5 and earlier
+#                      defaulted to rockylinux-9.4 — that slug no longer resolves.
 #   APPLIANCE_SIZE     output image size (default: 8G)
 #   APPLIANCE_MEMORY   build-time memory for guestfs (default: 2048)
 
@@ -31,7 +35,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 OUT="${1:-./out}"
-BASE_OS="${APPLIANCE_BASE_OS:-rockylinux-9.4}"
+BASE_OS="${APPLIANCE_BASE_OS:-centosstream-9}"
 SIZE="${APPLIANCE_SIZE:-8G}"
 MEMORY="${APPLIANCE_MEMORY:-2048}"
 

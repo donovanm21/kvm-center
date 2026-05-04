@@ -10,6 +10,28 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.49.6 — appliance base swap to CentOS Stream 9
+
+The libguestfs upstream `virt-builder` index dropped Rocky Linux
+entirely in early 2026. v5.49.4 and v5.49.5 appliance-builds both
+failed with `cannot find os-version 'rockylinux-9.4'`. v5.49.6
+swaps the default base to `centosstream-9` — the rolling RHEL-9
+entry that libguestfs ships now and the upstream of Rocky 9.
+
+Operator-visible changes:
+
+- The published qcow2 is now CentOS Stream 9 instead of Rocky 9.
+  Packaging (RPM, dnf, mongod, systemd) is identical for our
+  purposes; the only cosmetic difference is `/etc/redhat-release`.
+- `virt-install --import` snippets now use `--os-variant centos-stream9`.
+  Existing Rocky-based appliance VMs keep working — the change is
+  only for fresh imports of the v5.49.6+ qcow2.
+- Override hatch unchanged: set `APPLIANCE_BASE_OS` env var on
+  `appliance/build.sh` to pick a different libguestfs slug.
+
+Carries `[publish]` and `[deploy]` so the appliance pipeline ships
+the first end-to-end CentOS Stream 9 qcow2 to GitHub Releases.
+
 ## v5.49.5 — appliance-build fix + Hub README polish
 
 v5.49.4 corrected the publish gate but its appliance-build failed on

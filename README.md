@@ -87,7 +87,7 @@ gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS
 sudo cp kvm-center-appliance-${V}.qcow2 /var/lib/libvirt/images/
 sudo virt-install --name kvm-center --memory 2048 --vcpus 2 \
   --disk path=/var/lib/libvirt/images/kvm-center-appliance-${V}.qcow2,bus=virtio \
-  --import --os-variant rocky9 --network bridge=virbr0 --noautoconsole
+  --import --os-variant centos-stream9 --network bridge=virbr0 --noautoconsole
 sudo virsh console kvm-center   # banner shows URL + admin password
 ```
 

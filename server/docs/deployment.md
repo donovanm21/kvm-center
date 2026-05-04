@@ -143,10 +143,18 @@ cosign verify \
 > page — each release ships the qcow2, a `SHA256SUMS` file, and a
 > `SHA256SUMS.asc` GPG signature.
 
-The appliance is a Rocky Linux 9 minimal image with kvm-center,
+The appliance is a CentOS Stream 9 minimal image with kvm-center,
 MongoDB, and a one-shot first-boot service that generates a random
 admin password and prints it to the libvirt console + SSH MOTD. No
 config to write — `virt-install --import` and you're up.
+
+> **Note on the base image:** v5.49.3 through v5.49.5 shipped on
+> Rocky Linux 9. From v5.49.6 onwards the appliance is built on
+> CentOS Stream 9 (the upstream of Rocky 9) — libguestfs's
+> `virt-builder` index dropped Rocky entirely in early 2026 and
+> CentOS Stream 9 is its rolling RHEL-9 replacement. The packaging
+> (RPM, dnf, mongod, systemd) is identical for our purposes; the
+> only operator-visible change is `/etc/redhat-release`.
 
 ### Prerequisites
 
@@ -158,7 +166,7 @@ every mainstream distro.
 ### Step 1 — Download
 
 ```sh
-V=v5.49.3   # pick a release from
+V=v5.49.6   # pick a release from
             # https://github.com/donovanm21/kvmcenter/releases
 gh release download "$V" --repo donovanm21/kvmcenter \
   --pattern 'kvm-center-appliance-*.qcow2' \
@@ -195,7 +203,7 @@ sudo cp kvm-center-appliance-${V}.qcow2 /var/lib/libvirt/images/
 sudo virt-install --name kvm-center \
   --memory 2048 --vcpus 2 \
   --disk path=/var/lib/libvirt/images/kvm-center-appliance-${V}.qcow2,bus=virtio \
-  --import --os-variant rocky9 \
+  --import --os-variant centos-stream9 \
   --network bridge=virbr0 \
   --noautoconsole
 ```
@@ -244,7 +252,7 @@ external storage.
 ### Upgrading
 
 ```sh
-V=v5.49.4   # the new release
+V=v5.49.7   # the new release (example)
 gh release download "$V" --repo donovanm21/kvmcenter \
   --pattern 'kvm-center-appliance-*.qcow2' \
   --pattern 'SHA256SUMS*'

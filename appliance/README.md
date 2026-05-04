@@ -14,7 +14,7 @@ modifying the build pipeline.
 
 | File | Role |
 |------|------|
-| `build.sh` | The build pipeline. Calls `virt-builder` against `rockylinux-9.4`, layers in the kvm-center binary + dist + systemd units, sparsifies. |
+| `build.sh` | The build pipeline. Calls `virt-builder` against `centosstream-9` (RHEL-9 family; libguestfs upstream stopped shipping Rocky in early 2026), layers in the kvm-center binary + dist + systemd units, sparsifies. |
 | `smoke.sh` | Boots the freshly-built qcow2 with cloud-init + qemu user-mode net + hostfwd, polls `/api/version` for up to 120 s. The CI gate. |
 | `Makefile` | Wraps `build.sh` + `smoke.sh` so `make build && make smoke` is the local flow. |
 | `cloud-init/{user-data,meta-data}` | Seed data for `smoke.sh` only. The published qcow2 does not ship with these — the appliance generates its own admin credentials on first boot via the firstboot systemd service. |
@@ -67,7 +67,7 @@ sha256sum -c SHA256SUMS
 sudo cp kvm-center-appliance-vX.Y.Z.qcow2 /var/lib/libvirt/images/
 sudo virt-install --name kvm-center --memory 2048 --vcpus 2 \
   --disk path=/var/lib/libvirt/images/kvm-center-appliance-vX.Y.Z.qcow2,bus=virtio \
-  --import --os-variant rocky9 --network bridge=virbr0 --noautoconsole
+  --import --os-variant centos-stream9 --network bridge=virbr0 --noautoconsole
 
 # 4. Read the admin password from the libvirt console.
 sudo virsh console kvm-center
