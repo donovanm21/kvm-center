@@ -55,7 +55,7 @@ patches. Output uploads to GitHub Releases via PR-2c's pipeline.
 
 ```sh
 # 1. Download qcow2 + signature from the GitHub Release page.
-gh release download vX.Y.Z --repo donovanm21/kvmcenter \
+gh release download vX.Y.Z --repo donovanm21/kvm-center \
   --pattern 'kvm-center-appliance-*.qcow2*' \
   --pattern 'SHA256SUMS*'
 

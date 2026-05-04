@@ -22,7 +22,7 @@ to disable.
 
 ## Schema
 
-Source of truth: [`proto/agent.proto`](https://github.com/donovanm21/kvmcenter/blob/main/proto/agent.proto).
+Source of truth: [`proto/agent.proto`](https://github.com/donovanm21/kvm-center/blob/main/proto/agent.proto).
 Generated Go code is committed at `gen/agentpb/` so nobody has to
 run `protoc` to build from source.
 

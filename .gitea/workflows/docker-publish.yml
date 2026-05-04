@@ -91,8 +91,8 @@ jobs:
           labels: |
             org.opencontainers.image.title=kvm-center
             org.opencontainers.image.description=Central control plane for KVM/libvirt hypervisors
-            org.opencontainers.image.url=https://github.com/donovanm21/kvmcenter
-            org.opencontainers.image.source=https://github.com/donovanm21/kvmcenter
+            org.opencontainers.image.url=https://github.com/donovanm21/kvm-center
+            org.opencontainers.image.source=https://github.com/donovanm21/kvm-center
             org.opencontainers.image.version=${{ steps.ver.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=Apache-2.0
@@ -205,6 +205,6 @@ jobs:
           cosign:   signed thedon21/kvm-center:$V
 
           verify:
-            cosign verify --key https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/security/cosign.pub thedon21/kvm-center:$V
+            cosign verify --key https://raw.githubusercontent.com/donovanm21/kvm-center/main/docs/security/cosign.pub thedon21/kvm-center:$V
           ────────────────────────────────
           EOF

@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/assets/logo.svg" alt="kvm-center" width="112" height="112">
+<img src="https://kvm-center.com/assets/logo.svg" alt="kvm-center" width="112" height="112">
 
-<img src="https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/assets/wordmark.svg" alt="kvm center" height="44">
+<img src="https://kvm-center.com/assets/wordmark.svg" alt="kvm center" height="44">
 
 **A single pane of glass for your KVM hypervisor fleet.**
 
@@ -10,12 +10,12 @@ Inventory, live + offline migrations, snapshots, VNC consoles,
 mTLS between hosts, signed per-migration grants, in-app docs,
 Influx-backed metrics — all in one Go binary and a tiny agent.
 
-<img src="https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/assets/kvm-center-tour.webp" alt="kvm-center full UI tour" width="720">
+<img src="https://kvm-center.com/assets/dashboard-hero.webp" alt="kvm-center dashboard — 30 hypervisors, 147 VMs, fleet activity, telemetry" width="720">
 
-[Source](https://github.com/donovanm21/kvmcenter) ·
-[Documentation](https://github.com/donovanm21/kvmcenter/blob/main/server/docs/overview.md) ·
-[Architecture](https://github.com/donovanm21/kvmcenter/blob/main/server/docs/architecture.md) ·
-[Changelog](https://github.com/donovanm21/kvmcenter/blob/main/server/docs/changelog.md)
+[Source](https://github.com/donovanm21/kvm-center) ·
+[Documentation](https://github.com/donovanm21/kvm-center/blob/main/server/docs/overview.md) ·
+[Architecture](https://github.com/donovanm21/kvm-center/blob/main/server/docs/architecture.md) ·
+[Changelog](https://github.com/donovanm21/kvm-center/blob/main/server/docs/changelog.md)
 
 ![Multi-arch](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-3FB950?style=flat-square)
 ![Cosign signed](https://img.shields.io/badge/cosign-signed-3FB950?style=flat-square)
@@ -109,7 +109,7 @@ service and label your kvm-center container `com.centurylinklabs.watchtower.enab
 It polls Docker Hub once an hour and restarts on a fresh push. Pin
 `:vX.Y.Z` if you don't want automatic upgrades.
 
-Full recipe in [Deployment → Auto-update with Watchtower](https://github.com/donovanm21/kvmcenter/blob/main/server/docs/deployment.md#auto-update-with-watchtower).
+Full recipe in [Deployment → Auto-update with Watchtower](https://github.com/donovanm21/kvm-center/blob/main/server/docs/deployment.md#auto-update-with-watchtower).
 
 ## What's in the box
 
@@ -158,17 +158,17 @@ Browser ─── :8190 ──▶  kvm-center-server (Go)
 ```
 
 Full diagram and trust boundaries in
-[Architecture](https://github.com/donovanm21/kvmcenter/blob/main/server/docs/architecture.md).
+[Architecture](https://github.com/donovanm21/kvm-center/blob/main/server/docs/architecture.md).
 
 ## Verifying the image (cosign)
 
 Every published image is cosign-signed against the public key
 versioned in the source repo at
-[`docs/security/cosign.pub`](https://github.com/donovanm21/kvmcenter/blob/main/docs/security/cosign.pub):
+[`docs/security/cosign.pub`](https://github.com/donovanm21/kvm-center/blob/main/docs/security/cosign.pub):
 
 ```sh
 cosign verify \
-  --key https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/security/cosign.pub \
+  --key https://raw.githubusercontent.com/donovanm21/kvm-center/main/docs/security/cosign.pub \
   thedon21/kvm-center:vX.Y.Z
 ```
 
@@ -187,20 +187,20 @@ the **KVM appliance** (qcow2, GPG-signed, `virt-install --import` and
 done) or the **bare-metal `bootstrap.sh --interactive`** flow. All
 three give you the same kvm-center; switching later is "point the
 new install at the same Mongo and shut the old one down." See
-[Deployment](https://github.com/donovanm21/kvmcenter/blob/main/server/docs/deployment.md).
+[Deployment](https://github.com/donovanm21/kvm-center/blob/main/server/docs/deployment.md).
 
 ## Support
 
 kvm-center is maintained as a side project. Bug reports and pull
-requests welcome via [GitHub issues](https://github.com/donovanm21/kvmcenter/issues);
+requests welcome via [GitHub issues](https://github.com/donovanm21/kvm-center/issues);
 no commercial SLA. For security issues, please use the private
 reporting channel described in
-[`SECURITY.md`](https://github.com/donovanm21/kvmcenter/blob/main/SECURITY.md)
+[`SECURITY.md`](https://github.com/donovanm21/kvm-center/blob/main/SECURITY.md)
 rather than a public issue.
 
 ## License
 
-[Apache License 2.0](https://github.com/donovanm21/kvmcenter/blob/main/LICENSE).
+[Apache License 2.0](https://github.com/donovanm21/kvm-center/blob/main/LICENSE).
 Free for use, modification, and redistribution — including
 commercially — with the standard Apache 2 patent grant from
 contributors.

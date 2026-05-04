@@ -23,7 +23,7 @@ docker pull thedon21/kvm-center:v5.49.0
 # Substitute the version-tagged image — `:latest` works too if
 # you trust whatever the rolling tag points at.
 cosign verify \
-  --key https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/security/cosign.pub \
+  --key https://raw.githubusercontent.com/donovanm21/kvm-center/main/docs/security/cosign.pub \
   thedon21/kvm-center:v5.49.0
 ```
 
@@ -47,12 +47,12 @@ The appliance build attaches three artifacts to each GitHub Release:
 ```sh
 # Download all three from the Release page (or via gh):
 gh release download v5.49.1 \
-  --repo donovanm21/kvmcenter \
+  --repo donovanm21/kvm-center \
   --pattern 'kvm-center-appliance-*.qcow2' \
   --pattern 'SHA256SUMS*'
 
 # Import the maintainer's public key (one-time):
-curl -fsSL https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/security/maintainer.pub.asc \
+curl -fsSL https://raw.githubusercontent.com/donovanm21/kvm-center/main/docs/security/maintainer.pub.asc \
   | gpg --import
 
 # Verify the signature was made by the maintainer:

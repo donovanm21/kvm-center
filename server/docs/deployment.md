@@ -127,19 +127,19 @@ without minor-version surprises.
 ### Verifying the image (cosign)
 
 Every published image is signed. See
-[`docs/security/README.md`](https://github.com/donovanm21/kvmcenter/blob/main/docs/security/README.md)
+[`docs/security/README.md`](https://github.com/donovanm21/kvm-center/blob/main/docs/security/README.md)
 for the verification flow:
 
 ```sh
 cosign verify \
-  --key https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/security/cosign.pub \
+  --key https://raw.githubusercontent.com/donovanm21/kvm-center/main/docs/security/cosign.pub \
   thedon21/kvm-center:v5.49.0
 ```
 
 ## KVM appliance
 
 > Available from **v5.49.3**. Pre-built qcow2 images live on the
-> [GitHub Releases](https://github.com/donovanm21/kvmcenter/releases)
+> [GitHub Releases](https://github.com/donovanm21/kvm-center/releases)
 > page — each release ships the qcow2, a `SHA256SUMS` file, and a
 > `SHA256SUMS.asc` GPG signature.
 
@@ -167,21 +167,21 @@ every mainstream distro.
 
 ```sh
 V=v5.49.6   # pick a release from
-            # https://github.com/donovanm21/kvmcenter/releases
-gh release download "$V" --repo donovanm21/kvmcenter \
+            # https://github.com/donovanm21/kvm-center/releases
+gh release download "$V" --repo donovanm21/kvm-center \
   --pattern 'kvm-center-appliance-*.qcow2' \
   --pattern 'SHA256SUMS*'
 ```
 
 If you don't use `gh`, the equivalent `curl` URLs are
-`https://github.com/donovanm21/kvmcenter/releases/download/$V/<filename>`.
+`https://github.com/donovanm21/kvm-center/releases/download/$V/<filename>`.
 
 ### Step 2 — Verify the signature + checksum
 
 The first time, import the maintainer GPG key (one-off):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/security/maintainer.pub.asc \
+curl -fsSL https://raw.githubusercontent.com/donovanm21/kvm-center/main/docs/security/maintainer.pub.asc \
   | gpg --import
 ```
 
@@ -253,7 +253,7 @@ external storage.
 
 ```sh
 V=v5.49.7   # the new release (example)
-gh release download "$V" --repo donovanm21/kvmcenter \
+gh release download "$V" --repo donovanm21/kvm-center \
   --pattern 'kvm-center-appliance-*.qcow2' \
   --pattern 'SHA256SUMS*'
 gpg --verify SHA256SUMS.asc SHA256SUMS
@@ -289,7 +289,7 @@ Description=Check for new kvm-center releases
 [Service]
 Type=oneshot
 ExecStart=/bin/sh -c '\
-  latest=$(curl -fsSL https://api.github.com/repos/donovanm21/kvmcenter/releases/latest | sed -n "s/.*\"tag_name\": \"\\([^\"]*\\)\".*/\\1/p"); \
+  latest=$(curl -fsSL https://api.github.com/repos/donovanm21/kvm-center/releases/latest | sed -n "s/.*\"tag_name\": \"\\([^\"]*\\)\".*/\\1/p"); \
   current=$(kvm-center-server --version | awk "{print \\$NF}"); \
   [ "$latest" = "$current" ] || logger -t kvm-center "new release available: $latest (running $current)"'
 
@@ -344,8 +344,8 @@ Every release ships with a chain-of-custody artifact:
 The two public keys live in the repo so they're versioned alongside
 the code that signed against them:
 
-- cosign public key: [`docs/security/cosign.pub`](https://github.com/donovanm21/kvmcenter/blob/main/docs/security/cosign.pub)
-- maintainer GPG key: [`docs/security/maintainer.pub.asc`](https://github.com/donovanm21/kvmcenter/blob/main/docs/security/maintainer.pub.asc)
+- cosign public key: [`docs/security/cosign.pub`](https://github.com/donovanm21/kvm-center/blob/main/docs/security/cosign.pub)
+- maintainer GPG key: [`docs/security/maintainer.pub.asc`](https://github.com/donovanm21/kvm-center/blob/main/docs/security/maintainer.pub.asc)
 
 Quick reference (the install-path sections above also include these
 inline so you don't have to scroll):
@@ -353,11 +353,11 @@ inline so you don't have to scroll):
 ```sh
 # Docker image
 cosign verify \
-  --key https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/security/cosign.pub \
+  --key https://raw.githubusercontent.com/donovanm21/kvm-center/main/docs/security/cosign.pub \
   thedon21/kvm-center:vX.Y.Z
 
 # Appliance qcow2
-curl -fsSL https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/security/maintainer.pub.asc \
+curl -fsSL https://raw.githubusercontent.com/donovanm21/kvm-center/main/docs/security/maintainer.pub.asc \
   | gpg --import
 gpg --verify SHA256SUMS.asc SHA256SUMS
 sha256sum -c SHA256SUMS

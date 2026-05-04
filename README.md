@@ -14,7 +14,7 @@ Influx-backed metrics — all in one Go binary and a tiny agent.
 
 [Quick start](#quick-start) · [Documentation](server/docs/overview.md) · [Architecture](server/docs/architecture.md) · [Changelog](server/docs/changelog.md)
 
-[![CI](https://github.com/donovanm21/kvmcenter/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/donovanm21/kvmcenter/actions/workflows/test.yml)
+[![CI](https://github.com/donovanm21/kvm-center/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/donovanm21/kvm-center/actions/workflows/test.yml)
 ![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)
 ![libvirt](https://img.shields.io/badge/libvirt-qemu%2Btls-E3571E?style=flat-square)
@@ -74,13 +74,13 @@ setup wizard. For the docker-compose recipe with MongoDB persistence
 ### 2. KVM appliance (three minutes, v5.49.3+)
 
 Pre-built qcow2 + GPG-signed checksums on
-[GitHub Releases](https://github.com/donovanm21/kvmcenter/releases).
+[GitHub Releases](https://github.com/donovanm21/kvm-center/releases).
 Download, verify, `virt-install --import`, read the auto-generated
 admin password from the libvirt console:
 
 ```sh
 V=v5.49.3
-gh release download "$V" --repo donovanm21/kvmcenter \
+gh release download "$V" --repo donovanm21/kvm-center \
   --pattern 'kvm-center-appliance-*.qcow2' --pattern 'SHA256SUMS*'
 gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS
 

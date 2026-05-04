@@ -139,7 +139,7 @@ What ships:
 - **Signed releases on GitHub** — every qcow2 ships with a
   `SHA256SUMS` file plus a GPG-detached signature
   (`SHA256SUMS.asc`). Maintainer public key is at
-  [`docs/security/maintainer.pub.asc`](https://github.com/donovanm21/kvmcenter/blob/main/docs/security/maintainer.pub.asc);
+  [`docs/security/maintainer.pub.asc`](https://github.com/donovanm21/kvm-center/blob/main/docs/security/maintainer.pub.asc);
   verify with `gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS`.
 - **Auto-publish pipeline** — the v5.49 publish-gate from PR-1a
   now drives both the Docker Hub publish and the appliance build
@@ -153,7 +153,7 @@ What ships:
 CI built the qcow2 with libguestfs + virt-builder against
 Rocky 9.4 cloud, smoke-tested it with cloud-init + qemu user-mode
 networking, and published it to
-[`donovanm21/kvmcenter` releases](https://github.com/donovanm21/kvmcenter/releases)
+[`donovanm21/kvm-center` releases](https://github.com/donovanm21/kvm-center/releases)
 alongside the existing Docker Hub `:latest` / `:5.49` / `:v5.49.3`
 tags.
 
@@ -251,7 +251,7 @@ themed quickstart on the Hub repo page.
 
   ```sh
   cosign verify \
-    --key https://raw.githubusercontent.com/donovanm21/kvmcenter/main/docs/security/cosign.pub \
+    --key https://raw.githubusercontent.com/donovanm21/kvm-center/main/docs/security/cosign.pub \
     thedon21/kvm-center:v5.49.0
   ```
 

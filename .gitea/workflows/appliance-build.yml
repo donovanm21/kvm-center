@@ -19,7 +19,7 @@ name: appliance-build
 #   5. sha256sum + gpg --detach-sign over SHA256SUMS
 #   6. sha256sum + gpg --detach-sign SHA256SUMS using the
 #      APPLIANCE_SIGNING_KEY secret (PR-0b's GPG keypair).
-#   7. gh release upload to donovanm21/kvmcenter at the version
+#   7. gh release upload to donovanm21/kvm-center at the version
 #      tag (qcow2 + SHA256SUMS + SHA256SUMS.asc). PR-0a's mirror
 #      catch-up made the tags exist on GitHub; the docker-publish
 #      [deploy] flow keeps them current.
@@ -167,7 +167,7 @@ jobs:
         if: steps.smoke.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASES_TOKEN }}
-          GH_REPO: donovanm21/kvmcenter
+          GH_REPO: donovanm21/kvm-center
           V: ${{ steps.ver.outputs.version }}
         run: |
           set -e
@@ -184,7 +184,7 @@ jobs:
             "SHA256SUMS" \
             "SHA256SUMS.asc" \
             --clobber
-          echo "::notice::uploaded qcow2 + SHA256SUMS + .asc to https://github.com/donovanm21/kvmcenter/releases/tag/$V"
+          echo "::notice::uploaded qcow2 + SHA256SUMS + .asc to https://github.com/donovanm21/kvm-center/releases/tag/$V"
 
       - name: Summary
         if: always()
@@ -199,7 +199,7 @@ jobs:
           build:    ${{ steps.smoke.outcome == 'success' && 'ok' || 'see logs' }}
           smoke:    ${{ steps.smoke.outcome }}
           artifact: kvm-center-appliance-$V.qcow2 + SHA256SUMS + SHA256SUMS.asc
-          release:  https://github.com/donovanm21/kvmcenter/releases/tag/$V
+          release:  https://github.com/donovanm21/kvm-center/releases/tag/$V
           verify:   gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS
           ────────────────────────────────
           EOF
