@@ -149,9 +149,14 @@ else
 fi
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
-info() { echo -e "${GREEN}✓${NC} $1"; }
-warn() { echo -e "${YELLOW}⚠${NC} $1"; }
-fail() { echo -e "${RED}✗${NC} $1" >&2; exit 1; }
+# All progress / status output goes to stderr so it never bleeds into
+# `$(…)` captures further down — `fetch_or_local` uses `echo "$path"` on
+# stdout to return its result, and an `info "Downloading…"` call inside
+# the same function used to land on stdout too, prepending colored text
+# to the returned path and breaking the subsequent `cp "$binary" …`.
+info()    { echo -e "${GREEN}✓${NC} $1" >&2; }
+warn()    { echo -e "${YELLOW}⚠${NC} $1" >&2; }
+fail()    { echo -e "${RED}✗${NC} $1" >&2; exit 1; }
 
 # fetch_or_local <local-name> <download-name>
 # Looks for the binary next to the script first; falls back to /downloads/
