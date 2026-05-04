@@ -10,6 +10,36 @@ Every tagged release, newest first. Only user-visible changes — test
 harness / internal refactors that don't change behaviour are
 omitted.
 
+## v5.49.7 — UI polish: migration toast + VM-list dedup + kvm-tools guard
+
+Fixes three small UI rough edges caught during a live OFFLINE_MIGRATE
+on prod (Gitea issues #56, #57, #58):
+
+- **Premature "while you were away" toast (#56).** The Recent Tasks
+  pane was treating any `outcome !== 'pending'` as terminal, so a
+  migration that briefly reported a non-pending outcome on the
+  source side fired a "Task OFFLINE_MIGRATE on VM1 success" toast
+  *before* the destination came up. Toast now whitelists explicit
+  terminal outcomes (`success`, `failed`, `cancelled`).
+- **VM list duplicating a migrating VM (#57).** During an
+  OFFLINE_MIGRATE the source agent could briefly report a
+  shut-off ghost entry for the same uuid as the destination's
+  running entry. The VM list now dedupes by uuid (preferring the
+  more "live" state) so you see one row throughout the migration.
+- **kvm-tools view bypassed the migration guard (#58).** The
+  disable-during-migration predicate was inlined in the VMs page
+  and the kvm-tools page didn't know about it. Lifted into a
+  shared `useVMLocks()` hook. Locked rows on the kvm-tools page
+  now show the same lock badge as the main VM list, can't be
+  selected for bulk update, and lose the click-through link.
+
+Plus a small cleanup: `useVMLocks()` and `useDedupedVMs()` replace
+three near-identical inline `locks` memos previously duplicated
+across `VMs.tsx`, `KVMTools.tsx`, and `HostDetail.tsx`. Future VM
+list views inherit the lock semantics for free.
+
+Carries `[publish]` and `[deploy]` so the SPA bundle ships to prod.
+
 ## v5.49.6 — appliance base swap to CentOS Stream 9
 
 The libguestfs upstream `virt-builder` index dropped Rocky Linux

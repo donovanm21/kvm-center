@@ -6,51 +6,29 @@ import { KVMToolsPill } from '@/components/KVMToolsPill';
 import { PaginationBar, usePagination } from '@/components/Pagination';
 import { SortableTH, useSort } from '@/components/SortableTH';
 import { LockBadge, StatePill, type LockReason } from '@/components/StatePill';
-import { useVMs, useFeatures, useKVMToolsLatest, useMigrations } from '@/hooks/useInventory';
+import { useFeatures, useKVMToolsLatest } from '@/hooks/useInventory';
 import { useAuth } from '@/hooks/useAuth';
+import { lockTitleFor, useDedupedVMs, useVMLocks } from '@/hooks/useVMLocks';
 import type { VM } from '@/types';
 
 // Re-export so existing consumers (HostDetail) keep their import shape.
+// `lockKey` and `PHASES_PAST_DEFINE` moved to hooks/useVMLocks.ts so
+// every VM view inherits the same lock semantics; both are still
+// re-exported here for any caller still importing from this path.
+export { lockKey, PHASES_PAST_DEFINE } from '@/hooks/useVMLocks';
 export { LockBadge, type LockReason };
-
-// Phases that mean the destination already had the VM defined when the
-// migration failed. The agent's rollback path tries to undefine + delete
-// transferred files, but partial state can survive a failed rollback —
-// keep the destination row gated until an operator clears it.
-export const PHASES_PAST_DEFINE = new Set(['define', 'start', 'verify', 'cleanup']);
-
-export function lockKey(hostID: string, vmName: string): string {
-  return `${hostID}|${vmName}`;
-}
 
 type VMSortKey = 'name' | 'host_id' | 'state' | 'cpu_count' | 'mem_total_mb' | 'disk_total_gb' | 'guest_agent';
 
 export function VMs() {
-  const vms = useVMs();
+  const vms = useDedupedVMs();
   const features = useFeatures();
-  const migrations = useMigrations();
+  const { lockOf } = useVMLocks();
   const latest = useKVMToolsLatest();
   const { hasPerm } = useAuth();
   const [query, setQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const { sort, onToggle, compare } = useSort<VMSortKey>('name', 'asc', 'vms');
-
-  // Build a host|vm → lock-reason map from the migrations list. While a
-  // migration is running we lock the source row to prevent a duplicate
-  // start/stop/migrate against the VM that's already in flight. If the
-  // migration fails after defining the VM on the destination, lock the
-  // destination row instead — partial artifacts may remain there.
-  const locks = useMemo(() => {
-    const m = new Map<string, LockReason>();
-    for (const r of migrations.data ?? []) {
-      if (r.status === 'running' && r.source_host && r.vm_name) {
-        m.set(lockKey(r.source_host, r.vm_name), 'migrating');
-      } else if (r.status === 'failed' && r.dest_host && r.vm_name && PHASES_PAST_DEFINE.has(r.phase ?? '')) {
-        m.set(lockKey(r.dest_host, r.vm_name), 'rolled-back');
-      }
-    }
-    return m;
-  }, [migrations.data]);
 
   const canCreate = hasPerm('vm.create') && !features.data?.disable_vm_create;
 
@@ -109,7 +87,7 @@ export function VMs() {
                 <VMRow
                   key={v.uuid}
                   vm={v}
-                  lock={locks.get(lockKey(v.host_id, v.name))}
+                  lock={lockOf(v)}
                   latestKVMTools={latest.data?.version ?? ''}
                 />
               ))}
@@ -128,11 +106,7 @@ export function VMs() {
 function VMRow({ vm, lock, latestKVMTools }: { vm: VM; lock?: LockReason; latestKVMTools: string }) {
   const navigate = useNavigate();
   const locked = !!lock;
-  const lockTitle = lock === 'migrating'
-    ? 'Migration in progress — actions are disabled until it finishes'
-    : lock === 'rolled-back'
-      ? 'Migration rolled back — destination may have partial artifacts. Investigate before acting.'
-      : '';
+  const lockTitle = lockTitleFor(lock);
   const rowStyle: React.CSSProperties = locked
     ? { opacity: 0.45, cursor: 'not-allowed', background: 'var(--surface-2)' }
     : {};

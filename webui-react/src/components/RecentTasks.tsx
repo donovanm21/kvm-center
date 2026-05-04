@@ -87,6 +87,15 @@ const CANCELLABLE_ACTIONS = new Set([
   'POWER_CYCLE',
 ]);
 
+// Outcomes the server uses to mark a task as truly finished. The set
+// is explicit (rather than the inverse `outcome !== 'pending'`) so
+// transient / unexpected outcome values — e.g. 'running', 'unknown',
+// or anything a future server emits — are treated as in-flight.
+// Fix for #56: the "while you were away" toast was firing during an
+// OFFLINE_MIGRATE because the source-side phase briefly reported a
+// non-'pending' outcome before the destination came up.
+const TERMINAL_OUTCOMES = new Set(['success', 'failed', 'cancelled']);
+
 export function RecentTasks() {
   const qc = useQueryClient();
   const { hasPerm } = useAuth();
@@ -124,7 +133,7 @@ export function RecentTasks() {
   useEffect(() => {
     const onFocus = () => {
       const newlyTerminal = (data?.entries ?? [])
-        .filter((e) => e.outcome !== 'pending')
+        .filter((e) => TERMINAL_OUTCOMES.has(e.outcome))
         .filter((e) => !seenTerminalIDs.current.has(e.request_id));
       // First focus after mount — populate the seen set without
       // banner-spamming the user with everything in their recent

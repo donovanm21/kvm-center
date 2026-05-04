@@ -5,9 +5,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiPost } from '@/api/client';
 import { PaginationBar, usePagination } from '@/components/Pagination';
 import { SortableTH, useSort } from '@/components/SortableTH';
+import { LockBadge } from '@/components/StatePill';
 import { useAuth } from '@/hooks/useAuth';
-import { useKVMToolsLatest, useVMs } from '@/hooks/useInventory';
+import { useKVMToolsLatest } from '@/hooks/useInventory';
 import { useToast } from '@/hooks/useToast';
+import { lockTitleFor, useDedupedVMs, useVMLocks } from '@/hooks/useVMLocks';
 import type { VM } from '@/types';
 import { qk } from '@/queryKeys';
 
@@ -23,7 +25,8 @@ type Filter = 'all' | 'warning' | 'current';
  * server is needed.
  */
 export function KVMTools() {
-  const vms = useVMs();
+  const vms = useDedupedVMs();
+  const { lockOf } = useVMLocks();
   const latest = useKVMToolsLatest();
   const { hasPerm } = useAuth();
   const qc = useQueryClient();
@@ -42,7 +45,7 @@ export function KVMTools() {
 
   const rows = useMemo(() => {
     const list = vms.data ?? [];
-    const enriched = list.map((v) => ({ vm: v, status: classify(v, latestVer) }));
+    const enriched = list.map((v) => ({ vm: v, status: classify(v, latestVer), lock: lockOf(v) }));
     const filtered = enriched.filter((r) => {
       if (filter === 'all') return true;
       if (filter === 'warning') return r.status === 'outdated' || r.status === 'missing' || r.status === 'no-tools';
@@ -66,7 +69,7 @@ export function KVMTools() {
       if (cmp !== 0) return cmp;
       return a.vm.name.localeCompare(b.vm.name);
     });
-  }, [vms.data, latestVer, filter, sort, compare]);
+  }, [vms.data, latestVer, filter, sort, compare, lockOf]);
 
   const counts = useMemo(() => {
     const list = vms.data ?? [];
@@ -81,7 +84,10 @@ export function KVMTools() {
     return c;
   }, [vms.data, latestVer]);
 
-  const updateable = rows.filter((r) => r.status === 'outdated' || r.status === 'missing');
+  // A VM mid-migration shouldn't be queued for an update — the agent
+  // will be busy and the kvm-tools update could land on a partially-
+  // moved disk. Drop locked rows from the bulk-select pool.
+  const updateable = rows.filter((r) => !r.lock && (r.status === 'outdated' || r.status === 'missing'));
   const allSelected = updateable.length > 0 && updateable.every((r) => selected.has(r.vm.uuid));
   const someSelected = updateable.some((r) => selected.has(r.vm.uuid));
 
@@ -199,24 +205,34 @@ export function KVMTools() {
               </tr>
             </thead>
             <tbody>
-              {pg.items.map(({ vm, status }) => {
+              {pg.items.map(({ vm, status, lock }) => {
                 const checked = selected.has(vm.uuid);
-                const updateable = status === 'outdated' || status === 'missing';
+                const isUpdateable = status === 'outdated' || status === 'missing';
+                const locked = !!lock;
+                const lockTitle = lockTitleFor(lock);
+                const rowStyle: React.CSSProperties = locked
+                  ? { opacity: 0.45, background: 'var(--surface-2)' }
+                  : {};
                 return (
-                  <tr key={vm.uuid}>
+                  <tr key={vm.uuid} style={rowStyle} title={lockTitle}>
                     <td>
                       <input
                         type="checkbox"
                         checked={checked}
-                        disabled={!updateable}
+                        disabled={!isUpdateable || locked}
                         onChange={() => toggle(vm.uuid)}
                         aria-label={`Select ${vm.name}`}
                       />
                     </td>
                     <td>
-                      <Link to={`/vms/${encodeURIComponent(vm.uuid)}`} style={{ color: 'var(--text-strong)', fontWeight: 500 }}>
-                        {vm.name}
-                      </Link>
+                      {locked ? (
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{vm.name}</span>
+                      ) : (
+                        <Link to={`/vms/${encodeURIComponent(vm.uuid)}`} style={{ color: 'var(--text-strong)', fontWeight: 500 }}>
+                          {vm.name}
+                        </Link>
+                      )}
+                      {lock && <LockBadge reason={lock} />}
                     </td>
                     <td style={{ color: 'var(--text-muted)' }}>{vm.host_id}</td>
                     <td><span className={`state-pill ${vm.state}`}>{vm.state}</span></td>
