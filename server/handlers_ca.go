@@ -1,0 +1,368 @@
+package main
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"sort"
+	"strings"
+	"time"
+
+	"kvm-center/internal/models"
+)
+
+// Hypervisor PKI HTTP surface (v5.10.0).
+//
+//   POST /api/ca/enroll           admin — mint one-time bootstrap token for a hypervisor
+//   POST /api/ca/sign             public (token-gated) — exchange CSR for signed leaf
+//   GET  /api/ca/bundle           any signed-in user — fetch CA public cert
+//   GET  /api/ca/hypervisors      admin — list issued hypervisor certs
+//   POST /api/ca/hypervisors/<id>/revoke  admin — mark a cert revoked
+
+const (
+	enrollTokenTTL = 10 * time.Minute
+
+	AuditCAEnroll = "ca.enroll"
+	AuditCASign   = "ca.sign"
+	AuditCARevoke = "ca.revoke"
+
+	// Enrolment-approval flow (v5.55.0). Separate from ca.sign so a
+	// post-incident reviewer can distinguish token-driven sign-ups
+	// from approval-flow sign-ups, and so notification rules can
+	// subscribe to the pending-request stream specifically.
+	AuditEnrolmentRequest = "ca.enrolment.request"
+	AuditEnrolmentApprove = "ca.enrolment.approve"
+	AuditEnrolmentReject  = "ca.enrolment.reject"
+)
+
+// caEnrollEntry is an in-flight bootstrap token. TTL-bounded so a
+// token that isn't redeemed quickly falls out on its own.
+type caEnrollEntry struct {
+	HostID    string
+	ExpiresAt time.Time
+	IssuedBy  string
+}
+
+func (s *Store) mintEnrollToken(hostID, issuedBy string) string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	tok := "enroll_" + hex.EncodeToString(b[:])
+	s.mu.Lock()
+	if s.caEnrollTokens == nil {
+		s.caEnrollTokens = map[string]*caEnrollEntry{}
+	}
+	s.caEnrollTokens[tok] = &caEnrollEntry{
+		HostID:    hostID,
+		ExpiresAt: time.Now().Add(enrollTokenTTL),
+		IssuedBy:  issuedBy,
+	}
+	s.mu.Unlock()
+	return tok
+}
+
+// consumeEnrollToken validates and removes a token, returning the
+// bound host ID. Cleans up every expired entry under the same lock
+// to keep the map bounded without a background reaper.
+func (s *Store) consumeEnrollToken(tok string) (string, string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now()
+	for k, v := range s.caEnrollTokens {
+		if now.After(v.ExpiresAt) {
+			delete(s.caEnrollTokens, k)
+		}
+	}
+	entry, ok := s.caEnrollTokens[tok]
+	if !ok {
+		return "", "", errors.New("enrollment token invalid or expired")
+	}
+	delete(s.caEnrollTokens, tok)
+	return entry.HostID, entry.IssuedBy, nil
+}
+
+func (s *Store) recordHypervisorCert(rec *models.HypervisorCert) {
+	s.mu.Lock()
+	s.hypervisorCerts[rec.HostID] = rec
+	s.mu.Unlock()
+	// Synchronous — cert issuance is rare and must durable before the
+	// HTTP response returns. Async Save() races lost a cert on v5.10.4
+	// restart during validation.
+	s.Save()
+}
+
+func (s *Store) listHypervisorCerts() []*models.HypervisorCert {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]*models.HypervisorCert, 0, len(s.hypervisorCerts))
+	for _, c := range s.hypervisorCerts {
+		cp := *c
+		out = append(out, &cp)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].IssuedAt.After(out[j].IssuedAt) })
+	return out
+}
+
+func (s *Store) revokeHypervisorCert(hostID, actor, reason string) error {
+	s.mu.Lock()
+	c, ok := s.hypervisorCerts[hostID]
+	if !ok {
+		s.mu.Unlock()
+		return errors.New("no cert for host")
+	}
+	if !c.RevokedAt.IsZero() {
+		s.mu.Unlock()
+		return errors.New("already revoked")
+	}
+	c.RevokedAt = time.Now().UTC()
+	c.RevokedBy = actor
+	c.RevokeReason = reason
+	s.mu.Unlock()
+	// Synchronous — revocation must be durable before we tell the
+	// operator it succeeded.
+	s.Save()
+	return nil
+}
+
+// ── HTTP handlers ──────────────────────────────────────────────────
+
+// handleCAEnroll — admin creates a bootstrap token for hostID.
+func handleCAEnroll(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		var req struct {
+			HostID string `json:"host_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+			return
+		}
+		req.HostID = strings.TrimSpace(req.HostID)
+		if req.HostID == "" {
+			writeError(w, http.StatusBadRequest, "host_id required")
+			return
+		}
+		u := userFromRequest(r)
+		actorID := ""
+		if u != nil {
+			actorID = u.ID
+		}
+		tok := store.mintEnrollToken(req.HostID, actorID)
+		audit(store, r, AuditCAEnroll, "hypervisor/"+req.HostID, map[string]string{"ttl": enrollTokenTTL.String()}, true, "")
+		writeJSON(w, http.StatusOK, map[string]any{
+			"enroll_token": tok,
+			"host_id":      req.HostID,
+			"expires_in":   int(enrollTokenTTL.Seconds()),
+		})
+	}
+}
+
+// handleCASign — public endpoint gated by the one-time bootstrap
+// token. Caller POSTs { enroll_token, csr } and receives
+// { cert, ca_cert, serial, not_after }. The subject CN is overridden
+// with the host ID that was bound to the enrollment token — the
+// agent can't choose its own identity.
+func handleCASign(store *Store, ca *ClusterCA) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		var req struct {
+			EnrollToken string   `json:"enroll_token"`
+			CSR         string   `json:"csr"` // PEM
+			DNSNames    []string `json:"dns_names,omitempty"`
+			IPAddresses []string `json:"ip_addresses,omitempty"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+			return
+		}
+		hostID, issuedBy, err := store.consumeEnrollToken(req.EnrollToken)
+		if err != nil {
+			auditAs(store, r, "", "enrollment", AuditCASign, "hypervisor/?", map[string]string{"reason": err.Error()}, false, err.Error())
+			writeError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+		// v5.54.0 — refuse to sign for a host_id the operator has
+		// retired. Otherwise a stale install.sh script with a still-
+		// valid token could re-enrol a deny-listed host without the
+		// operator noticing.
+		if store.IsHostRemoved(hostID) {
+			auditAs(store, r, issuedBy, "enrollment", AuditCASign, "hypervisor/"+hostID, map[string]string{"reason": "host retired"}, false, "host retired")
+			writeError(w, http.StatusForbidden, "host_id has been retired from this kvm-center; unretire it from Settings → TLS before re-enrolling")
+			return
+		}
+		// Automatically include the host's known IP in the SAN list so
+		// peers can connect by IP without the hostname check failing.
+		// The Host record is authoritative — anything the enrolling
+		// agent claims via req.IPAddresses is appended in addition.
+		// Hosts are sometimes keyed by FQDN and sometimes by short
+		// form depending on how the agent first telemetered; try both.
+		ipAddrs := append([]string{}, req.IPAddresses...)
+		dom := strings.TrimPrefix(strings.TrimSpace(os.Getenv("KVM_CENTER_CLUSTER_DOMAIN")), ".")
+		lookups := []string{hostID}
+		if dom != "" {
+			lookups = append(lookups, hostID+"."+dom)
+		}
+		for _, id := range lookups {
+			if h := store.GetHost(id); h != nil && h.IP != "" {
+				ipAddrs = append(ipAddrs, h.IP)
+				break
+			}
+		}
+		// Also drop the FQDN for this host if the operator configured a
+		// cluster DNS domain so peers connecting by hostname succeed.
+		dnsNames := append([]string{}, req.DNSNames...)
+		if dom != "" {
+			dnsNames = append(dnsNames, hostID+"."+dom)
+		}
+		certPEM, serial, fp, notBefore, notAfter, serr := ca.SignHypervisorCSR([]byte(req.CSR), hostID, dnsNames, ipAddrs)
+		if serr != nil {
+			auditAs(store, r, issuedBy, "enrollment", AuditCASign, "hypervisor/"+hostID, nil, false, serr.Error())
+			writeError(w, http.StatusBadRequest, serr.Error())
+			return
+		}
+		rec := &models.HypervisorCert{
+			HostID:      hostID,
+			SerialHex:   serial,
+			Fingerprint: fp,
+			Subject:     "CN=" + hostID,
+			NotBefore:   notBefore,
+			NotAfter:    notAfter,
+			IssuedAt:    time.Now().UTC(),
+			IssuedBy:    issuedBy,
+		}
+		store.recordHypervisorCert(rec)
+		auditAs(store, r, issuedBy, "enrollment", AuditCASign, "hypervisor/"+hostID, map[string]string{
+			"serial":      serial,
+			"fingerprint": fp,
+			"not_after":   notAfter.Format(time.RFC3339),
+		}, true, "")
+		writeJSON(w, http.StatusOK, map[string]any{
+			"cert":      string(certPEM),
+			"ca_cert":   string(ca.CertPEM()),
+			"serial":    serial,
+			"not_after": notAfter.Format(time.RFC3339),
+		})
+	}
+}
+
+func handleCABundle(ca *ClusterCA) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-pem-file")
+		w.Write(ca.CertPEM())
+	}
+}
+
+// handleGrantPubKey serves the Ed25519 public half used to verify
+// migration grants. During a rotation grace window the previous key
+// is also returned so agents can accept grants issued under it until
+// the grace window elapses. Response shape is backward-compatible
+// with pre-v5.32.21 agents — they just ignore the new fields.
+func handleGrantPubKey(signer *GrantSigner) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, previous, rotAt, graceExpires := signer.RotationState()
+		body := map[string]any{
+			"pubkey_hex": current,
+		}
+		if previous != "" {
+			body["previous_pubkey_hex"] = previous
+			body["rotated_at"] = rotAt.Format(time.RFC3339)
+			body["grace_expires_at"] = graceExpires.Format(time.RFC3339)
+		}
+		writeJSON(w, http.StatusOK, body)
+	}
+}
+
+// handleGrantSignerRotate triggers a key rotation and returns the new
+// public key. Admin-only (user.manage). Audited. During the grace
+// window both current and previous keys verify; after grace the old
+// key is discarded. Tier S #9, v5.32.21.
+func handleGrantSignerRotate(store *Store, signer *GrantSigner) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		if signer == nil {
+			writeError(w, http.StatusServiceUnavailable, "grant signer not initialised")
+			return
+		}
+		pub, err := signer.Rotate()
+		if err != nil {
+			audit(store, r, "grants.rotate", "grant-signer", nil, false, err.Error())
+			writeError(w, http.StatusInternalServerError, "rotate: "+err.Error())
+			return
+		}
+		newHex := hex.EncodeToString(pub)
+		audit(store, r, "grants.rotate", "grant-signer", map[string]string{
+			"new_pubkey_prefix": newHex[:16],
+			"grace_seconds":     fmt.Sprintf("%d", int(grantRotationGrace.Seconds())),
+		}, true, "")
+		log.Printf("grants: signer rotated — new pubkey %s… (grace=%s)", newHex[:16], grantRotationGrace)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":               true,
+			"pubkey_hex":       newHex,
+			"grace_seconds":    int(grantRotationGrace.Seconds()),
+			"grace_expires_at": time.Now().UTC().Add(grantRotationGrace).Format(time.RFC3339),
+		})
+	}
+}
+
+func handleCAHypervisors(store *Store, ca *ClusterCA) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "GET only")
+			return
+		}
+		caCert := ca.Cert()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"certs": store.listHypervisorCerts(),
+			"ca": map[string]any{
+				"subject":    caCert.Subject.String(),
+				"not_before": caCert.NotBefore.Format(time.RFC3339),
+				"not_after":  caCert.NotAfter.Format(time.RFC3339),
+			},
+		})
+	}
+}
+
+func handleCARevoke(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		// Path: /api/ca/hypervisors/<id>/revoke
+		rest := strings.TrimPrefix(r.URL.Path, "/api/ca/hypervisors/")
+		hostID := strings.TrimSuffix(rest, "/revoke")
+		if hostID == "" || hostID == rest {
+			writeError(w, http.StatusBadRequest, "host id required")
+			return
+		}
+		var req struct {
+			Reason string `json:"reason"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		u := userFromRequest(r)
+		actorID := ""
+		if u != nil {
+			actorID = u.ID
+		}
+		if err := store.revokeHypervisorCert(hostID, actorID, req.Reason); err != nil {
+			audit(store, r, AuditCARevoke, "hypervisor/"+hostID, nil, false, err.Error())
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		audit(store, r, AuditCARevoke, "hypervisor/"+hostID, map[string]string{"reason": req.Reason}, true, "")
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
+}

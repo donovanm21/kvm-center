@@ -1,0 +1,170 @@
+name: test
+
+# GitHub Actions workflow — same gates as .gitea/workflows/test.yml.
+# The two are intentionally NOT byte-identical: GitHub-hosted runners
+# ship the `gh` CLI (cleaner than the Gitea-side curl/python dance),
+# and the `permissions:` block is a GitHub-ism. Keep the gate posture
+# and version stamps aligned.
+#
+# Security-gate posture (v5.20.13):
+#   - Go 1.25, govulncheck blocking on any reachable stdlib / dep vuln.
+#   - npm audit blocking on CRITICAL webui deps, warn on high+ below.
+#   - gitleaks blocking on any match in working tree or history;
+#     historical placeholders allowlisted via .gitleaksignore.
+#   - open-issue-on-failure files / comments on a single
+#     security:ci-blocker-labelled issue when any of the above fail
+#     on a push to main.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.10'
+
+      - name: go mod tidy
+        run: go mod tidy
+
+      - name: gofmt
+        run: |
+          changed=$(gofmt -l .)
+          if [ -n "$changed" ]; then
+            echo "files need gofmt:"; echo "$changed"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)"/bin/govulncheck ./...
+
+  webui-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: npm ci
+        working-directory: webui-react
+        run: npm ci --no-audit --no-fund --loglevel=error
+
+      # v5.32.11 gate: fail the build early on TypeScript or Vite
+      # errors. v5.30.0 and v5.31.6 each shipped with tsc errors that
+      # only surfaced at docker-build time on the deploy host.
+      - name: webui build (tsc + vite)
+        working-directory: webui-react
+        run: npm run build
+
+      - name: npm audit (CRITICAL — blocking)
+        working-directory: webui-react
+        run: npm audit --audit-level=critical --omit=dev
+
+      - name: npm audit (high / moderate — warn only)
+        working-directory: webui-react
+        continue-on-error: true
+        run: |
+          echo "::group::npm audit summary"
+          npm audit --audit-level=high --omit=dev || true
+          echo "::endgroup::"
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks
+        run: |
+          GITLEAKS_VERSION=8.18.4
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /tmp
+          /tmp/gitleaks detect --source . --no-banner --redact --verbose
+
+  summary:
+    needs: [lint-test, webui-audit, gitleaks]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: report
+        run: |
+          echo "lint-test:   ${{ needs.lint-test.result }}"
+          echo "webui-audit: ${{ needs.webui-audit.result }}"
+          echo "gitleaks:    ${{ needs.gitleaks.result }}"
+          if [ "${{ needs.lint-test.result }}"   = "success" ] \
+          && [ "${{ needs.webui-audit.result }}" = "success" ] \
+          && [ "${{ needs.gitleaks.result }}"    = "success" ]; then
+            echo "All security gates passed."
+          else
+            echo "::error::One or more security gates failed — see individual job logs."
+            exit 1
+          fi
+
+  # Auto-open a GitHub issue when a security gate trips on main, so a
+  # CVE landing overnight leaves a durable trail. Uses the `gh` CLI
+  # which comes pre-installed on GitHub-hosted runners and picks up
+  # GITHUB_TOKEN automatically.
+  open-issue-on-failure:
+    needs: [lint-test, webui-audit, gitleaks]
+    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: file CI failure issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          LINT: ${{ needs.lint-test.result }}
+          WEB:  ${{ needs.webui-audit.result }}
+          LEAK: ${{ needs.gitleaks.result }}
+        run: |
+          set -eu
+          LABEL="security:ci-blocker"
+          # Make sure the label exists (idempotent — swallow "already exists").
+          gh label create "$LABEL" --color "B60205" --description "CI security gate failure" 2>/dev/null || true
+
+          BODY=$(cat <<MARKDOWN
+          **Automated report** — a security gate failed on \`main\`.
+
+          - commit: \`$SHA\`
+          - run: $RUN_URL
+          - lint-test: \`$LINT\`
+          - webui-audit: \`$WEB\`
+          - gitleaks: \`$LEAK\`
+
+          See the linked run for the specific finding.
+          MARKDOWN
+          )
+
+          # Best-effort dedup by label — comment on the existing open
+          # issue instead of opening a duplicate.
+          existing=$(gh issue list --state open --label "$LABEL" --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "Updating existing issue #$existing"
+            gh issue comment "$existing" --body "$BODY"
+          else
+            echo "Opening new issue"
+            gh issue create \
+              --title "[CI] security gate failing on main" \
+              --label "$LABEL" \
+              --body "$BODY"
+          fi

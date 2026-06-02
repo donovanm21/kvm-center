@@ -1,0 +1,27 @@
+# Server only — use when you want to serve the UI separately or via a reverse proxy.
+# Usage: docker compose -f docker-compose.server.yml up -d
+version: "3.8"
+
+services:
+  kvm-center-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    image: kvm-center-server:latest
+    container_name: kvm-center-server
+    restart: unless-stopped
+    ports:
+      - "8190:8190"
+    environment:
+      - KVM_CENTER_TLS_ADDR=:8190
+      - KVM_CENTER_DISABLE_HTTP=1
+      - KVM_CENTER_DATA=/var/lib/kvm-center/data.json
+    volumes:
+      - kvm-center-data:/var/lib/kvm-center
+      - kvm-center-tls:/var/lib/kvm-center/tls
+
+volumes:
+  kvm-center-data:
+    driver: local
+  kvm-center-tls:
+    driver: local

@@ -1,0 +1,15 @@
+#cloud-config
+# cloud-init user-data for the kvm-center appliance smoke test only.
+# The published qcow2 doesn't ship with seeded credentials — the
+# firstboot service generates the admin password on first boot.
+# This file is consumed by appliance/smoke.sh (boots the qcow2 with
+# a tiny seed ISO that lets the smoke run log in via root:smoke).
+
+hostname: kvm-center-smoke
+ssh_pwauth: true
+chpasswd:
+  list: |
+    root:smoke
+  expire: false
+runcmd:
+  - [ systemctl, enable, --now, mongod, kvm-center-firstboot, kvm-center ]

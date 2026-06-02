@@ -1,0 +1,872 @@
+package main
+
+import (
+	"context"
+	"crypto/tls"
+	"embed"
+	"flag"
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"kvm-center/internal/models"
+)
+
+// serverCtx is cancelled on SIGINT/SIGTERM. Background workers
+// (host-mark, phantom-prune, backup scheduler, drainHost goroutines)
+// honour it so a clean shutdown stops their loops promptly instead
+// of leaving them mid-tick when the process exits.
+var (
+	serverCtx    context.Context
+	serverCancel context.CancelFunc
+)
+
+// staticV4 embeds the built React SPA (webui-react/dist) produced by the
+// "vite build" step in the Docker image. In local dev the directory may
+// be empty — the /v4/ mux check below handles that gracefully so "go run
+// ./server" still works without a Node build pass.
+//
+//go:embed all:staticv4
+var staticV4Files embed.FS
+
+// Version is read from the committed /VERSION file at compile time via
+// go:embed — single source of truth shared by the server binary, the
+// build-portal page, and anything else that needs to stamp a release.
+// Bump the VERSION file alongside the git tag on each release.
+//
+//go:embed VERSION
+var versionRaw string
+
+// grafanaDashboard is the importable dashboard template shipped to
+// operators via /api/grafana/dashboard.json. Embedded so it stays
+// pinned to the release — edits travel with the binary.
+//
+//go:embed grafana-dashboard.json
+var grafanaDashboard []byte
+var Version = strings.TrimSpace(versionRaw)
+
+// GitSHA is set at build time via -ldflags. Embedded in the system
+// health response so operators can cross-reference "which build is
+// running" with the deploy log.
+var GitSHA = "unknown"
+
+// serverStartedAt is captured at process start. Used by the system
+// health endpoint to report uptime without depending on /proc.
+var serverStartedAt = time.Now()
+
+func main() {
+	mongoURL := flag.String("mongo-url", envOrDefault("KVM_CENTER_MONGO_URL", ""), "MongoDB URI — if set, data is persisted in Mongo instead of the JSON file. Leave blank for the JSON backend.")
+	mongoDB := flag.String("mongo-db", envOrDefault("KVM_CENTER_MONGO_DB", "kvm-center"), "MongoDB database name (used when -mongo-url is set)")
+	addr := flag.String("addr", envOrDefault("KVM_CENTER_ADDR", ":8090"), "HTTP listen address (plain HTTP, used when TLS is off or as the HTTPS-redirect port)")
+	tlsAddr := flag.String("tls-addr", envOrDefault("KVM_CENTER_TLS_ADDR", ":8443"), "HTTPS listen address (used when -cert/-key are set or auto-generated)")
+	grpcAddr := flag.String("grpc-addr", envOrDefault("KVM_CENTER_GRPC_ADDR", ""), "Optional dedicated gRPC listen address. Leave empty (default) to multiplex gRPC on the TLS port (:8190) via content-type dispatch; set to e.g. :8095 if the operator wants a separate port for firewall or audit reasons.")
+	tlsCert := flag.String("cert", envOrDefault("KVM_CENTER_TLS_CERT", ""), "PEM-encoded TLS certificate (if blank, a self-signed cert is auto-generated)")
+	tlsKey := flag.String("key", envOrDefault("KVM_CENTER_TLS_KEY", ""), "PEM-encoded private key for -cert (must be set if -cert is set, and vice-versa)")
+	tlsDir := flag.String("tls-dir", envOrDefault("KVM_CENTER_TLS_DIR", "/var/lib/kvm-center/tls"), "directory for the auto-generated self-signed cert when -cert/-key are blank")
+	disableTLS := flag.Bool("no-tls", envOrDefault("KVM_CENTER_NO_TLS", "") == "1", "run plain HTTP only (skip cert bootstrap)")
+	dataFile := flag.String("data", envOrDefault("KVM_CENTER_DATA", "/var/lib/kvm-center/data.json"), "JSON persistence file")
+	caDir := flag.String("ca-dir", envOrDefault("KVM_CENTER_CA_DIR", "/var/lib/kvm-center/ca"), "directory for the cluster CA cert + private key (auto-generated on first boot)")
+	showVersion := flag.Bool("version", false, "print version and exit")
+	flag.Parse()
+
+	// --cert and --key must be supplied together; either flag alone is a
+	// config error worth surfacing up front rather than serving HTTP by
+	// accident.
+	if (*tlsCert != "") != (*tlsKey != "") {
+		log.Fatalf("server: %v", errTLSPathsIncomplete)
+	}
+
+	if *showVersion {
+		log.Printf("kvm-center-server %s", Version)
+		os.Exit(0)
+	}
+	log.Printf("kvm-center-server starting, version=%s", Version)
+
+	// Resolve security-related env up front so misconfigurations log
+	// at startup instead of on the first request.
+	loadTrustedProxies()
+	loadCORSOrigins()
+	// Demo-mode posture is read once at startup.
+	loadDemoMode()
+
+	// Server-wide context. Workers (host-mark, phantom-prune, backup
+	// scheduler, drainHost) honour ctx.Done() so tests + future code
+	// can drive a clean shutdown by calling serverCancel().
+	//
+	// We deliberately do NOT install our own SIGINT/SIGTERM handler.
+	// Tried it during the v5.47 cycle and discovered that even just
+	// cancelling the context on signal lets queued AsyncSave goroutines
+	// run during docker's 10 s SIGTERM→SIGKILL grace; that flushed the
+	// pre-seed empty in-memory state right over the seeded Mongo data
+	// in our demo restart flow and broke every authed e2e test. Go's
+	// default SIGTERM handler terminates the process immediately
+	// without giving goroutines a chance to finish — losing a tick of
+	// host-mark or backup scheduler on shutdown is a non-issue, but
+	// stale-Save-overwriting-newer-data is a correctness problem. So
+	// we keep the cancellable context for the in-process clean-paths
+	// and let docker handle the actual signal.
+	serverCtx, serverCancel = context.WithCancel(context.Background())
+	_ = serverCancel // exposed for tests via the package-level var; not called in main
+
+	// Ensure data directory exists.
+	if err := os.MkdirAll(dirOf(*dataFile), 0755); err != nil {
+		log.Fatalf("server: cannot create data dir: %v", err)
+	}
+
+	// Pick the persistence backend. Mongo wins when a URL is provided;
+	// otherwise we stay on the original JSON file so an existing v5.0
+	// install boots unchanged. First-boot migration from JSON → Mongo
+	// happens transparently if a data.json is found alongside an empty
+	// Mongo — see bootstrapBackend for the detailed dance.
+	backend := bootstrapBackend(*mongoURL, *mongoDB, *dataFile)
+	log.Printf("backend: using %s", backend.Name())
+	store := NewStoreWithBackend(backend, *dataFile)
+	serverRestorePaths.DataFile = *dataFile
+
+	// Kick off the audit-log shipper worker. Safe to call even when
+	// no shipping config exists yet — worker no-ops until the operator
+	// saves a config via Settings → Audit Log → Shipping.
+	// Bootstrap the cluster CA (v5.10.0). Controls the PKI used for
+	// hypervisor mTLS + signed migration grants in upcoming patches.
+	clusterCA, err := EnsureClusterCA(*caDir)
+	if err != nil {
+		log.Fatalf("server: cluster CA: %v", err)
+	}
+	log.Printf("ca: cluster CA loaded from %s (NotAfter=%s)", *caDir, clusterCA.Cert().NotAfter.Format(time.RFC3339))
+
+	// Secret-box: AES-GCM key for envelope-encrypting LDAP / OIDC /
+	// SAML credentials at rest. Lives next to the cluster CA private
+	// key (any backup that takes the CA already has enough trust
+	// material that splitting the keys buys nothing operational).
+	if err := loadSecretBox(*caDir); err != nil {
+		log.Fatalf("server: secret_box: %v", err)
+	}
+
+	// Publish on-disk paths for the backup handler (Tier S #11, v5.32.20).
+	// TLS paths are resolved below after the -cert / -key flags and the
+	// auto-gen fallback; set the CA dir here because it's known now.
+	serverBackupPaths.CADir = *caDir
+	serverRestorePaths.CADir = *caDir
+
+	// Grant signer (v5.11). Ed25519 key used to sign per-migration
+	// authorization tokens. Stored next to the cluster CA so a single
+	// volume backs everything the control plane needs to survive a
+	// restart.
+	grantSigner, err := EnsureGrantSigner(*caDir)
+	if err != nil {
+		log.Fatalf("server: grant signer: %v", err)
+	}
+	serverGrantSigner = grantSigner
+	log.Printf("grants: Ed25519 signer ready (pub=%s…)", grantSigner.PublicKeyHex()[:16])
+
+	// Metrics sink (v5.13). No-op until the operator enables it via
+	// Settings → Metrics; starting the worker early avoids a race
+	// where the first telemetry tick arrives before the queue exists.
+	store.startMetricsWorker(serverCtx)
+
+	store.startAuditShipper(serverCtx)
+	store.startSnapshotScheduler(serverCtx)
+	store.startNotificationDispatcher(serverCtx)
+	store.startBackupScheduler(serverCtx)
+	store.startDiscordGatewayWorkers(serverCtx)
+	// v5.55.0 — enrolment-approval sweeper expires pending CSRs
+	// past TTL and reaps terminal rows past 24h.
+	store.startEnrolmentSweeper(serverCtx.Done())
+	hub := NewSSEHub()
+	store.hub = hub // state-changing store methods publish via this handle
+
+	// TLS bootstrap: operator-supplied cert takes priority; otherwise
+	// generate a self-signed pair into -tls-dir so HTTPS works out of
+	// the box on a fresh install. -no-tls skips the whole dance for
+	// plain-HTTP dev / tests.
+	certPath, keyPath := *tlsCert, *tlsKey
+	var reloader *CertReloader
+	if !*disableTLS {
+		if certPath == "" && keyPath == "" {
+			certPath = *tlsDir + "/server.crt"
+			keyPath = *tlsDir + "/server.key"
+			if err := EnsureSelfSigned(certPath, keyPath); err != nil {
+				log.Fatalf("server: tls bootstrap: %v", err)
+			}
+			log.Printf("tls: using auto-generated self-signed cert at %s", certPath)
+		} else {
+			log.Printf("tls: using operator-supplied cert at %s", certPath)
+		}
+		reloader = NewCertReloader(certPath, keyPath)
+		// Prime the cache + surface any load error at startup so we
+		// don't defer discovery to the first client handshake.
+		if _, err := reloader.GetCertificate(nil); err != nil {
+			log.Fatalf("server: tls cert load: %v", err)
+		}
+		serverBackupPaths.TLSCert = certPath
+		serverBackupPaths.TLSKey = keyPath
+		serverRestorePaths.TLSCert = certPath
+		serverRestorePaths.TLSKey = keyPath
+	}
+
+	// Background: expiry watcher. Covers three certificate classes:
+	//   - server TLS leaf (self-signed by default or operator-supplied)
+	//   - cluster CA (ECDSA P-256, 10-year default; signs hypervisor certs)
+	//   - each enrolled hypervisor's leaf cert (used for mTLS migration)
+	// Any class going silently past its expiry breaks migrations with
+	// no UI signal (reported as Tier S #8, roadmapped 2026-04-20).
+	// Fires one warning per (kind, identity) transition into the
+	// threshold window so operators don't get spammed every tick.
+	goSafe("expiry-watcher", func() { startExpiryWatcher(store, reloader, clusterCA) })
+
+	// Background: mark offline hosts and persist every 30 seconds.
+	// Phantom-host prune runs on a separate, slower tick (hourly) so
+	// it can't thrash the store under load and so a noisy audit log
+	// doesn't complicate a storm of MarkOfflineHosts calls.
+	goSafe("host-mark-loop", func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-serverCtx.Done():
+				return
+			case <-ticker.C:
+				store.MarkOfflineHosts()
+				store.Save()
+			}
+		}
+	})
+	goSafe("phantom-prune-loop", func() {
+		// Stagger: first prune after 10 min, then hourly. No need to
+		// race with the post-boot reconcile storm.
+		select {
+		case <-serverCtx.Done():
+			return
+		case <-time.After(10 * time.Minute):
+		}
+		store.PrunePhantomHosts()
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-serverCtx.Done():
+				return
+			case <-ticker.C:
+				store.PrunePhantomHosts()
+			}
+		}
+	})
+
+	mux := http.NewServeMux()
+
+	// API routes.
+	mux.HandleFunc("/api/events", handleSSEEvents(hub))
+	mux.HandleFunc("/api/telemetry", handleTelemetry(store))
+	mux.HandleFunc("/api/hosts", handleGetHosts(store))
+	// Maintenance routes share the /api/hosts/ prefix; dispatch by suffix.
+	mux.HandleFunc("/api/hosts/", func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/maintenance/enter"):
+			requirePerm(store, "host.manage", http.HandlerFunc(handleMaintenanceEnter(store))).ServeHTTP(w, r)
+		case strings.HasSuffix(r.URL.Path, "/maintenance/exit"):
+			requirePerm(store, "host.manage", http.HandlerFunc(handleMaintenanceExit(store))).ServeHTTP(w, r)
+		// v5.56.0 — operator-acknowledged "expected down" state.
+		// `clear` suffix must be checked before `expected-down` to avoid
+		// the prefix swallowing the more specific route.
+		case strings.HasSuffix(r.URL.Path, "/expected-down/clear"):
+			requirePerm(store, "host.manage", http.HandlerFunc(handleHostExpectedDownClear(store))).ServeHTTP(w, r)
+		case strings.HasSuffix(r.URL.Path, "/expected-down"):
+			requirePerm(store, "host.manage", http.HandlerFunc(handleHostExpectedDownSet(store))).ServeHTTP(w, r)
+		case strings.HasSuffix(r.URL.Path, "/metrics"):
+			handleHostMetrics(store).ServeHTTP(w, r)
+		// v5.58.0 — storage-pool lifecycle. Match before the generic
+		// DELETE catch-all so DELETE /api/hosts/<id>/storage/pools/<n>
+		// doesn't route to handleDeleteHost (which would 404 the host).
+		case strings.Contains(r.URL.Path, "/storage/pools"):
+			requirePerm(store, "storage.upload", http.HandlerFunc(handleStoragePools(store))).ServeHTTP(w, r)
+		case r.Method == http.MethodDelete:
+			requirePerm(store, "host.manage", http.HandlerFunc(handleDeleteHost(store))).ServeHTTP(w, r)
+		case strings.HasSuffix(r.URL.Path, "/update-agent"):
+			requirePerm(store, "host.manage", http.HandlerFunc(handleUpdateAgent(store))).ServeHTTP(w, r)
+		case strings.HasSuffix(r.URL.Path, "/unretire"):
+			requirePerm(store, "host.manage", http.HandlerFunc(handleUnretireHost(store))).ServeHTTP(w, r)
+		default:
+			handleGetHost(store).ServeHTTP(w, r)
+		}
+	})
+	// v5.54.0 — list deny-listed (retired) host_ids. Settings → TLS
+	// surfaces this so an operator can see what's blocking telemetry
+	// + offer an Unretire button.
+	mux.Handle("/api/hosts/retired", requirePerm(store, "host.manage", http.HandlerFunc(handleListRetired(store))))
+	mux.Handle("/api/audit", requirePerm(store, "audit.view", http.HandlerFunc(handleAuditList(store))))
+	mux.Handle("/api/snapshot-policies", requirePerm(store, "vm.snapshot", http.HandlerFunc(handleSnapshotPolicies(store))))
+	mux.Handle("/api/snapshot-policies/", requirePerm(store, "vm.snapshot", http.HandlerFunc(handleSnapshotPolicy(store))))
+	mux.Handle("/api/settings/audit-shipping", requirePerm(store, "user.manage", http.HandlerFunc(auditShippingRouter(store))))
+	mux.Handle("/api/settings/audit-shipping/test", requirePerm(store, "user.manage", http.HandlerFunc(handleAuditShippingTest(store))))
+	mux.Handle("/api/settings/notifications", requirePerm(store, "user.manage", http.HandlerFunc(handleNotifications(store))))
+	mux.Handle("/api/settings/notifications/test", requirePerm(store, "user.manage", http.HandlerFunc(handleNotificationTest(store))))
+	// Discord Gateway settings hold a bearer-credential-grade token and
+	// can route every fleet event to a Discord channel — gate on the
+	// admin wildcard rather than user.manage so a "fleet operator with
+	// user.manage" custom role can't quietly redirect notifications to
+	// an untrusted gateway.
+	mux.Handle("/api/settings/discord-gateway", requirePerm(store, "admin", http.HandlerFunc(discordGatewayRouter(store))))
+	mux.Handle("/api/settings/discord-gateway/pair", requirePerm(store, "admin", http.HandlerFunc(handleDiscordGatewayPair(store))))
+	mux.Handle("/api/settings/discord-gateway/revoke", requirePerm(store, "admin", http.HandlerFunc(handleDiscordGatewayRevoke(store))))
+	mux.Handle("/api/settings/discord-gateway/test", requirePerm(store, "admin", http.HandlerFunc(handleDiscordGatewayTest(store))))
+	mux.Handle("/api/settings/metrics", requirePerm(store, "user.manage", http.HandlerFunc(handleMetricsSettings(store))))
+	mux.Handle("/api/settings/metrics/test", requirePerm(store, "user.manage", http.HandlerFunc(handleMetricsTest(store))))
+	// Docs (v5.14). Public — reference material, not operational state.
+	mux.HandleFunc("/api/docs/tree", handleDocsTree)
+	mux.HandleFunc("/api/docs/page/", handleDocsPage)
+	mux.HandleFunc("/api/docs/media/", handleDocsMedia)
+	mux.HandleFunc("/api/grafana/dashboard.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", `attachment; filename="kvm-center-dashboard.json"`)
+		w.Write(grafanaDashboard)
+	})
+	// Admin-scoped system tokens (user.manage).
+	mux.Handle("/api/tokens", requirePerm(store, "user.manage", http.HandlerFunc(handleAPITokens(store))))
+	// Self-service user tokens (any signed-in user). More-specific path
+	// must be registered before /api/tokens/ so http.ServeMux picks the
+	// right handler.
+	mux.Handle("/api/tokens/me", http.HandlerFunc(handleMyAPITokens(store)))
+	mux.Handle("/api/tokens/me/", http.HandlerFunc(handleMyAPIToken(store)))
+	mux.Handle("/api/tokens/", requirePerm(store, "user.manage", http.HandlerFunc(handleAPIToken(store))))
+
+	// Command log (v5.32.17). Admin-only: shows the last N /api/command
+	// invocations with actor + outcome, and surfaces any "unknown"
+	// entries the boot reconciler flagged.
+	mux.Handle("/api/admin/command-log", requirePerm(store, "user.manage", http.HandlerFunc(handleCommandLog(store))))
+
+	// Hypervisor PKI (v5.10.0). Admin-gated except /sign (which is
+	// protected by the one-time enrollment token) and /bundle (public
+	// trust anchor).
+	mux.Handle("/api/ca/enroll", requirePerm(store, "tls.manage", http.HandlerFunc(handleCAEnroll(store))))
+	mux.HandleFunc("/api/ca/sign", handleCASign(store, clusterCA))
+	mux.HandleFunc("/api/ca/bundle", handleCABundle(clusterCA))
+
+	// v5.55.0 — enrolment approval flow.
+	//
+	// The submit path (`POST /api/ca/enrollment-requests`) and the
+	// poll path (`GET /api/ca/enrollment-poll/<id>?token=...`) are
+	// PUBLIC — new hypervisor has no kvm-center session yet, only a
+	// one-time poll-token it received in the submit response.
+	//
+	// The list, approve, and reject paths under
+	// `/api/ca/enrollment-requests/` are admin (tls.manage) gated.
+	// The poll path lives on a distinct prefix so the public/private
+	// auth boundaries line up cleanly with publicAPIPrefixes.
+	mux.HandleFunc("/api/ca/enrollment-requests", handleEnrolmentRequest(store, clusterCA))
+	mux.HandleFunc("/api/ca/enrollment-poll/", handleEnrolmentPoll(store))
+	mux.Handle("/api/ca/enrollment-requests-list",
+		requirePerm(store, "tls.manage", http.HandlerFunc(handleEnrolmentList(store))))
+	mux.HandleFunc("/api/ca/enrollment-requests/", func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/approve"):
+			requirePerm(store, "tls.manage", http.HandlerFunc(handleEnrolmentApprove(store, clusterCA))).ServeHTTP(w, r)
+		case strings.HasSuffix(r.URL.Path, "/reject"):
+			requirePerm(store, "tls.manage", http.HandlerFunc(handleEnrolmentReject(store))).ServeHTTP(w, r)
+		default:
+			writeError(w, http.StatusBadRequest, "use /api/ca/enrollment-poll/<id> to poll status")
+		}
+	})
+	// Grant pub-key (v5.11). Public trust material, so served without
+	// auth so fresh agents can fetch during first contact.
+	mux.HandleFunc("/api/migrations/grant-pubkey", handleGrantPubKey(grantSigner))
+	// Grant-signer rotation (v5.32.21, Tier S #9). Admin-only. Agents
+	// pick up the new pubkey + grace window on next /grant-pubkey
+	// fetch (on-demand when they encounter an unknown signature).
+	mux.Handle("/api/admin/grant-signer/rotate", demoBlock403(requirePerm(store, "user.manage", http.HandlerFunc(handleGrantSignerRotate(store, grantSigner)))))
+	// Virsh reconcile (v5.32.21, Tier S #1). Triggers an immediate
+	// agent telemetry refresh and returns a diff of what changed.
+	mux.Handle("/api/admin/reconcile/", requirePerm(store, "user.manage", http.HandlerFunc(handleReconcileHost(store))))
+	// System health (v5.33.0, P1.1). Admin-gated single-pane status.
+	// Cached 15s inside the handler so polling pages don't stampede.
+	mux.Handle("/api/admin/system-health", requirePerm(store, "user.manage", handleSystemHealth(store, clusterCA, reloader, grantSigner)))
+	mux.Handle("/api/ca/hypervisors", requirePerm(store, "tls.manage", http.HandlerFunc(handleCAHypervisors(store, clusterCA))))
+	mux.Handle("/api/ca/hypervisors/", requirePerm(store, "tls.manage", http.HandlerFunc(handleCARevoke(store))))
+	mux.HandleFunc("/api/vms", handleGetVMs(store))
+	mux.HandleFunc("/api/vms/snapshots", handleVMSnapshots(store))
+	mux.HandleFunc("/api/vms/screenshot", handleVMScreenshot(store))
+	mux.Handle("/api/vms/notes", requirePerm(store, "vm.edit", http.HandlerFunc(handleVMNotes(store))))
+	mux.Handle("/api/vms/console-token", requirePerm(store, "vm.console", http.HandlerFunc(handleConsoleToken(store))))
+	// Per-UUID VM detail (v5.33.7). Registered with trailing slash so
+	// Go's ServeMux treats it as a subtree match — the more-specific
+	// exact routes above (snapshots/screenshot/notes/console-token)
+	// still win. Anything else under /api/vms/<...>/ is interpreted
+	// as a UUID lookup.
+	mux.HandleFunc("/api/vms/", handleGetVMByUUID(store))
+	// Server-proxied console (v5.0.4+): noVNC HTML and the VNC WebSocket
+	// both ride through the server's HTTPS origin so every hit is
+	// re-validated against the operator's session cookie. Sharing the
+	// URL with someone who doesn't carry that cookie does nothing.
+	mux.Handle("/api/console/", requirePerm(store, "vm.console", http.HandlerFunc(handleConsolePage(store))))
+	mux.Handle("/api/console-ws/", requirePerm(store, "vm.console", http.HandlerFunc(handleConsoleWSProxy(store))))
+	mux.HandleFunc("/api/storage", handleGetStorage(store))
+	mux.Handle("/api/storage/browse", requirePerm(store, "storage.view", http.HandlerFunc(handleStorageBrowse(store))))
+	mux.Handle("/api/storage/upload", requirePerm(store, "storage.upload", http.HandlerFunc(handleStorageUpload(store))))
+	mux.Handle("/api/storage/file", requirePerm(store, "storage.delete", http.HandlerFunc(handleStorageDelete(store))))
+	mux.Handle("/api/vm-create-info", requirePerm(store, "vm.create", http.HandlerFunc(handleVMCreateInfo(store))))
+	mux.Handle("/api/vm-create", requirePerm(store, "vm.create", http.HandlerFunc(handleVMCreate(store))))
+	mux.HandleFunc("/api/command", handleCommand(store))
+	// v5.48.1 (PR-3a): agents POST progress frames here while an
+	// in-flight command runs. Server persists onto command_log +
+	// fans out as SSE `command_progress` so the SPA's Recent Tasks
+	// pane (PR-3b) can render real-time progress bars.
+	mux.HandleFunc("/api/agent/command-progress", handleAgentCommandProgress(store))
+	// v5.48.1 (PR-3b): Tasks API for the Recent Tasks pane.
+	// Operators see their own tasks; admins (user.manage) see all.
+	mux.HandleFunc("/api/tasks/recent", handleTasksRecent(store))
+	mux.HandleFunc("/api/tasks/stats", handleTasksStats(store))
+	mux.HandleFunc("/api/tasks/", handleTaskByID(store))
+	mux.HandleFunc("/api/tasks", handleTasksSince(store))
+	// v5.48 (PR-2f): operator cancel endpoint. Proxies to the
+	// agent's /command/cancel and updates the server-side
+	// command_log row to "cancelled" so the SPA reflects intent
+	// even if the agent's reconciliation hasn't landed yet.
+	mux.Handle("/api/command/cancel", requirePerm(store, models.PermVMLifecycle, http.HandlerFunc(handleCommandCancel(store))))
+	mux.HandleFunc("/api/guest-telemetry", handleGuestTelemetry(store))
+	mux.HandleFunc("/api/migrations", handleGetMigrations(store))
+	mux.HandleFunc("/api/migrations/record", handlePostMigration(store))
+	mux.Handle("/api/migrations/cancel", requirePerm(store, "vm.migrate", http.HandlerFunc(handleCancelMigration(store))))
+	// Force-fail (v5.32.18): admin-only escape hatch when the normal
+	// cancel path refuses. Does NOT talk to the agent — operator has
+	// presumably resolved the VM state manually.
+	mux.Handle("/api/migrations/force-fail", requirePerm(store, "user.manage", http.HandlerFunc(handleForceFailMigration(store))))
+	mux.HandleFunc("/api/migrate-status", handleMigrateStatus(store))
+	mux.HandleFunc("/api/kvm-tools/version", handleKVMToolsVersion)
+	mux.Handle("/api/kvm-tools/update", requirePerm(store, "vm.edit", http.HandlerFunc(handleKVMToolsUpdate(store))))
+
+	// TLS management — status is readable by any signed-in user so the
+	// UI can show the expiry badge; mutations require tls.manage.
+	if reloader != nil {
+		mux.HandleFunc("/api/tls/status", handleTLSStatus(reloader, certPath, keyPath))
+		mux.HandleFunc("/api/tls/cert.pem", handleTLSCertDownload(certPath))
+		mux.Handle("/api/tls/upload", requirePerm(store, "tls.manage", auditTLSHandler(store, AuditTLSUpload, handleTLSUpload(certPath, keyPath))))
+		mux.Handle("/api/tls/regenerate", requirePerm(store, "tls.manage", auditTLSHandler(store, AuditTLSRegenerate, handleTLSRegenerate(certPath, keyPath))))
+	}
+	mux.HandleFunc("/health", handleHealth(store, clusterCA, reloader, grantSigner))
+
+	// /downloads/* serves the cross-compiled agent / kvm-tools / kvmctl
+	// binaries plus install scripts. v5.16 folded this in from the
+	// standalone kvm-center-build container (port 8097). Unauthenticated
+	// by design — install scripts need to be pullable before enrollment,
+	// and the enrollment token is what actually gates cluster access.
+	if dir := os.Getenv("KVM_CENTER_DOWNLOADS_DIR"); dir != "" {
+		if st, err := os.Stat(dir); err == nil && st.IsDir() {
+			mux.Handle("/downloads/", http.StripPrefix("/downloads/", http.FileServer(http.Dir(dir))))
+			log.Printf("downloads: serving %s under /downloads/", dir)
+			// C2: publish signed manifests for the agent binaries so
+			// self-update can verify them before swapping.
+			signAgentBinaries(dir, grantSigner)
+		} else {
+			log.Printf("downloads: KVM_CENTER_DOWNLOADS_DIR=%s is not a directory; /downloads/ disabled", dir)
+		}
+	}
+	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"version":"` + Version + `"}`))
+	})
+
+	// ── Auth + RBAC ────────────────────────────────────────────
+	mux.HandleFunc("/api/auth/status", handleAuthStatus(store))
+	mux.HandleFunc("/api/auth/register", handleAuthRegister(store))
+	mux.HandleFunc("/api/auth/login", handleAuthLogin(store))
+	mux.HandleFunc("/api/auth/logout", handleAuthLogout(store))
+	mux.HandleFunc("/api/auth/me", handleAuthMe(store))
+	mux.HandleFunc("/api/auth/2fa/setup", handleTOTPSetup(store))
+	mux.HandleFunc("/api/auth/2fa/enable", handleTOTPEnable(store))
+	mux.HandleFunc("/api/auth/2fa/disable", handleTOTPDisable(store))
+	// Federated sign-in (public): list providers + OAuth2/OIDC start+callback.
+	mux.HandleFunc("/api/auth/providers", handleListProviders(store))
+	mux.HandleFunc("/api/auth/oidc/start", handleOIDCStart(store))
+	mux.HandleFunc("/api/auth/oidc/callback", handleOIDCCallback(store))
+	mux.HandleFunc("/api/auth/saml/start", handleSAMLStart(store))
+	mux.HandleFunc("/api/auth/saml/acs", handleSAMLACS(store))
+	mux.HandleFunc("/api/auth/saml/metadata", handleSAMLMetadata(store))
+	// Admin IdP CRUD (requires user.manage).
+	mux.Handle("/api/idps", requirePerm(store, "user.manage", handleIDPsList(store)))
+	mux.Handle("/api/idps/new", requirePerm(store, "user.manage", handleIDPsCreate(store)))
+	mux.Handle("/api/idps/", requirePerm(store, "user.manage", handleIDPUpdate(store)))
+	// Global feature flags. GET is readable by any signed-in user (the UI
+	// needs it to grey out disabled buttons); writes require user.manage.
+	mux.HandleFunc("/api/settings", handleFeaturesGet(store))
+	mux.Handle("/api/settings/update", requirePerm(store, "user.manage", handleFeaturesUpdate(store)))
+
+	// First-boot setup wizard (v5.20). /state is public because the SPA
+	// needs to read it before the user signs in; /complete requires
+	// user.manage so only admins can close out the wizard.
+	backfillSetupComplete(store)
+	// Clean up migration records stranded by a server restart (bug:
+	// live migrate HTTP response goes to a closed socket across a
+	// restart, so finalizeMigration never runs).
+	go reconcileStrandedMigrations(store)
+	// Command log: flip any "pending" entries older than the cutoff
+	// to "unknown" so the admin UI surfaces them. We can't tell
+	// whether the agent actually ran them — hence "unknown", not
+	// "failed". Tier S #4, v5.32.17.
+	go reconcileStrandedCommands(store)
+	// v5.47.2 (PR-1c): live reconciler that polls each agent's
+	// /command-outcome cache to recover the actual outcome of
+	// commands left "pending" by HTTP-call timeouts. Resolves the
+	// bookkeeping divergence salvage from the 2026-04-30 incident.
+	go runCommandReconciler(serverCtx, store)
+	seedPublicURLFromEnv(store)
+	notifyStore = store
+	mux.HandleFunc("/api/setup/state", handleSetupState(store))
+	mux.Handle("/api/settings/public-url", requirePerm(store, "user.manage", handlePublicURL(store)))
+	mux.Handle("/api/setup/complete", requirePerm(store, "user.manage", http.HandlerFunc(handleSetupComplete(store))))
+	// Backup (v5.27): admin-only snapshot export. Restore lives in
+	// scripts/bootstrap.sh --restore because replacing live state
+	// in-process is hazardous.
+	mux.Handle("/api/admin/backup", requirePerm(store, "user.manage", handleBackup(store)))
+	// Restore (v5.39.0). Multipart upload of a backup tarball; the
+	// handler verifies checksums + writes files into live volumes,
+	// then expects the operator to hit /api/admin/restart so docker
+	// brings the server back against the restored state.
+	mux.Handle("/api/admin/restore", demoBlock403(requirePerm(store, "user.manage", handleRestore(store))))
+	mux.Handle("/api/admin/restart", demoBlock403(requirePerm(store, "user.manage", handleRestart(store))))
+	// Backup schedule (v5.43.0). Single endpoint, GET returns the
+	// current schedule + last-run outcome; PUT replaces it.
+	mux.Handle("/api/admin/backup/schedule", requirePerm(store, "user.manage", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleBackupScheduleGet(store)(w, r)
+		} else {
+			handleBackupSchedulePut(store)(w, r)
+		}
+	})))
+	// SSH known_hosts (v5.46.0). Admin endpoint for operator
+	// curation; the agent-facing fetch is below — also exposed but
+	// gated on a hypervisor cert (or token-bearing kvmctl) to
+	// prevent random LAN peers from harvesting the file.
+	mux.Handle("/api/admin/ssh-known-hosts", requirePerm(store, "user.manage", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleSSHKnownHostsGet(store)(w, r)
+		} else {
+			handleSSHKnownHostsPut(store)(w, r)
+		}
+	})))
+	// Agent-facing read-only endpoint. The install script + the
+	// agent fetch this during enrollment + on a periodic refresh.
+	// No SPA session required — agents on the management VLAN
+	// already have HTTPS access. Returns plaintext.
+	mux.HandleFunc("/api/agents/ssh-known-hosts", handleAgentSSHKnownHosts(store))
+	// v5.55.4 — fleet-wide kvm-migrator authorized_keys. Agents poll
+	// this hourly and overwrite their local authorized_keys so a new
+	// host is trusted across the fleet on its first telemetry tick.
+	mux.HandleFunc("/api/agents/migrator-authorized-keys", handleAgentMigratorAuthorizedKeys(store))
+	// Database backend status + migration (v5.1+). Gated on user.manage;
+	// considered a platform-ops operation alongside TLS management.
+	mux.Handle("/api/settings/database", requirePerm(store, "user.manage", handleDatabaseStatus(store)))
+	mux.Handle("/api/settings/database/test", requirePerm(store, "user.manage", handleDatabaseTest()))
+	mux.Handle("/api/settings/database/migrate", requirePerm(store, "user.manage", handleDatabaseMigrate(store)))
+	// Admin-only user/group/role CRUD (require user.manage permission).
+	mux.Handle("/api/users", requirePerm(store, "user.manage", handleUsersList(store)))
+	mux.Handle("/api/users/new", requirePerm(store, "user.manage", handleUsersCreate(store)))
+	mux.Handle("/api/users/", requirePerm(store, "user.manage", handleUserUpdate(store)))
+	mux.Handle("/api/groups", requirePerm(store, "user.manage", handleGroupsList(store)))
+	mux.Handle("/api/groups/new", requirePerm(store, "user.manage", handleGroupsCreate(store)))
+	mux.Handle("/api/groups/", requirePerm(store, "user.manage", handleGroupUpdate(store)))
+	mux.Handle("/api/roles", requirePerm(store, "user.manage", handleRolesList(store)))
+	mux.Handle("/api/roles/new", requirePerm(store, "user.manage", handleRolesCreate(store)))
+	mux.Handle("/api/roles/", requirePerm(store, "user.manage", handleRoleUpdate(store)))
+
+	// Purge expired sessions every 10 minutes. Honours serverCtx so a
+	// clean shutdown stops the loop instead of leaving it ticking past
+	// process cancellation.
+	goSafe("session-purger", func() {
+		t := time.NewTicker(10 * time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-serverCtx.Done():
+				return
+			case <-t.C:
+				store.PurgeExpiredSessions()
+			}
+		}
+	})
+
+	// v5.18.9: legacy v3 HTML UI retired. The React SPA is the only
+	// shipped UI now; /legacy and /v4 bookmarks 308 to the SPA root.
+	sub4, err := fs.Sub(staticV4Files, "staticv4/dist")
+	if err != nil {
+		log.Fatalf("server: v4 SPA bundle not embedded: %v", err)
+	}
+	mux.Handle("/", spaHandler(sub4))
+	mux.Handle("/legacy", http.RedirectHandler("/", http.StatusPermanentRedirect))
+	mux.Handle("/legacy/", http.RedirectHandler("/", http.StatusPermanentRedirect))
+	mux.Handle("/v4", http.RedirectHandler("/", http.StatusPermanentRedirect))
+	mux.Handle("/v4/", http.RedirectHandler("/", http.StatusPermanentRedirect))
+
+	handler := securityHeaders(corsMiddleware(loggingMiddleware(bodySizeMiddleware(authMiddleware(store, mux)))))
+
+	// gRPC agent service (v5.27+). The in-process gRPC server rides
+	// the same :8190 TLS listener as the HTTP API via content-type
+	// dispatch (see tlsServer.Handler below). A standalone :8095
+	// listener is still supported for the rare operator who wants a
+	// dedicated port + different firewall rules — set
+	// KVM_CENTER_GRPC_ADDR=0.0.0.0:8095 to enable. Default is the
+	// multiplex (empty → no separate listener).
+	grpcSrv := buildGRPCServer(store)
+	if *grpcAddr != "" {
+		stop, err := startGRPCServerOn(*grpcAddr, grpcSrv)
+		if err != nil {
+			log.Printf("grpc: dedicated listener disabled (%v)", err)
+		} else {
+			defer stop()
+		}
+	}
+
+	if reloader == nil {
+		log.Printf("kvm-center server listening on %s (plain HTTP, TLS disabled)", *addr)
+		if err := http.ListenAndServe(*addr, handler); err != nil {
+			log.Fatalf("server: %v", err)
+		}
+		return
+	}
+
+	// HTTPS on tlsAddr serves the full handler for browser users. Plain
+	// HTTP on addr keeps serving /api/ unchanged so hypervisor agents
+	// (which don't carry our self-signed CA) can keep posting telemetry
+	// without TLS changes on their side; anything that smells like a
+	// browser landing page (non-/api/ GET) is 308'd to the HTTPS URL.
+	//
+	// gRPC multiplex (v5.27+): a request with Content-Type
+	// application/grpc (HTTP/2 only) fans out to the in-process
+	// gRPC server; everything else goes through the REST handler.
+	// Sharing the port means one TLS cert, one firewall rule, one
+	// listen address in the agent's config.
+	muxedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			grpcSrv.ServeHTTP(w, r)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
+	tlsServer := &http.Server{
+		Addr:    *tlsAddr,
+		Handler: muxedHandler,
+		TLSConfig: &tls.Config{
+			GetCertificate: reloader.GetCertificate,
+			MinVersion:     tls.VersionTLS12,
+			// HTTP/2 is required for gRPC — advertise h2 in ALPN.
+			NextProtos: []string{"h2", "http/1.1"},
+			// v5.44.0 (gRPC mTLS opt-in): accept a client cert if the
+			// peer presents one, but don't require it. Browsers and
+			// kvmctl don't carry one; agents may. The gRPC stream
+			// interceptor verifies the chain when present.
+			ClientCAs:  clusterCA.Pool(),
+			ClientAuth: tls.VerifyClientCertIfGiven,
+		},
+	}
+	// v5.47.0: plain-HTTP :8090 listener now defaults OFF. Set
+	// KVM_CENTER_LEGACY_HTTP=1 to opt back in for clusters still
+	// running pre-v5.32 kvm-tools. Pre-v5.47 honoured the inverse
+	// flag KVM_CENTER_DISABLE_HTTP=1 — that flag still works as an
+	// off-switch alias so existing compose stacks keep behaving the
+	// same way through the upgrade.
+	legacyHTTP := os.Getenv("KVM_CENTER_LEGACY_HTTP") == "1"
+	disableLegacy := os.Getenv("KVM_CENTER_DISABLE_HTTP") == "1"
+	if legacyHTTP && !disableLegacy {
+		goSafe("legacy-http-listener", func() {
+			plain := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				p := r.URL.Path
+				if strings.HasPrefix(p, "/api/") || p == "/health" || strings.HasPrefix(p, "/downloads/") {
+					handler.ServeHTTP(w, r)
+					return
+				}
+				host := r.Host
+				if i := strings.Index(host, ":"); i > 0 {
+					host = host[:i]
+				}
+				target := "https://" + host + *tlsAddr + r.URL.RequestURI()
+				http.Redirect(w, r, target, http.StatusPermanentRedirect)
+			})
+			log.Printf("kvm-center server plain-HTTP on %s (legacy opt-in via KVM_CENTER_LEGACY_HTTP=1)", *addr)
+			if err := http.ListenAndServe(*addr, plain); err != nil {
+				log.Printf("server: http listener exited: %v", err)
+			}
+		})
+	} else {
+		log.Printf("kvm-center server plain-HTTP listener disabled (default v5.47+; opt in with KVM_CENTER_LEGACY_HTTP=1 if pre-v5.32 kvm-tools are still in the fleet)")
+	}
+	log.Printf("kvm-center server listening on %s (TLS)", *tlsAddr)
+	if err := tlsServer.ListenAndServeTLS("", ""); err != nil {
+		log.Fatalf("server: tls: %v", err)
+	}
+}
+
+// allowedCORSOrigins is the configured allowlist for cross-origin
+// API access. Populated from KVM_CENTER_CORS_ORIGINS (comma-separated)
+// at startup. When empty (default), CORS is closed entirely — the
+// SPA is same-origin so most deployments don't need any cross-origin
+// access. v5.49 and earlier shipped Allow-Origin: * which let any
+// site fetch every public-by-design endpoint (/api/version,
+// /api/setup/state, /api/ca/bundle).
+var allowedCORSOrigins map[string]bool
+
+func loadCORSOrigins() {
+	raw := os.Getenv("KVM_CENTER_CORS_ORIGINS")
+	if raw == "" {
+		return
+	}
+	allowedCORSOrigins = map[string]bool{}
+	for _, o := range strings.Split(raw, ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			allowedCORSOrigins[o] = true
+		}
+	}
+	if len(allowedCORSOrigins) > 0 {
+		log.Printf("cors: %d origin(s) allow-listed via KVM_CENTER_CORS_ORIGINS", len(allowedCORSOrigins))
+	}
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only set CORS headers if the request's Origin matches the
+		// allowlist. Same-origin requests don't carry an Origin header
+		// and don't need CORS at all; cross-origin requests from
+		// non-allowlisted origins fall through with no headers, which
+		// blocks the browser from reading the response.
+		if origin := r.Header.Get("Origin"); origin != "" && allowedCORSOrigins[origin] {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// bodySizeMiddleware caps the size of request bodies on body-bearing
+// API methods so that an attacker (or a buggy client) cannot stream a
+// multi-GB JSON / form payload into memory and OOM the process. The
+// default 1 MiB limit is comfortable for every JSON payload kvm-center
+// accepts on /api/* — the few paths that legitimately need big bodies
+// (admin restore tarballs, storage uploads) are listed in
+// `bigBodyRoutes` below and get a higher per-route ceiling.
+//
+// Per-route enforcement happens via http.MaxBytesReader, which makes
+// the next read on r.Body return *http.MaxBytesError once the limit
+// is hit. Handlers that already check decode errors will surface a
+// clean 400; the response writer also signals 413 if a handler tries
+// to write past the cap.
+func bodySizeMiddleware(next http.Handler) http.Handler {
+	const defaultLimit int64 = 1 << 20 // 1 MiB
+	// Routes that legitimately upload large payloads need a higher
+	// ceiling. Match by prefix so sub-paths inherit the limit.
+	bigBodyRoutes := []struct {
+		prefix string
+		limit  int64
+	}{
+		// Backup tarball restore — single multi-GB tar.gz.
+		{"/api/admin/restore", 8 << 30}, // 8 GiB
+		// Storage upload pipeline — ISO/disk-image uploads.
+		{"/api/storage/upload", 16 << 30}, // 16 GiB
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only restrict body-bearing methods. GET / DELETE / OPTIONS
+		// have no body to limit; HEAD never gets a body either.
+		if r.Method != http.MethodPost && r.Method != http.MethodPut && r.Method != http.MethodPatch {
+			next.ServeHTTP(w, r)
+			return
+		}
+		// Body-bearing requests outside /api/ (downloads, SPA POSTs that
+		// don't exist) get the default cap as a defence in depth.
+		limit := defaultLimit
+		for _, route := range bigBodyRoutes {
+			if strings.HasPrefix(r.URL.Path, route.prefix) {
+				limit = route.limit
+				break
+			}
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// securityHeaders adds the response headers that browser-side
+// hardening expects. Defence in depth — the SPA is same-origin and
+// session cookies use SameSite=Strict, but adding HSTS / CSP /
+// X-Frame-Options closes the more obscure clickjacking / mixed-content
+// / downgrade vectors that show up in any half-decent pen-test.
+//
+// CSP is intentionally tight: 'self' only, no inline scripts, no
+// remote sources. The SPA bundle is shipped as same-origin static
+// assets so this works without exceptions. Operator overrides via
+// KVM_CENTER_CSP env var if a future use case needs it.
+//
+// /api/console/* gets a relaxed CSP because the noVNC console page
+// (server/console_html.go) loads noVNC from the jsDelivr CDN via a
+// dynamic ESM import inside an inline <script type="module">. The
+// strict default would block both the inline script AND the CDN
+// fetch, leaving the operator stuck at "connecting…" forever. The
+// console page is auth-gated on `vm.console` and operator-only;
+// loosening its CSP doesn't widen the SPA's attack surface.
+// Override via KVM_CENTER_CONSOLE_CSP if you've self-hosted noVNC
+// or want to lock the CDN host down further.
+func securityHeaders(next http.Handler) http.Handler {
+	csp := os.Getenv("KVM_CENTER_CSP")
+	if csp == "" {
+		csp = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+	}
+	consoleCSP := os.Getenv("KVM_CENTER_CONSOLE_CSP")
+	if consoleCSP == "" {
+		consoleCSP = "default-src 'self'; " +
+			"img-src 'self' data: blob:; " +
+			"style-src 'self' 'unsafe-inline'; " +
+			"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+			"connect-src 'self' https://cdn.jsdelivr.net wss: ws:; " +
+			"frame-ancestors 'none'"
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// HSTS — only when serving TLS to avoid telling a plain-HTTP
+		// reverse proxy to upgrade indefinitely.
+		if r.TLS != nil {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		// Per-path CSP: the console page needs inline + CDN; everything
+		// else stays locked down.
+		if strings.HasPrefix(r.URL.Path, "/api/console/") {
+			w.Header().Set("Content-Security-Policy", consoleCSP)
+		} else {
+			w.Header().Set("Content-Security-Policy", csp)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip logging for UI assets and health checks.
+		if r.URL.Path != "/health" && len(r.URL.Path) > 4 && r.URL.Path[:4] == "/api" {
+			log.Printf("%s %s", r.Method, r.URL.Path)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func envOrDefault(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func dirOf(path string) string {
+	for i := len(path) - 1; i >= 0; i-- {
+		if path[i] == '/' || path[i] == '\\' {
+			return path[:i]
+		}
+	}
+	return "."
+}

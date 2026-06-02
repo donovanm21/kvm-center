@@ -1,0 +1,270 @@
+name: docker-publish
+
+# v5.52.2: GitHub-mirror-side Docker Hub publish. The internal Gitea
+# repo's matching workflow no longer fires on push — operators
+# iterate locally with `[deploy]` (no Hub round-trip) and only ship a
+# public artefact when a curated commit set lands on this mirror.
+#
+# Trigger model:
+#   - push to main → publish if scripts/should-publish.sh says yes
+#     (VERSION bumped + [publish] for patches; minor/major always)
+#   - workflow_dispatch → publish unconditionally (manual override)
+#
+# Pipeline mirrors .gitea/workflows/docker-publish.yml so consumers
+# pulling from Hub see identical artefacts whether the publish came
+# from a Gitea workflow_dispatch or this push-driven path. Tags
+# pushed: :vX.Y.Z (immutable), :X.Y, :X, :latest.
+#
+# Secrets required on the GitHub repo (Settings → Secrets and
+# variables → Actions):
+#   DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, COSIGN_KEY, COSIGN_PASSWORD
+#   DISCORD_RELEASE_WEBHOOK, DISCORD_CHANGELOG_WEBHOOK (optional)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # need HEAD~1 for VERSION diff
+
+      - name: Evaluate publish gate
+        id: gate
+        run: |
+          set -eu
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::publish=true (workflow_dispatch override)"
+            exit 0
+          fi
+          prev=$(git show HEAD~1:server/VERSION 2>/dev/null | tr -d '[:space:]' || echo "")
+          cur=$(cat server/VERSION | tr -d '[:space:]')
+          subject=$(git log -1 --format=%s HEAD)
+          verdict=$(scripts/should-publish.sh "$prev" "$cur" "$subject")
+          echo "publish=$verdict" >> "$GITHUB_OUTPUT"
+          echo "::notice::prev=$prev cur=$cur subject=$subject → publish=$verdict"
+
+  publish:
+    needs: gate
+    if: github.repository == 'donovanm21/kvm-center' && (needs.gate.outputs.publish == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: ver
+        run: |
+          v=$(cat server/VERSION | tr -d '[:space:]')
+          bare=${v#v}
+          major=${bare%%.*}
+          rest=${bare#*.}
+          minor=${rest%%.*}
+          patch=${rest#*.}
+          echo "version=$v"          >> "$GITHUB_OUTPUT"
+          echo "version_bare=$bare"  >> "$GITHUB_OUTPUT"
+          echo "major=$major"        >> "$GITHUB_OUTPUT"
+          echo "minor=$minor"        >> "$GITHUB_OUTPUT"
+          echo "patch=$patch"        >> "$GITHUB_OUTPUT"
+          echo "::notice::publishing kvm-center $v ($major.$minor.$patch)"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Docker Hub login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Multi-arch build + push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.server
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: |
+            thedon21/kvm-center:${{ steps.ver.outputs.version }}
+            thedon21/kvm-center:${{ steps.ver.outputs.major }}.${{ steps.ver.outputs.minor }}
+            thedon21/kvm-center:${{ steps.ver.outputs.major }}
+            thedon21/kvm-center:latest
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.title=kvm-center
+            org.opencontainers.image.description=Central control plane for KVM/libvirt hypervisors
+            org.opencontainers.image.url=https://github.com/donovanm21/kvm-center
+            org.opencontainers.image.source=https://github.com/donovanm21/kvm-center
+            org.opencontainers.image.version=${{ steps.ver.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Smoke test (amd64)
+        id: smoke
+        env:
+          IMAGE: thedon21/kvm-center:${{ steps.ver.outputs.version }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -e
+          docker pull --platform linux/amd64 "$IMAGE"
+          docker run --rm -d --name kvmc-smoke "$IMAGE"
+          ok=0
+          for i in $(seq 1 90); do
+            got=$(docker exec kvmc-smoke sh -c 'curl -fsk https://localhost:8443/api/version 2>/dev/null' | python3 -c "import json,sys; print(json.load(sys.stdin).get('version',''))" 2>/dev/null || true)
+            if [ "$got" = "$VERSION" ]; then
+              ok=1
+              echo "::notice::smoke ok after ${i}s — image returns $got"
+              break
+            fi
+            sleep 1
+          done
+          echo "::group::container logs"
+          docker logs kvmc-smoke 2>&1 | tail -40 || true
+          echo "::endgroup::"
+          docker rm -f kvmc-smoke || true
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::smoke test FAILED — image $IMAGE did not return $VERSION on /api/version within 90s"
+            exit 1
+          fi
+
+      - name: Untag rolling tags on smoke failure
+        if: failure() && steps.smoke.outcome == 'failure'
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          TOKEN=$(curl -s -u "$DOCKERHUB_USERNAME:$DOCKERHUB_TOKEN" \
+            "https://hub.docker.com/v2/users/login/" \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"$DOCKERHUB_USERNAME\",\"password\":\"$DOCKERHUB_TOKEN\"}" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])")
+          for tag in latest ${{ steps.ver.outputs.major }} ${{ steps.ver.outputs.major }}.${{ steps.ver.outputs.minor }}; do
+            curl -s -X DELETE -H "Authorization: JWT $TOKEN" \
+              "https://hub.docker.com/v2/repositories/thedon21/kvm-center/tags/$tag/" \
+              -w "untag $tag → HTTP %{http_code}\n" || true
+          done
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Update Docker Hub repo description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: thedon21/kvm-center
+          short-description: "Central control plane for KVM/libvirt hypervisors"
+          readme-filepath: ./docs/dockerhub-description.md
+
+      - name: Cosign sign (version-tagged manifest)
+        env:
+          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          IMAGE: thedon21/kvm-center:${{ steps.ver.outputs.version }}
+        run: |
+          cosign sign --yes --key env://COSIGN_KEY "$IMAGE"
+
+      - name: Announce to Discord
+        if: success()
+        env:
+          DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          V: ${{ steps.ver.outputs.version }}
+          MM: ${{ steps.ver.outputs.major }}.${{ steps.ver.outputs.minor }}
+        run: |
+          if [ -z "${DISCORD_RELEASE_WEBHOOK:-}" ]; then
+            echo "DISCORD_RELEASE_WEBHOOK not set — skipping"; exit 0
+          fi
+          payload=$(python3 -c '
+          import json, os
+          v = os.environ["V"]
+          mm = os.environ["MM"]
+          content = (
+              f"\U0001f680 **kvm-center {v}** published to Docker Hub\n"
+              f"• Pull: `docker pull thedon21/kvm-center:{v}` (also `:{mm}` `:latest`)\n"
+              f"• Changelog: https://github.com/donovanm21/kvm-center/blob/main/server/docs/changelog.md\n"
+              f"• Verify: `cosign verify --key https://raw.githubusercontent.com/donovanm21/kvm-center/main/docs/security/cosign.pub thedon21/kvm-center:{v}`"
+          )
+          print(json.dumps({"content": content, "allowed_mentions": {"parse": []}}))
+          ')
+          curl -sS -X POST -H "Content-Type: application/json" \
+            -d "$payload" "$DISCORD_RELEASE_WEBHOOK" \
+            -w "discord-announce HTTP %{http_code}\n" || true
+
+      - name: Mirror changelog entry to #changelog
+        if: success()
+        env:
+          DISCORD_CHANGELOG_WEBHOOK: ${{ secrets.DISCORD_CHANGELOG_WEBHOOK }}
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          if [ -z "${DISCORD_CHANGELOG_WEBHOOK:-}" ]; then
+            echo "DISCORD_CHANGELOG_WEBHOOK not set — skipping"; exit 0
+          fi
+          payload=$(python3 <<'PY'
+          import json, os, re, pathlib
+          version = os.environ["V"]
+          text = pathlib.Path("server/docs/changelog.md").read_text()
+          m = re.search(rf"^## {re.escape(version)}\b.*?(?=^## |\Z)", text, re.S | re.M)
+          if not m:
+              m2 = re.search(r"^## (.+?)$\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+              if not m2:
+                  print(json.dumps({"content": f"📜 changelog updated for `{version}`"}))
+                  raise SystemExit(0)
+              entry = m2.group(0)
+          else:
+              entry = m.group(0)
+          lines = entry.splitlines()
+          heading = lines[0].lstrip("# ").strip()
+          body = "\n".join(lines[1:]).strip()
+          if len(body) > 3800:
+              body = body[:3800].rsplit("\n", 1)[0] + "\n\n_…truncated. Full entry in [server/docs/changelog.md](https://github.com/donovanm21/kvm-center/blob/main/server/docs/changelog.md)._"
+          payload = {
+              "content": f"📜 **changelog — {version}**",
+              "embeds": [{
+                  "title": heading,
+                  "description": body,
+                  "url": "https://github.com/donovanm21/kvm-center/blob/main/server/docs/changelog.md",
+                  "color": 0xE3571E
+              }],
+              "allowed_mentions": {"parse": []}
+          }
+          print(json.dumps(payload))
+          PY
+          )
+          curl -sS -X POST -H "Content-Type: application/json" \
+            -d "$payload" "$DISCORD_CHANGELOG_WEBHOOK" \
+            -w "discord-changelog HTTP %{http_code}\n" || true
+
+      - name: Summary
+        if: always()
+        env:
+          V: ${{ steps.ver.outputs.version }}
+          MM: ${{ steps.ver.outputs.major }}.${{ steps.ver.outputs.minor }}
+          MAJ: ${{ steps.ver.outputs.major }}
+        run: |
+          cat <<EOF
+          ────────────────────────────────
+          docker-publish summary (github mirror)
+          ────────────────────────────────
+          tags pushed:
+            thedon21/kvm-center:$V
+            thedon21/kvm-center:$MM
+            thedon21/kvm-center:$MAJ
+            thedon21/kvm-center:latest
+          arches:   linux/amd64, linux/arm64
+          smoke:    ${{ steps.smoke.outcome }}
+          cosign:   signed thedon21/kvm-center:$V
+
+          verify:
+            cosign verify --key https://raw.githubusercontent.com/donovanm21/kvm-center/main/docs/security/cosign.pub thedon21/kvm-center:$V
+          ────────────────────────────────
+          EOF

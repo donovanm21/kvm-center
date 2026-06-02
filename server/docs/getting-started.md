@@ -1,0 +1,224 @@
+---
+title: Getting started
+section: Getting started
+order: 20
+---
+
+# Getting started
+
+A fresh kvm-center install needs three things: the control-plane
+stack, at least one enrolled hypervisor, and an administrator
+account.
+
+## 1. Deploy the control plane
+
+For a first-time install the recommended path is the interactive
+installer — it prompts for Mongo credentials, the cluster DNS
+domain, and writes a `.env` file (mode `0600`) before kicking off
+the deploy:
+
+```sh
+# On the docker host
+git clone https://github.com/donovanm21/kvm-center /opt/kvm-center
+cd /opt/kvm-center
+scripts/bootstrap.sh --interactive
+```
+
+Every prompt has a safe default, and the captured Mongo password
+is unset from the shell immediately after it's written to `.env`
+so it can't leak into `env` / `ps` output.
+
+**Re-running `--interactive`** on a host that already has an
+install gives you four choices up-front:
+
+- **keep** — just re-run `--deploy` against the current state (no
+  data loss; use this for routine re-deploys).
+- **reconfig** — regenerate `.env` (extra-confirmed because the
+  existing Mongo volume was initialised against the old password
+  and won't authenticate).
+- **fresh** — destructive nuke: `docker compose down -v`, delete
+  `.env` and any `.env.bak.*`, start over. Double-confirmed.
+  Hypervisor-side data is never touched.
+- **cancel** — no-op.
+
+For automated redeploys (CI, SSH), skip the TUI:
+
+```sh
+scripts/bootstrap.sh --deploy
+```
+
+`--deploy` pulls the latest commit, rebuilds the Docker stack,
+starts the containers, and pushes fresh agent binaries to known
+hypervisors. The build is safe to run repeatedly — the `GIT_SHA`
+build arg invalidates the test + compile layers on every new
+commit so you always get a fresh test run.
+
+Ports:
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 8190 | HTTPS    | Everything — UI, API, agent telemetry, `/downloads/*` install bundles (install scripts use `curl -k` for the default self-signed cert) |
+| 8090 | HTTP     | Legacy plaintext listener kept for pre-v5.24 agents only; firewall off or drop from compose once all agents are on HTTPS |
+
+## 2. Create the admin account and run the setup wizard
+
+Visit `https://<server>:8190` in a browser. First use asks for a new
+administrator: pick a username and password (min 8 chars). 2FA (TOTP)
+can be enabled later from the user menu → **Security & 2FA**.
+
+![Sign in and the dashboard landing](/api/docs/media/01-login-dashboard.webp)
+
+Once the admin account is created, the SPA routes to **`/setup`**
+and walks you through four optional steps:
+
+1. **Welcome** — confirmation that the stack is healthy.
+2. **First hypervisor** — mints a one-time enrollment token and
+   shows the install one-liner to run on the hypervisor.
+3. **Notifications** — optional Discord / Slack / generic webhook.
+4. **Metrics** — optional InfluxDB v2 URL + token.
+
+Every step has a "Skip the rest — take me to the dashboard" button;
+the stack works fine with the defaults, and everything the wizard
+touches is available later under **Settings**.
+
+## 3. Enroll a hypervisor
+
+Every hypervisor needs an identity certificate signed by the cluster
+CA. The default (approval) flow is two steps; a legacy token flow is
+preserved for scripted enrolment.
+
+### Approval flow (recommended)
+
+1. **Run the installer** on the hypervisor — no token required:
+
+   ```sh
+   curl -fsSLk https://<server>:8190/downloads/install.sh | sudo bash -s -- \
+     --mode agent --server https://<server>:8190 \
+     --host-id hv01.example.com
+   ```
+
+   The installer submits a CSR + system info to the server and
+   then polls for the issued cert (every 5 s, up to 30 min).
+
+2. **Approve the request** — Settings → TLS → Enrollment
+   Requests, find the pending request from `hv01.example.com`, click
+   **Approve**. The agent's poll picks up the issued cert within a
+   few seconds, installs the libvirt TLS bundle, and comes online.
+
+The advantage over the token flow: nothing sensitive on the
+operator's terminal scroll-back; the approval gate is the operator's
+deliberate "yes, I expect this host" step.
+
+### Legacy token flow (still supported)
+
+If you're scripting fleet enrolment and don't want a separate
+approval step, mint a token first and pass it to the installer:
+
+1. **Mint an enrollment token** — Settings → TLS → Hypervisor PKI,
+   enter the host ID (use the FQDN — it becomes the cert CN), click
+   **Issue enrollment token**. Copy the `enroll_…` string. One-time,
+   10-minute TTL.
+
+2. **Run the installer** with the token appended:
+
+   ```sh
+   curl -fsSLk https://<server>:8190/downloads/install.sh | sudo bash -s -- \
+     --mode agent --server https://<server>:8190 \
+     --host-id hv01.example.com \
+     --enroll-token enroll_…
+   ```
+
+### Notes
+
+v5.47.1+ ships a single unified installer at `install.sh`. Mode is
+auto-detected from libvirt presence when `--mode` is omitted, and
+the legacy `install-agent.sh` / `install-kvm-tools.sh` URLs keep
+working as symlinks for existing operator notes.
+
+In both flows the script drops the binary into `/opt/kvm-center`,
+creates a systemd unit, installs the libvirt TLS bundle, flips
+`listen_tls=1`, opens the firewall for 16514 + 49152-49215, and
+installs the `/etc/libvirt/hooks/qemu` grant enforcement hook.
+
+The host appears in the dashboard within 30 seconds. An **mTLS** pill
+on the host detail page confirms the cert is live.
+
+Minting the enrollment token looks like this:
+
+![Mint a hypervisor enrollment token](/api/docs/media/09-hypervisor-enroll.webp)
+
+And standing up the first VM — Create VM wizard, pick a host, size
+it, point at an install source — is a single modal:
+
+![Create VM wizard](/api/docs/media/08-create-vm.webp)
+
+## 4. Set up the CLI (optional)
+
+```sh
+curl -fsSLk https://<server>:8190/downloads/install-kvmctl.sh | bash -s -- \
+  --portal https://<server>:8190/downloads
+# then mint a token in the user menu → My API tokens
+kvmctl login --server https://<server>:8190 --token kvmc_…
+kvmctl hosts
+```
+
+## Upgrading
+
+Routine: pull the latest commit and re-run the deploy. The build
+is idempotent — the `GIT_SHA` build arg invalidates Docker layers
+on every commit so tests always re-run, and the volume holding
+your Mongo data is never touched by `--deploy`.
+
+```sh
+cd /opt/kvm-center
+scripts/bootstrap.sh --deploy
+```
+
+What happens:
+
+1. `git fetch && git reset --hard origin/main` (you've committed
+   any local edits, right?)
+2. `docker compose build` — fresh server + agent binaries.
+3. `docker compose up -d` — rolling restart; Mongo + the JSON
+   volume survive intact.
+4. Agents on known hypervisors are pushed the new binary on next
+   telemetry tick.
+
+Time budget on a warm cache: ~90 s for the rebuild, ~30 s for the
+restart. First-ever build with no Docker cache: 5–8 min.
+
+**Before a major release** — read the changelog for any
+operator-action notes. The PR workflow keeps `main` deployable at
+all times, but a release that requires (e.g.) a one-off
+`install.ps1` re-run on Windows guests will say so.
+
+## TLS certificate lifecycle
+
+The control plane bootstraps a self-signed leaf cert into
+`/var/lib/kvm-center/tls/` on first boot. Defaults:
+
+- **Server leaf:** 1 year, auto-renewed silently when the
+  remaining lifetime drops below 30 days.
+- **Cluster CA** (`/var/lib/kvm-center/ca/`): 10 years, signs all
+  hypervisor leaves.
+- **Hypervisor leaves:** 1 year, agents request renewal at the
+  90-day mark via the same enrollment endpoint.
+
+The expiry watcher (System Health → TLS) warns ~30 days out for
+each class. **Replacing a self-signed leaf with an operator cert**
+means setting `KVM_CENTER_TLS_CERT` + `KVM_CENTER_TLS_KEY` in
+`.env`, restarting the server, and re-accepting the cert in any
+browser bookmarks. Agents trust the server's cert via the cluster
+CA only, so a leaf rotation does not require fleet action.
+
+## 5. Configure notifications + metrics (optional)
+
+- **Settings → Notifications** — webhook (Discord / Slack / generic)
+  or email channels, pick which events fire.
+
+  ![Configure a webhook channel](/api/docs/media/07-notifications.webp)
+
+- **Settings → Metrics** — InfluxDB v2 URL / org / bucket / token,
+  import the Grafana dashboard from the download link.
+
+You're in business.

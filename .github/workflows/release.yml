@@ -1,0 +1,66 @@
+name: release
+
+# Attaches cross-compiled binaries to a GitHub Release on every `v*` tag.
+# Runs on the GitHub mirror only — Gitea CD is handled separately in
+# .gitea/workflows/deploy.yml and doesn't need release-asset uploads.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    if: github.repository == 'donovanm21/kvm-center'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.10'
+
+      - name: go mod tidy
+        run: go mod tidy
+
+      - name: Cross-compile binaries
+        run: |
+          set -eu
+          VERSION="${GITHUB_REF_NAME}"
+          mkdir -p dist
+          build() {
+            local os="$1" arch="$2" ext="$3" pkg="$4" name="$5"
+            local out="dist/${name}-${os}-${arch}${ext}"
+            echo "→ ${out}"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+              go build -trimpath -ldflags="-s -w -X main.Version=${VERSION}" \
+              -o "$out" "./${pkg}"
+          }
+          # Server + host-side agent: Linux only (libvirt host).
+          for arch in amd64 arm64; do
+            build linux "$arch" "" server kvm-center-server
+            build linux "$arch" "" agent  kvm-center-agent
+            build linux "$arch" "" cmd/kvmctl kvmctl
+            build linux "$arch" "" kvm-tools kvm-tools
+          done
+          # kvm-tools + kvmctl on Windows guests.
+          build windows amd64 .exe kvm-tools kvm-tools
+          build windows amd64 .exe cmd/kvmctl kvmctl
+          (cd dist && sha256sum * > SHA256SUMS)
+          ls -la dist
+
+      - name: Create release and attach assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          VERSION="${GITHUB_REF_NAME}"
+          # Create the release if it doesn't exist (idempotent across re-runs).
+          if ! gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release create "$VERSION" \
+              --title "$VERSION" \
+              --notes "Automated release. See [changelog](https://github.com/${GITHUB_REPOSITORY}/blob/main/server/docs/changelog.md) for operator-visible changes."
+          fi
+          gh release upload "$VERSION" dist/* --clobber

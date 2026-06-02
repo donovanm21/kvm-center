@@ -1,0 +1,137 @@
+# demo stack — dev-only, NOT for production use.
+#
+# Runs a full kvm-center deployment against Mongo with synthetic
+# fixture data: 30 hypervisors (mixed tiers incl. GPU hosts), ~150
+# VMs across them, 200 migrations of history, 800 audit events,
+# snapshot policies, notifications config, tokens. No real
+# hypervisors involved — the single demo-agents container stands in
+# for every synthetic host, posting telemetry on a loop and no-op'ing
+# commands from the server.
+#
+# Start:   ../scripts/demo-up.sh
+# Reset:   ../scripts/demo-reset.sh
+# Tear:    docker compose -f docker-compose.demo.yml down -v
+#
+# SPA:     http://localhost:8290
+# Admin:   admin / demo-password
+# Token:   kvmc_demo0001.00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+
+name: kvm-center-demo
+
+services:
+  kvm-center-demo-mongo:
+    image: mongo:7
+    container_name: kvm-center-demo-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: demo
+      MONGO_INITDB_ROOT_PASSWORD: demo-mongo-password
+    volumes:
+      - kvm-center-demo-mongo:/data/db
+    networks: [demo]
+
+  kvm-center-demo-server:
+    # Reuse the production server image. Build it first via
+    #   docker compose -f ../docker-compose.yml build kvm-center-server
+    # (the demo-up.sh script handles this automatically).
+    image: kvm-center-server:latest
+    container_name: kvm-center-demo-server
+    restart: unless-stopped
+    ports:
+      - "8290:8190"
+    environment:
+      KVM_CENTER_MONGO_URL: mongodb://demo:demo-mongo-password@kvm-center-demo-mongo:27017
+      KVM_CENTER_MONGO_DB: kvm-center-demo
+      KVM_CENTER_DISABLE_HTTP: "1"
+      KVM_CENTER_TLS_ADDR: ":8190"
+    depends_on:
+      - kvm-center-demo-mongo
+    volumes:
+      - kvm-center-demo-tls:/var/lib/kvm-center/tls
+      - kvm-center-demo-ca:/var/lib/kvm-center/ca
+      - kvm-center-demo-data:/var/lib/kvm-center
+    networks: [demo]
+
+  kvm-center-demo-seed:
+    # One-shot seed container. Runs after server is up, populates
+    # Mongo with fixtures, exits. restart=no so it doesn't re-seed on
+    # reboot (use demo-reset.sh to force a re-seed).
+    build:
+      context: ..
+      dockerfile: demo/Dockerfile.demo
+    image: kvm-center-demo:latest
+    container_name: kvm-center-demo-seed
+    command: ["/bin/demo-seed"]
+    restart: "no"
+    environment:
+      KVM_CENTER_DEMO_MONGO_URL: mongodb://demo:demo-mongo-password@kvm-center-demo-mongo:27017
+      KVM_CENTER_DEMO_MONGO_DB: kvm-center-demo
+    depends_on:
+      - kvm-center-demo-mongo
+      - kvm-center-demo-server
+    networks: [demo]
+
+  # Single demo-agent container that impersonates every synthetic
+  # hypervisor. One goroutine per host posts telemetry + serves the
+  # command endpoint on a unique port (8101..8130) per host's
+  # agent_port setting in the seed.
+  kvm-center-demo-agents:
+    image: kvm-center-demo:latest
+    container_name: kvm-center-demo-agents
+    restart: unless-stopped
+    command: ["/bin/demo-agent"]
+    environment:
+      KVM_CENTER_DEMO_MONGO_URL: mongodb://demo:demo-mongo-password@kvm-center-demo-mongo:27017
+      KVM_CENTER_DEMO_MONGO_DB: kvm-center-demo
+      KVM_CENTER_SERVER: https://kvm-center-demo-server:8190
+    depends_on:
+      - kvm-center-demo-seed
+    # Aliases so the server can reach each synthetic host at its own
+    # DNS name (demo-agent-01 … demo-agent-30) even though they all
+    # share one container. The seeded host.IP matches one of these
+    # aliases; docker DNS resolves the alias back to this container.
+    # Unique agent_port (8101-8130) still distinguishes which host
+    # the server is talking to.
+    networks:
+      demo:
+        aliases:
+          - demo-agent-01
+          - demo-agent-02
+          - demo-agent-03
+          - demo-agent-04
+          - demo-agent-05
+          - demo-agent-06
+          - demo-agent-07
+          - demo-agent-08
+          - demo-agent-09
+          - demo-agent-10
+          - demo-agent-11
+          - demo-agent-12
+          - demo-agent-13
+          - demo-agent-14
+          - demo-agent-15
+          - demo-agent-16
+          - demo-agent-17
+          - demo-agent-18
+          - demo-agent-19
+          - demo-agent-20
+          - demo-agent-21
+          - demo-agent-22
+          - demo-agent-23
+          - demo-agent-24
+          - demo-agent-25
+          - demo-agent-26
+          - demo-agent-27
+          - demo-agent-28
+          - demo-agent-29
+          - demo-agent-30
+
+volumes:
+  kvm-center-demo-mongo:
+  kvm-center-demo-tls:
+  kvm-center-demo-ca:
+  kvm-center-demo-data:
+
+networks:
+  demo:
+    driver: bridge

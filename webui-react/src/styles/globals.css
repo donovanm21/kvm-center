@@ -1,0 +1,922 @@
+/* KVM Center v4 — design tokens come straight from docs/STYLE_GUIDE.md so
+   the React shell is visually indistinguishable from v3 during the port. */
+
+:root {
+  --accent: #E3571E;
+  --accent-hover: #FF8A3C;
+  --accent-dim: #C04512;
+  --accent-subtle: #2D1810;
+
+  --bg: #0B0E13;
+  --bg-input: #0D1117;
+  --surface: #161B22;
+  --surface-2: #1C2128;
+  --surface-3: #21262D;
+  --border: #30363D;
+  --border-subtle: #21262D;
+
+  --text-strong: #F0F6FC;
+  --text-body: #C9D1D9;
+  --text-muted: #8B949E;
+  --text-faded: #6E7681;
+  --text-disabled: #484F58;
+}
+
+body.light-mode {
+  --bg: #F6F8FA;
+  --bg-input: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-2: #F6F8FA;
+  --surface-3: #EAEEF2;
+  --border: #D0D7DE;
+  --border-subtle: #EAEEF2;
+
+  --text-strong: #1F2328;
+  --text-body: #3D434D;
+  --text-muted: #656D76;
+  --text-faded: #8B95A1;
+  --text-disabled: #AFB8C1;
+
+  /* Flip the dark-mode accent-subtle (warm brown) to a soft peach that
+   * reads on a white surface. Keeps brand hue consistent across modes. */
+  --accent-subtle: #FFF4EC;
+}
+
+* { box-sizing: border-box; }
+/* v5.45.2: switched root chain from fixed `height: 100%` to
+   `min-height` so the document body is the scroll container.
+   With a fixed-height root, sticky descendants (.topbar, .sidebar)
+   pin to a containing block that's already the size of the
+   viewport — so scrolling past it took them with it. */
+html, body, #root { min-height: 100vh; margin: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text-body);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: #E3571E44; color: var(--text-strong); }
+
+/* ── Global select + scrollbar overrides ──────────────────────
+   Native selects on macOS / Windows render with a light OS chrome
+   ("shiny") that doesn't belong on our dark canvas. Strip the
+   widget styling and paint a chevron ourselves. Same story for the
+   default scrollbars — flip them to a slim dark thumb so they read
+   as part of the panel. Scoped to actual form controls so it can't
+   leak into iframe content or embedded docs. */
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4 L5 7 L8 4' fill='none' stroke='%238B949E' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 10px;
+  padding-right: 28px;                 /* reserve room for the chevron */
+  background-color: var(--bg-input);
+  color: var(--text-body);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+select:hover { border-color: var(--text-faded); }
+select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(227, 87, 30, 0.35);
+}
+/* The popup / listbox that the OS draws is outside our DOM, so the
+   <option> rows fall back to the platform picker. Setting the bg
+   here makes Chrome on Linux honour the dark treatment. */
+select option { background: var(--bg-input); color: var(--text-body); }
+
+/* Scrollbars — themed (v5.48.7).
+   v5.48.6 hid all scrollbars; the operator reported that without
+   any visual cue users couldn't tell content was clipped. Bring
+   them back in the brand palette: 10 px track on --bg-input,
+   8 px effective thumb on --border (rounded; 1 px inset border
+   painted in the track colour so the thumb floats), accent on
+   hover. scroll-gutter: stable on the always-on shell containers
+   reserves the lane so content doesn't reflow when the scrollbar
+   appears or hides. */
+* { scrollbar-width: thin; scrollbar-color: var(--border) var(--bg-input); }
+*:hover { scrollbar-color: var(--accent-dim) var(--bg-input); }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track {
+  background: var(--bg-input);
+  border-left: 1px solid var(--border-subtle);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 1px solid var(--bg-input);  /* 1 px inset painted in track colour so thumb floats */
+  border-radius: 6px;
+  min-height: 30px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+::-webkit-scrollbar-thumb:active { background: var(--accent); }
+::-webkit-scrollbar-corner { background: var(--bg-input); }
+
+/* Reserve gutter on shell containers so content layout doesn't
+   reflow when the scrollbar paints. Modals and data tables
+   stay gutter-less so a brief overflow doesn't widen them. */
+.main, .sidebar, .recent-tasks-list { scrollbar-gutter: stable; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
+
+#root { display: flex; flex-direction: column; }
+
+.app-shell {
+  /* v5.48.2: fixed viewport — only the main content area scrolls.
+     The previous v5.45.1/v5.45.2 sticky topbar+sidebar pattern
+     used the document as the scroll context (so sticky pinning
+     worked); flipping to a fixed-viewport shell with an
+     overflow:auto inner container is the cleaner mobile-app
+     pattern and makes the bottom-pinned Recent Tasks pane
+     (v5.48.1) play nicely with content scroll. */
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+.app-body {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  flex: 1;
+  min-height: 0; /* flex children need this for overflow:auto on a child to actually scroll */
+  overflow: hidden;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 20px;
+  height: 64px;
+  flex-shrink: 0;
+  background: #13161D;
+  border-bottom: 1px solid var(--border);
+  z-index: 30;
+  /* v5.48.2: with the fixed-viewport .app-shell, the topbar is
+     simply the first row in the column flex — no sticky needed,
+     it stays put because the page below has its own scroll. */
+}
+body.light-mode .topbar { background: #FFFFFF; }
+.topbar .logo { display: flex; align-items: center; gap: 12px; }
+.topbar .logo svg { filter: drop-shadow(0 0 8px rgba(227,87,30,0.25)); }
+.brand-text { display: flex; flex-direction: column; gap: 2px; line-height: 1; }
+.brand { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.brand .primary { color: var(--text-strong); }
+.brand .accent { color: var(--accent); margin-left: 2px; }
+.brand-sub {
+  font-size: 10px; color: var(--text-muted); font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.12em;
+}
+.spacer { flex: 1; }
+.version-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 12px;
+  background: var(--accent-subtle); color: var(--accent-hover);
+  font-size: 11px; font-weight: 600; border: 1px solid var(--accent-dim);
+}
+.version-badge::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+}
+body.light-mode .version-badge { background: #FFF4EC; color: #C04512; border-color: #E3571E; }
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+.sidebar {
+  background: #0F1217;
+  border-right: 1px solid var(--border);
+  padding: 14px 10px;
+  overflow-y: auto;
+  /* v5.48.2: with the fixed-viewport .app-shell, the sidebar is
+     just the left grid cell of .app-body — it fills the cell,
+     scrolls internally if the nav is taller than the viewport,
+     and stays visible because the page below is what scrolls. */
+}
+body.light-mode .sidebar { background: #FFFFFF; }
+.sidebar-section-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-faded);
+  padding: 12px 10px 6px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 5px;
+  font-size: 13px; color: var(--text-body); cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  text-decoration: none;
+}
+.nav-item:hover { background: var(--surface-2); color: var(--text-strong); }
+.nav-item.active {
+  background: var(--accent-subtle); color: var(--accent-hover);
+  border-left: 3px solid var(--accent); padding-left: 9px;
+}
+body.light-mode .nav-item.active { background: #FFF4EC; color: #C04512; }
+.nav-item svg { flex-shrink: 0; }
+
+/* ── Main content ────────────────────────────────────────── */
+.main {
+  display: flex; flex-direction: column;
+  padding: 20px;
+  /* v5.48.2: this is now the scroll container. Topbar + sidebar
+     stay fixed by virtue of being siblings in a height:100vh
+     overflow:hidden shell. Padding-bottom keeps page content
+     clear of the collapsed Recent Tasks pane (~40px header). */
+  overflow-y: auto;
+  min-height: 0;
+  padding-bottom: 60px;
+}
+
+/* v5.48.3: per-container scrollbar overrides moved to the global
+   ::-webkit-scrollbar block above — same translucent overlay
+   style applies everywhere now, no need to scope to .main +
+   .sidebar individually. */
+.breadcrumb {
+  font-size: 11px; color: var(--text-muted); margin-bottom: 14px;
+}
+.breadcrumb strong { color: var(--text-body); font-weight: 500; }
+
+/* ── Generic cards / panels ──────────────────────────────── */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px 18px;
+  /* `.main` is `display: flex; flex-direction: column; min-height: 0`
+     so a panel with `overflow: hidden` (used to clip rounded corners
+     around our `data-table-scroll` blocks) would otherwise be squeezed
+     below its content height when sibling panels above eat vertical
+     space — silently clipping the bottom rows of the table since the
+     panel can't scroll. KVM Tools surfaced this with 15 rows but only
+     9 visible, no scrollbar, no pagination bar. flex-shrink: 0 keeps
+     each panel at its natural height; `.main` handles all scrolling. */
+  flex-shrink: 0;
+}
+.panel + .panel { margin-top: 12px; }
+.panel h2 {
+  margin: 0 0 12px 0;
+  font-size: 14px; font-weight: 600; color: var(--text-strong);
+}
+
+/* ── Auth screen ─────────────────────────────────────────── */
+.auth-screen {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+}
+.auth-card {
+  width: 380px; max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 32px 28px;
+}
+.auth-title { font-size: 18px; font-weight: 600; color: var(--text-strong); margin: 16px 0 6px; }
+.auth-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
+.auth-form label {
+  display: block; font-size: 11px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.08em; margin: 14px 0 6px;
+}
+.auth-form input {
+  width: 100%; height: 36px; padding: 0 12px;
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text-body); font-size: 13px;
+  outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.auth-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px #E3571E33; }
+.auth-submit {
+  width: 100%; height: 42px; margin-top: 20px;
+  background: linear-gradient(180deg, #F26419 0%, #E3571E 100%);
+  color: #fff; border: 1px solid #C04512; border-radius: 5px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.auth-submit:hover:not(:disabled) { background: linear-gradient(180deg, #FF7B3C 0%, #F26419 100%); }
+.auth-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.auth-error {
+  margin-top: 14px; padding: 8px 12px; border-radius: 5px;
+  background: #3D1E1E; color: #FFB3B3; border: 1px solid #A02929;
+  font-size: 12px;
+}
+body.light-mode .auth-error { background: #FFEBE9; color: #CF222E; border-color: #FF8182; }
+
+.loading-screen {
+  display: flex; align-items: center; justify-content: center;
+  height: 100vh; color: var(--text-muted); font-size: 13px;
+}
+
+/* ── Pagination ──────────────────────────────────────────── */
+.page-btn {
+  background: var(--surface-2);
+  color: var(--text-body);
+  border: 1px solid var(--border);
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.page-btn:hover:not(:disabled):not(.active) { background: var(--surface-3); color: var(--text-strong); }
+.page-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+body.light-mode .page-btn { background: #FFFFFF; color: #3D434D; border-color: #D0D7DE; }
+body.light-mode .page-btn:hover:not(:disabled):not(.active) { background: #F6F8FA; color: #1F2328; }
+body.light-mode .page-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ── IP copy-to-clipboard badges ─────────────────────────── */
+.ip-badge {
+  display: inline-flex; align-items: center;
+  height: 22px; padding: 0 8px;
+  font-family: 'SF Mono', monospace; font-size: 11px; font-weight: 500;
+  background: var(--bg-input); color: var(--text-body);
+  border: 1px solid var(--border);
+  border-radius: 4px; cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.ip-badge:hover { background: var(--surface-3); }
+.ip-badge.copied { background: #1E3D23; color: #3FB950; border-color: #2E5E35; }
+.ip-badge.failed { background: #3D1E1E; color: #F85149; border-color: #5C2A2A; }
+body.light-mode .ip-badge.copied { background: #DAFBE1; color: #1A7F37; border-color: #1A7F3755; }
+body.light-mode .ip-badge.failed { background: #FFEBE9; color: #A40E26; border-color: #FF8182; }
+
+/* ── Tone primitives ─────────────────────────────────────── */
+/* Five semantic tones (ok / warn / danger / info / muted) expressed as a
+ * pill (inline label), a panel (tinted card/banner), or an icon tile
+ * (the squarish coloured square behind status glyphs). All carry light-
+ * mode overrides so the whole UI flips cleanly. Use these instead of
+ * hand-rolled inline styles — it's the only way new pages stay
+ * theme-consistent without duplicating colour literals. */
+.tone-pill {
+  display: inline-flex; align-items: center;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  border: 1px solid transparent;
+}
+.tone-pill.ok     { background: #1E3D23; color: #3FB950; }
+.tone-pill.warn   { background: #3D2510; color: #FF8A3C; }
+.tone-pill.danger { background: #3D1E1E; color: #F85149; }
+.tone-pill.info   { background: #0F2A4A; color: #58A6FF; }
+.tone-pill.muted  { background: var(--surface-3); color: var(--text-muted); }
+body.light-mode .tone-pill.ok     { background: #DAFBE1; color: #1A7F37; }
+body.light-mode .tone-pill.warn   { background: #FFF4EC; color: #C04512; border-color: #F7B07F; }
+body.light-mode .tone-pill.danger { background: #FFEBE9; color: #A40E26; border-color: #FF8182; }
+body.light-mode .tone-pill.info   { background: #DDF4FF; color: #0969DA; border-color: #54AEFF; }
+body.light-mode .tone-pill.muted  { background: #EAEEF2; color: #656D76; }
+
+.tone-panel {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 18px;
+}
+.tone-panel.ok     { background: #1E3D23; color: #3FB950; border-color: #2E5E35; }
+.tone-panel.warn   { background: #3D2510; color: #FF8A3C; border-color: #5C3814; }
+.tone-panel.danger { background: #3D1E1E; color: #F85149; border-color: #5C2A2A; }
+.tone-panel.info   { background: #0F2A4A; color: #58A6FF; border-color: #1F4B7A; }
+.tone-panel.muted  { background: var(--surface-3); color: var(--text-muted); }
+body.light-mode .tone-panel.ok     { background: #DAFBE1; color: #1A7F37; border-color: #1A7F3755; }
+body.light-mode .tone-panel.warn   { background: #FFF4EC; color: #C04512; border-color: #F7B07F; }
+body.light-mode .tone-panel.danger { background: #FFEBE9; color: #A40E26; border-color: #FF8182; }
+body.light-mode .tone-panel.info   { background: #DDF4FF; color: #0969DA; border-color: #54AEFF; }
+body.light-mode .tone-panel.muted  { background: #EAEEF2; color: #656D76; }
+
+.tone-icon-tile {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.tone-icon-tile.accent { background: #2D1810; color: var(--accent); }
+.tone-icon-tile.ok     { background: #1E3D23; color: #3FB950; }
+.tone-icon-tile.warn   { background: #3D2510; color: #FF8A3C; }
+.tone-icon-tile.danger { background: #3D1E1E; color: #F85149; }
+.tone-icon-tile.info   { background: #1E2340; color: #8B5CF6; }
+.tone-icon-tile.muted  { background: var(--surface-3); color: var(--text-muted); }
+body.light-mode .tone-icon-tile.accent { background: #FFF4EC; color: #C04512; }
+body.light-mode .tone-icon-tile.ok     { background: #DAFBE1; color: #1A7F37; }
+body.light-mode .tone-icon-tile.warn   { background: #FFF4EC; color: #C04512; }
+body.light-mode .tone-icon-tile.danger { background: #FFEBE9; color: #A40E26; }
+body.light-mode .tone-icon-tile.info   { background: #EDE9FE; color: #6D28D9; }
+body.light-mode .tone-icon-tile.muted  { background: #EAEEF2; color: #656D76; }
+
+/* ── Migration / lock badges ─────────────────────────────── */
+.lock-pill, .topbar-mig-badge {
+  display: inline-flex; align-items: center;
+  font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.lock-pill {
+  margin-left: 8px; padding: 1px 8px; border-radius: 8px;
+  font-size: 9px; font-weight: 700;
+}
+.lock-pill.warn  { background: #3D2510; color: #FF8A3C; border: 1px solid #5C3814; }
+.lock-pill.danger{ background: #3D1E1E; color: #F85149; border: 1px solid #5C2A2A; }
+body.light-mode .lock-pill.warn   { background: #FFF4EC; color: #C04512; border-color: #F7B07F; }
+body.light-mode .lock-pill.danger { background: #FFEBE9; color: #A40E26; border-color: #FF8182; }
+
+.topbar-mig-badge {
+  gap: 8px; height: 28px; padding: 0 12px; margin-right: 4px;
+  background: #3D2510; color: #FF8A3C;
+  border: 1px solid #5C3814; border-radius: 14px;
+  font-size: 11px; font-family: inherit; cursor: pointer;
+}
+body.light-mode .topbar-mig-badge { background: #FFF4EC; color: #C04512; border-color: #F7B07F; }
+
+/* ── Animations ──────────────────────────────────────────── */
+@keyframes kvmPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.85); }
+}
+
+/* ── Focus rings (keyboard a11y) ─────────────────────────── */
+/* Keyboard users need to see which control is focused. We turn off
+   the noisy default outline (var on inputs is `outline: none` inline)
+   and replace with a subtle accent ring on :focus-visible only — so
+   mouse clicks don't paint the ring. */
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: none;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px rgba(227, 87, 30, 0.35);
+}
+button:focus-visible, [role="menuitem"]:focus-visible, [role="button"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.btn-primary-sm, .btn-secondary-sm, .btn-danger-sm {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 12px;
+  border-radius: 4px; border: 1px solid transparent;
+  font-size: 12px; font-weight: 500; font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.btn-primary-sm {
+  background: linear-gradient(180deg, #F26419 0%, #E3571E 100%);
+  border-color: #C04512; color: #fff;
+}
+.btn-primary-sm:hover:not(:disabled) { background: linear-gradient(180deg, #FF7B3C 0%, #F26419 100%); }
+.btn-secondary-sm {
+  background: var(--surface-2); color: var(--text-body); border-color: var(--border);
+}
+.btn-secondary-sm:hover:not(:disabled) { background: var(--surface-3); color: var(--text-strong); }
+.btn-danger-sm {
+  background: #7A1C1C; border-color: #A02929; color: #FFB3B3;
+}
+.btn-danger-sm:hover:not(:disabled) { background: #D32F2F; border-color: #E53935; color: #fff; }
+.btn-primary-sm:disabled, .btn-secondary-sm:disabled, .btn-danger-sm:disabled {
+  opacity: 0.45; cursor: not-allowed;
+}
+body.light-mode .btn-secondary-sm { background: #FFFFFF; color: #3D434D; border-color: #D0D7DE; }
+body.light-mode .btn-secondary-sm:hover:not(:disabled) { background: #F6F8FA; color: #1F2328; }
+body.light-mode .btn-danger-sm { background: #FFEBE9; color: #A40E26; border-color: #FF8182; }
+
+/* ── State pills ─────────────────────────────────────────── */
+.state-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 10px; border-radius: 10px;
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+/* v5.45.1: removed the `::before` decorative dot — `<StatePill>`
+   now renders its own leading glyph (●/■/⏸/✕), and the pseudo-
+   element produced a doubled icon. Kept the rule's flex-gap so
+   StatePill's glyph still spaces away from its label. */
+.state-pill.running { background: #1E3D23; color: #3FB950; }
+.state-pill.stopped { background: var(--surface-3); color: var(--text-muted); }
+.state-pill.paused  { background: #3d2a00; color: #ff9800; }
+.state-pill.crashed, .state-pill.unknown { background: #3D1E1E; color: #F85149; }
+body.light-mode .state-pill.running { background: #DAFBE1; color: #1A7F37; }
+body.light-mode .state-pill.stopped { background: #EAEEF2; color: #656D76; }
+body.light-mode .state-pill.crashed { background: #FFEBE9; color: #CF222E; }
+
+/* ── Data tables ─────────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.data-table th {
+  text-align: left; padding: 10px;
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-faded); font-weight: 500;
+  border-bottom: 1px solid var(--border);
+}
+.data-table td { padding: 10px; border-bottom: 1px solid var(--border-subtle); }
+.data-table tbody tr { cursor: default; transition: background 0.1s; }
+.data-table tbody tr.clickable { cursor: pointer; }
+.data-table tbody tr.clickable:hover { background: var(--surface-2); }
+
+/* Scrollable wrapper for long tables. Vertical overflow opens a scroll
+   region; the thead sticks so column labels stay visible while reading
+   down. Pair with the panel wrapper to keep the border treatment. */
+/* Match the Audit tab pattern: native scrollbar, sticky dark header,
+   no custom ::-webkit-scrollbar treatment. */
+.data-table-scroll {
+  /* v5.48.8: pre-v5.48.2 the document was the scroll context, so
+     the table needed its own internal scroll (max-height: 60vh)
+     to keep the sticky thead anchored to the table top. With
+     v5.48.2's switch to .main as the scroll container, that
+     internal cap clipped long lists — operator reported a 15-row
+     Migrations page only showing 12. Drop both rules so the
+     table grows naturally; .main is now the only scroll
+     container in play. */
+  overflow: visible;
+  max-height: none;
+}
+.data-table-scroll .data-table thead th {
+  /* Sticky anchors to the nearest scroll container = .main, so
+     the column header bar pins to the top of .main's viewport
+     instead of the table's. Same UX, correct anchor. */
+  position: sticky;
+  top: 0;
+  background: var(--bg-input);
+  z-index: 1;
+}
+/* v5.48.3: the per-container inset-border tweak is no longer
+   needed — the global slim-overlay scrollbar (translucent grey,
+   no border) reads cleanly on the panel surface. */
+
+/* Pagination footer sits below the scroll region, reuses the same
+   token palette as section headers. */
+.data-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.data-pagination .spacer { flex: 1; }
+/* Matches the Audit tab's `input` style (height 32 / 0 10 padding /
+   bg-input / 1px border / 4px radius). Native dropdown caret, no
+   custom chevron — kept deliberately simple for consistency. */
+.data-pagination select {
+  height: 32px;
+  padding: 0 10px;
+  background: var(--bg-input);
+  color: var(--text-body);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.data-pagination button {
+  height: 32px;
+  min-width: 32px;
+  padding: 0 10px;
+  background: var(--bg-input);
+  color: var(--text-body);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.data-pagination button:hover:not(:disabled) { background: var(--surface-3); color: var(--text-strong); }
+.data-pagination button:disabled { opacity: 0.35; cursor: not-allowed; }
+.data-pagination .current { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+
+/* ── In-app docs (v5.14) ─────────────────────────────────────
+   Prose styling for the markdown rendered under /docs. Scoped so
+   it doesn't leak into other panels. */
+.docs-prose h1 { font-size: 28px; color: var(--text-strong); margin: 0 0 18px 0; font-weight: 700; letter-spacing: -0.01em; }
+.docs-prose h2 { font-size: 20px; color: var(--text-strong); margin: 28px 0 10px 0; font-weight: 600; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.docs-prose h3 { font-size: 16px; color: var(--text-strong); margin: 22px 0 8px 0; font-weight: 600; }
+.docs-prose p  { margin: 0 0 12px 0; }
+.docs-prose a  { color: var(--accent); text-decoration: none; }
+.docs-prose a:hover { text-decoration: underline; }
+.docs-prose code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12.5px; background: var(--bg-input); color: var(--accent-hover); padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border-subtle); }
+.docs-prose pre  { background: var(--bg-input); border: 1px solid var(--border); border-radius: 5px; padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; margin: 10px 0 16px 0; }
+.docs-prose pre code { background: transparent; border: none; padding: 0; color: var(--text); }
+.docs-prose ul, .docs-prose ol { padding-left: 22px; margin: 0 0 12px 0; }
+.docs-prose li { margin: 4px 0; }
+.docs-prose table { width: 100%; border-collapse: collapse; margin: 10px 0 16px 0; font-size: 13px; }
+.docs-prose th, .docs-prose td { padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); text-align: left; }
+.docs-prose th { color: var(--text-faded); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+.docs-prose blockquote { border-left: 3px solid var(--accent); background: var(--surface-2); padding: 10px 14px; margin: 10px 0; color: var(--text-body); }
+.docs-prose strong { color: var(--text-strong); }
+.docs-prose img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 12px 0 18px 0;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+/* ── Fleet activity widget (v5.48.1, PR-3f) ───────────────── */
+.fleet-activity-widget { padding: 14px 16px; }
+.fleet-activity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.fleet-activity-stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.fleet-activity-stat-value { font-size: 24px; font-weight: 600; line-height: 1.1; }
+.fleet-activity-sparkline { display: block; width: 100%; max-width: 120px; height: 24px; margin-top: 6px; color: var(--accent, #2a7df9); opacity: 0.65; }
+.fleet-activity-actions { width: 100%; font-size: 12px; border-collapse: collapse; }
+.fleet-activity-actions th, .fleet-activity-actions td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); }
+.fleet-activity-actions th { font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; font-size: 10px; }
+.fleet-activity-actions td:first-child { font-family: var(--font-mono, monospace); }
+@media (max-width: 640px) {
+  .fleet-activity-grid { grid-template-columns: 1fr; gap: 8px; }
+}
+
+/* v5.58.3: removed `.task-resume-banner` styles — the "while you
+ * were away" toast it powered duplicated the Recent Tasks pill
+ * and was removed. */
+
+/* ── Recent Tasks pane (v5.48.1, PR-3b) ────────────────────── */
+/* Bottom-of-screen Recent Tasks pane. Pinned to viewport bottom,
+ * collapses on click of the header. The bottom-pinned position
+ * is the standard "recent activity" surface familiar from any
+ * central hypervisor management UI; mobile gets a drawer-style
+ * overlay. */
+.recent-tasks {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* v5.48.5: lighter than panel surface so the pane reads as a
+     distinct sheet hovering above .main, not a continuation of
+     the page bg. Stronger top border + drop shadow seal it. */
+  background: var(--surface-2);
+  border-top: 2px solid var(--border);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 80;
+  font-size: 13px;
+}
+body.light-mode .recent-tasks {
+  background: var(--surface);
+  border-top-color: var(--border);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12);
+}
+.recent-tasks-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  background: var(--surface-3);
+  border-bottom: 1px solid var(--border);
+}
+body.light-mode .recent-tasks-header { background: var(--surface-2); }
+.recent-tasks-header:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.recent-tasks-badge {
+  background: var(--accent-soft, rgba(31,119,255,0.15));
+  color: var(--accent, #2a7df9);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+  font-size: 11px;
+}
+.recent-tasks-toggle { margin-left: auto; opacity: 0.6; }
+.recent-tasks.collapsed .recent-tasks-list { display: none; }
+.recent-tasks-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.recent-task-row {
+  display: grid;
+  /* v5.48.5: action / target / progress / outcome / duration / cancel
+     — wider action column so DELETE_SNAPSHOT et al. don't crowd into
+     target. minmax(0, …) lets text-overflow:ellipsis kick in on
+     tight viewports instead of forcing the row to grow. */
+  grid-template-columns: 180px minmax(0, 1.2fr) minmax(0, 2fr) 100px 80px 28px;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+.recent-task-row:nth-child(odd) { background: rgba(255, 255, 255, 0.015); }
+body.light-mode .recent-task-row:nth-child(odd) { background: rgba(0, 0, 0, 0.02); }
+.recent-task-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-task-row > .task-progress { overflow: visible; white-space: normal; }
+.task-cancel-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--err, #f85149);
+  border-radius: 3px;
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+.task-cancel-btn:hover { background: rgba(248,81,73,0.12); }
+.task-cancel-spacer { display: block; width: 22px; }
+.recent-task-row:hover { background: var(--surface-hover, rgba(255,255,255,0.03)); }
+.recent-task-row .task-action { font-weight: 600; }
+.recent-task-row .task-target { font-family: var(--font-mono, monospace); font-size: 12px; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-task-row .task-progress {
+  position: relative;
+  height: 14px;
+  background: var(--surface-alt, rgba(255,255,255,0.05));
+  border-radius: 3px;
+  overflow: hidden;
+}
+.task-progress-bar {
+  display: block;
+  height: 100%;
+  background: var(--accent, #2a7df9);
+  transition: width 0.3s ease-out;
+}
+.task-progress-label {
+  position: absolute;
+  left: 6px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--fg);
+  text-shadow: 0 0 2px rgba(0,0,0,0.5);
+}
+.task-outcome { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; opacity: 0.85; }
+.task-duration { font-size: 11px; opacity: 0.7; text-align: right; }
+.recent-task-row.task-pending .task-outcome { color: var(--accent, #2a7df9); }
+.recent-task-row.task-success .task-outcome { color: var(--ok, #2ea043); }
+.recent-task-row.task-failed .task-outcome { color: var(--err, #f85149); }
+.recent-task-row.task-cancelled .task-outcome { color: var(--warn, #d29922); }
+.recent-task-row.task-unknown .task-outcome { color: var(--fg-soft, #888); }
+.task-detail { display: grid; grid-template-columns: 130px 1fr; gap: 8px 16px; }
+.task-detail dt { font-weight: 600; opacity: 0.7; }
+.task-detail dd { margin: 0; }
+.task-progress-detail { font-size: 12px; opacity: 0.7; margin-top: 4px; font-family: var(--font-mono, monospace); }
+
+/* ── Responsive mobile (v5.33.0, P1.2) ─────────────────────── */
+/* Breakpoints:
+ *   ≤ 640 px  — phone: sidebar → drawer, tables → card list.
+ *   641–1024  — tablet: sidebar is drawer by default, body fills.
+ *   > 1024    — desktop: sidebar pinned (default layout).
+ *
+ * The drawer is slide-out-from-left, overlays content, and is
+ * toggled by the hamburger button (.nav-toggle) in the topbar
+ * that only renders below the tablet breakpoint. */
+.nav-toggle {
+  display: none;
+  background: transparent; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: 5px;
+  padding: 6px 10px; cursor: pointer;
+}
+.nav-backdrop {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 45;
+}
+.nav-backdrop.open { display: block; }
+
+@media (max-width: 1024px) {
+  .app-body { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed; top: 64px; left: 0; bottom: 0;
+    width: 240px;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease-out;
+    z-index: 50;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .nav-toggle { display: inline-flex; align-items: center; gap: 6px; }
+  .topbar { padding: 0 12px; gap: 10px; }
+  .topbar .logo svg { display: none; }
+  .brand-sub { display: none; }
+}
+
+@media (max-width: 640px) {
+  html, body, #root { overflow-x: hidden; }
+  .main { padding: 10px; overflow-x: hidden; }
+  .topbar { gap: 6px; }
+  .version-badge { display: none; }
+  .brand { font-size: 16px; }
+
+  /* Hide Deployment on mobile — install/download flows are not
+   * phone-friendly and operators almost always do this on a
+   * desktop. v5.33.4. */
+  .nav-item.nav-hide-mobile { display: none; }
+
+  /* Breadcrumb + titles wrap on narrow screens. */
+  .breadcrumb { font-size: 12px; flex-wrap: wrap; }
+
+  /* ── Data tables: card-per-row with label *above* content ──
+   * v5.33.4: previous version used space-between which scrunched
+   * bars + long strings to the right. Stacking vertically gives
+   * each value room to breathe and lets inline bars span the full
+   * card width. */
+  table.data-table thead { display: none; }
+  table.data-table,
+  table.data-table tbody,
+  table.data-table tr,
+  table.data-table td {
+    display: block; width: 100%;
+  }
+  table.data-table tr {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    background: var(--surface-1);
+    box-sizing: border-box;
+  }
+  table.data-table td {
+    padding: 5px 0;
+    border: none !important;
+    display: block;
+    font-size: 13px;
+    text-align: left !important;
+    overflow-wrap: anywhere;
+  }
+  /* Only render the label strip when data-label is actually set.
+   * Some pages (VMs list) use <table class="data-table"> without
+   * labels — keep their reflow clean. */
+  table.data-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--text-muted); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 3px;
+  }
+  /* Inline bars — let them span full width inside the card. */
+  table.data-table td > div[style*="min-width"] { min-width: 0 !important; }
+
+  /* Settings page — horizontal tab bar becomes a horizontally
+   * scrollable strip so it no longer clips Identity Providers
+   * off the edge. The tab-bar container gets overflow-x: auto;
+   * each tab becomes flex-shrink: 0 so the labels stay readable.
+   * v5.33.4. */
+  .settings-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .settings-tabs::-webkit-scrollbar { display: none; }
+  .settings-tabs > * { flex-shrink: 0 !important; }
+
+  /* Grids that assume desktop width should stack on phone.
+   * v5.33.4: two-column flows (Snapshots overview, Host detail,
+   * VM detail header) all break to single column. */
+  .mobile-stack,
+  .mobile-stack > * { width: 100% !important; }
+  .mobile-stack { grid-template-columns: 1fr !important; }
+
+  /* Panels: nudge padding down + force content to wrap inside
+   * the card. Solves the "content bleeds past the right edge"
+   * issue on Settings + VM list. */
+  .panel { padding: 12px !important; overflow-x: hidden; }
+  .panel * { max-width: 100%; }
+
+  /* Code-like strings (breadcrumb UUIDs, migration IDs) allow
+   * break-anywhere so they don't push their container. */
+  code, .mono, [class*="uuid"] { overflow-wrap: anywhere; word-break: break-all; }
+
+  /* Health dashboard: hide gauges, charts, big-number, and the
+   * host-breakdown table on phone. Leaves the status tiles,
+   * subsystem cards, and the problems feed — a lightweight
+   * quick-check view similar to the pre-v5.33.1 layout. Add the
+   * .mobile-health-hide class to the respective panels. v5.33.4.
+   */
+  .mobile-health-hide { display: none !important; }
+
+  /* Dashboard host card: the status pill + Manage button column
+   * was overflowing on phones. Drop it onto its own row beneath
+   * the title + meta, aligned to the left. v5.33.4. */
+  .host-card-grid {
+    grid-template-columns: 48px 1fr !important;
+  }
+  .host-card-grid > :nth-child(3) {
+    grid-column: 1 / -1;
+    justify-self: start;
+    display: flex; gap: 10px; align-items: center;
+  }
+
+  /* Modals go full-screen on phones. */
+  .modal, .modal-content, .kvm-modal {
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    width: 100vw !important;
+    border-radius: 0 !important;
+  }
+}

@@ -1,0 +1,984 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+
+	"kvm-center/internal/models"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
+)
+
+// MongoBackend is the scale-up persistence tier introduced in v5.1.
+// Connection is lazy (first Load/Save dials) so a misconfigured URL
+// doesn't kill server startup — the operator can still reach the UI
+// via JSON backend fallback and fix things from Settings → Database.
+//
+// Save semantics mirror the JSON backend's "replace the whole world"
+// model: drop-and-reinsert every collection inside a single logical
+// operation. Cheap at current fleet sizes and keeps the conversion
+// from persistData trivial. Per-collection dirty tracking is a v5.2
+// optimisation if we ever need it.
+type MongoBackend struct {
+	uri    string
+	dbName string
+
+	mu     sync.Mutex
+	client *mongo.Client
+	db     *mongo.Database
+}
+
+// Mongo collection names. Declared as constants so grep-finding every
+// persisted entity is one symbol search.
+const (
+	mcoHosts            = "hosts"
+	mcoVMs              = "vms"         // flat per-VM documents keyed by uuid
+	mcoStorage          = "storage"     // flat per-pool docs keyed by host_id+name
+	mcoVMNotes          = "vm_notes"    // keyed by vm_uuid
+	mcoGuestData        = "guest_data"  // keyed by vm_uuid, updated_at TTL
+	mcoMigrations       = "migrations"  // append-only, indexed by started_at desc
+	mcoCommandLog       = "command_log" // per-/api/command invocation, indexed by submitted_at + TTL on expires_at
+	mcoUsers            = "users"       // username unique
+	mcoGroups           = "groups"
+	mcoRoles            = "roles"
+	mcoSessions         = "sessions" // TTL on expires_at
+	mcoIDPs             = "idps"
+	mcoFeatures         = "features"    // single doc with _id:"singleton"
+	mcoServerMeta       = "server_meta" // _id:"singleton" — console_secret etc.
+	mcoAuditEvents      = "audit_events"
+	mcoSnapshotPolicies = "snapshot_policies"
+	mcoNotifications    = "notifications"       // singleton _id:"singleton"
+	mcoMetrics          = "metrics"             // singleton _id:"singleton"
+	mcoAuditShipping    = "audit_shipping"      // singleton _id:"singleton" (v5.51.1)
+	mcoBackupSchedule   = "backup_schedule"     // singleton _id:"singleton" (v5.51.1)
+	mcoDiscordGateway   = "discord_gateway"     // singleton _id:"singleton" (v5.52.0)
+	mcoRemovedHosts     = "removed_hosts"       // keyed by host_id (v5.54.0)
+	mcoPendingEnrol     = "pending_enrollments" // keyed by enrolment ID (v5.55.0)
+	mcoAPITokens        = "api_tokens"          // keyed by token ID
+	mcoHypervisorCerts  = "hypervisor_certs"    // keyed by host ID
+)
+
+func NewMongoBackend(uri, dbName string) *MongoBackend {
+	if dbName == "" {
+		dbName = "kvm-center"
+	}
+	return &MongoBackend{uri: uri, dbName: dbName}
+}
+
+func (b *MongoBackend) Name() string { return "mongo" }
+
+// RedactedEndpoint strips the password out of the Mongo URI for UI
+// display. Keeps host + username visible so the operator can tell
+// which cluster they're pointed at without exposing credentials.
+func (b *MongoBackend) RedactedEndpoint() string {
+	u, err := url.Parse(b.uri)
+	if err != nil {
+		return "mongodb://(unparseable)"
+	}
+	if u.User != nil {
+		if _, hasPass := u.User.Password(); hasPass {
+			u.User = url.UserPassword(u.User.Username(), "****")
+		}
+	}
+	return u.String()
+}
+
+func (b *MongoBackend) Info(ctx context.Context) BackendInfo {
+	info := BackendInfo{Type: "mongo", Endpoint: b.RedactedEndpoint(), Healthy: false}
+	db, err := b.dial(ctx)
+	if err != nil {
+		info.Error = err.Error()
+		return info
+	}
+	// Ping + dbStats give us both liveness and a size number for the UI.
+	if err := db.Client().Ping(ctx, readpref.Primary()); err != nil {
+		info.Error = "ping: " + err.Error()
+		return info
+	}
+	var stats struct {
+		DataSize int64 `bson:"dataSize"`
+	}
+	if err := db.RunCommand(ctx, bson.D{{Key: "dbStats", Value: 1}}).Decode(&stats); err == nil {
+		info.SizeBytes = stats.DataSize
+	}
+	info.Healthy = true
+	info.LastModified = time.Now().UTC().Format(time.RFC3339)
+	return info
+}
+
+// dial lazy-connects and caches the client. Subsequent calls reuse it.
+func (b *MongoBackend) dial(ctx context.Context) (*mongo.Database, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.db != nil {
+		return b.db, nil
+	}
+	opts := options.Client().ApplyURI(b.uri).SetServerSelectionTimeout(8 * time.Second)
+	cli, err := mongo.Connect(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	// Confirm reachability and auth before caching — a bad URL should
+	// surface NOW, not on the first write ten minutes in.
+	pingCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+	if err := cli.Ping(pingCtx, readpref.Primary()); err != nil {
+		_ = cli.Disconnect(context.Background())
+		return nil, fmt.Errorf("mongo ping: %w", err)
+	}
+	b.client = cli
+	b.db = cli.Database(b.dbName)
+	if err := b.ensureIndexes(ctx); err != nil {
+		return nil, fmt.Errorf("mongo indexes: %w", err)
+	}
+	return b.db, nil
+}
+
+// invalidateOnTransientError nulls the cached client/db when an error
+// looks like a network/timeout/topology failure so the next dial()
+// re-connects instead of returning the stale cached handle. Mongo
+// flapping after boot used to require a server restart to recover —
+// the cached client kept returning connection-refused on every call
+// without ever attempting to re-dial. With this hook, the first
+// transient error tears down the cache; the next op reconnects.
+//
+// We deliberately keep the heuristic narrow: only error strings that
+// strongly imply transport-level failures trigger the invalidation.
+// Auth or schema errors stay on the cached client so the caller
+// surfaces them immediately rather than silently recycling.
+func (b *MongoBackend) invalidateOnTransientError(err error) {
+	if err == nil {
+		return
+	}
+	msg := err.Error()
+	transient := false
+	for _, sig := range []string{
+		"connection refused",
+		"connection reset",
+		"server selection error",
+		"i/o timeout",
+		"context deadline exceeded",
+		"no reachable servers",
+		"socket was unexpectedly closed",
+		"EOF",
+	} {
+		if strings.Contains(msg, sig) {
+			transient = true
+			break
+		}
+	}
+	if !transient {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.client != nil {
+		// Disconnect on a fresh context — the caller's ctx may already
+		// be done, and Disconnect has its own internal timeout anyway.
+		go func(c *mongo.Client) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = c.Disconnect(ctx)
+		}(b.client)
+	}
+	b.client, b.db = nil, nil
+}
+
+func (b *MongoBackend) Close(ctx context.Context) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.client == nil {
+		return nil
+	}
+	err := b.client.Disconnect(ctx)
+	b.client, b.db = nil, nil
+	return err
+}
+
+// ensureIndexes runs every dial — CreateIndexes is idempotent on the
+// Mongo side. Defined together so every index the app relies on lives
+// in one place.
+func (b *MongoBackend) ensureIndexes(ctx context.Context) error {
+	type idx struct {
+		col     string
+		keys    bson.D
+		options *options.IndexOptions
+	}
+	ensure := []idx{
+		// Unique + sparse so legacy rows without a UUID (rare but
+		// present in some pre-v4 exports) don't collide on null keys.
+		{mcoVMs, bson.D{{Key: "uuid", Value: 1}}, options.Index().SetUnique(true).SetSparse(true)},
+		{mcoVMs, bson.D{{Key: "host_id", Value: 1}}, nil},
+		{mcoUsers, bson.D{{Key: "username", Value: 1}}, options.Index().SetUnique(true).SetSparse(true)},
+		{mcoMigrations, bson.D{{Key: "started_at", Value: -1}}, nil},
+		// TTL on expires_at — set only for terminal records
+		// (complete/failed/cancelled). Active records omit the field,
+		// so they never expire. Tier S #2, v5.32.17.
+		{mcoMigrations, bson.D{{Key: "expires_at", Value: 1}}, options.Index().SetExpireAfterSeconds(0)},
+		// Command log — indexed for reconciler queries, TTL sweeps
+		// terminal entries 30d after completion. Tier S #4, v5.32.17.
+		{mcoCommandLog, bson.D{{Key: "submitted_at", Value: -1}}, nil},
+		{mcoCommandLog, bson.D{{Key: "outcome", Value: 1}}, nil},
+		{mcoCommandLog, bson.D{{Key: "expires_at", Value: 1}}, options.Index().SetExpireAfterSeconds(0)},
+		{mcoAuditEvents, bson.D{{Key: "at", Value: -1}}, nil},
+		{mcoAuditEvents, bson.D{{Key: "actor_id", Value: 1}}, nil},
+		{mcoAuditEvents, bson.D{{Key: "action", Value: 1}}, nil},
+		// v5.60.18: TTL on `at` — audit events older than 365 days
+		// roll off the Mongo collection. The in-memory ring already
+		// caps at 10k entries (auditRetentionMax in audit.go), but
+		// the on-disk collection grew unboundedly pre-v5.60.18.
+		// 365d preserves a year of history for compliance review
+		// without letting a high-event-rate fleet fill the disk.
+		// Operators wanting longer retention should ship audit
+		// events to an external store via Settings → Audit shipping.
+		{mcoAuditEvents, bson.D{{Key: "at", Value: 1}}, options.Index().SetExpireAfterSeconds(365 * 24 * 60 * 60)},
+		{mcoSessions, bson.D{{Key: "expires_at", Value: 1}}, options.Index().SetExpireAfterSeconds(0)},
+		// guest_data: drop docs older than 5 minutes to mirror the
+		// guestToolsFreshness window the UI already uses.
+		{mcoGuestData, bson.D{{Key: "updated_at", Value: 1}}, options.Index().SetExpireAfterSeconds(300)},
+	}
+	for _, i := range ensure {
+		_, err := b.db.Collection(i.col).Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys:    i.keys,
+			Options: i.options,
+		})
+		if err != nil {
+			return fmt.Errorf("index %s %v: %w", i.col, i.keys, err)
+		}
+	}
+	return nil
+}
+
+// Load reads every collection and reassembles a persistData. Shape
+// matches the JSON backend's output exactly so the in-memory store
+// doesn't know or care which backend produced it.
+func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
+	defer func() { b.invalidateOnTransientError(err) }()
+	db, err := b.dial(ctx)
+	if err != nil {
+		return nil, err
+	}
+	pd := &persistData{
+		Hosts:     map[string]*models.Host{},
+		VMs:       map[string][]*models.VM{},
+		Storage:   map[string][]*models.StoragePool{},
+		VMNotes:   map[string]string{},
+		GuestData: map[string]*guestEntry{},
+		Users:     map[string]*models.User{},
+		Groups:    map[string]*models.Group{},
+		Roles:     map[string]*models.Role{},
+		Sessions:  map[string]*models.Session{},
+		IDPs:      map[string]*models.IdentityProvider{},
+	}
+
+	// Hosts
+	if err := loadMapByID[models.Host](ctx, db, mcoHosts, pd.Hosts, func(h *models.Host) string { return h.ID }); err != nil {
+		return nil, err
+	}
+
+	// VMs — flat collection grouped back into map[host_id][]*VM
+	// Pre-v5.50 these cursor blocks reused a single `cur` variable
+	// without closing previous iterations. cur.All() does close the
+	// cursor on success/error, but the for-range Next() blocks below
+	// (VMNotes, GuestData) do not — and any reuse without defer leaks
+	// the prior cursor on the server side until idle-cursor timeout
+	// (10 min). Each Find now scopes its own cursor inside a closure
+	// with an explicit defer Close so the server-side resource is
+	// released regardless of decode failure or context cancellation.
+	if err := func() error {
+		cur, err := db.Collection(mcoVMs).Find(ctx, bson.D{})
+		if err != nil {
+			return err
+		}
+		defer cur.Close(ctx)
+		var vms []*models.VM
+		if err := cur.All(ctx, &vms); err != nil {
+			return err
+		}
+		for _, v := range vms {
+			pd.VMs[v.HostID] = append(pd.VMs[v.HostID], v)
+		}
+		return nil
+	}(); err != nil {
+		return nil, err
+	}
+
+	// Storage — same pattern
+	if err := func() error {
+		cur, err := db.Collection(mcoStorage).Find(ctx, bson.D{})
+		if err != nil {
+			return err
+		}
+		defer cur.Close(ctx)
+		var pools []*models.StoragePool
+		if err := cur.All(ctx, &pools); err != nil {
+			return err
+		}
+		for _, p := range pools {
+			pd.Storage[p.HostID] = append(pd.Storage[p.HostID], p)
+		}
+		return nil
+	}(); err != nil {
+		return nil, err
+	}
+
+	// VM notes
+	if err := func() error {
+		cur, err := db.Collection(mcoVMNotes).Find(ctx, bson.D{})
+		if err != nil {
+			return err
+		}
+		defer cur.Close(ctx)
+		for cur.Next(ctx) {
+			var doc struct {
+				UUID string `bson:"vm_uuid"`
+				Text string `bson:"notes"`
+			}
+			if err := cur.Decode(&doc); err == nil && doc.UUID != "" {
+				pd.VMNotes[doc.UUID] = doc.Text
+			}
+		}
+		return cur.Err()
+	}(); err != nil {
+		return nil, err
+	}
+
+	// Guest data
+	if err := func() error {
+		cur, err := db.Collection(mcoGuestData).Find(ctx, bson.D{})
+		if err != nil {
+			return err
+		}
+		defer cur.Close(ctx)
+		for cur.Next(ctx) {
+			var doc struct {
+				UUID  string     `bson:"vm_uuid"`
+				Entry guestEntry `bson:"entry,inline"`
+			}
+			if err := cur.Decode(&doc); err == nil && doc.UUID != "" {
+				e := doc.Entry
+				pd.GuestData[doc.UUID] = &e
+			}
+		}
+		return cur.Err()
+	}(); err != nil {
+		return nil, err
+	}
+
+	// Migrations — load all, preserve order (started_at desc on read)
+	if err := func() error {
+		opts := options.Find().SetSort(bson.D{{Key: "started_at", Value: -1}})
+		cur, err := db.Collection(mcoMigrations).Find(ctx, bson.D{}, opts)
+		if err != nil {
+			return err
+		}
+		defer cur.Close(ctx)
+		return cur.All(ctx, &pd.Migrations)
+	}(); err != nil {
+		return nil, err
+	}
+
+	// Users / Groups / Roles / IDPs
+	if err := loadMapByID[models.User](ctx, db, mcoUsers, pd.Users, func(u *models.User) string { return u.ID }); err != nil {
+		return nil, err
+	}
+	if err := loadMapByID[models.Group](ctx, db, mcoGroups, pd.Groups, func(g *models.Group) string { return g.ID }); err != nil {
+		return nil, err
+	}
+	if err := loadMapByID[models.Role](ctx, db, mcoRoles, pd.Roles, func(r *models.Role) string { return r.ID }); err != nil {
+		return nil, err
+	}
+	if err := loadMapByID[models.IdentityProvider](ctx, db, mcoIDPs, pd.IDPs, func(i *models.IdentityProvider) string { return i.ID }); err != nil {
+		return nil, err
+	}
+
+	// Sessions (session token is the _id; TTL cleans expired)
+	if err := func() error {
+		cur, err := db.Collection(mcoSessions).Find(ctx, bson.D{})
+		if err != nil {
+			return err
+		}
+		defer cur.Close(ctx)
+		var sessions []*models.Session
+		if err := cur.All(ctx, &sessions); err != nil {
+			return err
+		}
+		for _, s := range sessions {
+			pd.Sessions[s.Token] = s
+		}
+		return nil
+	}(); err != nil {
+		return nil, err
+	}
+
+	// Features singleton
+	var feat models.Features
+	err = db.Collection(mcoFeatures).FindOne(ctx, bson.D{{Key: "_id", Value: "singleton"}}).Decode(&feat)
+	if err == nil {
+		pd.Features = &feat
+	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
+	}
+
+	// Server metadata singleton — currently just the console-token secret.
+	var meta struct {
+		ConsoleSecret string `bson:"console_secret"`
+	}
+	err = db.Collection(mcoServerMeta).FindOne(ctx, bson.D{{Key: "_id", Value: "singleton"}}).Decode(&meta)
+	if err == nil {
+		pd.ConsoleSecret = meta.ConsoleSecret
+	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
+	}
+
+	// Audit events — loaded in chronological order so the ring-buffer
+	// trim in Store behaves identically to the JSON backend path.
+	if err := func() error {
+		auditOpts := options.Find().SetSort(bson.D{{Key: "at", Value: 1}})
+		cur, err := db.Collection(mcoAuditEvents).Find(ctx, bson.D{}, auditOpts)
+		if err != nil {
+			return err
+		}
+		defer cur.Close(ctx)
+		return cur.All(ctx, &pd.Audit)
+	}(); err != nil {
+		return nil, err
+	}
+
+	// Snapshot policies (v5.3) — keyed map, same pattern as users.
+	pd.SnapshotPolicies = map[string]*models.SnapshotPolicy{}
+	if err := loadMapByID[models.SnapshotPolicy](ctx, db, mcoSnapshotPolicies, pd.SnapshotPolicies, func(p *models.SnapshotPolicy) string { return p.ID }); err != nil {
+		return nil, err
+	}
+
+	// API tokens (v5.5) keyed map.
+	pd.APITokens = map[string]*models.APIToken{}
+	if err := loadMapByID[models.APIToken](ctx, db, mcoAPITokens, pd.APITokens, func(t *models.APIToken) string { return t.ID }); err != nil {
+		return nil, err
+	}
+
+	// Hypervisor certs (v5.10.0).
+	pd.HypervisorCerts = map[string]*models.HypervisorCert{}
+	if err := loadMapByID[models.HypervisorCert](ctx, db, mcoHypervisorCerts, pd.HypervisorCerts, func(c *models.HypervisorCert) string { return c.HostID }); err != nil {
+		return nil, err
+	}
+
+	// Command log (v5.32.17). Mongo TTL handles its own pruning.
+	pd.CommandLog = map[string]*models.CommandLogEntry{}
+	if err := loadMapByID[models.CommandLogEntry](ctx, db, mcoCommandLog, pd.CommandLog, func(c *models.CommandLogEntry) string { return c.RequestID }); err != nil {
+		return nil, err
+	}
+
+	// Notifications (v5.4) singleton.
+	var notif models.NotificationConfig
+	err = db.Collection(mcoNotifications).FindOne(ctx, bson.D{{Key: "_id", Value: "singleton"}}).Decode(&notif)
+	if err == nil {
+		pd.Notifications = &notif
+	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
+	}
+
+	// Metrics (v5.13) singleton.
+	var metrics models.MetricsConfig
+	err = db.Collection(mcoMetrics).FindOne(ctx, bson.D{{Key: "_id", Value: "singleton"}}).Decode(&metrics)
+	if err == nil {
+		pd.Metrics = &metrics
+	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
+	}
+
+	// AuditShipping (v5.51.1) singleton. Pre-v5.51.1 the mongo backend
+	// silently dropped this on Save, so any operator-set syslog/HTTP
+	// shipping config evaporated on the next redeploy.
+	var ship models.AuditShipping
+	err = db.Collection(mcoAuditShipping).FindOne(ctx, bson.D{{Key: "_id", Value: "singleton"}}).Decode(&ship)
+	if err == nil {
+		pd.AuditShipping = &ship
+	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
+	}
+
+	// BackupSchedule (v5.51.1) singleton. Same drop-on-redeploy bug as
+	// audit_shipping above — fixed together.
+	var bsched models.BackupSchedule
+	err = db.Collection(mcoBackupSchedule).FindOne(ctx, bson.D{{Key: "_id", Value: "singleton"}}).Decode(&bsched)
+	if err == nil {
+		pd.BackupSchedule = &bsched
+	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
+	}
+
+	// DiscordGateway (v5.52.0) singleton. Carries pairing creds +
+	// state-machine value; survives restart so the operator doesn't
+	// have to re-pair.
+	var dgw models.DiscordGateway
+	err = db.Collection(mcoDiscordGateway).FindOne(ctx, bson.D{{Key: "_id", Value: "singleton"}}).Decode(&dgw)
+	if err == nil {
+		pd.DiscordGateway = &dgw
+	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
+	}
+
+	// RemovedHosts (v5.54.0) — deny-list keyed by host_id. Survives
+	// restart so a straggling agent that was retired pre-restart
+	// stays rejected without operator intervention.
+	pd.RemovedHosts = map[string]*models.RemovedHost{}
+	if err := loadMapByID[models.RemovedHost](ctx, db, mcoRemovedHosts, pd.RemovedHosts, func(rh *models.RemovedHost) string { return rh.HostID }); err != nil {
+		return nil, err
+	}
+
+	// PendingEnrollments (v5.55.0) — keyed by enrolment ID. Survives
+	// restart so an in-flight approval workflow can resume across
+	// kvm-center bounces without making the operator re-submit.
+	pd.PendingEnrollments = map[string]*models.PendingEnrollment{}
+	if err := loadMapByID[models.PendingEnrollment](ctx, db, mcoPendingEnrol, pd.PendingEnrollments, func(p *models.PendingEnrollment) string { return p.ID }); err != nil {
+		return nil, err
+	}
+
+	return pd, nil
+}
+
+// Save replaces every collection's contents with the provided
+// persistData snapshot. Uses drop-and-insert inside a single logical
+// checkpoint: simple, correct, and — crucially — matches the JSON
+// backend's "full-state persist" semantics so there are zero subtle
+// differences between backends at the Store layer. Not the most
+// network-efficient pattern; that's a v5.2 problem.
+func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
+	defer func() { b.invalidateOnTransientError(err) }()
+	db, err := b.dial(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Hosts. Every embed below uses bson:",inline" so the entity's
+	// fields land at the document root rather than nested under the
+	// Go struct's field name — otherwise the default decoder can't
+	// hydrate the Host back from a "host" sub-object.
+	if err := replaceMap(ctx, db, mcoHosts, mapToDocs(d.Hosts, func(h *models.Host) any {
+		return struct {
+			ID           string `bson:"_id"`
+			*models.Host `bson:",inline"`
+		}{h.ID, h}
+	})); err != nil {
+		return err
+	}
+
+	// VMs — flatten nested map. Fall back to host|name for the _id when
+	// the UUID field is empty (pre-v4 data) so docs don't collide.
+	//
+	// v5.53.1: dedup by `_id` across host slices. A VM that straddles
+	// two host entries (e.g. stale post-migration record on the source
+	// + live record on the destination) used to trip the unique _id
+	// index and fail the entire bulk insert with E11000 every save
+	// tick — leaving the persisted state stuck at whatever the prior
+	// successful save wrote and silently dropping all subsequent
+	// changes (RAM edits, telemetry refreshes, etc.).
+	var vmDocs []any
+	seenVM := map[string]bool{}
+	for hostID, vms := range d.VMs {
+		for _, v := range vms {
+			id := strings.ToLower(v.UUID)
+			if id == "" {
+				id = hostID + "|" + v.Name
+			}
+			if seenVM[id] {
+				continue
+			}
+			seenVM[id] = true
+			vmDocs = append(vmDocs, struct {
+				ID         string `bson:"_id"`
+				*models.VM `bson:",inline"`
+			}{id, v})
+		}
+	}
+	if err := replaceMap(ctx, db, mcoVMs, vmDocs); err != nil {
+		return err
+	}
+
+	// Storage — same pattern
+	var poolDocs []any
+	for hostID, pools := range d.Storage {
+		for _, p := range pools {
+			poolDocs = append(poolDocs, struct {
+				ID                  string `bson:"_id"`
+				*models.StoragePool `bson:",inline"`
+			}{hostID + "|" + p.Name, p})
+		}
+	}
+	if err := replaceMap(ctx, db, mcoStorage, poolDocs); err != nil {
+		return err
+	}
+
+	// VM notes
+	var noteDocs []any
+	for uuid, text := range d.VMNotes {
+		noteDocs = append(noteDocs, bson.M{"_id": uuid, "vm_uuid": uuid, "notes": text})
+	}
+	if err := replaceMap(ctx, db, mcoVMNotes, noteDocs); err != nil {
+		return err
+	}
+
+	// Guest data (updated_at drives the TTL index)
+	var gdDocs []any
+	for uuid, entry := range d.GuestData {
+		gdDocs = append(gdDocs, bson.M{
+			"_id":        uuid,
+			"vm_uuid":    uuid,
+			"updated_at": entry.UpdatedAt,
+			"entry":      entry,
+		})
+	}
+	if err := replaceMap(ctx, db, mcoGuestData, gdDocs); err != nil {
+		return err
+	}
+
+	// Migrations — append-only list, persisted as the full array.
+	// Terminal records carry expires_at = CompletedAt + 30d so the
+	// TTL index sweeps them; active records leave the field unset
+	// so they stick around indefinitely. Tier S #2, v5.32.17.
+	var migDocs []any
+	for _, m := range d.Migrations {
+		doc := struct {
+			ID                      string `bson:"_id"`
+			*models.MigrationRecord `bson:",inline"`
+			ExpiresAt               *time.Time `bson:"expires_at,omitempty"`
+		}{ID: m.ID, MigrationRecord: m}
+		if isTerminalMigration(m.Status) && m.CompletedAt > 0 {
+			t := time.Unix(m.CompletedAt, 0).Add(migrationRetentionDays * 24 * time.Hour)
+			doc.ExpiresAt = &t
+		}
+		migDocs = append(migDocs, doc)
+	}
+	if err := replaceMap(ctx, db, mcoMigrations, migDocs); err != nil {
+		return err
+	}
+
+	if err := replaceMapIfDirty(ctx, db, mcoUsers, "users", d, mapToDocs(d.Users, func(u *models.User) any {
+		return struct {
+			ID           string `bson:"_id"`
+			*models.User `bson:",inline"`
+		}{u.ID, u}
+	})); err != nil {
+		return err
+	}
+	if err := replaceMapIfDirty(ctx, db, mcoGroups, "groups", d, mapToDocs(d.Groups, func(g *models.Group) any {
+		return struct {
+			ID            string `bson:"_id"`
+			*models.Group `bson:",inline"`
+		}{g.ID, g}
+	})); err != nil {
+		return err
+	}
+	if err := replaceMapIfDirty(ctx, db, mcoRoles, "roles", d, mapToDocs(d.Roles, func(r *models.Role) any {
+		return struct {
+			ID           string `bson:"_id"`
+			*models.Role `bson:",inline"`
+		}{r.ID, r}
+	})); err != nil {
+		return err
+	}
+	if err := replaceMapIfDirty(ctx, db, mcoIDPs, "idps", d, mapToDocs(d.IDPs, func(i *models.IdentityProvider) any {
+		return struct {
+			ID                       string `bson:"_id"`
+			*models.IdentityProvider `bson:",inline"`
+		}{i.ID, i}
+	})); err != nil {
+		return err
+	}
+
+	// Sessions — keyed by token; TTL index auto-expires.
+	if isDirty(d, "sessions") {
+		var sessDocs []any
+		for tok, s := range d.Sessions {
+			sessDocs = append(sessDocs, struct {
+				ID              string `bson:"_id"`
+				*models.Session `bson:",inline"`
+			}{tok, s})
+		}
+		if err := replaceMap(ctx, db, mcoSessions, sessDocs); err != nil {
+			return err
+		}
+	}
+
+	// Features singleton upsert
+	if d.Features != nil && isDirty(d, "features") {
+		if _, err := db.Collection(mcoFeatures).ReplaceOne(
+			ctx,
+			bson.D{{Key: "_id", Value: "singleton"}},
+			struct {
+				ID               string `bson:"_id"`
+				*models.Features `bson:",inline"`
+			}{"singleton", d.Features},
+			options.Replace().SetUpsert(true),
+		); err != nil {
+			return err
+		}
+	}
+
+	// Server metadata singleton
+	if isDirty(d, "server_meta") {
+		if _, err := db.Collection(mcoServerMeta).ReplaceOne(
+			ctx,
+			bson.D{{Key: "_id", Value: "singleton"}},
+			bson.M{"_id": "singleton", "console_secret": d.ConsoleSecret},
+			options.Replace().SetUpsert(true),
+		); err != nil {
+			return err
+		}
+	}
+
+	// Audit events — always write (hot collection). Dedup by ID
+	// (v5.53.1) — a clock skew or re-issue path occasionally produces
+	// two entries with the same ID in the in-memory ring buffer,
+	// which then fails the bulk insert. Keep the first occurrence;
+	// the buffer is FIFO so first == oldest and the duplicate (if
+	// it differs at all) is a re-emission.
+	var auditDocs []any
+	seenAudit := map[string]bool{}
+	for _, ev := range d.Audit {
+		if ev == nil || ev.ID == "" {
+			continue
+		}
+		if seenAudit[ev.ID] {
+			continue
+		}
+		seenAudit[ev.ID] = true
+		auditDocs = append(auditDocs, struct {
+			ID                 string `bson:"_id"`
+			*models.AuditEvent `bson:",inline"`
+		}{ev.ID, ev})
+	}
+	if err := replaceMap(ctx, db, mcoAuditEvents, auditDocs); err != nil {
+		return err
+	}
+
+	// API tokens
+	if err := replaceMapIfDirty(ctx, db, mcoAPITokens, "api_tokens", d, mapToDocs(d.APITokens, func(t *models.APIToken) any {
+		return struct {
+			ID               string `bson:"_id"`
+			*models.APIToken `bson:",inline"`
+		}{t.ID, t}
+	})); err != nil {
+		return err
+	}
+
+	// Metrics singleton
+	if d.Metrics != nil && isDirty(d, "metrics") {
+		if _, err := db.Collection(mcoMetrics).ReplaceOne(
+			ctx,
+			bson.D{{Key: "_id", Value: "singleton"}},
+			struct {
+				ID                    string `bson:"_id"`
+				*models.MetricsConfig `bson:",inline"`
+			}{"singleton", d.Metrics},
+			options.Replace().SetUpsert(true),
+		); err != nil {
+			return err
+		}
+	}
+
+	// Notifications singleton
+	if d.Notifications != nil && isDirty(d, "notifications") {
+		if _, err := db.Collection(mcoNotifications).ReplaceOne(
+			ctx,
+			bson.D{{Key: "_id", Value: "singleton"}},
+			struct {
+				ID                         string `bson:"_id"`
+				*models.NotificationConfig `bson:",inline"`
+			}{"singleton", d.Notifications},
+			options.Replace().SetUpsert(true),
+		); err != nil {
+			return err
+		}
+	}
+
+	// AuditShipping singleton (v5.51.1). Mirrors notifications/metrics —
+	// upsert the singleton doc when the dirty hint flags it. Pre-v5.51.1
+	// this branch was missing entirely, so operator syslog/HTTP config
+	// only lived in memory and evaporated on every redeploy.
+	if d.AuditShipping != nil && isDirty(d, "audit_shipping") {
+		if _, err := db.Collection(mcoAuditShipping).ReplaceOne(
+			ctx,
+			bson.D{{Key: "_id", Value: "singleton"}},
+			struct {
+				ID                    string `bson:"_id"`
+				*models.AuditShipping `bson:",inline"`
+			}{"singleton", d.AuditShipping},
+			options.Replace().SetUpsert(true),
+		); err != nil {
+			return err
+		}
+	}
+
+	// BackupSchedule singleton (v5.51.1).
+	if d.BackupSchedule != nil && isDirty(d, "backup_schedule") {
+		if _, err := db.Collection(mcoBackupSchedule).ReplaceOne(
+			ctx,
+			bson.D{{Key: "_id", Value: "singleton"}},
+			struct {
+				ID                     string `bson:"_id"`
+				*models.BackupSchedule `bson:",inline"`
+			}{"singleton", d.BackupSchedule},
+			options.Replace().SetUpsert(true),
+		); err != nil {
+			return err
+		}
+	}
+
+	// RemovedHosts (v5.54.0) — keyed by host_id, replace on every
+	// save to mirror the in-memory deny-list. Cheap (small set).
+	if isDirty(d, "removed_hosts") {
+		if err := replaceMap(ctx, db, mcoRemovedHosts, mapToDocs(d.RemovedHosts, func(rh *models.RemovedHost) any {
+			return struct {
+				ID                  string `bson:"_id"`
+				*models.RemovedHost `bson:",inline"`
+			}{rh.HostID, rh}
+		})); err != nil {
+			return err
+		}
+	}
+
+	// PendingEnrollments (v5.55.0) — keyed by enrolment ID.
+	if isDirty(d, "pending_enrollments") {
+		if err := replaceMap(ctx, db, mcoPendingEnrol, mapToDocs(d.PendingEnrollments, func(p *models.PendingEnrollment) any {
+			return struct {
+				ID                        string `bson:"_id"`
+				*models.PendingEnrollment `bson:",inline"`
+			}{p.ID, p}
+		})); err != nil {
+			return err
+		}
+	}
+
+	// DiscordGateway singleton (v5.52.0).
+	if d.DiscordGateway != nil && isDirty(d, "discord_gateway") {
+		if _, err := db.Collection(mcoDiscordGateway).ReplaceOne(
+			ctx,
+			bson.D{{Key: "_id", Value: "singleton"}},
+			struct {
+				ID                     string `bson:"_id"`
+				*models.DiscordGateway `bson:",inline"`
+			}{"singleton", d.DiscordGateway},
+			options.Replace().SetUpsert(true),
+		); err != nil {
+			return err
+		}
+	}
+
+	// Hypervisor certs
+	if err := replaceMapIfDirty(ctx, db, mcoHypervisorCerts, "hypervisor_certs", d, mapToDocs(d.HypervisorCerts, func(c *models.HypervisorCert) any {
+		return struct {
+			ID                     string `bson:"_id"`
+			*models.HypervisorCert `bson:",inline"`
+		}{c.HostID, c}
+	})); err != nil {
+		return err
+	}
+
+	// Snapshot policies
+	if err := replaceMapIfDirty(ctx, db, mcoSnapshotPolicies, "snapshot_policies", d, mapToDocs(d.SnapshotPolicies, func(p *models.SnapshotPolicy) any {
+		return struct {
+			ID                     string `bson:"_id"`
+			*models.SnapshotPolicy `bson:",inline"`
+		}{p.ID, p}
+	})); err != nil {
+		return err
+	}
+
+	// Command log (v5.32.17). Inline the whole entry — _id == RequestID.
+	if err := replaceMapIfDirty(ctx, db, mcoCommandLog, "command_log", d, mapToDocs(d.CommandLog, func(c *models.CommandLogEntry) any {
+		return c
+	})); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// isDirty returns true when the persistData carries a dirty flag for
+// the named collection. First-boot migration paths pass Dirty=nil, in
+// which case we conservatively treat everything as dirty to keep the
+// initial Mongo load complete.
+func isDirty(d *persistData, name string) bool {
+	if d == nil || d.Dirty == nil {
+		return true
+	}
+	return d.Dirty[name]
+}
+
+// replaceMapIfDirty skips the drop-and-insert cycle when the named
+// collection isn't marked dirty. First save after startup has no
+// dirty set (nil) — falls through to a full write so the collection
+// is in sync before we start trusting the hint.
+func replaceMapIfDirty(ctx context.Context, db *mongo.Database, collection, dirtyKey string, d *persistData, docs []any) error {
+	if !isDirty(d, dirtyKey) {
+		return nil
+	}
+	return replaceMap(ctx, db, collection, docs)
+}
+
+// replaceMap empties a collection then bulk-inserts the provided
+// documents. Executed as a single DeleteMany + InsertMany pair; not
+// transactional (Mongo standalone doesn't support multi-doc txn
+// without a replica set) — acceptable because Save is only called
+// from the 30s persist ticker and a mid-save crash just means the
+// next tick reinstates the correct state.
+func replaceMap(ctx context.Context, db *mongo.Database, collection string, docs []any) error {
+	coll := db.Collection(collection)
+	if _, err := coll.DeleteMany(ctx, bson.D{}); err != nil {
+		return fmt.Errorf("drop %s: %w", collection, err)
+	}
+	if len(docs) == 0 {
+		return nil
+	}
+	if _, err := coll.InsertMany(ctx, docs); err != nil {
+		return fmt.Errorf("insert %s: %w", collection, err)
+	}
+	return nil
+}
+
+// loadMapByID streams an entire collection and builds a keyed map by
+// calling keyOf on each decoded value. Generic so the same plumbing
+// covers hosts / users / groups / roles / idps.
+func loadMapByID[T any](ctx context.Context, db *mongo.Database, col string, dst map[string]*T, keyOf func(*T) string) error {
+	cur, err := db.Collection(col).Find(ctx, bson.D{})
+	if err != nil {
+		return err
+	}
+	defer cur.Close(ctx)
+	for cur.Next(ctx) {
+		v := new(T)
+		if err := cur.Decode(v); err != nil {
+			return err
+		}
+		k := keyOf(v)
+		if k == "" {
+			continue
+		}
+		dst[k] = v
+	}
+	return cur.Err()
+}
+
+// mapToDocs flattens a keyed map into a slice of BSON docs. The
+// toDoc closure controls exactly how each entity is serialised,
+// including the _id field, so we get consistent keys per collection.
+func mapToDocs[T any](m map[string]*T, toDoc func(*T) any) []any {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make([]any, 0, len(m))
+	for _, v := range m {
+		out = append(out, toDoc(v))
+	}
+	return out
+}

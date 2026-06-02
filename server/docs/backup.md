@@ -1,0 +1,169 @@
+---
+title: Backup and restore
+section: Operations
+order: 68
+---
+
+# Backup and restore
+
+kvm-center ships a built-in backup for the control plane's state.
+Physical VMs on the hypervisors are **not** affected by backup or
+restore — those are handled by your libvirt / storage backup strategy.
+
+## What's in a backup
+
+A kvm-center backup tarball contains:
+
+| File | Contents |
+|------|----------|
+| `manifest.json` | Version, timestamp, operator identity, schema format, bytes |
+| `store.json` | The full `persistData` snapshot — users, groups, roles, API tokens, hosts, VM inventory, snapshot policies, audit events, features, notifications config, metrics config, hypervisor certs, console secret |
+
+Not included (out-of-band — back up separately):
+
+- TLS server cert + key at `$KVM_CENTER_TLS_DIR`
+- Cluster CA material at `$KVM_CENTER_CA_DIR`
+- `.env` (contains `KVM_MONGO_PASSWORD`)
+- MongoDB data volume (alternative to `store.json` for same-version restore)
+
+## Take a backup
+
+### From the API
+
+`POST /api/admin/backup` (requires `user.manage`) streams a `tar.gz`:
+
+```sh
+curl -fsSLOJ \
+  -H "Authorization: Bearer $KVMCTL_TOKEN" \
+  -k https://kvm-center.example.com:8190/api/admin/backup
+```
+
+The response is saved as `kvm-center-backup-YYYYMMDD-HHMMSS.tar.gz`.
+
+### From the docker host
+
+For a full disaster-recovery backup that includes the TLS + CA
+material, pair the API export with a filesystem copy of the server's
+data volume:
+
+```sh
+ssh <your-docker-host> '
+  mkdir -p /tmp/kvmc-dr
+  # 1. API export (catches the full store snapshot)
+  curl -fsSLk -o /tmp/kvmc-dr/store.tar.gz \
+    -H "Authorization: Bearer $KVMCTL_TOKEN" \
+    https://localhost:8190/api/admin/backup
+  # 2. TLS + CA material (on-disk)
+  docker cp kvm-center-server:/var/lib/kvm-center/tls  /tmp/kvmc-dr/tls
+  docker cp kvm-center-server:/var/lib/kvm-center/ca   /tmp/kvmc-dr/ca
+  # 3. .env (contains KVM_MONGO_PASSWORD — keep safe)
+  cp /opt/kvm-center/.env /tmp/kvmc-dr/env
+  tar czf /tmp/kvmc-dr-$(date +%Y%m%d).tar.gz -C /tmp kvmc-dr
+'
+```
+
+## Restore
+
+There are two ways to restore. Both write the staged files into the
+live volumes and require a server restart to load the new state —
+the difference is whether you do that from the SPA or the host.
+
+### From the SPA (v5.39.0+)
+
+**Settings → Backup → Restore.** Pick the backup `.tar.gz`, type
+`RESTORE` to confirm, click **Apply restore**. Checksums in
+`manifest.json` are verified before any file is touched. After the
+upload succeeds the **Restart server** button enables — clicking it
+saves any pending state, exits the process, and lets the container
+restart policy bring it back against the restored data.
+
+Requires `user.manage`. Audit events: `backup.restore` for the
+upload, then again for the restart.
+
+### From the docker host (CLI)
+
+Same effect, useful when the SPA isn't reachable (DR scenarios where
+the cluster is being rebuilt from scratch).
+
+1. Stop the stack: `docker compose -f /opt/kvm-center/docker-compose.yml stop kvm-center-server`
+2. Extract the backup tarball and inspect `manifest.json` to confirm
+   the version matches (major/minor at minimum).
+3. Copy `store.json` into the server's data volume:
+   ```
+   docker run --rm -v kvm-center_kvm-center-data:/target \
+     -v "$PWD:/src" alpine \
+     cp /src/store.json /target/data.json
+   ```
+   (Replace `kvm-center_kvm-center-data` with `$(docker compose -f
+   /opt/kvm-center/docker-compose.yml config --volumes | grep data)`
+   if the compose project name differs.)
+4. If restoring TLS + CA material, copy `tls/` and `ca/` into their
+   respective volumes the same way.
+5. Restart: `docker compose -f /opt/kvm-center/docker-compose.yml start kvm-center-server`
+6. Confirm: `/api/version` returns, login works, the Hosts page
+   shows the expected inventory.
+
+## Mongo notes
+
+Since v5.1 the canonical state lives in MongoDB, not the
+`data.json` file. The API export above (`/api/admin/backup`)
+serializes the in-memory store — which has been hydrated from
+Mongo at boot — so you get a consistent snapshot regardless of
+backend. **You do not need to dump Mongo separately for a
+control-plane restore.** The legacy JSON file is kept on disk as
+a parallel cache and the migration path; if Mongo goes empty on
+restart, the server hydrates from the JSON file.
+
+For a Mongo-level point-in-time backup (e.g. against a
+filesystem-corruption scenario), use mongodump:
+
+```sh
+docker compose -f /opt/kvm-center/docker-compose.yml exec kvm-center-mongo \
+  mongodump --uri "mongodb://kvmc:$KVM_MONGO_PASSWORD@localhost:27017/kvm-center" \
+  --archive=/tmp/kvmc.archive --gzip
+docker compose -f /opt/kvm-center/docker-compose.yml cp \
+  kvm-center-mongo:/tmp/kvmc.archive ./kvmc-mongo-$(date +%Y%m%d).archive
+```
+
+Pair with the `/api/admin/backup` export and you cover both the
+"app state corrupt" and "DB-volume corrupt" scenarios.
+
+## Safety during active migrations
+
+Both scheduled and ad-hoc backups serialize the in-memory store
+under a read lock — they are safe to run concurrently with a
+migration. The migration's progress frames update the
+MigrationRecord under a write lock that blocks the export
+momentarily; the export resumes once the writer releases. Worst
+case: the export takes a few seconds longer than usual.
+
+A *restore* (`POST /api/admin/restore`) refuses to run while any
+migration is in `running` state — the server returns 409 with a
+list of in-flight IDs. Cancel or wait for them before restoring.
+
+## Rollback
+
+If restore goes wrong, the previous `store.json` is still in Mongo's
+`data.json.migrated` (v5.1+ migration artefact) or in the pre-restore
+volume snapshot you should have taken. Roll back by reversing step 3.
+
+## Scheduling
+
+**Settings → Backup → Schedule** (v5.43.0+). Tick the **Enable**
+checkbox, set how often (`every_hours`), pick a destination path
+on the docker host, and choose how many tarballs to keep
+(`retain_count`). The server runs a once-per-minute scheduler tick
+that fires when `time.Since(last_run) >= every_hours`. Tarballs
+are written atomically (`.tmp` + rename) and rotation drops the
+oldest beyond `retain_count`.
+
+The scheduler writes to a host directory that's mounted into the
+container — pick a path under a bind-mounted volume so backups
+survive container rebuilds. The default `/var/lib/kvm-center/backups`
+follows that pattern in the shipped compose stack.
+
+Disabled by default — opt in when ready. Outcome (last-run
+timestamp, size, error) is exposed in the UI so a stuck scheduler
+is visible at a glance. Want a different cadence than a fixed
+`every_hours`? File an issue — we can add a real cron expression
+if there's demand.

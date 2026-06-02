@@ -1,0 +1,63 @@
+kvm-center
+Copyright 2026 The kvm-center contributors
+Licensed under the Apache License 2.0 (the "License"); you may not use this
+product except in compliance with the License. A copy of the License is in the
+LICENSE file at the root of this repository, or at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+================================================================================
+Third-party components
+================================================================================
+
+This product bundles Go modules and browser assets from third parties. The
+authoritative, machine-checkable license set is derivable from the dependency
+manifests:
+
+  - Go server + agent:  go.mod / go.sum
+  - React web UI:       webui-react/package.json / webui-react/package-lock.json
+
+The complete attribution report is reproducible at any time with:
+
+    go install github.com/google/go-licenses@latest
+    go-licenses report ./...
+
+The components below ship under the Apache License 2.0 and therefore carry
+their own NOTICE / attribution requirements, which are passed through here per
+Apache-2.0 §4(d). License texts and any upstream NOTICE files are distributed
+with each module under the Go module cache / vendor tree.
+
+  google.golang.org/grpc                          Apache-2.0
+  google.golang.org/genproto/googleapis/rpc       Apache-2.0
+  go.mongodb.org/mongo-driver                      Apache-2.0
+  github.com/klauspost/compress                    Apache-2.0
+  github.com/jonboulle/clockwork                   Apache-2.0
+  github.com/mattermost/xml-roundtrip-validator    Apache-2.0
+  github.com/russellhaering/goxmldsig              Apache-2.0
+  github.com/xdg-go/pbkdf2                          Apache-2.0
+  github.com/xdg-go/scram                           Apache-2.0
+  github.com/xdg-go/stringprep                      Apache-2.0
+
+Additional bundled Go modules are distributed under permissive
+non-attribution-NOTICE licenses (MIT, BSD-2-Clause, BSD-3-Clause), including
+but not limited to:
+
+  github.com/crewjam/saml                           BSD-2-Clause
+  github.com/go-ldap/ldap/v3                         MIT
+  github.com/robfig/cron/v3                          MIT
+  github.com/yuin/goldmark                           MIT
+  github.com/google/uuid                             BSD-3-Clause
+  google.golang.org/protobuf                         BSD-3-Clause
+  golang.org/x/crypto, .../net, .../sync,            BSD-3-Clause
+    .../sys, .../text
+  modernc.org/sqlite (and modernc.org/libc,          BSD-3-Clause / MIT
+    .../mathutil, .../memory)
+
+See `go-licenses report ./...` for the exhaustive, version-pinned list.
+
+--------------------------------------------------------------------------------
+Browser-loaded assets
+--------------------------------------------------------------------------------
+
+This product loads noVNC (https://github.com/novnc/noVNC), licensed under
+MPL-2.0, in the browser console.

@@ -1,0 +1,131 @@
+# ── Stage 1a: Build the React SPA ─────────────────────────────────────────────
+# Produces webui-react/dist, which the Go stage copies into
+# server/staticv4/dist before `go build` so //go:embed can pick it up.
+FROM node:20-alpine AS webui
+
+WORKDIR /webui
+COPY webui-react/package.json webui-react/package-lock.jso[n] ./
+RUN npm install --no-audit --no-fund --loglevel=error
+COPY webui-react/ ./
+RUN npm run build
+
+# ── Stage 1b: Cross-compile every distributable binary ────────────────────────
+# Produces /dist with every agent/kvm-tools/kvmctl variant + install
+# scripts. The runtime image copies this into /app/dist so the server
+# can serve them over /downloads/*. Consolidates what used to be the
+# standalone kvm-center-build container on port 8097 (v5.16).
+FROM golang:1.25-alpine AS artifacts
+
+WORKDIR /src
+COPY . .
+RUN cp /src/server/VERSION /src/kvm-tools/VERSION
+RUN go mod tidy
+
+# GIT_SHA busts BuildKit's layer cache on every new commit so the
+# cross-compile layers re-run against the current source. bootstrap.sh
+# --deploy passes the HEAD SHA; standalone callers get "dev".
+ARG GIT_SHA=dev
+RUN echo "artifacts stage @ $GIT_SHA"
+
+RUN VERSION=$(cat /src/server/VERSION) && \
+    LDF="-s -w -X main.Version=$VERSION" && \
+    KVMCTL_LDF="-s -w -X main.cliVersion=$VERSION" && \
+    mkdir -p /dist && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvm-center-agent-amd64 ./agent && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$LDF" -o /dist/kvm-center-agent-arm64 ./agent && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvm-tools-linux-amd64 ./kvm-tools && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$LDF" -o /dist/kvm-tools-linux-arm64 ./kvm-tools && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvm-tools-windows-amd64.exe ./kvm-tools && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-linux-amd64       ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-linux-arm64       ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-darwin-amd64      ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-darwin-arm64      ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-windows-amd64.exe ./cmd/kvmctl && \
+    # v5.47.1: unified Linux installer. install.sh is the canonical
+    # entry point; install-agent.sh + install-kvm-tools.sh are kept as
+    # symlinks so existing one-liners in operator notes keep working —
+    # the unified script auto-detects mode from the invocation name.
+    cp /src/scripts/install.sh            /dist/install.sh && \
+    ln -sf install.sh                     /dist/install-agent.sh && \
+    ln -sf install.sh                     /dist/install-kvm-tools.sh && \
+    cp /src/scripts/update-agent.sh       /dist/ && \
+    cp /src/kvm-tools/install.ps1         /dist/install-kvm-tools.ps1 && \
+    cp /src/scripts/install-kvmctl.sh     /dist/install-kvmctl.sh && \
+    cp /src/scripts/install-kvmctl.ps1    /dist/install-kvmctl.ps1 && \
+    cp /src/scripts/libvirt-hooks-qemu.sh /dist/libvirt-hooks-qemu.sh && \
+    chmod +x /dist/install.sh /dist/update-agent.sh \
+             /dist/install-kvmctl.sh /dist/libvirt-hooks-qemu.sh && \
+    ln -sf kvm-tools-linux-amd64 /dist/kvm-tools-amd64 && \
+    ln -sf kvm-tools-linux-arm64 /dist/kvm-tools-arm64 && \
+    # Claude skill bundle (v5.33.0, P1.3). Packaged here so the
+    # install one-liner can curl → tar → install.sh without extra
+    # infrastructure. install.sh chmod-fixed so the tarball round-trip
+    # preserves the executable bit.
+    chmod +x /src/skill/install.sh && \
+    tar czf /dist/kvm-center-skill.tar.gz -C /src/skill .
+
+# ── Stage 1c: Build the Go server ─────────────────────────────────────────────
+# --platform=$BUILDPLATFORM keeps the builder stage native to the
+# host runner (no qemu emulation overhead for the Go compiler);
+# TARGETOS/TARGETARCH are then passed to `go build` so it
+# cross-compiles for the target arch. v5.49 (PR-1b) introduces
+# multi-arch buildx (linux/amd64 + linux/arm64) via Docker Hub.
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
+WORKDIR /src
+COPY go.mod go.su[m] ./
+COPY . .
+# Drop in the built SPA so the Go //go:embed directive finds a populated
+# staticv4 tree. The directory is .gitignored in dev; CI produces it.
+RUN rm -rf server/staticv4/dist
+COPY --from=webui /webui/dist ./server/staticv4/dist
+
+RUN go mod tidy
+RUN VERSION=$(cat /src/server/VERSION) && \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
+      -ldflags="-s -w -X main.Version=$VERSION" \
+      -o /out/kvm-center-server ./server
+
+# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
+# Pinned by multi-arch manifest-list digest (OCI image index) so amd64 +
+# arm64 buildx targets both resolve reproducibly. Bump the tag and the
+# digest together; never replace with :latest.
+FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+
+# OCI image metadata for the published runtime image.
+LABEL org.opencontainers.image.title="kvm-center" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.source="https://github.com/donovanm21/kvm-center"
+
+# su-exec drops privileges in the entrypoint after fixing volume ownership.
+RUN apk --no-cache add ca-certificates tzdata curl su-exec
+
+WORKDIR /app
+COPY --from=builder   /out/kvm-center-server .
+COPY --from=artifacts /dist ./dist
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+
+# The server runs as the unprivileged kvmc user (see docker-entrypoint.sh).
+# A fresh named volume is initialised from this kvmc-owned dir; the entrypoint
+# repairs ownership on upgrade from a pre-v5.61 (root) volume, then drops privs.
+RUN addgroup -S kvmc && adduser -S -G kvmc kvmc && \
+    mkdir -p /var/lib/kvm-center && \
+    chown -R kvmc:kvmc /var/lib/kvm-center /app && \
+    chmod +x /app/docker-entrypoint.sh
+
+# 8443 is the TLS listener (always on; the only listener since v5.47.0
+# disabled plain HTTP by default). 8090 stays exposed for operators
+# who explicitly opt back in via KVM_CENTER_LEGACY_HTTP=1 for legacy
+# pre-v5.32 kvm-tools that hard-coded http://…:8090.
+EXPOSE 8443 8090
+
+ENV KVM_CENTER_ADDR=:8090
+ENV KVM_CENTER_TLS_ADDR=:8443
+ENV KVM_CENTER_DATA=/var/lib/kvm-center/data.json
+ENV KVM_CENTER_DOWNLOADS_DIR=/app/dist
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["/app/kvm-center-server"]

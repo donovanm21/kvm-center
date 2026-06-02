@@ -1,0 +1,24 @@
+kvm-center-server
+kvm-center-agent
+kvm-center-agent-*
+kvm-tools-*
+kvmctl-*
+install-kvm-tools.sh
+install-agent.sh
+install-kvmctl.*
+update-agent.sh
+libvirt-hooks-qemu.sh
+dist/
+data.json
+*.tar.gz
+node_modules/
+server/staticv4/dist/
+.claude/
+.env
+.env.bak.*
+migration-keys/
+*.migrated
+*.exe
+
+# internal-only artifacts (kept locally, excluded from the public repo)
+.internal/

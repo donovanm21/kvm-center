@@ -1,0 +1,402 @@
+/* KVM Center mobile shell — v5.46.0.
+ *
+ * App-like layout for iPhone: full-viewport flex column with a
+ * pinned header, a scrollable body, and a bottom tab bar that
+ * respects the home-indicator safe-area inset. All sizing in rem
+ * so iOS text-size accessibility settings are honoured. The shell
+ * deliberately fills the viewport (100dvh) so add-to-home-screen
+ * standalone mode looks chrome-less.
+ */
+
+.m-shell {
+  display: flex;
+  flex-direction: column;
+  /* dvh handles iOS Safari's collapsing URL bar; vh fallback for
+   * older WebViews. */
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text-body);
+  font-size: 15px;
+  line-height: 1.4;
+  /* v5.46.5: clamp the layout to the device width and forbid
+     horizontal overflow. The page used to land slightly zoomed-
+     out because some descendant (a long .m-card-meta string, the
+     `kvmc_…` token chip, etc.) measured wider than 100vw at first
+     paint, and iOS Safari shrunk the page to fit. Hard-clipping
+     here means zoom-1 always equals device width. */
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+/* Same defence at the document root so any rogue child element
+   in a future screen can't push the body wider than the viewport
+   either. Doesn't affect the desktop SPA — its own .app-shell
+   already uses min-width: 0 inside flex children. */
+html, body { overflow-x: hidden; }
+/* Long inline strings (host_id, vm.name, audit action paths,
+   guest IPs) wrap mid-string instead of pushing the card wider
+   than the viewport. */
+.m-card-title, .m-card-meta, .m-kv dd { overflow-wrap: anywhere; }
+
+/* ── Header ──────────────────────────────────────────────── */
+.m-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: max(env(safe-area-inset-top), 8px) 14px 8px;
+  background: #13161D;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+body.light-mode .m-header { background: #FFFFFF; }
+.m-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  flex: 1;
+  min-width: 0;
+}
+.m-header-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+.m-header-primary { color: var(--text-strong); }
+.m-header-accent { color: var(--accent); margin-left: 1px; }
+.m-header-actions { display: flex; gap: 6px; }
+.m-icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-body);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-icon-btn:active { background: var(--surface-3); }
+
+/* ── Body ────────────────────────────────────────────────── */
+.m-body {
+  flex: 1;
+  -webkit-overflow-scrolling: touch;
+  /* Bottom padding clears the fixed-position tab bar so the last
+     card isn't hidden underneath it. 64 px tab + safe-area inset
+     for the home indicator + 12 px breathing room. */
+  padding: 14px 14px calc(76px + env(safe-area-inset-bottom));
+}
+
+/* v5.46.2: every mobile screen wraps its content in `.m-screen`
+   so vertical rhythm is owned by the layout, not by ad-hoc
+   margins on each section. flex column + gap handles all the
+   between-section spacing (h1 → sub → search → list → next list)
+   in one rule, and is consistent across every screen. */
+.m-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* Pair h1 + sub copy as a single block so the screen's 14 px gap
+   doesn't push them apart. Each screen wraps them in `.m-screen-h`. */
+.m-screen-h { display: flex; flex-direction: column; gap: 4px; }
+
+/* Sub-section inside a screen: a section header (`.m-section-h`)
+   followed by a stack of cards or rows. Gives the same flex-column
+   gap rhythm as `.m-screen` but tighter (10 px) since cards inside
+   a section sit closer together than top-level screen blocks. */
+.m-section { display: flex; flex-direction: column; gap: 10px; }
+
+/* ── Bottom tab bar ──────────────────────────────────────── */
+/* v5.46.2: switched from `position: sticky; bottom: 0` to fixed.
+   Sticky on a long page only pins after the element scrolls into
+   view — operators were having to scroll to the bottom of the
+   Activity feed before the nav reappeared. Fixed keeps it
+   permanently floating, matching native iOS app conventions. */
+.m-tabbar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: #13161D;
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+}
+body.light-mode .m-tabbar { background: #FFFFFF; }
+.m-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 0 6px;
+  text-decoration: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-tab:active { background: var(--surface-2); }
+.m-tab.is-active { color: var(--accent-hover); }
+.m-tab-glyph { font-size: 18px; line-height: 1; }
+.m-tab-label { font-weight: 500; letter-spacing: 0.01em; }
+
+/* ── Page heading ────────────────────────────────────────── */
+.m-h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+  margin: 0 0 4px 0;
+}
+.m-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── Cards ───────────────────────────────────────────────── */
+.m-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+/* List sections wrap card-links in a flex-column with its own
+   tighter gap. Cards inside that container don't need additional
+   margin — the gap handles it. */
+.m-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.m-card-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-card-link:active .m-card { background: var(--surface-2); }
+
+.m-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.m-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.m-card-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.m-card-arrow {
+  color: var(--text-faded);
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* ── Stat tiles (Dashboard) ──────────────────────────────── */
+.m-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.m-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 14px;
+}
+.m-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.m-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-strong);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.m-stat-foot {
+  font-size: 11px;
+  color: var(--text-faded);
+  margin-top: 4px;
+}
+
+/* ── Section header ──────────────────────────────────────── */
+.m-section-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 0 8px;
+}
+/* When nested inside `.m-section`, drop the margin so the parent's
+   gap is the single source of vertical spacing. */
+.m-section > .m-section-h { margin: 0; }
+.m-section-h h2 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+.m-section-h a {
+  font-size: 12px;
+  color: var(--accent-hover);
+}
+
+/* ── Search input ────────────────────────────────────────── */
+.m-search {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  background: var(--bg-input);
+  color: var(--text-body);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 15px;
+  outline: none;
+}
+.m-search:focus { border-color: var(--accent); box-shadow: 0 0 0 2px #E3571E33; }
+
+/* ── Snapshot rows ───────────────────────────────────────── */
+.m-snap-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.m-snap-row:last-child { border-bottom: none; padding-bottom: 0; }
+.m-snap-row:first-child { padding-top: 0; }
+.m-snap-name {
+  font-size: 13px;
+  color: var(--text-strong);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.m-snap-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #1E3D23;
+  color: #3FB950;
+}
+.m-snap-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 10px;
+}
+
+/* ── Detail key/value rows ───────────────────────────────── */
+.m-kv {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px 14px;
+  font-size: 13px;
+}
+.m-kv dt {
+  color: var(--text-faded);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  align-self: center;
+}
+.m-kv dd {
+  margin: 0;
+  color: var(--text-body);
+  word-break: break-word;
+}
+.m-kv dd strong { color: var(--text-strong); }
+
+/* ── Empty / loading / error placeholders ────────────────── */
+.m-placeholder {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.m-error {
+  padding: 12px 14px;
+  background: #3D1E1E;
+  color: #FFB3B3;
+  border: 1px solid #A02929;
+  border-radius: 10px;
+  font-size: 13px;
+}
+body.light-mode .m-error { background: #FFEBE9; color: #CF222E; border-color: #FF8182; }
+
+/* ── Inline meter (CPU/mem/disk bars) ────────────────────── */
+.m-meter {
+  height: 6px;
+  background: var(--surface-3);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.m-meter-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.2s;
+}
+.m-meter-fill.warn { background: #FF8A3C; }
+.m-meter-fill.danger { background: #F85149; }
+
+/* ── State pill (mobile-tuned size) ──────────────────────── */
+.m-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.m-pill.ok      { background: #1E3D23; color: #3FB950; }
+.m-pill.warn    { background: #3D2510; color: #FF8A3C; }
+.m-pill.danger  { background: #3D1E1E; color: #F85149; }
+.m-pill.muted   { background: var(--surface-3); color: var(--text-muted); }
+body.light-mode .m-pill.ok      { background: #DAFBE1; color: #1A7F37; }
+body.light-mode .m-pill.warn    { background: #FFF4EC; color: #C04512; }
+body.light-mode .m-pill.danger  { background: #FFEBE9; color: #A40E26; }
+body.light-mode .m-pill.muted   { background: #EAEEF2; color: #656D76; }
+
+/* ── Back button (detail screens) ────────────────────────── */
+.m-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  background: transparent;
+  border: none;
+  color: var(--accent-hover);
+  font-size: 14px;
+  cursor: pointer;
+  margin-bottom: 4px;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-back:active { opacity: 0.6; }
