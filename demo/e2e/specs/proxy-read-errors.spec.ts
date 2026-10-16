@@ -22,7 +22,11 @@ test('VM Snapshots distinguishes agent rejection from browser login', async ({ p
   await page.route(/\/api\/vms\/snapshots\?/, route => route.fulfill({ status: 502, json: { error: message } }));
   await gotoSidebar(page, /virtual machines/i);
   await page.locator('tr', { has: page.locator('.state-pill.running') }).first().click();
-  await page.getByRole('link', { name: 'Snapshots', exact: true }).click();
+  await expect(page).toHaveURL(/\/vms\/[^/]+$/);
+  const response = page.waitForResponse(r => r.url().includes('/api/vms/snapshots?'));
+  // Wait for the VM tab, not the global sidebar's Snapshots link.
+  await page.locator('a[href^="/vms/"][href$="/snapshots"]').click();
+  expect((await response).status()).toBe(502);
   await expect(page.getByText(`Failed to load snapshots: ${message}`, { exact: true })).toBeVisible({ timeout: 15000 });
   await page.getByRole('link', { name: 'Summary', exact: true }).click();
   await expect(page.getByRole('button', { name: /^actions/i })).toBeVisible();
