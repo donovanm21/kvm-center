@@ -1,37 +1,13 @@
 package main
 
-// API-driven restore (v5.39.0). Companion to backup.go's
-// /api/admin/backup. The CLI path (bootstrap.sh --restore) shipped
-// in v5.32.20; this is the in-app equivalent so an operator who
-// already has SPA access doesn't need shell on the docker host to
-// run a restore.
-//
-// Flow on the server side:
-//   1. Operator uploads a backup tarball via multipart POST.
-//   2. Server unpacks to a staging dir, parses manifest.json,
-//      verifies SHA-256 of every entry against the manifest.
-//   3. Files are copied into the live volumes (data.json, tls/,
-//      ca/) — same destination layout as the CLI path.
-//   4. Response carries a "restart required" indicator + a summary
-//      of what was placed.
-//   5. The operator triggers a restart via /api/admin/restart
-//      (the SPA's Restore button does this automatically after
-//      confirming). Docker's restart policy brings the server
-//      back up against the restored data.
-//
-// We deliberately do NOT hot-swap state in-process — replacing the
-// running store while migrations might be in flight, sessions are
-// open, and SSE channels are live is hazardous. The restart-after-
-// upload pattern matches the CLI's "stop the stack first" hygiene.
+// Online restore is intentionally disabled until state and security
+// material can be restored transactionally to the active backend. Writing
+// data.json while live saves are running can discard the restored state,
+// and does not restore an active MongoDB backend.
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
-	"crypto/sha256"
-	"crypto/tls"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -63,209 +39,17 @@ type restorePaths struct {
 
 var serverRestorePaths restorePaths
 
-// handleRestore accepts a multipart upload of a backup tarball and
-// applies it to the live volumes. Gated on `user.manage` at route
-// registration. The handler enforces a 64 MB upload cap; backup
-// tarballs are kilobytes in practice (no VM disks), 64 MB is more
-// than enough headroom for a giant audit log.
-func handleRestore(store *Store) http.HandlerFunc {
+// handleRestore fails closed before consuming an upload or modifying any
+// live files. Offline recovery requires a stopped service and a verified,
+// backend-specific recovery plan; the API must never report false success.
+func handleRestore(_ *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "POST only")
 			return
 		}
-		// Cap upload size before parsing so a malicious peer can't
-		// exhaust memory by streaming a multi-GB body.
-		r.Body = http.MaxBytesReader(w, r.Body, 64<<20)
-		if err := r.ParseMultipartForm(32 << 20); err != nil {
-			writeError(w, http.StatusBadRequest, "parse upload: "+err.Error())
-			return
-		}
-		file, hdr, err := r.FormFile("backup")
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "missing form field 'backup' (the .tar.gz)")
-			return
-		}
-		defer file.Close()
-
-		stage, err := os.MkdirTemp("", "kvmc-restore-*")
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "stage dir: "+err.Error())
-			return
-		}
-		defer os.RemoveAll(stage)
-
-		// v5.45.0: encrypted tarballs carry a 7-byte magic prefix.
-		// Read the body into memory (capped at 64 MB by MaxBytesReader)
-		// so we can sniff + optionally decrypt before handing the
-		// stream to extractTarGz.
-		raw, err := io.ReadAll(file)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "read upload: "+err.Error())
-			return
-		}
-		var input io.Reader = bytes.NewReader(raw)
-		if len(raw) >= len(backupEnvelopeMagic) && string(raw[:len(backupEnvelopeMagic)]) == backupEnvelopeMagic {
-			passphrase := r.FormValue("passphrase")
-			if passphrase == "" {
-				writeError(w, http.StatusBadRequest, "encrypted backup — supply 'passphrase' in the form")
-				return
-			}
-			plain, decErr := DecryptBackupEnvelope(raw, []byte(passphrase))
-			if decErr != nil {
-				writeError(w, http.StatusBadRequest, decErr.Error())
-				return
-			}
-			input = bytes.NewReader(plain)
-		}
-
-		if err := extractTarGz(input, stage); err != nil {
-			writeError(w, http.StatusBadRequest, "extract: "+err.Error())
-			return
-		}
-
-		manPath := filepath.Join(stage, "manifest.json")
-		manBytes, err := os.ReadFile(manPath)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "manifest.json missing — is this a v5.32.20+ backup?")
-			return
-		}
-		var manifest backupManifest
-		if err := json.Unmarshal(manBytes, &manifest); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid manifest.json: "+err.Error())
-			return
-		}
-		if len(manifest.Files) == 0 {
-			writeError(w, http.StatusBadRequest, "manifest.json carries no files entry")
-			return
-		}
-
-		// Verify every file's SHA-256 matches the manifest before we
-		// touch live state.
-		for rel, want := range manifest.Files {
-			full := filepath.Join(stage, rel)
-			b, err := os.ReadFile(full)
-			if err != nil {
-				writeError(w, http.StatusBadRequest, "file missing in tarball: "+rel)
-				return
-			}
-			sum := sha256.Sum256(b)
-			if got := hex.EncodeToString(sum[:]); got != want {
-				writeError(w, http.StatusBadRequest,
-					fmt.Sprintf("checksum mismatch for %s (want %s..., got %s...)", rel, want[:12], got[:12]))
-				return
-			}
-		}
-
-		// Refuse to restore while any migration is in flight: the
-		// destination agent is still updating its MigrationRecord and
-		// our overwrite would race the next persist tick. Operators
-		// can cancel the migrations or wait them out.
-		var inFlight []string
-		for _, m := range store.GetMigrations() {
-			if m != nil && m.Status == "running" {
-				inFlight = append(inFlight, m.ID)
-			}
-		}
-		if len(inFlight) > 0 {
-			writeError(w, http.StatusConflict,
-				fmt.Sprintf("refusing to restore — %d migration(s) in flight: %s. Cancel or wait, then retry.",
-					len(inFlight), strings.Join(inFlight, ", ")))
-			return
-		}
-
-		// Validate any staged TLS material before we overwrite the live
-		// files. A backup with an expired or mismatched cert/key pair
-		// would brick the HTTPS listener on next restart; bail with a
-		// clear error instead.
-		if _, ok := manifest.Files["tls/server.crt"]; ok {
-			if _, ok2 := manifest.Files["tls/server.key"]; ok2 {
-				certPath := filepath.Join(stage, "tls/server.crt")
-				keyPath := filepath.Join(stage, "tls/server.key")
-				if _, err := tls.LoadX509KeyPair(certPath, keyPath); err != nil {
-					writeError(w, http.StatusBadRequest,
-						"staged TLS cert/key would not load (expired or mismatched): "+err.Error())
-					return
-				}
-			}
-		}
-
-		// Apply: copy the staged files into the live volumes.
-		paths := serverRestorePaths
-		var placed []string
-
-		copyTo := func(srcRel, dst string, mode os.FileMode) error {
-			src := filepath.Join(stage, srcRel)
-			b, err := os.ReadFile(src)
-			if err != nil {
-				return err
-			}
-			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-				return err
-			}
-			if err := os.WriteFile(dst, b, mode); err != nil {
-				return err
-			}
-			placed = append(placed, dst)
-			return nil
-		}
-
-		if _, ok := manifest.Files["store.json"]; ok && paths.DataFile != "" {
-			if err := copyTo("store.json", paths.DataFile, 0o600); err != nil {
-				writeError(w, http.StatusInternalServerError, "place store.json: "+err.Error())
-				return
-			}
-		}
-		if _, ok := manifest.Files["tls/server.crt"]; ok && paths.TLSCert != "" {
-			if err := copyTo("tls/server.crt", paths.TLSCert, 0o644); err != nil {
-				writeError(w, http.StatusInternalServerError, "place tls cert: "+err.Error())
-				return
-			}
-		}
-		if _, ok := manifest.Files["tls/server.key"]; ok && paths.TLSKey != "" {
-			if err := copyTo("tls/server.key", paths.TLSKey, 0o600); err != nil {
-				writeError(w, http.StatusInternalServerError, "place tls key: "+err.Error())
-				return
-			}
-		}
-		// CA dir: copy every staged ca/* file across.
-		if paths.CADir != "" {
-			for rel := range manifest.Files {
-				if !strings.HasPrefix(rel, "ca/") {
-					continue
-				}
-				dst := filepath.Join(paths.CADir, strings.TrimPrefix(rel, "ca/"))
-				mode := os.FileMode(0o600)
-				if strings.HasSuffix(rel, ".crt") || strings.HasSuffix(rel, ".pub") {
-					mode = 0o644
-				}
-				if err := copyTo(rel, dst, mode); err != nil {
-					writeError(w, http.StatusInternalServerError, "place "+rel+": "+err.Error())
-					return
-				}
-			}
-		}
-
-		summary := restoreSummary{
-			OK:              true,
-			Manifest:        manifest,
-			FilesRestored:   placed,
-			RestartRequired: true,
-			StagedAt:        time.Now().UTC(),
-		}
-
-		actor := ""
-		if u := userFromRequest(r); u != nil {
-			actor = u.ID
-		}
-		audit(store, r, AuditBackupRestore, "backup", map[string]string{
-			"upload":     hdr.Filename,
-			"files":      fmt.Sprintf("%d", len(placed)),
-			"actor":      actor,
-			"manifest_v": manifest.Version,
-		}, true, "")
-
-		writeJSON(w, http.StatusOK, summary)
+		writeError(w, http.StatusServiceUnavailable,
+			"Online restore is temporarily unavailable. It requires a backend-aware, transactional restore workflow; no files have been changed. Use the documented offline recovery procedure with the service stopped.")
 	}
 }
 

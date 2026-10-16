@@ -9,70 +9,58 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"hash/fnv"
 	"log"
 	"runtime/debug"
-	"sync"
 	"time"
 )
 
-// lastHashes caches FNV hashes of each cold collection from the
-// previous Save, letting us compute a dirty set automatically instead
-// of instrumenting every mutator. Access is serialised by s.mu.
-var lastHashes = struct {
-	mu sync.Mutex
-	m  map[string]uint64
-}{m: map[string]uint64{}}
-
-// computeDirty hashes each cold collection's JSON form, compares to
-// the previous snapshot, and returns the set that changed. First call
-// returns nil (save everything) so Mongo reaches a known-good state.
-func computeDirty(d *persistData) map[string]bool {
-	lastHashes.mu.Lock()
-	defer lastHashes.mu.Unlock()
-	first := len(lastHashes.m) == 0
-	out := map[string]bool{}
-	fields := map[string]any{
-		"users":               d.Users,
-		"groups":              d.Groups,
-		"roles":               d.Roles,
-		"idps":                d.IDPs,
-		"sessions":            d.Sessions,
-		"features":            d.Features,
-		"server_meta":         d.ConsoleSecret,
-		"notifications":       d.Notifications,
-		"audit_shipping":      d.AuditShipping,
-		"backup_schedule":     d.BackupSchedule,
-		"discord_gateway":     d.DiscordGateway,
-		"removed_hosts":       d.RemovedHosts,
-		"pending_enrollments": d.PendingEnrollments,
-		"api_tokens":          d.APITokens,
-		"snapshot_policies":   d.SnapshotPolicies,
-		"hypervisor_certs":    d.HypervisorCerts,
-		"command_log":         d.CommandLog,
-		"metrics":             d.Metrics,
+// snapshotHashes fingerprints the exact serialized state, including fields
+// excluded from API JSON. This is read-only: Save commits the result only
+// after a successful backend write, so a failed write stays dirty on retry.
+func snapshotHashes(raw []byte) (map[string]uint64, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, err
 	}
-	for name, v := range fields {
-		h := hashJSON(v)
-		if first || lastHashes.m[name] != h {
-			out[name] = true
+	names := []string{
+		"users", "groups", "roles", "idps", "sessions", "features",
+		"notifications", "audit_shipping", "backup_schedule", "discord_gateway",
+		"removed_hosts", "pending_enrollments", "api_tokens", "snapshot_policies",
+		"hypervisor_certs", "command_log", "metrics", "console_secret",
+	}
+	hashes := make(map[string]uint64, len(names))
+	for _, name := range names {
+		h := fnv.New64a()
+		_, _ = h.Write(fields[name])
+		// Private state belongs to these collections. Conservatively dirty all
+		// three when any private field changes; never skip a credential update.
+		if name == "discord_gateway" || name == "pending_enrollments" || name == "command_log" {
+			_, _ = h.Write([]byte{0})
+			_, _ = h.Write(fields["_private"])
 		}
-		lastHashes.m[name] = h
+		key := name
+		if name == "console_secret" {
+			key = "server_meta"
+		}
+		hashes[key] = h.Sum64()
 	}
-	if first {
-		return nil // nil == write everything on first Save
-	}
-	return out
+	return hashes, nil
 }
 
-func hashJSON(v any) uint64 {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return 0
+func dirtyCollections(previous, current map[string]uint64) map[string]bool {
+	if previous == nil {
+		return nil
+	} // First successful save writes everything.
+	dirty := make(map[string]bool)
+	for name, hash := range current {
+		if previous[name] != hash {
+			dirty[name] = true
+		}
 	}
-	h := fnv.New64a()
-	h.Write(b)
-	return h.Sum64()
+	return dirty
 }
 
 // saveGated is true once the initial Load has populated the store
@@ -97,7 +85,7 @@ func (s *Store) isSaveGated() bool {
 // backend (JSON file or Mongo).
 //
 // Lock discipline (v5.41.0, closes feedback_async_save.md):
-// computeDirty + the whole-state JSON marshal both run under the
+// Fingerprinting and the whole-state JSON marshal both run under the
 // read lock so nothing iterates the live pointer-valued maps
 // without it. The marshalled bytes are deep-copied out — we
 // unmarshal back into a fresh persistData struct that the backend
@@ -111,18 +99,24 @@ func (s *Store) isSaveGated() bool {
 // unmarshal per Save (~hundreds of µs per MB) which is cheap
 // relative to the I/O it precedes.
 func (s *Store) Save() {
-	// Cheap pre-checks before the lock-held snapshot phase. The
-	// nil-backend short-circuit matters in tests that pump
-	// AsyncSave at high rate against an in-memory store — without
-	// it, every save still serialises through snapshotBytes' read
-	// lock, which under `-race` overhead piles up and starves
-	// concurrent writers.
+	// Keep the in-memory test store's fire-and-forget saves inexpensive.
 	if s.backend == nil {
 		return
 	}
+	if err := s.SaveChecked(); err != nil {
+		log.Printf("store: save failed: %v", err)
+	}
+}
+
+// SaveChecked persists a consistent snapshot and reports any failure. Use
+// it before acknowledging security changes or other durability-sensitive
+// mutations; Save is only the logging wrapper for background persistence.
+func (s *Store) SaveChecked() error {
+	if s.backend == nil {
+		return errors.New("store: no persistence backend configured")
+	}
 	if !s.isSaveGated() {
-		log.Printf("store: skipping Save — initial Load returned empty on a non-fresh install; resolve backend connectivity first")
-		return
+		return errors.New("store: persistence is blocked until the initial backend load succeeds")
 	}
 	// v5.60.6: serialise inside Save itself, not at the AsyncSave
 	// caller. v5.60.4 added the mutex at AsyncSave's goroutine entry,
@@ -141,49 +135,52 @@ func (s *Store) Save() {
 	// spawned its own goroutine. Telemetry / migration bursts could
 	// pile up dozens of goroutines on saveMu.
 	s.saveQueued.Store(false)
-	bytes, dirty, ok := s.snapshotBytes()
-	if !ok {
-		return
+	bytes, hashes, err := s.snapshotBytes()
+	if err != nil {
+		return err
 	}
 
 	// Deep copy: unmarshal back into a fresh persistData. The backend
 	// iterates ITS struct, never the live store maps.
 	var snap persistData
 	if err := json.Unmarshal(bytes, &snap); err != nil {
-		log.Printf("store: snapshot unmarshal: %v", err)
-		return
+		return fmt.Errorf("store: snapshot unmarshal: %w", err)
 	}
-	snap.Dirty = dirty // Dirty is `json:"-"`, reattach.
-
-	// v5.60.3: re-attach bson-only fields. The JSON round-trip above
-	// is the deep-copy mechanism (so backend.Save iterates an isolated
-	// struct without holding s.mu), but it silently strips any field
-	// tagged `json:"-"`. Those fields are credential-grade and
-	// intentionally hidden from the API surface — but they still need
-	// to persist. Without this, the DG bearer token is written to
-	// Mongo as "" on every Save, so a server restart loses pairing
-	// and the operator must Re-pair after every deploy.
-	//
-	// Fields covered (search models.go for `json:"-" bson:` to keep
-	// in sync): DiscordGateway.Token, PendingEnrollment.PollTokenHash
-	// / IssuedCertPEM / IssuedCAPEM, CommandLogEntry.ExpiresAt.
-	s.reattachBsonOnlyFields(&snap)
+	snap.Dirty = dirtyCollections(s.lastSavedHashes, hashes)
 
 	ctx, cancel := contextWithTimeout(15 * time.Second)
 	defer cancel()
 	if err := s.backend.Save(ctx, &snap); err != nil {
-		log.Printf("store: backend save error (%s): %v", s.backend.Name(), err)
+		// A backend may have committed some collections before failing.
+		// Force a full retry, including fields reverted to their last
+		// successful value since that partial write.
+		s.lastSavedHashes = nil
+		return fmt.Errorf("store: backend save (%s): %w", s.backend.Name(), err)
 	}
+	s.lastSavedHashes = hashes
+	return nil
 }
 
-// snapshotBytes builds a persistData under the read lock, runs
-// computeDirty, and serialises to JSON — all under the lock so
-// concurrent writers can't race the iteration. Returns the bytes,
-// the dirty set (which doesn't survive json round-trip), and a
-// success flag.
-func (s *Store) snapshotBytes() ([]byte, map[string]bool, bool) {
+// snapshotBytes serializes a complete, internally consistent copy under the
+// read lock. Its fingerprints are not committed until backend.Save succeeds.
+func (s *Store) snapshotBytes() ([]byte, map[string]uint64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	d := s.persistDataLocked()
+	raw, err := json.Marshal(&d)
+	if err != nil {
+		return nil, nil, fmt.Errorf("store: snapshot marshal: %w", err)
+	}
+	hashes, err := snapshotHashes(raw)
+	if err != nil {
+		return nil, nil, fmt.Errorf("store: snapshot fingerprints: %w", err)
+	}
+	return raw, hashes, nil
+}
+
+// persistDataLocked is the single inventory of persisted fields for saves
+// and backups. Caller must hold s.mu while using its pointer-valued fields.
+func (s *Store) persistDataLocked() persistData {
 	d := persistData{
 		Hosts:              s.hosts,
 		VMs:                s.vms,
@@ -211,51 +208,7 @@ func (s *Store) snapshotBytes() ([]byte, map[string]bool, bool) {
 		RemovedHosts:       s.removedHosts,
 		PendingEnrollments: s.pendingEnrollments,
 	}
-	d.Dirty = computeDirty(&d)
-	bytes, err := json.Marshal(&d)
-	if err != nil {
-		log.Printf("store: snapshot marshal: %v", err)
-		return nil, nil, false
-	}
-	return bytes, d.Dirty, true
-}
-
-// reattachBsonOnlyFields restores credential-grade fields stripped by
-// the JSON round-trip in Save(). See the call site for the why; this
-// helper is intentionally narrow — only the fields that are present
-// in the live store at lock-acquire time are copied over the (zero-
-// valued) snap fields.
-func (s *Store) reattachBsonOnlyFields(snap *persistData) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.discordGateway != nil && snap.DiscordGateway != nil {
-		snap.DiscordGateway.Token = s.discordGateway.Token
-	}
-	if s.pendingEnrollments != nil && snap.PendingEnrollments != nil {
-		for k, live := range s.pendingEnrollments {
-			if live == nil {
-				continue
-			}
-			if dst, ok := snap.PendingEnrollments[k]; ok && dst != nil {
-				dst.PollTokenHash = live.PollTokenHash
-				dst.IssuedCertPEM = live.IssuedCertPEM
-				dst.IssuedCAPEM = live.IssuedCAPEM
-			}
-		}
-	}
-	// CommandLog.ExpiresAt is bson-only too. The snapshot is a
-	// map[RequestID]*CommandLogEntry; correlate by key.
-	if len(snap.CommandLog) > 0 {
-		live := s.commandLog.snapshot()
-		for k, dst := range snap.CommandLog {
-			if dst == nil {
-				continue
-			}
-			if src, ok := live[k]; ok && src != nil {
-				dst.ExpiresAt = src.ExpiresAt
-			}
-		}
-	}
+	return d
 }
 
 func (s *Store) load() {

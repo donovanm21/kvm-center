@@ -184,7 +184,7 @@ func (s *Store) runBackupSchedulerTick() {
 		log.Printf("backup-scheduler: wrote %d bytes to %s", size, sc.DestPath)
 	}
 	s.recordBackupRun(now, size, err)
-	if sc.RetainCount > 0 {
+	if err == nil && sc.RetainCount > 0 {
 		if pruneErr := pruneScheduledBackups(sc.DestPath, sc.RetainCount); pruneErr != nil {
 			log.Printf("backup-scheduler: rotation failed: %v", pruneErr)
 		}
@@ -207,21 +207,9 @@ func (s *Store) runScheduledBackup(sc *models.BackupSchedule, ts time.Time) (int
 	if err != nil {
 		return 0, fmt.Errorf("export: %w", err)
 	}
-	entries := []backupEntry{{"store.json", storeBytes, 0o600}}
-	if serverBackupPaths.TLSCert != "" {
-		if b, err := os.ReadFile(serverBackupPaths.TLSCert); err == nil {
-			entries = append(entries, backupEntry{"tls/server.crt", b, 0o644})
-		}
-	}
-	if serverBackupPaths.TLSKey != "" {
-		if b, err := os.ReadFile(serverBackupPaths.TLSKey); err == nil {
-			entries = append(entries, backupEntry{"tls/server.key", b, 0o600})
-		}
-	}
-	if serverBackupPaths.CADir != "" {
-		if caEntries, err := readDirForBackup(serverBackupPaths.CADir, "ca/"); err == nil {
-			entries = append(entries, caEntries...)
-		}
+	entries, err := collectBackupEntries(storeBytes, serverBackupPaths)
+	if err != nil {
+		return 0, fmt.Errorf("collect backup material: %w", err)
 	}
 	manifest := backupManifest{
 		Version:      Version,
@@ -247,10 +235,17 @@ func (s *Store) runScheduledBackup(sc *models.BackupSchedule, ts time.Time) (int
 	}
 	filename := fmt.Sprintf("kvm-center-backup-%s%s", ts.Format("20060102-150405"), suffix)
 	full := filepath.Join(sc.DestPath, filename)
-	tmp := full + ".tmp"
-	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	// Create an exclusive private sibling, rather than following or reusing
+	// a predictable .tmp path left behind by another process.
+	out, err := os.CreateTemp(sc.DestPath, "."+filename+".*.tmp")
 	if err != nil {
 		return 0, fmt.Errorf("create tarball: %w", err)
+	}
+	tmp := out.Name()
+	defer os.Remove(tmp) // No-op after a successful rename.
+	if err := out.Chmod(0o600); err != nil {
+		out.Close()
+		return 0, fmt.Errorf("set backup permissions: %w", err)
 	}
 	// When encrypting, build the tarball into a memory buffer first
 	// (kilobytes — same size class as backup.go's existing flow) so
@@ -310,6 +305,11 @@ func (s *Store) runScheduledBackup(sc *models.BackupSchedule, ts time.Time) (int
 			return 0, fmt.Errorf("write envelope: %w", werr)
 		}
 	}
+	if err := out.Sync(); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return 0, fmt.Errorf("sync backup: %w", err)
+	}
 	if err := out.Close(); err != nil {
 		os.Remove(tmp)
 		return 0, fmt.Errorf("close file: %w", err)
@@ -318,6 +318,9 @@ func (s *Store) runScheduledBackup(sc *models.BackupSchedule, ts time.Time) (int
 		os.Remove(tmp)
 		return 0, fmt.Errorf("rename: %w", err)
 	}
+	if err := syncDirectory(sc.DestPath); err != nil {
+		return 0, fmt.Errorf("sync backup directory: %w", err)
+	}
 	st, _ := os.Stat(full)
 	if st != nil {
 		return st.Size(), nil
@@ -325,8 +328,9 @@ func (s *Store) runScheduledBackup(sc *models.BackupSchedule, ts time.Time) (int
 	return 0, nil
 }
 
-// pruneScheduledBackups keeps the newest `keep` files matching
-// kvm-center-backup-*.tar.gz under dir, deletes the rest.
+// pruneScheduledBackups keeps the newest `keep` generated archives,
+// counting plaintext and encrypted files together. Unrelated paths,
+// unfinished temporary files, directories, and symlinks are left alone.
 func pruneScheduledBackups(dir string, keep int) error {
 	if keep <= 0 {
 		return nil
@@ -344,11 +348,11 @@ func pruneScheduledBackups(dir string, keep int) error {
 		if e.IsDir() {
 			continue
 		}
-		if !strings.HasPrefix(e.Name(), "kvm-center-backup-") || !strings.HasSuffix(e.Name(), ".tar.gz") {
+		if !isScheduledBackupFilename(e.Name()) {
 			continue
 		}
 		info, err := e.Info()
-		if err != nil {
+		if err != nil || !info.Mode().IsRegular() {
 			continue
 		}
 		files = append(files, bf{filepath.Join(dir, e.Name()), info.ModTime()})
@@ -356,13 +360,42 @@ func pruneScheduledBackups(dir string, keep int) error {
 	if len(files) <= keep {
 		return nil
 	}
-	sort.Slice(files, func(i, j int) bool { return files[i].modTime.After(files[j].modTime) })
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].modTime.Equal(files[j].modTime) {
+			return files[i].path > files[j].path
+		}
+		return files[i].modTime.After(files[j].modTime)
+	})
 	for _, f := range files[keep:] {
 		if err := os.Remove(f.path); err != nil {
 			log.Printf("backup-scheduler: prune %s: %v", f.path, err)
 		}
 	}
 	return nil
+}
+
+// Match only the exact timestamped filenames generated above. A broad
+// prefix/suffix match could delete an unrelated operator-created archive.
+func isScheduledBackupFilename(name string) bool {
+	const prefix = "kvm-center-backup-"
+	if !strings.HasPrefix(name, prefix) {
+		return false
+	}
+	stamp := strings.TrimPrefix(name, prefix)
+	switch {
+	case strings.HasSuffix(stamp, ".tar.gz.enc"):
+		stamp = strings.TrimSuffix(stamp, ".tar.gz.enc")
+	case strings.HasSuffix(stamp, ".tar.gz"):
+		stamp = strings.TrimSuffix(stamp, ".tar.gz")
+	default:
+		return false
+	}
+	const layout = "20060102-150405"
+	if len(stamp) != len(layout) {
+		return false
+	}
+	ts, err := time.Parse(layout, stamp)
+	return err == nil && ts.Format(layout) == stamp
 }
 
 func errMsg(err error) string {

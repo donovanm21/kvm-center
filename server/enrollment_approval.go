@@ -180,7 +180,9 @@ func (s *Store) patchPendingEnrollment(id string, mut func(*models.PendingEnroll
 		return false
 	}
 	mut(p)
-	go s.AsyncSave()
+	// AsyncSave registers its work before starting its own goroutine.
+	// An outer goroutine would let a shutdown/test drain miss this mutation.
+	s.AsyncSave()
 	return true
 }
 
