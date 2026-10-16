@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { InventoryStatus } from '@/components/InventoryStatus';
 import { FleetActivityWidget } from '@/components/FleetActivityWidget';
 import { Pagination } from '@/components/Pagination';
 import { HostStatusPill } from '@/components/StatePill';
@@ -60,26 +61,29 @@ export function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
         <Summary
           label="Hypervisors"
-          value={hostList.length}
-          sub={`${onlineHosts.length} online · ${offlineHosts.length} offline`}
+          value={hosts.data === undefined ? '—' : hostList.length}
+          sub={hosts.data === undefined ? undefined : `${onlineHosts.length} online · ${offlineHosts.length} offline`}
         />
         <Summary
           label="Total VMs"
-          value={totalVMs}
+          value={vms.data === undefined ? '—' : totalVMs}
           sub={`across all hosts`}
         />
         <Summary
           label="Running"
-          value={running}
-          sub={`${stopped} stopped`}
+          value={vms.data === undefined ? '—' : running}
+          sub={vms.data === undefined ? undefined : `${stopped} stopped`}
         />
         <Summary
           label="Avg CPU"
-          value={`${avgCPU.toFixed(1)}%`}
-          sub={`${onlineHosts.length} online host${onlineHosts.length === 1 ? '' : 's'}`}
+          value={hosts.data === undefined ? '—' : `${avgCPU.toFixed(1)}%`}
+          sub={hosts.data === undefined ? undefined : `${onlineHosts.length} online host${onlineHosts.length === 1 ? '' : 's'}`}
         />
       </div>
 
+      <InventoryStatus label="Hypervisors" query={hosts} />
+      <InventoryStatus label="VM inventory" query={vms} />
+      <InventoryStatus label="Storage inventory" query={storage} />
       <div style={{ marginTop: 18 }}>
         <FleetActivityWidget />
       </div>
@@ -90,8 +94,7 @@ export function Dashboard() {
           <span style={{ fontSize: 11, color: 'var(--text-faded)' }}>Click a hypervisor to manage</span>
         </div>
 
-        {hosts.isLoading && <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading…</div>}
-        {hostList.length === 0 && !hosts.isLoading && (
+        {hosts.data !== undefined && hostList.length === 0 && (
           <div className="panel" style={{ color: 'var(--text-muted)', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <span>No hypervisors have reported yet — install an agent on a hypervisor and point it at this server.</span>
             <Link to="/deployment" className="btn-primary-sm" style={{ textDecoration: 'none' }}>
@@ -104,8 +107,8 @@ export function Dashboard() {
             <HostCard
               key={h.id}
               host={h}
-              vms={vmsByHost[h.id] ?? []}
-              pools={storageByHost[h.id] ?? []}
+              vms={vms.data === undefined ? undefined : vmsByHost[h.id] ?? []}
+              pools={storage.data === undefined ? undefined : storageByHost[h.id] ?? []}
             />
           ))}
         </div>
@@ -136,9 +139,9 @@ function Summary({ label, value, sub }: { label: string; value: string | number;
   );
 }
 
-function HostCard({ host, vms, pools }: { host: Host; vms: VM[]; pools: StoragePool[] }) {
-  const runningVMs = vms.filter((v) => v.state === 'running').length;
-  const stoppedVMs = vms.length - runningVMs;
+function HostCard({ host, vms, pools }: { host: Host; vms?: VM[]; pools?: StoragePool[] }) {
+  const runningVMs = (vms ?? []).filter((v) => v.state === 'running').length;
+  const stoppedVMs = (vms?.length ?? 0) - runningVMs;
   const cpuPct = Math.min(host.cpu_usage || 0, 100);
   const memUsed = host.mem_total_mb - host.mem_free_mb;
   const memPct = host.mem_total_mb > 0 ? (memUsed / host.mem_total_mb) * 100 : 0;
@@ -161,10 +164,9 @@ function HostCard({ host, vms, pools }: { host: Host; vms: VM[]; pools: StorageP
             {host.uptime && <span>Up {host.uptime}</span>}
           </div>
           <div style={{ ...metaRow, marginTop: 6 }}>
-            <span>{vms.length} VMs</span>
-            <span style={{ color: '#3FB950' }}>{runningVMs} running</span>
-            <span>{stoppedVMs} stopped</span>
-            <span>{pools.length} storage pool{pools.length === 1 ? '' : 's'}</span>
+            <span>{vms?.length ?? '—'} VMs</span>
+            {vms !== undefined && <><span style={{ color: '#3FB950' }}>{runningVMs} running</span><span>{stoppedVMs} stopped</span></>}
+            <span>{pools?.length ?? '—'} storage pool{pools?.length === 1 ? '' : 's'}</span>
             <span>◎ {host.cpu_count} CPU</span>
             <span>{ramGB} GB RAM</span>
           </div>
