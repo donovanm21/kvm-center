@@ -16,7 +16,7 @@ package main
 // KVM_AGENT_OPS_DB env var for tests). Pure-Go SQLite via
 // modernc.org/sqlite — no CGO so the agent binary stays portable.
 //
-// Concurrency: SQLite WAL + NORMAL sync handles concurrent reads
+// Concurrency: SQLite WAL + FULL sync handles concurrent reads
 // while one writer holds a transaction. We rely on database/sql's
 // connection pool rather than rolling our own mutex.
 //
@@ -114,29 +114,15 @@ type OperationsStore struct {
 // OpenOperationsStore opens (or creates) the SQLite DB at path,
 // applies the schema if missing, and returns a ready-to-use store.
 //
-// On a corruption-detected open we rename the bad file aside and
-// rebuild from scratch. We deliberately lose the in-flight history
-// in that case rather than refusing to start — libvirt is the
-// ultimate source of truth, the boot reconciler will recover state
-// from it on PR-2d, and a non-starting agent is much worse than a
-// blank ops.db.
+// A damaged database must not be silently replaced: losing its history
+// would permit replayed mutating commands. Preserve the files for recovery
+// and let startup fail closed until the operator repairs the store.
 func OpenOperationsStore(path string) (*OperationsStore, error) {
 	if path == "" {
 		path = DefaultOpsDBPath
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return nil, fmt.Errorf("ops.db: create parent dir: %w", err)
-	}
-	store, err := openOpsDB(path)
-	if err == nil {
-		return store, nil
-	}
-	if !isCorruption(err) {
-		return nil, err
-	}
-	log.Printf("ops.db: corruption detected at %s (%v); renaming aside and rebuilding", path, err)
-	if mvErr := renameCorrupted(path); mvErr != nil {
-		return nil, fmt.Errorf("ops.db: rename corrupted file: %w", mvErr)
 	}
 	return openOpsDB(path)
 }
@@ -157,7 +143,7 @@ func openOpsDB(path string) (*OperationsStore, error) {
 	defer cancel()
 	for _, p := range []string{
 		`PRAGMA journal_mode=WAL`,
-		`PRAGMA synchronous=NORMAL`,
+		`PRAGMA synchronous=FULL`,
 		`PRAGMA foreign_keys=ON`,
 		`PRAGMA busy_timeout=5000`,
 	} {
@@ -227,8 +213,15 @@ func (s *OperationsStore) Close() error {
 // the second insert with the same id is a no-op so the caller
 // doesn't have to guard against a retried HTTP /command.
 func (s *OperationsStore) Insert(ctx context.Context, op Operation) error {
+	_, err := s.insertIfAbsent(ctx, op)
+	return err
+}
+
+// insertIfAbsent atomically claims a request ID. Only the caller that
+// created the row may execute the command. Existing rows are never reset.
+func (s *OperationsStore) insertIfAbsent(ctx context.Context, op Operation) (bool, error) {
 	if op.RequestID == "" {
-		return errors.New("ops.db: Insert with empty request_id")
+		return false, errors.New("ops.db: Insert with empty request_id")
 	}
 	if op.SubmittedAt.IsZero() {
 		op.SubmittedAt = time.Now()
@@ -237,18 +230,26 @@ func (s *OperationsStore) Insert(ctx context.Context, op Operation) error {
 	if len(op.Params) > 0 {
 		b, err := json.Marshal(op.Params)
 		if err != nil {
-			return fmt.Errorf("ops.db: marshal params: %w", err)
+			return false, fmt.Errorf("ops.db: marshal params: %w", err)
 		}
 		params = string(b)
 	}
-	_, err := s.db.ExecContext(ctx, `
+	var startedAt any
+	if op.StartedAt != nil {
+		startedAt = op.StartedAt.UnixNano()
+	}
+	res, err := s.db.ExecContext(ctx, `
 		INSERT OR IGNORE INTO operations (
 			request_id, action, vm_uuid, vm_name, params_json,
-			state, submitted_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			state, submitted_at, started_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		op.RequestID, op.Action, op.VMUUID, op.VMName, params,
-		op.State, op.SubmittedAt.UnixNano())
-	return err
+		op.State, op.SubmittedAt.UnixNano(), startedAt)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
 }
 
 // UpdateStateOpts is the diff applied by UpdateState. Zero-valued
@@ -270,6 +271,19 @@ type UpdateStateOpts struct {
 // UpdateState applies a partial update to an existing row.
 // Returns sql.ErrNoRows if the request_id is unknown.
 func (s *OperationsStore) UpdateState(ctx context.Context, requestID string, opts UpdateStateOpts) error {
+	return s.updateState(ctx, requestID, opts, false)
+}
+
+// FinishActive changes a pending/running operation to terminal atomically.
+// ErrNoRows means another terminal writer won (or the ID is unknown).
+func (s *OperationsStore) FinishActive(ctx context.Context, requestID string, opts UpdateStateOpts) error {
+	if !IsTerminalOpState(opts.State) {
+		return errors.New("ops.db: FinishActive requires a terminal state")
+	}
+	return s.updateState(ctx, requestID, opts, true)
+}
+
+func (s *OperationsStore) updateState(ctx context.Context, requestID string, opts UpdateStateOpts, onlyActive bool) error {
 	if requestID == "" {
 		return errors.New("ops.db: UpdateState with empty request_id")
 	}
@@ -309,8 +323,12 @@ func (s *OperationsStore) UpdateState(ctx context.Context, requestID string, opt
 		return nil
 	}
 	args = append(args, requestID)
-	res, err := s.db.ExecContext(ctx,
-		"UPDATE operations SET "+strings.Join(sets, ", ")+" WHERE request_id = ?", args...)
+	query := "UPDATE operations SET " + strings.Join(sets, ", ") + " WHERE request_id = ?"
+	if onlyActive {
+		query += " AND state IN (?, ?)"
+		args = append(args, OpStatePending, OpStateRunning)
+	}
+	res, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
@@ -503,22 +521,17 @@ func synthesizeOutcomeFromOp(op *Operation) (status int, body []byte, cachedAt t
 	return status, b, at, true
 }
 
-// recordOpsLifecycleStart inserts a "running" row in ops.db at the
-// start of every command (v5.48 PR-2b). Best-effort: a failure here
-// shouldn't block the command — degraded durability is preferable
-// to refusing operator actions.
-//
-// Each command gets one row keyed on request_id. Insert is
-// idempotent so a retry against a brand-new agent (cache lost,
-// db row already exists) is a no-op.
-func recordOpsLifecycleStart(req models.CommandRequest) {
+// recordOpsLifecycleStart atomically claims an operation before execution.
+// A durable-store failure must stop dispatch: executing without a claim
+// could repeat an operation whose previous outcome is inaccessible.
+func recordOpsLifecycleStart(req models.CommandRequest) (bool, error) {
 	if ops == nil || req.RequestID == "" {
-		return
+		return true, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), opsLookupDeadline)
 	defer cancel()
 	now := time.Now()
-	op := Operation{
+	return ops.insertIfAbsent(ctx, Operation{
 		RequestID:   req.RequestID,
 		Action:      strings.ToUpper(req.Action),
 		VMUUID:      req.VMUUID,
@@ -526,19 +539,8 @@ func recordOpsLifecycleStart(req models.CommandRequest) {
 		Params:      req.Params,
 		State:       OpStateRunning,
 		SubmittedAt: now,
-	}
-	if err := ops.Insert(ctx, op); err != nil {
-		log.Printf("ops.db: insert lifecycle row req_id=%s action=%s: %v", req.RequestID, req.Action, err)
-		return
-	}
-	if err := ops.UpdateState(ctx, req.RequestID, UpdateStateOpts{
-		State:     OpStateRunning,
-		StartedAt: &now,
-	}); err != nil {
-		// Insert succeeded but the second update failed — log and
-		// move on. The row is at least visible.
-		log.Printf("ops.db: stamp started_at req_id=%s: %v", req.RequestID, err)
-	}
+		StartedAt:   &now,
+	})
 }
 
 // recordOpsLifecycleEnd is the deferred counterpart to
@@ -555,10 +557,11 @@ func recordOpsLifecycleStart(req models.CommandRequest) {
 // arrive here (e.g. the operator cancelled it while the goroutine
 // was still running), we leave the cancelled outcome in place and
 // don't overwrite. Same goes for any race where another writer
-// got there first.
-func recordOpsLifecycleEnd(requestID string, status int, body []byte) {
+// got there first. The returned operation is the winning terminal result
+// when another writer completed first, or nil when this write succeeded.
+func recordOpsLifecycleEnd(requestID string, status int, body []byte) *Operation {
 	if ops == nil || requestID == "" {
-		return
+		return nil
 	}
 	state := OpStateSuccess
 	if status >= 400 {
@@ -566,10 +569,7 @@ func recordOpsLifecycleEnd(requestID string, status int, body []byte) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), opsLookupDeadline)
 	defer cancel()
-	if cur, err := ops.Get(ctx, requestID); err == nil && cur != nil && IsTerminalOpState(cur.State) {
-		log.Printf("ops.db: req_id=%s already %s; not overwriting with %s", requestID, cur.State, state)
-		return
-	}
+
 	now := time.Now()
 	output, errMsg := parseLifecycleBody(body, state)
 	opts := UpdateStateOpts{
@@ -579,11 +579,18 @@ func recordOpsLifecycleEnd(requestID string, status int, body []byte) {
 		ClearChildPID: true,
 		CompletedAt:   &now,
 	}
-	if err := ops.UpdateState(ctx, requestID, opts); err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
+	if err := ops.FinishActive(ctx, requestID, opts); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// A cancellation or another terminal writer won. Return that result
+			// so the HTTP response/cache cannot contradict the durable outcome.
+			if existing, readErr := ops.Get(ctx, requestID); readErr == nil && existing != nil && IsTerminalOpState(existing.State) {
+				return existing
+			}
+		} else {
 			log.Printf("ops.db: update terminal state req_id=%s: %v", requestID, err)
 		}
 	}
+	return nil
 }
 
 // parseLifecycleBody extracts the message + error fields from the
@@ -633,39 +640,4 @@ func runOpsGC(ctx context.Context, store *OperationsStore) {
 			}
 		}
 	}
-}
-
-// isCorruption returns true for SQLite errors that justify
-// renaming the file aside and rebuilding. We deliberately keep the
-// list narrow — a permission error or full-disk shouldn't trigger
-// a rebuild.
-func isCorruption(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "malformed") ||
-		strings.Contains(msg, "not a database") ||
-		strings.Contains(msg, "file is encrypted or is not a database") ||
-		strings.Contains(msg, "integrity_check failed")
-}
-
-// renameCorrupted moves path → path.corrupt-<unix>.db so the
-// operator can later inspect it without the agent re-using a bad
-// file forever.
-func renameCorrupted(path string) error {
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	bak := fmt.Sprintf("%s.corrupt-%d.db", path, time.Now().Unix())
-	if err := os.Rename(path, bak); err != nil {
-		return err
-	}
-	// WAL + SHM sidecars get cleared too — leaving them confuses
-	// the rebuilt DB.
-	for _, suffix := range []string{"-wal", "-shm"} {
-		_ = os.Remove(path + suffix)
-	}
-	log.Printf("ops.db: corrupt file moved to %s", bak)
-	return nil
 }

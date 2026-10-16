@@ -201,7 +201,7 @@ func reconcileBootRow(ctx context.Context, store *OperationsStore, op *Operation
 		fresh := op.LastHeartbeatAt != nil && now.Sub(*op.LastHeartbeatAt) < 90*time.Second
 		_ = fresh // PR-2d: log only; reattach is out of scope.
 		msg := fmt.Sprintf("agent restarted while %s was in flight; child PID %d still alive — review manually", op.Action, op.ChildPID)
-		_ = store.UpdateState(ctx, op.RequestID, UpdateStateOpts{
+		_ = store.FinishActive(ctx, op.RequestID, UpdateStateOpts{
 			State:       OpStateUnknown,
 			Error:       msg,
 			CompletedAt: &now,
@@ -215,7 +215,7 @@ func reconcileBootRow(ctx context.Context, store *OperationsStore, op *Operation
 	if op.LastHeartbeatAt != nil && op.LastHeartbeatAt.After(completedAt) {
 		completedAt = *op.LastHeartbeatAt
 	}
-	_ = store.UpdateState(ctx, op.RequestID, UpdateStateOpts{
+	_ = store.FinishActive(ctx, op.RequestID, UpdateStateOpts{
 		State:         state,
 		Output:        output,
 		Error:         errStr,
