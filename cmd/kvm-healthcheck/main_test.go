@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -125,5 +128,82 @@ func TestProbeConnectionFailureAndCancellation(t *testing.T) {
 	cancel()
 	if err := probe(ctx, "https://"+address+"/health", time.Second); err == nil {
 		t.Fatal("cancelled probe succeeded")
+	}
+}
+
+func TestProbeChildMain(t *testing.T) {
+	if os.Getenv("KVMC_HEALTHCHECK_CHILD") != "1" {
+		return
+	}
+	for i, arg := range os.Args {
+		if arg == "--" {
+			os.Args = append([]string{"kvm-healthcheck"}, os.Args[i+1:]...)
+			break
+		}
+	}
+	flag.CommandLine = flag.NewFlagSet("kvm-healthcheck", flag.ExitOnError)
+	main()
+}
+
+// Each invocation is a real short-lived CLI process. Run waits/reaps it before
+// the next cycle; this is process-lifecycle regression coverage, not a soak or
+// proof of Docker's adoption/reaping behavior on every supported runtime.
+func TestProbeRepeatedCLIProcesses(t *testing.T) {
+	for _, scenario := range []string{"success", "failure", "timeout"} {
+		t.Run(scenario, func(t *testing.T) {
+			var active, handled atomic.Int32
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				active.Add(1)
+				handled.Add(1)
+				defer active.Add(-1)
+				switch scenario {
+				case "success":
+					w.Write([]byte("ok"))
+				case "failure":
+					w.WriteHeader(503)
+				case "timeout":
+					<-r.Context().Done()
+				}
+			}))
+			defer server.Close()
+			for i := 0; i < 4; i++ {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				timeout := "2s"
+				if scenario == "timeout" {
+					timeout = "200ms"
+				}
+				cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestProbeChildMain$", "--", "-url", server.URL+"/health", "-timeout", timeout)
+				cmd.Env = append(os.Environ(), "KVMC_HEALTHCHECK_CHILD=1")
+				err := cmd.Run()
+				deadlineErr := ctx.Err()
+				cancel()
+				if deadlineErr != nil {
+					t.Fatalf("probe process exceeded outer deadline: %v", deadlineErr)
+				}
+				if cmd.ProcessState == nil || !cmd.ProcessState.Exited() {
+					t.Fatal("probe process was not reaped")
+				}
+				if scenario == "success" {
+					if err != nil {
+						t.Fatalf("successful probe exit: %v", err)
+					}
+				} else {
+					var exitErr *exec.ExitError
+					if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+						t.Fatalf("failed probe exit: %v", err)
+					}
+				}
+			}
+			if handled.Load() != 4 {
+				t.Fatalf("fixture handled %d CLI requests, want4", handled.Load())
+			}
+			deadline := time.Now().Add(time.Second)
+			for active.Load() != 0 {
+				if time.Now().After(deadline) {
+					t.Fatal("fixture request survived CLI exit")
+				}
+				time.Sleep(time.Millisecond)
+			}
+		})
 	}
 }

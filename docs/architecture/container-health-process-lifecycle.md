@@ -27,7 +27,10 @@ operational action, not a side effect of this healthcheck.
 
 Focused tests repeatedly exercise success, non-200 responses, redirect refusal,
 connect failure, header/body timeout, response-size limits and cancellation. They
-verify that fixture connections close. The probe imports no subprocess API.
+verify that fixture connections close. A further twelve real CLI invocations
+(four each for success, failure and timeout) verify bounded completion and
+parent-side process reaping. This is a short regression sequence, not a soak
+or a measurement of long-term CPU/memory/PID growth. The probe imports no subprocess API.
 These tests do not prove behavior of every Docker/runtime/init combination.
 Production-image build, container startup/reaping/termination and target-OS
 acceptance remain required before release. Existing absent installer/package
