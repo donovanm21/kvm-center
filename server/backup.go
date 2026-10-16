@@ -91,30 +91,7 @@ type backupManifest struct {
 func (s *Store) ExportSnapshot() ([]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	d := persistData{
-		Hosts:            s.hosts,
-		VMs:              s.vms,
-		Storage:          s.storage,
-		VMNotes:          s.vmNotes,
-		GuestData:        s.guestData,
-		Migrations:       s.migrations,
-		Users:            s.users,
-		Groups:           s.groups,
-		Roles:            s.roles,
-		Sessions:         s.sessions,
-		IDPs:             s.idps,
-		Features:         &s.features,
-		Audit:            s.audit,
-		AuditShipping:    s.auditShipping,
-		SnapshotPolicies: s.snapshotPolicies,
-		Notifications:    s.notifications,
-		Metrics:          s.metrics,
-		APITokens:        s.apiTokens,
-		HypervisorCerts:  s.hypervisorCerts,
-		ConsoleSecret:    s.consoleSecret,
-		BackupSchedule:   s.backupSchedule,
-	}
-	d.Dirty = computeDirty(&d)
+	d := s.persistDataLocked()
 	return json.MarshalIndent(&d, "", "  ")
 }
 
@@ -133,28 +110,10 @@ func handleBackup(store *Store) http.HandlerFunc {
 			return
 		}
 
-		// Collect the on-disk materials. Each entry is (tarball-path,
-		// data, mode). We read into memory so the manifest can carry
-		// per-file SHA-256 without a second-pass read. Total size is
-		// KBs (certs + keys).
-		entries := []backupEntry{
-			{"store.json", storeBytes, 0o600},
-		}
-		if serverBackupPaths.TLSCert != "" {
-			if b, err := os.ReadFile(serverBackupPaths.TLSCert); err == nil {
-				entries = append(entries, backupEntry{"tls/server.crt", b, 0o644})
-			}
-		}
-		if serverBackupPaths.TLSKey != "" {
-			if b, err := os.ReadFile(serverBackupPaths.TLSKey); err == nil {
-				entries = append(entries, backupEntry{"tls/server.key", b, 0o600})
-			}
-		}
-		if serverBackupPaths.CADir != "" {
-			caEntries, err := readDirForBackup(serverBackupPaths.CADir, "ca/")
-			if err == nil {
-				entries = append(entries, caEntries...)
-			}
+		entries, err := collectBackupEntries(storeBytes, serverBackupPaths)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "collect backup material: "+err.Error())
+			return
 		}
 
 		manifest := backupManifest{
@@ -223,11 +182,39 @@ func handleBackup(store *Store) http.HandlerFunc {
 	}
 }
 
-// readDirForBackup walks dir non-recursively and returns every regular
-// file as a backup entry, prefixing names with tarPrefix (e.g. "ca/").
-// Skips dotfiles so accidental editor backups don't land in tarballs.
-// A missing directory returns an error; handleBackup treats that as a
-// soft condition (fresh install with no CA yet).
+// collectBackupEntries is shared by downloaded and scheduled backups. A
+// configured file that cannot be read is an incomplete backup, not success.
+func collectBackupEntries(storeBytes []byte, paths backupPaths) ([]backupEntry, error) {
+	entries := []backupEntry{{"store.json", storeBytes, 0o600}}
+	for _, file := range []struct {
+		src, name string
+		mode      int64
+	}{
+		{paths.TLSCert, "tls/server.crt", 0o644},
+		{paths.TLSKey, "tls/server.key", 0o600},
+	} {
+		if file.src == "" {
+			continue
+		}
+		data, err := os.ReadFile(file.src)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", file.name, err)
+		}
+		entries = append(entries, backupEntry{file.name, data, file.mode})
+	}
+	if paths.CADir != "" {
+		caEntries, err := readDirForBackup(paths.CADir, "ca/")
+		if err != nil {
+			return nil, fmt.Errorf("read CA material: %w", err)
+		}
+		entries = append(entries, caEntries...)
+	}
+	return entries, nil
+}
+
+// readDirForBackup walks dir non-recursively and includes regular files.
+// Configured but unreadable or non-regular material fails the backup.
+// Dotfiles and subdirectories are not part of the flat CA key layout.
 func readDirForBackup(dir, tarPrefix string) ([]backupEntry, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -235,21 +222,20 @@ func readDirForBackup(dir, tarPrefix string) ([]backupEntry, error) {
 	}
 	out := make([]backupEntry, 0, len(entries))
 	for _, ent := range entries {
-		if ent.IsDir() {
-			continue
-		}
 		nm := ent.Name()
-		if len(nm) == 0 || nm[0] == '.' {
-			continue
-		}
-		full := filepath.Join(dir, nm)
-		b, err := os.ReadFile(full)
-		if err != nil {
+		if ent.IsDir() || len(nm) == 0 || nm[0] == '.' {
 			continue
 		}
 		info, err := ent.Info()
 		if err != nil {
-			continue
+			return nil, err
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("%s is not a regular file", nm)
+		}
+		b, err := os.ReadFile(filepath.Join(dir, nm))
+		if err != nil {
+			return nil, err
 		}
 		mode := int64(info.Mode().Perm())
 		if mode == 0 {
