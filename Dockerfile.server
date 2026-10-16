@@ -14,7 +14,7 @@ RUN npm run build
 # scripts. The runtime image copies this into /app/dist so the server
 # can serve them over /downloads/*. Consolidates what used to be the
 # standalone kvm-center-build container on port 8097 (v5.16).
-FROM golang:1.25-alpine AS artifacts
+FROM golang:1.26.9-alpine AS artifacts
 
 WORKDIR /src
 COPY . .
@@ -70,7 +70,7 @@ RUN VERSION=$(cat /src/server/VERSION) && \
 # TARGETOS/TARGETARCH are then passed to `go build` so it
 # cross-compiles for the target arch. v5.49 (PR-1b) introduces
 # multi-arch buildx (linux/amd64 + linux/arm64) via Docker Hub.
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.9-alpine AS builder
 
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64

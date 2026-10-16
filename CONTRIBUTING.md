@@ -45,7 +45,7 @@ upstream/main` if review takes a while.
 Requirements:
 
 - Docker + Docker Compose plugin (v2)
-- Go 1.25+ (optional if you build inside Docker)
+- Go 1.26.9+ (optional if you build inside Docker)
 - Node 20+ (for the React SPA)
 - `make`, `git`, `curl`
 
