@@ -7,7 +7,7 @@ name: test
 # and version stamps aligned.
 #
 # Security-gate posture (v5.20.13):
-#   - Go 1.25, govulncheck blocking on any reachable stdlib / dep vuln.
+#   - Go version from go.mod, govulncheck blocking on any reachable stdlib / dep vuln.
 #   - npm audit blocking on CRITICAL webui deps, warn on high+ below.
 #   - gitleaks blocking on any match in working tree or history;
 #     historical placeholders allowlisted via .gitleaksignore.
@@ -28,7 +28,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.10'
+          go-version-file: 'go.mod'
 
       - name: go mod tidy
         run: go mod tidy

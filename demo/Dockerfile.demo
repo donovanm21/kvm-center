@@ -8,7 +8,7 @@
 # Kept in demo/ so git-filter-repo strips it with the rest of the
 # demo tree when publishing to the public GitHub mirror.
 
-FROM golang:1.25-alpine AS build
+FROM golang:1.26.9-alpine AS build
 WORKDIR /src
 COPY go.mod go.su[m] ./
 COPY . .
