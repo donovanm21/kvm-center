@@ -31,23 +31,25 @@ jobs:
           VERSION="${GITHUB_REF_NAME}"
           mkdir -p dist
           build() {
-            local os="$1" arch="$2" ext="$3" pkg="$4" name="$5"
+            local os="$1" arch="$2" ext="$3" pkg="$4" name="$5" symbol="$6"
             local out="dist/${name}-${os}-${arch}${ext}"
             echo "→ ${out}"
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-              go build -trimpath -ldflags="-s -w -X main.Version=${VERSION}" \
+              go build -trimpath -ldflags="-s -w -X main.${symbol}=${VERSION}" \
               -o "$out" "./${pkg}"
           }
+          # Stamp the variable actually read at startup. Server/guest-tools
+          # initialize Version from versionRaw; the CLI reads cliVersion.
           # Server + host-side agent: Linux only (libvirt host).
           for arch in amd64 arm64; do
-            build linux "$arch" "" server kvm-center-server
-            build linux "$arch" "" agent  kvm-center-agent
-            build linux "$arch" "" cmd/kvmctl kvmctl
-            build linux "$arch" "" kvm-tools kvm-tools
+            build linux "$arch" "" server kvm-center-server versionRaw
+            build linux "$arch" "" agent  kvm-center-agent Version
+            build linux "$arch" "" cmd/kvmctl kvmctl cliVersion
+            build linux "$arch" "" kvm-tools kvm-tools versionRaw
           done
           # kvm-tools + kvmctl on Windows guests.
-          build windows amd64 .exe kvm-tools kvm-tools
-          build windows amd64 .exe cmd/kvmctl kvmctl
+          build windows amd64 .exe kvm-tools kvm-tools versionRaw
+          build windows amd64 .exe cmd/kvmctl kvmctl cliVersion
           (cd dist && sha256sum * > SHA256SUMS)
           ls -la dist
 
