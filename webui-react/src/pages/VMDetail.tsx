@@ -1,3 +1,4 @@
+import { formatMemoryUsage } from '@/utils/memory';
 import { VMTags } from '@/components/VMTags';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, useMatch, useNavigate, useParams } from 'react-router-dom';
@@ -621,7 +622,7 @@ function MonitorTab({ vm }: { vm: VM }) {
       <BigPanel title="CPU" valueLabel={`${cpuPct.toFixed(1)}%`} subLabel={`${vm.cpu_count} vCPU`} pct={cpuPct} tone={toneFor(cpuPct)} />
       <BigPanel
         title="Memory"
-        valueLabel={vm.mem_total_mb > 0 ? `${(vm.mem_usage_mb / 1024).toFixed(1)} / ${(vm.mem_total_mb / 1024).toFixed(0)} GB` : '—'}
+        valueLabel={formatMemoryUsage(vm.mem_usage_mb, vm.mem_total_mb)}
         subLabel={`${memPct.toFixed(0)}% used`}
         pct={memPct}
         tone={toneFor(memPct)}

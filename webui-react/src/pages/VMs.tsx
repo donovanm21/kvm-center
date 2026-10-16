@@ -1,3 +1,4 @@
+import { formatMemoryUsage } from '@/utils/memory';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -139,9 +140,7 @@ function VMRow({ vm, lock, latestKVMTools }: { vm: VM; lock?: LockReason; latest
       <td><StatePill state={vm.state} /></td>
       <td>{vm.cpu_count}</td>
       <td>
-        {vm.mem_total_mb > 0
-          ? `${(vm.mem_usage_mb / 1024).toFixed(1)} / ${(vm.mem_total_mb / 1024).toFixed(0)} GB`
-          : '—'}
+        {formatMemoryUsage(vm.mem_usage_mb, vm.mem_total_mb)}
       </td>
       <td>
         {vm.disk_total_gb > 0
