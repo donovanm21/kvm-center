@@ -79,8 +79,8 @@ def main():
                            'rss_bytes': 768 << 20, 'late_heap_growth_bytes': 32 << 20, 'fd_growth': 8, 'goroutine_growth': 8,
                            'cycles_per_backend': 20},
               'remaining_gates': ['Long-duration and concurrent fleet soak; disk-full/backend outage acceptance',
-                                  'Production Docker image build and native runtime acceptance',
-                                  'Tag release workflow lacks fresh SPA build and explicit Git SHA stamping',
+                                  'Production-image acceptance is reported separately by distributable-acceptance',
+                                  'Deployed v5.61.58 schema compatibility requires explicit offline conversion',
                                   'ARM64 runtime; actual deployment lineage and backend-native recovery',
                                   'Outstanding release security acceptance'],
               'missing_container_inputs': missing_release_inputs()}

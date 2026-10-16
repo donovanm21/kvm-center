@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Non-publishing entry point: always rebuild the production SPA before stamping
-# the native release matrix. Workflow adoption requires a separate change.
+# the native release matrix, shared by hosted acceptance and tag packaging.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 bash "$ROOT/scripts/build-webui.sh"

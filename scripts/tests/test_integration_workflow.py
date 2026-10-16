@@ -15,7 +15,7 @@ def job_block(name):
 
 class IntegrationWorkflowTests(unittest.TestCase):
     def test_disposable_jobs_are_bounded_and_local(self):
-        for name, limit in [('mongo-integration', 15), ('browser-integration', 20), ('history-acceptance', 20)]:
+        for name, limit in [('mongo-integration', 15), ('browser-integration', 20), ('history-acceptance', 20), ('distributable-acceptance', 30)]:
             with self.subTest(job=name):
                 block = job_block(name)
                 self.assertIn('runs-on: ubuntu-24.04', block)
@@ -46,7 +46,8 @@ class IntegrationWorkflowTests(unittest.TestCase):
                 ('mongo-integration', ['.validation/**/report.json', '.validation/**/mongo.log']),
                 ('browser-integration', ['.validation/**/report.json', '.validation/**/browser.log',
                                          '.validation/**/browser-results.json']),
-                ('history-acceptance', ['.validation/history/report.json'])]:
+                ('history-acceptance', ['.validation/history/report.json']),
+                ('distributable-acceptance', ['.validation/distributable/report.json'])]:
             with self.subTest(job=name):
                 block = job_block(name)
                 self.assertIn('name: Verify fixture database cleanup\n        if: always()', block)
@@ -62,7 +63,7 @@ class IntegrationWorkflowTests(unittest.TestCase):
 
     def test_summary_requires_every_job_success(self):
         block = job_block('summary')
-        names = ['lint-test', 'webui-audit', 'gitleaks', 'mongo-integration', 'browser-integration', 'history-acceptance']
+        names = ['lint-test', 'webui-audit', 'gitleaks', 'mongo-integration', 'browser-integration', 'history-acceptance', 'distributable-acceptance']
         self.assertIn('needs: [' + ', '.join(names) + ']', block)
         self.assertIn('if: always()', block)
         script = block.split('        run: |\n', 1)[1]
