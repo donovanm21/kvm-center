@@ -87,7 +87,9 @@ RUN go mod tidy
 RUN VERSION=$(cat /src/server/VERSION) && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
       -ldflags="-s -w -X main.Version=$VERSION" \
-      -o /out/kvm-center-server ./server
+      -o /out/kvm-center-server ./server && \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
+      -ldflags="-s -w" -o /out/kvm-healthcheck ./cmd/kvm-healthcheck
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 # Pinned by multi-arch manifest-list digest (OCI image index) so amd64 +
@@ -105,6 +107,7 @@ RUN apk --no-cache add ca-certificates tzdata curl su-exec
 
 WORKDIR /app
 COPY --from=builder   /out/kvm-center-server .
+COPY --from=builder   /out/kvm-healthcheck .
 COPY --from=artifacts /dist ./dist
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 

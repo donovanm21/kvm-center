@@ -4,6 +4,13 @@ version: "3.8"
 
 services:
   kvm-center-server:
+    init: true
+    healthcheck:
+      test: ["CMD", "/app/kvm-healthcheck", "-url", "https://127.0.0.1:8190/health", "-timeout", "3s"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     build:
       context: .
       dockerfile: Dockerfile.server

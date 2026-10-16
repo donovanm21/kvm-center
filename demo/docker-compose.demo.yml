@@ -31,6 +31,13 @@ services:
     networks: [demo]
 
   kvm-center-demo-server:
+    init: true
+    healthcheck:
+      test: ["CMD", "/app/kvm-healthcheck", "-url", "https://127.0.0.1:8190/health", "-timeout", "3s"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     # Reuse the production server image. Build it first via
     #   docker compose -f ../docker-compose.yml build kvm-center-server
     # (the demo-up.sh script handles this automatically).
