@@ -1125,6 +1125,14 @@ type APICommandRequest struct {
 	Params    map[string]string `json:"params,omitempty"`
 }
 
+// CommandResolution is an immutable operator observation, not a command retry.
+type CommandResolution struct {
+	ActorID string    `json:"actor_id" bson:"actor_id"`
+	TokenID string    `json:"token_id,omitempty" bson:"token_id,omitempty"`
+	Note    string    `json:"note" bson:"note"`
+	At      time.Time `json:"at" bson:"at"`
+}
+
 // CommandLogEntry records every mutating command the server
 // dispatched so a restart + any dropped response can be reconciled
 // from this log alone. Written BEFORE the agent call and updated
@@ -1132,15 +1140,16 @@ type APICommandRequest struct {
 //
 // Tier S #4, v5.32.17.
 type CommandLogEntry struct {
-	RequestID   string            `json:"request_id" bson:"_id"`
-	Action      string            `json:"action" bson:"action"`
-	HostID      string            `json:"host_id" bson:"host_id"`
-	VMUUID      string            `json:"vm_uuid,omitempty" bson:"vm_uuid,omitempty"`
-	VMName      string            `json:"vm_name,omitempty" bson:"vm_name,omitempty"`
-	Params      map[string]string `json:"params,omitempty" bson:"params,omitempty"`
-	ActorID     string            `json:"actor_id,omitempty" bson:"actor_id,omitempty"`
-	SubmittedAt time.Time         `json:"submitted_at" bson:"submitted_at"`
-	AppliedAt   *time.Time        `json:"applied_at,omitempty" bson:"applied_at,omitempty"`
+	Resolution  *CommandResolution `json:"resolution,omitempty" bson:"resolution,omitempty"`
+	RequestID   string             `json:"request_id" bson:"_id"`
+	Action      string             `json:"action" bson:"action"`
+	HostID      string             `json:"host_id" bson:"host_id"`
+	VMUUID      string             `json:"vm_uuid,omitempty" bson:"vm_uuid,omitempty"`
+	VMName      string             `json:"vm_name,omitempty" bson:"vm_name,omitempty"`
+	Params      map[string]string  `json:"params,omitempty" bson:"params,omitempty"`
+	ActorID     string             `json:"actor_id,omitempty" bson:"actor_id,omitempty"`
+	SubmittedAt time.Time          `json:"submitted_at" bson:"submitted_at"`
+	AppliedAt   *time.Time         `json:"applied_at,omitempty" bson:"applied_at,omitempty"`
 	// Outcome is "pending" while the command is in flight, then
 	// "success" / "failed" when the agent returns, or "unknown" when
 	// the server crashed mid-flight and the boot reconciler couldn't

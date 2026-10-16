@@ -62,8 +62,10 @@ func NewRequestID() string {
 // Record/Update call; the JSON backend relies on the periodic
 // store.Save() tick like every other mutable collection.
 type CommandLog struct {
-	mu      sync.Mutex
-	entries map[string]*models.CommandLogEntry
+	resolveMu sync.Mutex      // serialize resolution acknowledgement and retries
+	resolving map[string]bool // protect unacknowledged resolutions from cap eviction
+	mu        sync.Mutex
+	entries   map[string]*models.CommandLogEntry
 }
 
 func NewCommandLog() *CommandLog {
@@ -78,23 +80,25 @@ func (l *CommandLog) Record(entry *models.CommandLogEntry) (*models.CommandLogEn
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if existing, ok := l.entries[entry.RequestID]; ok {
-		return existing, true
+		snapshot := *existing
+		return &snapshot, true
 	}
 	cp := *entry
 	l.entries[entry.RequestID] = &cp
 	l.enforceCap()
-	return &cp, false
+	snapshot := cp
+	return &snapshot, false
 }
 
-// Update records the outcome for an in-flight entry. No-ops when the
-// request_id is unknown (shouldn't happen in the normal flow but
-// cheap to defend against).
-func (l *CommandLog) Update(requestID, outcome, message string, statusCode int, replayed bool) {
+// Update records an agent outcome. It returns false when the request ID
+// is absent or an immutable operator resolution already won. Callers must
+// suppress outcome side effects when the update is rejected.
+func (l *CommandLog) Update(requestID, outcome, message string, statusCode int, replayed bool) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	e, ok := l.entries[requestID]
-	if !ok {
-		return
+	if !ok || e.Resolution != nil {
+		return false
 	}
 	now := time.Now()
 	e.AppliedAt = &now
@@ -106,6 +110,7 @@ func (l *CommandLog) Update(requestID, outcome, message string, statusCode int, 
 		exp := now.Add(commandLogRetentionDays * 24 * time.Hour)
 		e.ExpiresAt = &exp
 	}
+	return true
 }
 
 // Pending returns the entries still in-flight older than minAge.
@@ -219,7 +224,7 @@ func (l *CommandLog) RecordProgress(requestID string, frame *models.CommandProgr
 func (l *CommandLog) RecordPoll(requestID string, at time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if e, ok := l.entries[requestID]; ok {
+	if e, ok := l.entries[requestID]; ok && e.Resolution == nil {
 		e.LastPolledAt = at
 	}
 }
@@ -284,7 +289,9 @@ func reconcileStrandedCommands(store *Store) {
 	}
 	log.Printf("command-reconcile: found %d stranded command entries, marking unknown", len(pending))
 	for _, e := range pending {
-		store.commandLog.Update(e.RequestID, "unknown", "server restarted while command was in flight; outcome undetermined — check the target VM state and resolve manually", 0, false)
+		if !store.commandLog.Update(e.RequestID, "unknown", "server restarted while command was in flight; outcome undetermined — check the target VM state and resolve manually", 0, false) {
+			continue
+		}
 		auditSystem(store, "command.stranded", "vm/"+e.VMUUID, map[string]string{
 			"request_id": e.RequestID,
 			"action":     e.Action,
@@ -345,7 +352,7 @@ func (l *CommandLog) enforceCap() {
 	}
 	terminals := make([]kv, 0, len(l.entries))
 	for k, v := range l.entries {
-		if v.Outcome != "pending" {
+		if v.Outcome != "pending" && !l.resolving[k] {
 			terminals = append(terminals, kv{k, v})
 		}
 	}

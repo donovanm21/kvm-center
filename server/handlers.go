@@ -716,12 +716,14 @@ func handleCommand(store *Store) http.HandlerFunc {
 		case hasExplicitOutcome && !*bodySuccess.Success:
 			// Deterministic application error — agent has a body and
 			// has declared the operation failed. Terminal.
-			store.commandLog.Update(req.RequestID, "failed", msg, resp.StatusCode, replayed)
-			notifyTaskOutcome(store, existing, "failed", msg)
+			if store.commandLog.Update(req.RequestID, "failed", msg, resp.StatusCode, replayed) {
+				notifyTaskOutcome(store, existing, "failed", msg)
+			}
 		case hasExplicitOutcome && *bodySuccess.Success:
 			// Body says success=true. Trust it.
-			store.commandLog.Update(req.RequestID, "success", msg, resp.StatusCode, replayed)
-			notifyTaskOutcome(store, existing, "success", msg)
+			if store.commandLog.Update(req.RequestID, "success", msg, resp.StatusCode, replayed) {
+				notifyTaskOutcome(store, existing, "success", msg)
+			}
 		case resp.StatusCode >= 500:
 			// 5xx without an explicit body outcome: genuine transport /
 			// internal failure where the agent didn't get a chance to
@@ -730,11 +732,13 @@ func handleCommand(store *Store) http.HandlerFunc {
 			deadline := time.Now().Add(outcomeReconcileWindow)
 			store.commandLog.MarkPending(req.RequestID, deadline, "agent returned "+strconv.Itoa(resp.StatusCode)+": "+msg+"; outcome will be reconciled")
 		case resp.StatusCode >= 400:
-			store.commandLog.Update(req.RequestID, "failed", msg, resp.StatusCode, replayed)
-			notifyTaskOutcome(store, existing, "failed", msg)
+			if store.commandLog.Update(req.RequestID, "failed", msg, resp.StatusCode, replayed) {
+				notifyTaskOutcome(store, existing, "failed", msg)
+			}
 		default:
-			store.commandLog.Update(req.RequestID, "success", msg, resp.StatusCode, replayed)
-			notifyTaskOutcome(store, existing, "success", msg)
+			if store.commandLog.Update(req.RequestID, "success", msg, resp.StatusCode, replayed) {
+				notifyTaskOutcome(store, existing, "success", msg)
+			}
 		}
 		if replayed {
 			w.Header().Set("X-Command-Replayed", "true")

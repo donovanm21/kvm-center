@@ -146,3 +146,33 @@ func TestMongoIntegrationDirtyCollections(t *testing.T) {
 		t.Fatalf("dirty users collection was not replaced (load error: %v)", err)
 	}
 }
+
+// Operator observations must survive a fresh backend load and remain protected
+// from delayed agent outcomes without creating a second resolution on retry.
+func TestMongoIntegrationCommandResolution(t *testing.T) {
+	b := newMongoIntegrationBackend(t)
+	s := NewStoreWithBackend(b, t.TempDir()+"/unused.json")
+	t.Cleanup(func() { s.saveWG.Wait() })
+	u := resolutionActor(s)
+	seedResolution(s)
+	if w := resolutionRequest(s, u, resolutionBody); w.Code != 200 {
+		t.Fatalf("resolve: %d %s", w.Code, w.Body)
+	}
+	s.saveWG.Wait()
+	loaded := NewStoreWithBackend(b, t.TempDir()+"/unused.json")
+	t.Cleanup(func() { loaded.saveWG.Wait() })
+	assertResolution(t, loaded)
+	if w := resolutionRequest(loaded, u, resolutionBody); w.Code != 200 {
+		t.Fatalf("retry: %d %s", w.Code, w.Body)
+	}
+	events, _ := loaded.GetAuditEvents(AuditFilter{})
+	count := 0
+	for _, event := range events {
+		if event.Action == "command.resolved" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("resolution audit count after reload/retry=%d", count)
+	}
+}
