@@ -15,6 +15,7 @@ import (
 // returns the snapshot with AgentStatus=skipped and no crash.
 func TestReconcile_NoAgentAddress(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(s.saveWG.Wait) // Finish handler-triggered saves before TempDir cleanup.
 	s.hosts["hv1"] = &models.Host{ID: "hv1", LastSeen: time.Now()}
 	// No agent IP configured.
 
@@ -47,6 +48,7 @@ func TestReconcile_AgentUnreachable(t *testing.T) {
 	addr := strings.TrimPrefix(fake.URL, "http://")
 
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(s.saveWG.Wait) // Finish handler-triggered saves before TempDir cleanup.
 	s.hosts["hv1"] = &models.Host{ID: "hv1", IP: strings.Split(addr, ":")[0], AgentPort: intFromAddr(addr), LastSeen: time.Now()}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/reconcile/hv1", nil)
@@ -65,6 +67,7 @@ func TestReconcile_AgentUnreachable(t *testing.T) {
 // TestReconcile_MissingHost: unknown host id → 404.
 func TestReconcile_MissingHost(t *testing.T) {
 	s := NewStore(t.TempDir() + "/data.json")
+	t.Cleanup(s.saveWG.Wait) // Finish handler-triggered saves before TempDir cleanup.
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/reconcile/absent", nil)
 	rr := httptest.NewRecorder()
 	handleReconcileHost(s)(rr, req)
