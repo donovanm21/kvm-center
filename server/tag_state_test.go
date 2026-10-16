@@ -255,6 +255,7 @@ func TestTagFoundationDowngradeIsUnsupported(t *testing.T) {
 
 func TestTagFoundationScheduledArchive(t *testing.T) {
 	s, _ := persistenceTestStore(t)
+	s.history = historyFixture()
 	if err := s.SetVMTags(tagFixtureUUID, []string{"scheduled"}); err != nil {
 		t.Fatal(err)
 	}
@@ -304,6 +305,9 @@ func TestTagFoundationScheduledArchive(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+	}
+	if manifest.FeatureSchemas["host_history_state"] != 1 || snapshot.HostHistory == nil {
+		t.Fatal("scheduled history schema/state missing")
 	}
 	if manifest.FeatureSchemas["vm_tag_state"] != 1 || snapshot.VMTagState == nil || !reflect.DeepEqual(snapshot.VMTagState.ByVM[tagFixtureUUID], []string{"scheduled"}) {
 		t.Fatal("scheduled archive schema/state mismatch")

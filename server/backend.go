@@ -204,6 +204,22 @@ func verifyBackendRoundTrip(ctx context.Context, src *persistData, dst Backend) 
 	if back == nil {
 		return errors.New("read-back returned nil persistData")
 	}
+	if err := src.HostHistory.validate(); err != nil {
+		return err
+	}
+	if err := back.HostHistory.validate(); err != nil {
+		return err
+	}
+	var srcHistory, backHistory map[string]hostHistory
+	if src.HostHistory != nil {
+		srcHistory = src.HostHistory.Hosts
+	}
+	if back.HostHistory != nil {
+		backHistory = back.HostHistory.Hosts
+	}
+	if (len(srcHistory) != 0 || len(backHistory) != 0) && !reflect.DeepEqual(srcHistory, backHistory) {
+		return errors.New("host history content mismatch")
+	}
 	if err := src.VMTagState.validate(); err != nil {
 		return err
 	}

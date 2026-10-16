@@ -259,8 +259,12 @@ func snapshotFeatureSchemas(raw []byte) (map[string]int, error) {
 	if err := json.Unmarshal(raw, &d); err != nil {
 		return nil, err
 	}
-	if d.VMTagState == nil {
-		return nil, nil
+	features := map[string]int{}
+	if d.VMTagState != nil {
+		features["vm_tag_state"] = d.VMTagState.Version
 	}
-	return map[string]int{"vm_tag_state": d.VMTagState.Version}, nil
+	if d.HostHistory != nil {
+		features["host_history_state"] = d.HostHistory.Version
+	}
+	return features, nil
 }

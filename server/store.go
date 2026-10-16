@@ -20,6 +20,7 @@ func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
 
 // persistData is the on-disk JSON structure.
 type persistData struct {
+	HostHistory      *historyState                       `json:"host_history_state,omitempty"`
 	VMTagState       *vmTagState                         `json:"vm_tag_state,omitempty"`
 	Hosts            map[string]*models.Host             `json:"hosts"`
 	VMs              map[string][]*models.VM             `json:"vms"`
@@ -87,8 +88,10 @@ const guestToolsFreshness = 5 * time.Minute
 
 // Store is the in-memory data store backed by a JSON file.
 type Store struct {
-	vmTags map[string][]string
-	mu     sync.RWMutex
+	history        *historyState // guarded by mu; never shared across Stores
+	historyEnabled bool          // collection only; persisted state is always preserved
+	vmTags         map[string][]string
+	mu             sync.RWMutex
 	// saveWG tracks in-flight async Save goroutines so tests can
 	// wait for persistence before tearing down TempDir. Production
 	// shutdown uses saves to seal admission and drain without Add/Wait races.
@@ -346,6 +349,7 @@ func (s *Store) ensureBuiltInRoles() {
 // crosses the goroutine boundary.
 func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 	s.mu.Lock()
+	observedAt := time.Now() // server observation order, independent of agent timestamps
 
 	host, ok := s.hosts[p.HostID]
 	if !ok {
@@ -476,9 +480,9 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 	s.goWork("telemetry-fanout", func() {
 		s.EmitHostMetrics(&hostCopy, prefix)
 		s.EmitVMMetrics(vmsCopy, prefix)
-		// v5.17: feed the in-UI sparkline ring alongside the Influx
-		// write. Cheap (~1 µs) and memory-only.
-		s.AppendHostMetric(p.HostID, &hostCopy, poolsCopy)
+		// Feed the in-UI sparkline ring and optional bounded history
+		// alongside the external metric writes.
+		s.appendHostMetricAt(p.HostID, &hostCopy, poolsCopy, observedAt)
 	})
 
 	// Notification side effects — fan out outside the lock.
