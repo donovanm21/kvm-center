@@ -776,7 +776,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 		// arrives only when virsh migrate finishes (or errors). Offline
 		// migrations return immediately and the poller takes over from
 		// here.
-		if migRec != nil && action == "MIGRATE" {
+		if migRec != nil && action == "MIGRATE" && resp.StatusCode != http.StatusAccepted {
 			if resp.StatusCode >= 400 {
 				finalizeMigration(store, migRec, "failed", strings.TrimSpace(string(respBody)))
 			} else {

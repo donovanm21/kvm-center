@@ -152,3 +152,45 @@ func TestLiveMigrationPendingReplayPreservesUncertainty(t *testing.T) {
 		t.Fatalf("uncertain outcome rewritten: %d %s", w.Code, w.Body)
 	}
 }
+
+func TestLiveMigrationAcceptedThenReconciled(t *testing.T) {
+	for _, outcome := range []string{"failed", "success"} {
+		t.Run(outcome, func(t *testing.T) {
+			s, u := migrationFixture(t)
+			agent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/command" {
+					w.WriteHeader(202)
+					_, _ = w.Write([]byte(`{"status":"running"}`))
+					return
+				}
+				code := 200
+				if outcome == "failed" {
+					code = 409
+				}
+				_ = json.NewEncoder(w).Encode(models.CommandOutcomeResponse{Outcome: outcome, StatusCode: code, Message: "synthetic execution outcome"})
+			}))
+			defer agent.Close()
+			_, port, _ := net.SplitHostPort(strings.TrimPrefix(agent.URL, "http://"))
+			s.hosts["source"].AgentPort, _ = strconv.Atoi(port)
+			req := models.APICommandRequest{RequestID: "accepted", Action: "MIGRATE", HostID: "source", VMUUID: "fixture-uuid", VMName: "fixture-vm", Params: map[string]string{"destination": "192.0.2.20"}}
+			w := migrationRequest(s, u, req)
+			if w.Code != 202 || s.commandLog.List(1)[0].Outcome != "pending" || s.GetMigrations()[0].Status != "running" {
+				t.Fatal("admission was treated as completion")
+			}
+			// Fresh admission does not guarantee execution state. The agent's eventual
+			// response is authoritative even after inventory changes in the meantime.
+			s.mu.Lock()
+			s.vms["source"][0].State = models.VMStopped
+			s.mu.Unlock()
+			reconcileOne(context.Background(), s, agent.Client(), s.commandLog.List(1)[0])
+			want := "failed"
+			if outcome == "success" {
+				want = "complete"
+			}
+			if s.commandLog.List(1)[0].Outcome != outcome || s.GetMigrations()[0].Status != want {
+				t.Fatal("terminal outcome not reflected in task and migration")
+			}
+		})
+	}
+}
