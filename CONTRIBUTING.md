@@ -46,7 +46,7 @@ Requirements:
 
 - Docker + Docker Compose plugin (v2)
 - Go 1.26.9+ (optional if you build inside Docker)
-- Node 20+ (for the React SPA)
+- Node ^20.19.0 or >=22.12.0 (for the React SPA)
 - `make`, `git`, `curl`
 
 ### Run the server + Mongo locally

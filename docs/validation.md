@@ -6,7 +6,7 @@ one of them. The report records what ran, what failed, and what did not run.
 
 ## Commands
 
-Prerequisites: Go 1.26.9+, Node 20+, Python 3, Bash, Git; a C compiler for the Go
+Prerequisites: Go 1.26.9+, Node ^20.19.0 or >=22.12.0, Python 3, Bash, Git; a C compiler for the Go
 race detector. Use a writable Go/npm cache when the environment has no home
 folder. The commands never push, deploy, contact a homelab, or install software
 system-wide.
