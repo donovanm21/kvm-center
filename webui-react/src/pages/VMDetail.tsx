@@ -1,3 +1,4 @@
+import { VMTags } from '@/components/VMTags';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, useMatch, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -314,6 +315,8 @@ function Summary({ vm, host }: { vm: VM; host: Host | undefined }) {
           />
         </div>
       </div>
+
+      <div className="panel" style={{ padding: 16, marginBottom: 16 }}><VMTags key={vm.uuid} uuid={vm.uuid} tags={vm.tags} /></div>
 
       {/* VM hardware quick-view + Notes */}
       <div className="mobile-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>

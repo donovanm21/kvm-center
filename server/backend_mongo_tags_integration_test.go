@@ -185,3 +185,39 @@ func TestMongoIntegrationTagStateOlderWriterVisibility(t *testing.T) {
 	}
 	// This is retention, not downgrade support: an older reader/export omits it.
 }
+
+// Uses actual tag route/permission handling and real Mongo, then reloads a fresh
+// Store after disconnect. Browser page reload alone cannot prove this property.
+func TestMongoIntegrationTagAPIWorkflow(t *testing.T) {
+	b := newMongoIntegrationBackend(t)
+	s := NewStoreWithBackend(b, filepath.Join(t.TempDir(), "unused.json"))
+	t.Cleanup(func() { s.saveWG.Wait() })
+	u := tagActor(s)
+	for _, body := range []string{tagCreateBody, `{"tags":["edited"],"expected_tags":["database","production"]}`} {
+		if w := tagRequest(s, u, "PUT", body); w.Code != 200 {
+			t.Fatal(w.Body)
+		}
+	}
+	s.saveWG.Wait()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := b.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	loaded := NewStoreWithBackend(b, filepath.Join(t.TempDir(), "unused.json"))
+	t.Cleanup(func() { loaded.saveWG.Wait() })
+	if !reflect.DeepEqual(loaded.GetVMTags(tagFixtureUUID), []string{"edited"}) {
+		t.Fatal("API edit lost after Mongo reconnect")
+	}
+	if w := tagRequest(loaded, u, "PUT", `{"tags":[],"expected_tags":["edited"]}`); w.Code != 200 {
+		t.Fatal(w.Body)
+	}
+	loaded.saveWG.Wait()
+	if err := b.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cleared, err := b.Load(ctx)
+	if err != nil || cleared.VMTagState != nil {
+		t.Fatal("API clear resurrected after Mongo reconnect")
+	}
+}

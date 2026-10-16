@@ -15,6 +15,7 @@ history for per-commit detail.
 ## v5.61
 
 ### Added
+- VM detail pages on desktop and mobile can create, assign, edit and remove tags. Conditional API writes wait for checked persistence, surface conflicts and support identical retries after unconfirmed saves; VM list searches match tags. Reads require `vm.view` and writes require `vm.edit`.
 - Versioned VM tag persistence foundations cover snapshots, JSON/Mongo reload and backup archives. Tag APIs and UI remain future work; older binaries require offline recovery from a compatible pre-upgrade backup rather than an in-place downgrade.
 - Servers can opt into a bounded 20-second shutdown drain with `-graceful-shutdown` after establishing exclusive backend writer ownership. Accepted work and persistence are joined before backend closure; incomplete drain exits unsuccessfully. A successful drain is not a consistent backup guarantee.
 - The agent has an opt-in fixture-only validation runtime with separate temporary state, loopback listeners and no native host workers or command routes. It does not yet validate native VM operations or enrollment.

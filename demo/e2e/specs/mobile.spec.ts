@@ -1,3 +1,4 @@
+import { tagWorkflow } from './_tag_workflow';
 import { test, expect, devices } from '@playwright/test';
 import { loginAsAdminMobile } from './_helpers';
 
@@ -70,4 +71,10 @@ test.describe('mobile (/m)', () => {
     // Sign-out remains.
     await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible();
   });
+});
+
+// Uses actual server/Mongo requests; no mobile API mocks.
+test('tags integrated on iPhone: create, assign, edit, remove and reload', async ({ page }) => {
+  await loginAsAdminMobile(page);
+  await tagWorkflow(page, true);
 });

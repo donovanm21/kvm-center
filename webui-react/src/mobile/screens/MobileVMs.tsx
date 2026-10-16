@@ -28,7 +28,8 @@ export function MobileVMs() {
       const q = filter.toLowerCase();
       return v.name.toLowerCase().includes(q)
         || v.host_id.toLowerCase().includes(q)
-        || (v.guest_hostname || '').toLowerCase().includes(q);
+        || (v.guest_hostname || '').toLowerCase().includes(q)
+        || (v.tags ?? []).some(tag => tag.includes(q));
     });
 
   return (

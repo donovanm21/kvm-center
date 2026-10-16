@@ -17,6 +17,7 @@ export const qk = {
   hostMetrics: (hostID: string) => ['host-metrics', hostID] as const,
   hostPools: (hostID: string) => ['host-pools', hostID] as const,
   vms: () => ['vms'] as const,
+  tags: () => ['tags'] as const,
   vmCreateInfo: (hostID: string | null) => ['vm-create-info', hostID] as const,
   storage: () => ['storage'] as const,
   storageBrowse: (hostID: string, path: string) => ['storage-browse', hostID, path] as const,
