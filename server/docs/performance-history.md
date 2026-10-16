@@ -161,11 +161,10 @@ credentials, keys, archives and fixture data are removed; random fixture Mongo
 databases are dropped and checked separately by CI. All subprocess sessions are
 owned and terminated/reaped on failure or cancellation.
 
-Production image acceptance remains blocked by missing tracked inputs referenced
-by `Dockerfile.server`: `scripts/update-agent.sh`, `scripts/install-kvmctl.sh`,
-`scripts/install-kvmctl.ps1` and `scripts/libvirt-hooks-qemu.sh`. The current tag
-release workflow also does not invoke the fresh SPA build or explicitly stamp
-Git SHA. Passing the native release-script artifact therefore does not validate
+The tracked Docker build inputs have been restored, but production image build
+and native runtime acceptance remain separate gates. The current tag release
+workflow does not invoke the fresh SPA build or explicitly stamp Git SHA. Passing
+the native release-script artifact therefore does not validate
 that image or the tag workflow's output. ARM64 runtime, sustained concurrent
 load, disk-full/backend outage, real deployment lineage/backend-native recovery,
 and outstanding release security acceptance remain separate gates.

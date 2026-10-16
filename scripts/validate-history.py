@@ -10,7 +10,6 @@ import os
 from pathlib import Path
 import platform
 import re
-import shutil
 import signal
 import subprocess
 import sys
@@ -80,7 +79,7 @@ def main():
                            'rss_bytes': 768 << 20, 'late_heap_growth_bytes': 32 << 20, 'fd_growth': 8, 'goroutine_growth': 8,
                            'cycles_per_backend': 20},
               'remaining_gates': ['Long-duration and concurrent fleet soak; disk-full/backend outage acceptance',
-                                  'Production Docker image: missing tracked build inputs',
+                                  'Production Docker image build and native runtime acceptance',
                                   'Tag release workflow lacks fresh SPA build and explicit Git SHA stamping',
                                   'ARM64 runtime; actual deployment lineage and backend-native recovery',
                                   'Outstanding release security acceptance'],
@@ -104,14 +103,11 @@ def main():
             report['binary_sha256'] = hashlib.sha256(binary.read_bytes()).hexdigest()
             report['toolchain'] = subprocess.check_output(['go', 'version'], text=True).strip()
             report['release_script_matrix'] = (temp / 'artifacts/SHA256SUMS').read_text().splitlines()
-            # The prior UI source must be identical before reusing these assets.
-            run(['git', 'diff', '--exit-code', PRIOR, 'HEAD', '--', 'webui-react', 'scripts/build-webui.sh'], temp / 'ui-compare.log')
             prior = temp / 'prior'
             run(['git', 'worktree', 'add', '--detach', str(prior), PRIOR], temp / 'worktree.log')
             try:
-                dest = prior / 'server/staticv4/dist'
-                if dest.exists(): shutil.rmtree(dest)
-                shutil.copytree(ROOT / 'server/staticv4/dist', dest)
+                # Rollback must use the pinned revision's own frontend too.
+                run(['bash', 'scripts/build-webui.sh'], temp / 'prior-webui.log', env, prior)
                 version = (prior / 'server/VERSION').read_text().strip()
                 old = temp / 'prior-server'
                 run(['go', 'build', '-mod=readonly', '-buildvcs=false', '-trimpath',
