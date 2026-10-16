@@ -58,6 +58,14 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
     );
   }, [onlinePeers, targetFilter]);
   const [mode, setMode] = useState<Mode>('offline');
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!open) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [open]);
+
   const [targetID, setTargetID] = useState<string>('');
   const [copyStorage, setCopyStorage] = useState(true);
   const [keepRaw, setKeepRaw] = useState(false);
@@ -174,8 +182,13 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
           : { ok: true, label: 'No snapshots to lose', detail: 'None' },
       ];
     }
-    // Live
+    // Live requires a fresh running source; offline retains its shutdown path.
+    const seen = Date.parse(sourceHost?.last_seen ?? '');
+    const sourceFresh = Number.isFinite(seen) && now - seen <= 120_000;
     return [
+      { ok: sourceHost?.status === 'online', label: 'Source host is available', detail: sourceHost?.status ?? 'Source host is not in inventory' },
+      { ok: sourceFresh, label: 'Source inventory is current', detail: sourceFresh ? 'Observed within two minutes; rechecked at execution' : 'Source observation is missing or stale; wait for fresh telemetry' },
+      { ok: vm.state === 'running', label: 'Source VM is running', detail: vm.state === 'running' ? 'Running; rechecked at execution' : `Reported state: ${vm.state || 'unknown'}. Live migration requires running state; use Offline for a stopped VM.` },
       { ok: target.status === 'online', label: 'Target host is online', detail: target.status },
       { ok: maintOk, label: 'Target host is NOT in maintenance', detail: maintOk ? 'available' : 'refusing placements (drain mode)' },
       { ok: memOk, label: 'Sufficient free memory', detail: memDetail },
@@ -206,7 +219,7 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
           : 'None',
       },
     ];
-  }, [mode, target, sourceHost, vm]);
+  }, [mode, target, sourceHost, vm, now]);
 
   // A `warn` check is allowed to fail ok (non-blocking). Only hard
   // failures (ok:false && !warn) gate the submit button.
@@ -233,6 +246,12 @@ export function MigrateModal({ vm, hosts, open, onClose }: Props) {
 
   const submit = () => {
     if (!target || !allOk) return;
+    // Recheck freshness at click time as well as the visible one-second tick.
+    const seen = Date.parse(sourceHost?.last_seen ?? '');
+    if (mode === 'live' && (sourceHost?.status !== 'online' || vm.state !== 'running' || !Number.isFinite(seen) || Date.now() - seen > 120_000)) {
+      setNow(Date.now());
+      return;
+    }
     if (newVMNameErr) return;
     const params: Record<string, string> = { destination: target.ip };
     if (mode === 'live') {

@@ -244,6 +244,21 @@ func reconcileOne(ctx context.Context, store *Store, client reconcileHTTPDoer, e
 		if !store.commandLog.Update(e.RequestID, parsed.Outcome, msg, parsed.StatusCode, false) {
 			return // operator resolution won while this poll was in flight
 		}
+		// A live request can receive 202 when the agent already owns it.
+		// Finalize its migration record only from this terminal outcome, never
+		// from admission. Do not route through finalizeMigration: the command
+		// outcome above already contains the agent's exact status and message.
+		if e.Action == "MIGRATE" {
+			for _, migration := range store.GetMigrations() {
+				if migration.RequestID == e.RequestID && migration.Mode == "live" && migration.Status == "running" {
+					status := "failed"
+					if parsed.Outcome == "success" {
+						status = "complete"
+					}
+					store.FinalizeMigration(migration, status, msg)
+				}
+			}
+		}
 		store.hub.Publish(EventCommand, eventPayload(e.RequestID, parsed.Outcome, e.HostID, e.Action))
 		auditSystem(store, "command.reconciled", "vm/"+e.VMUUID, map[string]string{
 			"request_id": e.RequestID,
