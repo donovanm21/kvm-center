@@ -6,7 +6,7 @@ require (
 	github.com/crewjam/saml v0.5.1
 	github.com/go-ldap/ldap/v3 v3.4.8
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/yuin/goldmark v1.7.17
+	github.com/yuin/goldmark v1.8.6
 	go.mongodb.org/mongo-driver v1.17.7
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
