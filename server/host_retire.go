@@ -102,14 +102,14 @@ func (s *Store) UnmarkHostRemoved(hostID string) bool {
 		for k := range s.removedHosts {
 			if strings.ToLower(k) == short {
 				delete(s.removedHosts, k)
-				go s.AsyncSave()
+				s.AsyncSave()
 				return true
 			}
 		}
 		return false
 	}
 	delete(s.removedHosts, low)
-	go s.AsyncSave()
+	s.AsyncSave()
 	return true
 }
 

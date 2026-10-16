@@ -234,30 +234,20 @@ func TestOpsStore_PersistsAcrossReopen(t *testing.T) {
 	}
 }
 
-func TestOpsStore_CorruptionTriggersRebuild(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "ops.db")
-	// Write garbage at the canonical path so the SQLite open fails
-	// with "file is not a database" / "malformed".
-	if err := os.WriteFile(path, []byte("this is not a sqlite database file"), 0o600); err != nil {
-		t.Fatalf("seed garbage: %v", err)
+func TestOpsStore_CorruptionFailsClosedAndPreservesHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ops.db")
+	original := []byte("this is not a sqlite database file")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatal(err)
 	}
-
-	s, err := OpenOperationsStore(path)
-	if err != nil {
-		t.Fatalf("OpenOperationsStore should rebuild on corruption, got: %v", err)
+	store, err := OpenOperationsStore(path)
+	if err == nil {
+		store.Close()
+		t.Fatal("corrupt history must not be replaced with an empty operation store")
 	}
-	defer s.Close()
-
-	// New file is a valid empty schema — Insert + Get round-trips.
-	if err := s.Insert(context.Background(), Operation{RequestID: "after_rebuild", Action: "X", State: OpStatePending, SubmittedAt: time.Now()}); err != nil {
-		t.Fatalf("Insert after rebuild: %v", err)
-	}
-
-	// The corrupt original was renamed aside.
-	matches, _ := filepath.Glob(filepath.Join(dir, "*.corrupt-*.db"))
-	if len(matches) == 0 {
-		t.Fatal("expected corrupt file to be renamed aside")
+	got, readErr := os.ReadFile(path)
+	if readErr != nil || string(got) != string(original) {
+		t.Fatalf("original history changed: %q, %v", got, readErr)
 	}
 }
 
@@ -333,5 +323,23 @@ func TestIsTerminalOpState(t *testing.T) {
 		if IsTerminalOpState(s) {
 			t.Fatalf("%s must not be terminal", s)
 		}
+	}
+}
+
+func TestOpsStore_FinishActiveCannotOverwriteTerminal(t *testing.T) {
+	s, _ := newTestOpsStore(t)
+	ctx := context.Background()
+	if err := s.Insert(ctx, Operation{RequestID: "first-terminal", Action: "STOP", State: OpStateRunning}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishActive(ctx, "first-terminal", UpdateStateOpts{State: OpStateCancelled, Error: "first"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishActive(ctx, "first-terminal", UpdateStateOpts{State: OpStateSuccess, Output: "later"}); err == nil {
+		t.Fatal("terminal update replaced cancellation")
+	}
+	got, _ := s.Get(ctx, "first-terminal")
+	if got.State != OpStateCancelled || got.Error != "first" || got.Output != "" {
+		t.Fatalf("terminal state changed: %+v", got)
 	}
 }
