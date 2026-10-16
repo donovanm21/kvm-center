@@ -321,6 +321,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 		// outcome. We re-audit with success=false in the error paths
 		// below; RBAC/feature rejections are covered in the overarching
 		// middleware which already 401/403s before we get here.
+		migrationPreflightError := ""
 		defer func() {
 			// Detail tag records which agent was called and which action
 			// verb; lifecycle/snapshot ops all funnel through /api/command
@@ -366,7 +367,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 				} else {
 					detail["mode"] = "live"
 				}
-				audit(store, r, AuditMigrationStart, resource, detail, true, "")
+				audit(store, r, AuditMigrationStart, resource, detail, migrationPreflightError == "", migrationPreflightError)
 			case "DELETE_VM":
 				audit(store, r, AuditVMDelete, resource, detail, true, "")
 			}
@@ -559,6 +560,27 @@ func handleCommand(store *Store) http.HandlerFunc {
 				Message:   existing.Message,
 			})
 			return
+		}
+
+		// Do not reinterpret completed replays or overwrite an uncertain pending
+		// outcome when telemetry changes. New live requests must pass admission;
+		// the agent revalidates native state when execution actually begins.
+		if action == "MIGRATE" && replay {
+			// A pending retry is not permission to start a second migration or
+			// reinterpret telemetry as its outcome. The reconciler owns it.
+			writeJSON(w, http.StatusAccepted, map[string]string{
+				"request_id": req.RequestID, "status": "pending",
+				"message": "Live migration outcome is pending; check task status before submitting a new request.",
+			})
+			return
+		}
+		if action == "MIGRATE" {
+			if err := store.liveMigrationSource(req, time.Now()); err != nil {
+				migrationPreflightError = err.Error()
+				store.commandLog.Update(req.RequestID, "failed", err.Error(), http.StatusConflict, false)
+				writeError(w, http.StatusConflict, err.Error())
+				return
+			}
 		}
 
 		url := fmt.Sprintf("http://%s/command", agentAddr)

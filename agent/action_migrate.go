@@ -10,9 +10,14 @@ package main
 // inlined here for the MIGRATE path so the move is self-contained.
 
 import (
+	"context"
+	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"os/exec"
 	"strings"
+	"time"
 
 	"kvm-center/internal/models"
 )
@@ -22,9 +27,36 @@ import (
 // gRPC for the duration; the SPA reads them off /migrate-status
 // for the in-flight progress bar.
 func handleMigrate(w http.ResponseWriter, req models.CommandRequest, vmTarget string) {
+	handleMigrateWithChecks(w, req, vmTarget, readLiveMigrationState, forwardGrantToDest, runLiveMigrateWithProgress)
+}
+
+// Inject only native boundaries for synthetic tests; production always uses the
+// bounded state probe and existing grant/migration implementations.
+func handleMigrateWithChecks(w http.ResponseWriter, req models.CommandRequest, vmTarget string,
+	readState func(context.Context, string) (string, error),
+	forwardGrant func(string, string) error,
+	migrate func([]string, string, string, string) ([]byte, error),
+) {
 	dest := req.Params["destination"]
 	if dest == "" {
 		respond(w, false, "MIGRATE requires params.destination")
+		return
+	}
+	check := func() bool {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		state, err := readState(ctx, vmTarget)
+		if err != nil || ctx.Err() != nil {
+			rejectLiveMigration(w, "Cannot verify source VM state; no live migration started. Retry after the source is available.")
+			return false
+		}
+		if strings.TrimSpace(state) != "running" {
+			rejectLiveMigration(w, "Live migration requires a running source VM; no live migration started. Refresh inventory or choose offline migration for a stopped VM.")
+			return false
+		}
+		return true
+	}
+	if !check() {
 		return
 	}
 	// v5.44.0: operator can flip strict-host-key via Features. Server
@@ -36,7 +68,7 @@ func handleMigrate(w http.ResponseWriter, req models.CommandRequest, vmTarget st
 	// libvirtd's TLS handshake starts. Only applies to mTLS
 	// migrations; legacy ssh path ignores the param.
 	if grant := req.Params["grant"]; grant != "" && req.Params["migration_transport"] == "tls" {
-		if err := forwardGrantToDest(dest, grant); err != nil {
+		if err := forwardGrant(dest, grant); err != nil {
 			respond(w, false, "destination rejected migration grant: "+err.Error())
 			return
 		}
@@ -55,8 +87,11 @@ func handleMigrate(w http.ResponseWriter, req models.CommandRequest, vmTarget st
 	// v5.32.9: mark the shared MigrationStatus.Active=true so
 	// /self-update + bootstrap.sh --update-agents refuse to restart
 	// this agent mid-flight.
+	if !check() {
+		return
+	}
 	setLiveMigrateActive(req.Params["migration_id"], vmTarget, dest, true)
-	out, err := runLiveMigrateWithProgress(args, req.Params["migration_id"], vmTarget, dest)
+	out, err := migrate(args, req.Params["migration_id"], vmTarget, dest)
 	setLiveMigrateActive(req.Params["migration_id"], vmTarget, dest, false)
 
 	if err != nil {
@@ -106,4 +141,20 @@ func handleOfflineMigrate(w http.ResponseWriter, req models.CommandRequest, vmTa
 		vmTarget, dest, keepRaw, req.Params["migration_transport"], opts.TargetPool, opts.NewVMName, opts.RegenerateMAC)
 	startOfflineMigrate(vmTarget, dest, req.Params["migration_id"], keepRaw, req.Params["migration_transport"], opts)
 	respond(w, true, "offline migration started — poll /migrate-status for progress")
+}
+
+// A cancelled/slow probe never falls through to migration. Force the C locale
+// for libvirt's state text; retain the existing connection environment.
+func readLiveMigrationState(ctx context.Context, target string) (string, error) {
+	cmd := exec.CommandContext(ctx, "virsh", "domstate", target)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	cmd.WaitDelay = time.Second
+	out, err := cmd.Output()
+	return strings.TrimSpace(string(out)), err
+}
+
+func rejectLiveMigration(w http.ResponseWriter, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusConflict)
+	_ = json.NewEncoder(w).Encode(models.CommandResponse{Success: false, Message: message})
 }

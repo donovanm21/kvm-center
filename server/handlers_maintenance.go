@@ -156,6 +156,12 @@ func drainOneVM(ctx context.Context, store *Store, sourceID string, vm *models.V
 	if mode == "offline" {
 		action = "OFFLINE_MIGRATE"
 	}
+	if action == "MIGRATE" {
+		if err := store.liveMigrationSource(models.APICommandRequest{HostID: sourceID, VMUUID: vm.UUID, VMName: vm.Name}, time.Now()); err != nil {
+			return err
+		}
+	}
+
 	rec := &models.MigrationRecord{
 		ID:         fmt.Sprintf("drain-%s-%d", vm.Name, time.Now().UnixNano()),
 		VMName:     vm.Name,
