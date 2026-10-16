@@ -30,7 +30,7 @@ from urllib.parse import urlparse
 from scripts.validate import local_test_url
 if not local_test_url(sys.argv[1], ('mongodb',)):
     raise SystemExit('Only a single unauthenticated loopback MongoDB without driver options is accepted')
-print(urlparse(sys.argv[1])._replace(query='directConnection=true').geturl())
+print(urlparse(sys.argv[1])._replace(path='/', query='directConnection=true').geturl())
 PYMONGO
 )"
     ;;
