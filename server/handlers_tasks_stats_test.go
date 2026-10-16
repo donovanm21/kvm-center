@@ -13,7 +13,16 @@ import (
 )
 
 func TestTaskStatsSubmissionWindowAndVisibility(t *testing.T) {
-	now := time.Date(2026, 1, 15, 12, 30, 0, 0, time.UTC)
+	for _, clockNow := range []time.Time{
+		time.Date(2026, 1, 15, 12, 30, 0, 0, time.UTC),
+		time.Date(2026, 1, 15, 12, 0, 0, 500000000, time.UTC),
+	} {
+		t.Run(clockNow.Format(time.RFC3339Nano), func(t *testing.T) { testTaskStatsWindow(t, clockNow) })
+	}
+}
+
+func testTaskStatsWindow(t *testing.T, clockNow time.Time) {
+	now := clockNow.Truncate(time.Second)
 	since := now.Add(-24 * time.Hour)
 	s := newTestStore(t)
 	actor := &models.User{ID: "fixture-operator"}
@@ -32,6 +41,7 @@ func TestTaskStatsSubmissionWindowAndVisibility(t *testing.T) {
 		{"recent", actor.ID, "success", now.Add(-2 * time.Minute), &recentDone},
 		{"pending", actor.ID, "pending", now.Add(-time.Minute), nil},
 		{"upper-boundary", actor.ID, "pending", now, nil},
+		{"fractional-upper", actor.ID, "pending", now.Add(100 * time.Millisecond), nil},
 		{"future", actor.ID, "pending", now.Add(time.Minute), nil},
 		{"other-user", "other", "failed", now.Add(-time.Minute), &recentDone},
 	}
@@ -43,7 +53,7 @@ func TestTaskStatsSubmissionWindowAndVisibility(t *testing.T) {
 			r := httptest.NewRequest("GET", "/api/tasks/stats"+query, nil)
 			r = r.WithContext(context.WithValue(r.Context(), userCtxKey, actor))
 			w := httptest.NewRecorder()
-			handleTasksStatsWithClock(s, func() time.Time { return now })(w, r)
+			handleTasksStatsWithClock(s, func() time.Time { return clockNow })(w, r)
 			var got struct {
 				Since     int64
 				Now       int64
@@ -61,7 +71,7 @@ func TestTaskStatsSubmissionWindowAndVisibility(t *testing.T) {
 			if got.Running != 2 || !reflect.DeepEqual(got.ByOutcome, map[string]int{"failed": 1, "success": 1, "pending": 1}) {
 				t.Fatalf("counts: %s", w.Body)
 			}
-			wantHourly := map[int64]int{since.Truncate(time.Hour).Unix(): 1, now.Truncate(time.Hour).Unix(): 2}
+			wantHourly := map[int64]int{since.Truncate(time.Hour).Unix(): 1, recentDone.Truncate(time.Hour).Unix(): 2}
 			if !reflect.DeepEqual(got.Hourly, wantHourly) {
 				t.Fatalf("hourly: %s", w.Body)
 			}
