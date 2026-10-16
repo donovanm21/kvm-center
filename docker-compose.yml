@@ -35,6 +35,7 @@ services:
       retries: 10
 
   kvm-center-server:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile.server
@@ -75,15 +76,10 @@ services:
       # Dedicated volume for the cert/key so TLS material survives image
       # rebuilds and is easy to back up separately from the JSON store.
       - kvm-center-tls:/var/lib/kvm-center/tls
-    # Healthcheck hits the internal plaintext port (no TLS tooling
-    # needed inside the Alpine runtime container). Compose uses this
-    # to detect readiness; Docker restarts the container on sustained
-    # failure because restart:unless-stopped is set above.
+    # In-process TLS probe: no shell or orphanable TLS helper. Docker marks
+    # unhealthy containers; restart policies alone do not restart unhealthy ones.
     healthcheck:
-      # TLS port is the only listener after v5.32.1. `--no-check-certificate`
-      # tolerates the auto-generated self-signed cert — we just want to
-      # know the process is accepting connections, not validate chain.
-      test: ["CMD", "wget", "--no-check-certificate", "-qO-", "https://localhost:8190/health"]
+      test: ["CMD", "/app/kvm-healthcheck", "-url", "https://127.0.0.1:8190/health", "-timeout", "3s"]
       interval: 15s
       timeout: 5s
       retries: 5
