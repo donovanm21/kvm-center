@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
+
 	"kvm-center/internal/models"
 	"kvm-center/internal/validationfixture"
 )
@@ -144,5 +146,57 @@ func TestMongoIntegrationDirtyCollections(t *testing.T) {
 	got, err = b.Load(ctx)
 	if err != nil || got.Users["u"] == nil || got.Users["u"].Username != "after" {
 		t.Fatalf("dirty users collection was not replaced (load error: %v)", err)
+	}
+}
+
+// Retained records are replaced in place, stale records removed, and new
+// records inserted. An invalid plan must leave the existing collection intact.
+func TestMongoIntegrationReplacementCompatibility(t *testing.T) {
+	b := newMongoIntegrationBackend(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	db, err := b.dial(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const collection = "replacement_fixture"
+	if err := replaceMap(ctx, db, collection, []any{
+		bson.M{"_id": "keep", "value": "old"}, bson.M{"_id": "remove", "value": "old"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := replaceMap(ctx, db, collection, []any{
+		bson.M{"_id": "keep", "value": "new"}, bson.M{"_id": "add", "value": "new"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A valid first document followed by an invalid one must cause no writes.
+	if err := replaceMap(ctx, db, collection, []any{
+		bson.M{"_id": "keep", "value": "incorrect"}, bson.M{"value": "missing id"},
+	}); err == nil {
+		t.Fatal("invalid replacement plan accepted")
+	}
+	cursor, err := db.Collection(collection).Find(ctx, bson.D{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cursor.Close(ctx)
+	var docs []bson.M
+	if err := cursor.All(ctx, &docs); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, doc := range docs {
+		got[doc["_id"].(string)] = doc["value"].(string)
+	}
+	if len(got) != 2 || got["keep"] != "new" || got["add"] != "new" {
+		t.Fatalf("replacement or invalid-plan handling changed retained records: %v", got)
+	}
+	if err := replaceMap(ctx, db, collection, nil); err != nil {
+		t.Fatal(err)
+	}
+	count, err := db.Collection(collection).CountDocuments(ctx, bson.D{})
+	if err != nil || count != 0 {
+		t.Fatalf("empty snapshot did not clear collection: count=%d err=%v", count, err)
 	}
 }

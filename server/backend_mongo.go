@@ -915,7 +915,7 @@ func isDirty(d *persistData, name string) bool {
 	return d.Dirty[name]
 }
 
-// replaceMapIfDirty skips the drop-and-insert cycle when the named
+// replaceMapIfDirty skips replacement writes when the named
 // collection isn't marked dirty. First save after startup has no
 // dirty set (nil) — falls through to a full write so the collection
 // is in sync before we start trusting the hint.
@@ -926,24 +926,73 @@ func replaceMapIfDirty(ctx context.Context, db *mongo.Database, collection, dirt
 	return replaceMap(ctx, db, collection, docs)
 }
 
-// replaceMap empties a collection then bulk-inserts the provided
-// documents. Executed as a single DeleteMany + InsertMany pair; not
-// transactional (Mongo standalone doesn't support multi-doc txn
-// without a replica set) — acceptable because Save is only called
-// from the 30s persist ticker and a mid-save crash just means the
-// next tick reinstates the correct state.
+// replaceMap upserts every retained document before deleting obsolete records.
+// An interrupted ordered write may leave mixed old/new values, but does not
+// remove retained records before their replacements exist. This is not an
+// atomic snapshot across records or collections; SaveChecked retains full-retry
+// behavior after any partial failure.
 func replaceMap(ctx context.Context, db *mongo.Database, collection string, docs []any) error {
 	coll := db.Collection(collection)
-	if _, err := coll.DeleteMany(ctx, bson.D{}); err != nil {
-		return fmt.Errorf("drop %s: %w", collection, err)
-	}
 	if len(docs) == 0 {
+		// Genuinely empty now — clearing is the correct end state, and there's
+		// no gap to protect since there's nothing to write afterwards.
+		if _, err := coll.DeleteMany(ctx, bson.D{}); err != nil {
+			return fmt.Errorf("clear %s: %w", collection, err)
+		}
 		return nil
 	}
-	if _, err := coll.InsertMany(ctx, docs); err != nil {
-		return fmt.Errorf("insert %s: %w", collection, err)
+
+	models, err := buildReplaceModels(collection, docs)
+	if err != nil {
+		return err
+	}
+	if _, err := coll.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(true)); err != nil {
+		return fmt.Errorf("replace %s: %w", collection, err)
 	}
 	return nil
+}
+
+// buildReplaceModels turns the desired document set into an ordered write
+// plan: one upsert per document, then a single delete of everything else.
+//
+// Split out so the invariant can be tested without a live Mongo — namely that
+// the trailing delete's $nin lists every document being kept, so it can only
+// ever remove documents that are genuinely gone, and that it sorts last so no
+// moment exists where a kept document is absent.
+func buildReplaceModels(collection string, docs []any) ([]mongo.WriteModel, error) {
+	models := make([]mongo.WriteModel, 0, len(docs)+1)
+	ids := make(bson.A, 0, len(docs))
+	for _, d := range docs {
+		// Marshal once and reuse the raw bytes as the replacement, so the
+		// stored document is byte-identical to what InsertMany would have
+		// written — no type drift from a bson.M round-trip.
+		raw, err := bson.Marshal(d)
+		if err != nil {
+			return nil, fmt.Errorf("marshal %s doc: %w", collection, err)
+		}
+		idVal, err := bson.Raw(raw).LookupErr("_id")
+		if err != nil {
+			return nil, fmt.Errorf("%s doc has no _id: %w", collection, err)
+		}
+		// Every collection here keys on a string _id (host ID, VM UUID,
+		// request ID, "singleton", …). Refuse anything else rather than
+		// silently building a $nin that matches nothing and wipes the
+		// collection.
+		id, ok := idVal.StringValueOK()
+		if !ok {
+			return nil, fmt.Errorf("%s doc has a non-string _id (%s)", collection, idVal.Type)
+		}
+		ids = append(ids, id)
+		models = append(models, mongo.NewReplaceOneModel().
+			SetFilter(bson.D{{Key: "_id", Value: id}}).
+			SetReplacement(bson.Raw(raw)).
+			SetUpsert(true))
+	}
+	// Last, and only after every upsert has landed: drop whatever is no
+	// longer part of the state.
+	models = append(models, mongo.NewDeleteManyModel().
+		SetFilter(bson.D{{Key: "_id", Value: bson.D{{Key: "$nin", Value: ids}}}}))
+	return models, nil
 }
 
 // loadMapByID streams an entire collection and builds a keyed map by
