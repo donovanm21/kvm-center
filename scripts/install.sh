@@ -597,19 +597,26 @@ DROPIN
         warn ":16514 NOT listening after enrolment — check 'systemctl status libvirtd-tls.socket'"
       fi
 
-      # Migration-grant qemu hook.
-      local hook_src=""
-      if [[ -n "${SCRIPT_DIR:-}" && -f "${SCRIPT_DIR}/libvirt-hooks-qemu.sh" ]]; then
-        hook_src="${SCRIPT_DIR}/libvirt-hooks-qemu.sh"
+      # Never overwrite an operator's existing hook. New hook activation
+      # requires an explicitly scheduled libvirt restart, not a silent reload.
+      local hook_src="" hook_tmp=""
+      if [[ -e /etc/libvirt/hooks/qemu || -L /etc/libvirt/hooks/qemu ]]; then
+        warn "Existing /etc/libvirt/hooks/qemu preserved; merge migration hook manually"
       else
-        hook_src="$(mktemp)"
-        curl -fsSLk "${SERVER_URL%/}/downloads/libvirt-hooks-qemu.sh" -o "$hook_src" 2>/dev/null || hook_src=""
-      fi
-      if [[ -n "$hook_src" && -f "$hook_src" ]]; then
-        install -d -m 755 /etc/libvirt/hooks
-        install -m 755 "$hook_src" /etc/libvirt/hooks/qemu
-        systemctl reload libvirtd 2>/dev/null || systemctl kill -s HUP libvirtd 2>/dev/null || true
-        info "Installed migration-grant hook at /etc/libvirt/hooks/qemu"
+        if [[ -n "${SCRIPT_DIR:-}" && -f "${SCRIPT_DIR}/libvirt-hooks-qemu.sh" ]]; then
+          hook_src="${SCRIPT_DIR}/libvirt-hooks-qemu.sh"
+        else
+          hook_tmp="$(mktemp)"
+          if curl -fsSLk --connect-timeout 10 --max-time 30 "${SERVER_URL%/}/downloads/libvirt-hooks-qemu.sh" -o "$hook_tmp"; then
+            hook_src="$hook_tmp"
+          fi
+        fi
+        if [[ -n "$hook_src" && -s "$hook_src" ]]; then
+          install -d -m 755 /etc/libvirt/hooks
+          install -m 755 "$hook_src" /etc/libvirt/hooks/qemu
+          warn "Migration hook installed; schedule a libvirt restart to activate it"
+        fi
+        [[ -z "$hook_tmp" ]] || rm -f "$hook_tmp"
       fi
 
       # Firewalld: open the agent command port + libvirt TLS + qemu migration range.
