@@ -24,36 +24,20 @@ jobs:
           go-version-file: 'go.mod'
           cache-dependency-path: 'go.sum' # Preserve the pre-v6 cache key input.
 
-      - name: go mod tidy
-        run: go mod tidy
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          package-manager-cache: false
 
       - name: Cross-compile binaries
+        env:
+          VERSION: ${{ github.ref_name }}
+          GIT_SHA: ${{ github.sha }}
         run: |
           set -eu
-          VERSION="${GITHUB_REF_NAME}"
-          mkdir -p dist
-          build() {
-            local os="$1" arch="$2" ext="$3" pkg="$4" name="$5" symbol="$6"
-            local out="dist/${name}-${os}-${arch}${ext}"
-            echo "→ ${out}"
-            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-              go build -trimpath -ldflags="-s -w -X main.${symbol}=${VERSION}" \
-              -o "$out" "./${pkg}"
-          }
-          # Stamp the variable actually read at startup. Server/guest-tools
-          # initialize Version from versionRaw; the CLI reads cliVersion.
-          # Server + host-side agent: Linux only (libvirt host).
-          for arch in amd64 arm64; do
-            build linux "$arch" "" server kvm-center-server versionRaw
-            build linux "$arch" "" agent  kvm-center-agent Version
-            build linux "$arch" "" cmd/kvmctl kvmctl cliVersion
-            build linux "$arch" "" kvm-tools kvm-tools versionRaw
-          done
-          # kvm-tools + kvmctl on Windows guests.
-          build windows amd64 .exe kvm-tools kvm-tools versionRaw
-          build windows amd64 .exe cmd/kvmctl kvmctl cliVersion
-          (cd dist && sha256sum * > SHA256SUMS)
-          ls -la dist
+          test ! -e dist
+          bash scripts/build-package.sh dist
+          (cd dist && sha256sum --check SHA256SUMS)
 
       - name: Create release and attach assets
         env:

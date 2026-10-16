@@ -37,6 +37,9 @@ import (
 var versionRaw string
 var Version = strings.TrimSpace(versionRaw)
 
+// GitSHA identifies the exact source used by distributable builds.
+var GitSHA = "dev"
+
 // GuestFS mirrors models.GuestFS. Defined locally to keep this binary free of
 // internal package imports so it can be built and distributed standalone.
 type GuestFS struct {
@@ -88,7 +91,12 @@ func main() {
 	serverURL := flag.String("server", envOr("KVM_TOOLS_SERVER", "https://localhost:8190"), "kvm-center server URL")
 	uuidOverride := flag.String("uuid", envOr("KVM_TOOLS_UUID", ""), "override VM UUID (use when DMI UUID doesn't match libvirt domain UUID)")
 	interval := flag.Duration("interval", 30*time.Second, "report interval")
+	showVersion := flag.Bool("version", false, "print version and source revision, then exit")
 	flag.Parse()
+	if *showVersion {
+		log.Printf("kvm-tools %s (%s)", Version, GitSHA)
+		return
+	}
 
 	// v5.32.4: on-boot migration of legacy http://<host>:8090 URLs to
 	// https://<host>:8190. The prior release shipped the unit-rewrite
