@@ -119,19 +119,29 @@ func handleTaskByID(store *Store) http.HandlerFunc {
 //
 // Aggregates the visible command_log into:
 //   - by_outcome  — count per outcome (pending/success/failed/...)
-//   - by_action   — count + p50/p95 duration per action
+//   - by_action   — count + average duration per action
 //   - hourly      — counts bucketed by submitted_at hour for the
 //     sparkline.
+//
+// Window aggregates include submissions in [since, now); completion time does
+// not change membership. Running counts all visible pending records, including
+// older submissions; pending does not necessarily mean executing.
 //
 // Returns the same RBAC slice as /api/tasks/recent: admins see the
 // fleet, non-admins see their own.
 func handleTasksStats(store *Store) http.HandlerFunc {
+	return handleTasksStatsWithClock(store, time.Now)
+}
+
+func handleTasksStatsWithClock(store *Store, clock func() time.Time) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "GET only")
 			return
 		}
-		since := time.Now().Add(-24 * time.Hour)
+		// Match the second-resolution bounds returned to the client.
+		now := clock().Truncate(time.Second)
+		since := now.Add(-24 * time.Hour)
 		if v := r.URL.Query().Get("since"); v != "" {
 			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
 				since = time.Unix(n, 0)
@@ -144,13 +154,13 @@ func handleTasksStats(store *Store) http.HandlerFunc {
 		hourly := map[int64]int{}
 		running := 0
 		for _, e := range all {
-			if !e.SubmittedAt.After(since) && e.AppliedAt == nil {
+			if e.Outcome == "pending" && e.SubmittedAt.Before(now) {
+				running++
+			}
+			if e.SubmittedAt.Before(since) || !e.SubmittedAt.Before(now) {
 				continue
 			}
 			byOutcome[e.Outcome]++
-			if e.Outcome == "pending" {
-				running++
-			}
 			as := byAction[e.Action]
 			if as == nil {
 				as = &actionStat{Action: e.Action}
@@ -177,7 +187,7 @@ func handleTasksStats(store *Store) http.HandlerFunc {
 			"by_outcome": byOutcome,
 			"by_action":  actions,
 			"hourly":     hourly,
-			"now":        time.Now().Unix(),
+			"now":        now.Unix(),
 		})
 	}
 }

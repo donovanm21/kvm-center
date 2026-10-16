@@ -1,3 +1,4 @@
+import { InventoryStatus } from '@/components/InventoryStatus';
 import { useMemo, useState } from 'react';
 import { Link, NavLink, useMatch, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -463,7 +464,7 @@ export function HostDetail() {
   const hosts = useHosts();
   const host = useMemo(() => (hosts.data ?? []).find((h) => h.id === id), [hosts.data, id]);
 
-  if (hosts.isLoading) return <div style={{ color: 'var(--text-muted)' }}>Loading…</div>;
+  if (hosts.data === undefined || (!host && hosts.isError)) return <InventoryStatus label="Hypervisors" query={hosts} />;
   if (!host) {
     return (
       <div className="panel">
@@ -476,6 +477,7 @@ export function HostDetail() {
   }
   return (
     <>
+      <InventoryStatus label="Hypervisors" query={hosts} />
       <Tabs id={host.id} />
       <TabBody host={host} />
     </>
@@ -628,6 +630,8 @@ function SummaryTab({ host }: { host: Host }) {
         )}
       </div>
 
+      <InventoryStatus label="VM inventory" query={vms} />
+      <InventoryStatus label="Storage inventory" query={storage} />
       {/* Four-up stat row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         <BigStat
@@ -643,13 +647,13 @@ function SummaryTab({ host }: { host: Host }) {
         />
         <BigStat
           label="VMs"
-          value={`${hostVMs.length}`}
-          sub={`${running} running`}
+          value={vms.data === undefined ? '—' : `${hostVMs.length}`}
+          sub={vms.data === undefined ? undefined : `${running} running`}
           accent={running > 0 ? '#3FB950' : undefined}
         />
         <BigStat
           label="Storage pools"
-          value={`${pools.length}`}
+          value={storage.data === undefined ? '—' : `${pools.length}`}
           sub="libvirt pools"
         />
       </div>
@@ -885,11 +889,13 @@ function VMsTab({ host }: { host: Host }) {
     [filtered, sort, compare],
   );
   const pg = usePagination(list);
+  if (vms.data === undefined) return <InventoryStatus label="VM inventory" query={vms} />;
   if (filtered.length === 0) {
-    return <div className="panel" style={{ color: 'var(--text-muted)', fontSize: 12 }}>No VMs on this host.</div>;
+    return <div className="panel" style={{ color: 'var(--text-muted)', fontSize: 12 }}><InventoryStatus label="VM inventory" query={vms} />No VMs on this host.</div>;
   }
   return (
     <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
+      <InventoryStatus label="VM inventory" query={vms} />
       <div className="data-table-scroll">
         <table className="data-table">
           <thead>
@@ -945,8 +951,10 @@ function StorageTab({ host }: { host: Host }) {
     }),
     [filtered, sort, compare],
   );
+  if (storage.data === undefined) return <InventoryStatus label="Storage inventory" query={storage} />;
   return (
     <div style={{ display: 'grid', gap: 12 }}>
+      <InventoryStatus label="Storage inventory" query={storage} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ flex: 1, fontSize: 12, color: 'var(--text-muted)' }}>
           {pools.length === 0
