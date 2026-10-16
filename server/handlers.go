@@ -1098,6 +1098,9 @@ func handleVMSnapshots(store *Store) http.HandlerFunc {
 			return
 		}
 		defer resp.Body.Close()
+		if agentReadAuthenticationError(w, resp.StatusCode) {
+			return
+		}
 
 		body, _ := io.ReadAll(resp.Body)
 		w.Header().Set("Content-Type", "application/json")
@@ -1152,6 +1155,9 @@ func handleStorageBrowse(store *Store) http.HandlerFunc {
 			return
 		}
 		defer resp.Body.Close()
+		if agentReadAuthenticationError(w, resp.StatusCode) {
+			return
+		}
 		body, _ := io.ReadAll(resp.Body)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)

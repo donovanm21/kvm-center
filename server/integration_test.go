@@ -106,6 +106,8 @@ func buildTestMux(s *Store) *http.ServeMux {
 		}
 	})
 	mux.HandleFunc("/api/vms", handleGetVMs(s))
+	mux.HandleFunc("/api/vms/snapshots", handleVMSnapshots(s))
+	mux.Handle("/api/storage/browse", requirePerm(s, "storage.view", handleStorageBrowse(s)))
 
 	// Migrations.
 	mux.HandleFunc("/api/migrations", handleGetMigrations(s))
