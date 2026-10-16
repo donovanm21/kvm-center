@@ -18,8 +18,12 @@ test.describe('auth', () => {
     await page.goto('/login');
     await page.locator('#login-username').fill(ADMIN_USERNAME);
     await page.locator('#login-password').fill('definitely-not-the-password');
-    await page.getByRole('button', { name: /sign in|log in|login/i }).click();
-    // Dashboard link must NOT appear within the action timeout.
+    const [response] = await Promise.all([
+      page.waitForResponse((r) => r.url().endsWith('/api/auth/login') && r.request().method() === 'POST'),
+      page.getByRole('button', { name: /sign in|log in|login/i }).click(),
+    ]);
+    expect(response.status()).toBe(401);
+    // Assert after the rejection, rather than passing before the request finishes.
     await expect(
       page.getByRole('link', { name: /dashboard/i }),
     ).not.toBeVisible({ timeout: 5000 });
@@ -40,4 +44,19 @@ test.describe('auth', () => {
     // login form on the next render. Wait on that, not on the URL.
     await expect(page.locator('#login-username')).toBeVisible();
   });
+});
+
+test('refresh preserves the session and logout revokes protected access', async ({ page, context }) => {
+  await loginAsAdmin(page);
+  await page.reload();
+  await expect(page.getByRole('link', { name: /dashboard/i })).toBeVisible();
+  expect((await context.request.get('/api/hosts')).status()).toBe(200);
+  await page.getByRole('button', { name: /user menu/i }).click();
+  await page.getByRole('menuitem', { name: /sign out/i }).click();
+  await expect(page.locator('#login-username')).toBeVisible();
+  expect((await context.request.get('/api/hosts')).status()).toBe(401);
+  await page.goto('/vms');
+  await expect(page.locator('#login-username')).toBeVisible();
+  await page.reload();
+  await expect(page.locator('#login-username')).toBeVisible();
 });

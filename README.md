@@ -12,11 +12,11 @@ Influx-backed metrics — all in one Go binary and a tiny agent.
 
 <img src="docs/assets/kvm-center-tour.webp" alt="kvm-center full UI tour — dashboard, hosts, VMs, snapshots, storage, migrations, System Health, docs" width="720">
 
-[Quick start](#quick-start) · [Documentation](server/docs/overview.md) · [Architecture](server/docs/architecture.md) · [Changelog](server/docs/changelog.md) · [Discord](https://discord.gg/c6yWauUsQh)
+[Validation and readiness](docs/validation.md) · [Quick start](#quick-start) · [Documentation](server/docs/overview.md) · [Architecture](server/docs/architecture.md) · [Changelog](server/docs/changelog.md) · [Discord](https://discord.gg/c6yWauUsQh)
 
 [![CI](https://github.com/donovanm21/kvm-center/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/donovanm21/kvm-center/actions/workflows/test.yml)
 ![Go](https://img.shields.io/badge/Go-1.26.9-00ADD8?style=flat-square&logo=go&logoColor=white)
-![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white)
 ![libvirt](https://img.shields.io/badge/libvirt-qemu%2Btls-E3571E?style=flat-square)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)
 ![Status](https://img.shields.io/badge/status-active-3FB950?style=flat-square)

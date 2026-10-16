@@ -17,6 +17,16 @@ E2E_DIR="$ROOT/demo/e2e"
 IMG="kvmc-e2e"
 
 export KVMC_DEMO_URL="${KVMC_DEMO_URL:-https://localhost:8290}"
+export KVMC_EXPECTED_SHA="${KVMC_EXPECTED_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
+export KVMC_EXPECTED_BACKEND="${KVMC_EXPECTED_BACKEND:-mongo}"
+if [[ ! "$KVMC_EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+  echo "KVMC_EXPECTED_SHA must be the exact 40-character deployed revision" >&2
+  exit 2
+fi
+if [[ "$KVMC_EXPECTED_BACKEND" != mongo && "$KVMC_EXPECTED_BACKEND" != json ]]; then
+  echo "KVMC_EXPECTED_BACKEND must be mongo or json" >&2
+  exit 2
+fi
 
 DOCKER_URL="${KVMC_DEMO_URL//localhost/host.docker.internal}"
 
@@ -36,6 +46,8 @@ if [[ -n "${CI:-}" ]]; then
   docker run --rm \
     --add-host=host.docker.internal:host-gateway \
     -e KVMC_DEMO_URL="$DOCKER_URL" \
+    -e KVMC_EXPECTED_SHA="$KVMC_EXPECTED_SHA" \
+    -e KVMC_EXPECTED_BACKEND="$KVMC_EXPECTED_BACKEND" \
     -v "$VOL:/work/output" \
     "$IMG" "$@"
   rc=$?
@@ -60,6 +72,8 @@ fi
 docker run --rm \
   --add-host=host.docker.internal:host-gateway \
   -e KVMC_DEMO_URL="$DOCKER_URL" \
+    -e KVMC_EXPECTED_SHA="$KVMC_EXPECTED_SHA" \
+    -e KVMC_EXPECTED_BACKEND="$KVMC_EXPECTED_BACKEND" \
   -v "$E2E_DIR/specs:/work/specs" \
   -v "$E2E_DIR/playwright.config.ts:/work/playwright.config.ts" \
   -v "$E2E_DIR/output:/work/output" \

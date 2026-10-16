@@ -1,5 +1,4 @@
 node_modules/
 output/
-package-lock.json
 test-results/
 playwright-report/

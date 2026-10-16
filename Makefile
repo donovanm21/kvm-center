@@ -118,3 +118,23 @@ check: lint test
 .PHONY: hooks
 hooks:
 	@./scripts/install-hooks.sh
+
+# Evidence-backed gates. A source pass never implies Mongo/browser/libvirt passed.
+.PHONY: validate validate-mongo validate-browser validate-release build-webui release-binaries
+validate:
+	python3 scripts/validate.py --profile source
+
+validate-mongo:
+	python3 scripts/validate.py --profile mongo
+
+validate-browser:
+	python3 scripts/validate.py --profile browser
+
+validate-release:
+	python3 scripts/validate.py --profile release
+
+build-webui:
+	./scripts/build-webui.sh
+
+release-binaries: build-webui
+	./scripts/build-release.sh
