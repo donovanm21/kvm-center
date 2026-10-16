@@ -13,7 +13,7 @@ system-wide.
 
 ```sh
 make validate                 # harness, format, module consistency, vet, race tests,
-                              # production SPA, 12 cross-compiled binaries
+                              # form/schema/type regressions, production SPA, 12 cross-compiled binaries
 make validate-mongo           # real Mongo tests; requires local disposable Mongo
 make validate-browser         # tests an already running local disposable demo
 make validate-release         # every gate; incomplete acceptance exits nonzero
@@ -177,9 +177,9 @@ paths; this matrix is a minimum acceptance backlog, not an exhaustive API count.
 
 ## Active CI and proposed gates
 
-This change adds manual tooling only. Existing GitHub Actions remain unchanged:
-Go formatting/vet/unit tests and vulnerability scan, production frontend build
-and audit, and secret scanning. Those jobs do not establish race, Mongo, browser,
+Browser and Mongo fixture tooling remains manual-only. Existing GitHub jobs run:
+Go formatting/vet/unit tests and vulnerability scan, form/schema/type regressions,
+production frontend build and audit, and secret scanning. Those jobs do not establish race, Mongo, browser,
 container or hypervisor acceptance. No new dispatch, schedule, hosted service,
 workflow permission or publication action is activated here.
 

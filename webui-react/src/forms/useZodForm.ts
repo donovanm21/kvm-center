@@ -21,13 +21,14 @@ import type { z } from 'zod';
 //     <span className="form-error">{form.formState.errors.name.message}</span>
 //   )}
 
-export function useZodForm<T extends z.ZodTypeAny>(
-  schema: T,
-  options: Omit<UseFormProps<z.infer<T>>, 'resolver'> = {},
-): UseFormReturn<z.infer<T>> {
-  return useForm<z.infer<T>>({
+// Keep form input values separate from parsed output (for transforms and coercion).
+export function useZodForm<Input extends FieldValues, Output extends FieldValues = Input>(
+  schema: z.ZodType<Output, Input>,
+  options: Omit<UseFormProps<Input, unknown, Output>, 'resolver'> = {},
+): UseFormReturn<Input, unknown, Output> {
+  return useForm<Input, unknown, Output>({
     resolver: zodResolver(schema),
     mode: 'onBlur',
     ...options,
-  } as UseFormProps<FieldValues> as UseFormProps<z.infer<T>>);
+  });
 }

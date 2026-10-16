@@ -1,22 +1,15 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { z } from 'zod';
 
 import { Modal } from './Modal';
 import { CheckList } from './FormBits';
 import { apiDelete, apiGet, apiPost } from '@/api/client';
 import { PERMISSIONS } from '@/api/permissions';
 import { useZodForm } from '@/forms/useZodForm';
+import { tokenFormSchema } from '@/forms/schemas';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useToast } from '@/hooks/useToast';
 import { qk } from '@/queryKeys';
-
-// Token-name schema: the server stores arbitrary strings but a UI
-// limit keeps the audit log readable. Reuse vmName-like rules.
-const tokenFormSchema = z.object({
-  name: z.string().trim().min(1, 'Token name is required').max(64, '64 characters maximum'),
-  days: z.number().int().min(1).max(3650),
-});
 
 interface APIToken {
   id: string;
