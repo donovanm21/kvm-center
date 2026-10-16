@@ -103,10 +103,11 @@ type Store struct {
 	// stranded in memory because its Save would error out on an
 	// earlier collection's E11000 before reaching the discord_gateway
 	// collection.
-	saveMu   contextMutex
-	work     workSet
-	saves    workSet
-	shutdown *shutdownCoordinator
+	tagEditMu contextMutex // serializes API tag compare/edit/durable acknowledgement
+	saveMu    contextMutex
+	work      workSet
+	saves     workSet
+	shutdown  *shutdownCoordinator
 	// Fingerprints of the last successful backend write; guarded by saveMu.
 	lastSavedHashes map[string]uint64
 	// saveQueued (v5.60.4) coalesces concurrent AsyncSave invocations

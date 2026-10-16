@@ -217,7 +217,8 @@ func handleGetVMs(store *Store) http.HandlerFunc {
 			for _, v := range vms {
 				if strings.Contains(strings.ToLower(v.Name), search) ||
 					strings.Contains(strings.ToLower(v.UUID), search) ||
-					strings.Contains(strings.ToLower(v.HostID), search) {
+					strings.Contains(strings.ToLower(v.HostID), search) ||
+					strings.Contains(strings.Join(store.GetVMTags(v.UUID), " "), search) {
 					filtered = append(filtered, v)
 				}
 			}
@@ -226,7 +227,13 @@ func handleGetVMs(store *Store) http.HandlerFunc {
 		if vms == nil {
 			vms = []*models.VM{}
 		}
-		writeJSON(w, http.StatusOK, vms)
+		out := make([]vmTagView, 0, len(vms))
+		for _, vm := range vms {
+			if vm != nil {
+				out = append(out, tagView(store, vm))
+			}
+		}
+		writeJSON(w, http.StatusOK, out)
 	}
 }
 
@@ -254,7 +261,7 @@ func handleGetVMByUUID(store *Store) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "vm not found")
 			return
 		}
-		writeJSON(w, http.StatusOK, vm)
+		writeJSON(w, http.StatusOK, tagView(store, vm))
 	}
 }
 

@@ -37,7 +37,7 @@ export function VMs() {
     const list = vms.data ?? [];
     const base = !q
       ? list
-      : list.filter((v) => v.name.toLowerCase().includes(q) || v.host_id.toLowerCase().includes(q));
+      : list.filter((v) => v.name.toLowerCase().includes(q) || v.host_id.toLowerCase().includes(q) || (v.tags ?? []).some(tag => tag.includes(q)));
     return [...base].sort((a, b) => {
       const primary = compare(a[sort.key], b[sort.key]);
       if (primary !== 0) return primary;
@@ -53,7 +53,7 @@ export function VMs() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
         <input
           type="search"
-          placeholder="Search VMs or hosts…"
+          placeholder="Search VMs, hosts or tags…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           style={searchStyle}

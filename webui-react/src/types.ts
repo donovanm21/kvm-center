@@ -105,6 +105,7 @@ export interface GuestInterface {
 }
 
 export interface VM {
+  tags?: string[];
   uuid: string;
   name: string;
   host_id: string;

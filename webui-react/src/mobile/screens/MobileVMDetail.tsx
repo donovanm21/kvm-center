@@ -1,3 +1,4 @@
+import { VMTags } from '@/components/VMTags';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -42,6 +43,8 @@ export function MobileVMDetail() {
               <span style={{ marginLeft: 8 }}>{vm.host_id}</span>
             </p>
           </div>
+
+          <div className="m-card"><VMTags key={vm.uuid} uuid={vm.uuid} tags={vm.tags} /></div>
 
           <div className="m-card">
             <div className="m-section-h" style={{ marginBottom: 10 }}><h2>Resources</h2></div>

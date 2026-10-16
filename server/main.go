@@ -423,7 +423,8 @@ func main() {
 	// exact routes above (snapshots/screenshot/notes/console-token)
 	// still win. Anything else under /api/vms/<...>/ is interpreted
 	// as a UUID lookup.
-	mux.HandleFunc("/api/vms/", handleGetVMByUUID(store))
+	mux.Handle("/api/vms/", vmDetailRoute(store))
+	mux.Handle("/api/tags", requirePerm(store, "vm.view", handleTags(store)))
 	// Server-proxied console (v5.0.4+): noVNC HTML and the VNC WebSocket
 	// both ride through the server's HTTPS origin so every hit is
 	// re-validated against the operator's session cookie. Sharing the
