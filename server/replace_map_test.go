@@ -191,3 +191,34 @@ func TestBuildReplaceModelsPreservesDocumentBytes(t *testing.T) {
 		t.Error("replacement bytes differ from the marshalled document")
 	}
 }
+
+func TestObsoleteUsernameOwnersExcludesEveryRetainedID(t *testing.T) {
+	plan, err := buildReplaceModels(mcoUsers, []any{
+		bson.M{"_id": "retained", "username": "existing"},
+		bson.M{"_id": "recreated", "username": "reused"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	filter := obsoleteUsernameOwners(plan)
+	if len(filter) != 2 || filter[0].Key != "_id" || filter[1].Key != "username" {
+		t.Fatalf("cleanup must constrain both identity and username: %v", filter)
+	}
+	excluded := filter[0].Value.(bson.D)
+	names := filter[1].Value.(bson.D)
+	ids := excluded[0].Value.(bson.A)
+	usernames := names[0].Value.(bson.A)
+	if excluded[0].Key != "$nin" || len(ids) != 2 || ids[0] != "retained" || ids[1] != "recreated" {
+		t.Fatalf("cleanup can select a retained ID: %v", excluded)
+	}
+	if names[0].Key != "$in" || len(usernames) != 2 || usernames[0] != "existing" || usernames[1] != "reused" {
+		t.Fatalf("cleanup can select an unrelated username: %v", names)
+	}
+	plan, err = buildReplaceModels("fixture", []any{bson.M{"_id": "no-username"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if obsoleteUsernameOwners(plan) != nil {
+		t.Fatal("cleanup planned without a username")
+	}
+}

@@ -302,3 +302,32 @@ func TestMongoIntegrationReplacementUsernameHandoff(t *testing.T) {
 		}
 	}
 }
+
+func TestMongoIntegrationUsernameConflictPreservesRetainedIDs(t *testing.T) {
+	b := newMongoIntegrationBackend(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	before := &persistData{Users: map[string]*models.User{
+		"a": {ID: "a", Username: "fixture-a", Enabled: true},
+		"b": {ID: "b", Username: "fixture-b", Enabled: true},
+	}}
+	if err := b.Save(ctx, before); err != nil {
+		t.Fatal(err)
+	}
+	// This invalid desired state must fail, never delete the retained owner.
+	after := &persistData{Users: map[string]*models.User{
+		"a": {ID: "a", Username: "fixture-a", Enabled: true},
+		"b": {ID: "b", Username: "fixture-a", Enabled: true},
+	}}
+	if err := b.Save(ctx, after); !mongo.IsDuplicateKeyError(err) {
+		t.Fatalf("want duplicate-key failure for retained ownership conflict: %v", err)
+	}
+	got, err := b.Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Users) != 2 || got.Users["a"] == nil || got.Users["b"] == nil ||
+		got.Users["a"].Username != "fixture-a" || got.Users["b"].Username != "fixture-b" {
+		t.Fatal("username conflict cleanup changed a retained identity")
+	}
+}

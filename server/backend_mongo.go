@@ -926,7 +926,8 @@ func replaceMapIfDirty(ctx context.Context, db *mongo.Database, collection, dirt
 	return replaceMap(ctx, db, collection, docs)
 }
 
-// replaceMap upserts every retained document before deleting obsolete records.
+// replaceMap preserves retained IDs while replacing records. Obsolete username
+// owners are retired first when needed; other obsolete records are pruned last.
 // An interrupted ordered write may leave mixed old/new values, but does not
 // remove retained records before their replacements exist. This is not an
 // atomic snapshot across records or collections; SaveChecked retains full-retry
@@ -945,6 +946,18 @@ func replaceMap(ctx context.Context, db *mongo.Database, collection string, docs
 	models, err := buildReplaceModels(collection, docs)
 	if err != nil {
 		return err
+	}
+	// A removed user can own a username needed by a newly created identity.
+	// Retire only those obsolete owners before upserting; deleting retained
+	// IDs would reintroduce the data-loss interval this ordering avoids.
+	// This can commit an intended deletion before a later write fails, so the
+	// operation remains nontransactional and requires a full-snapshot retry.
+	if collection == mcoUsers {
+		if filter := obsoleteUsernameOwners(models); filter != nil {
+			if _, err := coll.DeleteMany(ctx, filter); err != nil {
+				return fmt.Errorf("retire obsolete username owners: %w", err)
+			}
+		}
 	}
 	if _, err := coll.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(true)); err != nil {
 		return fmt.Errorf("replace %s: %w", collection, err)
@@ -993,6 +1006,34 @@ func buildReplaceModels(collection string, docs []any) ([]mongo.WriteModel, erro
 	models = append(models, mongo.NewDeleteManyModel().
 		SetFilter(bson.D{{Key: "_id", Value: bson.D{{Key: "$nin", Value: ids}}}}))
 	return models, nil
+}
+
+// obsoleteUsernameOwners is built only from a fully validated replacement
+// plan. The ID exclusion protects every record retained by that snapshot.
+// Existing user IDs cannot be renamed through the user-update API; conflicting
+// usernames within one desired snapshot remain errors rather than deleting a
+// retained record to satisfy a unique index.
+func obsoleteUsernameOwners(plan []mongo.WriteModel) bson.D {
+	ids := make(bson.A, 0, len(plan))
+	usernames := make(bson.A, 0, len(plan))
+	for _, model := range plan {
+		replacement, ok := model.(*mongo.ReplaceOneModel)
+		if !ok {
+			continue
+		}
+		raw := replacement.Replacement.(bson.Raw)
+		ids = append(ids, raw.Lookup("_id").StringValue())
+		if username, ok := raw.Lookup("username").StringValueOK(); ok {
+			usernames = append(usernames, username)
+		}
+	}
+	if len(usernames) == 0 {
+		return nil
+	}
+	return bson.D{
+		{Key: "_id", Value: bson.D{{Key: "$nin", Value: ids}}},
+		{Key: "username", Value: bson.D{{Key: "$in", Value: usernames}}},
+	}
 }
 
 // loadMapByID streams an entire collection and builds a keyed map by
