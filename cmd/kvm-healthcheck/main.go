@@ -57,6 +57,9 @@ func probe(ctx context.Context, endpoint string, timeout time.Duration) error {
 	if err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if n > 4096 {
 		return errors.New("health response exceeds 4096 bytes")
 	}

@@ -35,6 +35,7 @@ func TestProbeRepeatedCleanup(t *testing.T) {
 				case "timeout":
 					<-r.Context().Done()
 				case "body-timeout":
+					w.Header().Set("Content-Length", "1")
 					w.WriteHeader(200)
 					w.(http.Flusher).Flush()
 					<-r.Context().Done()
