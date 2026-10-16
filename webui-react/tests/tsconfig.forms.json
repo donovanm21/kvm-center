@@ -4,6 +4,6 @@
     "rootDir": "..",
     "noEmitOnError": true
   },
-  "include": ["../src/forms/*.ts", "./forms.types.ts"],
+  "include": ["../src/forms/*.ts", "../src/utils/memory.ts", "./forms.types.ts"],
   "references": []
 }

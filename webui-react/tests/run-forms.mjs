@@ -20,7 +20,7 @@ function run(args, env = process.env) {
 try {
   writeFileSync(join(buildDir, 'package.json'), '{"type":"module"}\n');
   run([compiler, '--project', 'tests/tsconfig.forms.json', '--outDir', buildDir]);
-  run(['--test', 'tests/forms.test.mjs'], { ...process.env, KVMC_FORMS_TEST_BUILD: buildDir });
+  run(['--test', 'tests/forms.test.mjs', 'tests/memory.test.mjs'], { ...process.env, KVMC_FORMS_TEST_BUILD: buildDir });
 } finally {
   rmSync(buildDir, { recursive: true, force: true });
 }
