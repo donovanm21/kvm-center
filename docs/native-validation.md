@@ -151,3 +151,21 @@ keys or switch routes to evade a denial. No release/deployment is implied.
    report the residual UUID and exact reason; do not substitute broad virsh
    delete commands. Remove only manifest-owned local test files after evidence
    capture and successful postflight, under the approved cleanup scope.
+
+### Domain absence verification
+
+The adapter does not classify localized virsh error text. After a failed
+`dumpxml`, it requires a successful, bounded `list --all --uuid` (UUID lookup)
+or `list --all --name` (name lookup) before treating the exact target as absent.
+Inventory diagnostics, malformed or duplicate identifiers, command failures,
+and timeouts fail closed. Lookup timeout, output overflow, and execution errors
+also fail closed without an inventory fallback. Other commands never classify
+error text as absence.
+
+This adds a read of local domain identifiers to the fixture-only lookup scope.
+Identifiers remain in memory and are omitted from reports and logs. The approved
+execution manifest must include this read and confirm unfiltered inventory
+visibility on the existing local socket. Successful enumeration cannot detect
+ACL-filtered results or reserve identity against concurrent changes: exclusive
+fixture ownership and a quiescent validation window remain prerequisites.
+No additional host, credentials, VM resources, or lifecycle operations are added.

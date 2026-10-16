@@ -36,7 +36,8 @@ func (id Identity) Validate() error {
 }
 
 // Driver operates on one exact name/UUID. Implementations must distinguish
-// absence from connection/permission errors; no shell or broad inventory calls.
+// absence from connection/permission errors. Virsh may verify a failed XML
+// lookup against a bounded local identifier inventory; never invoke a shell.
 type Driver interface {
 	XML(context.Context, string) (string, error)
 	Define(context.Context, string) error
