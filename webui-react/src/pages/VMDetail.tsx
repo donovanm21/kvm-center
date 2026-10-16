@@ -24,7 +24,7 @@ import {
   useSnapshots,
 } from '@/hooks/useSnapshots';
 import { useVMCommand, type VMAction } from '@/hooks/useVMCommand';
-import type { GuestFS, Host, Snapshot, VM, VMDisk, VMNetwork, VMPCIDevice } from '@/types';
+import type { Features, GuestFS, Host, Snapshot, VM, VMDisk, VMNetwork, VMPCIDevice } from '@/types';
 import { qk } from '@/queryKeys';
 
 type ModalKind = null | 'snapshot' | 'delete' | 'migrate';
@@ -90,7 +90,7 @@ function DetailHeader({ vm, openModal }: { vm: VM; openModal: (k: ModalKind) => 
     return null;
   }, [migrations.data, vm.name, vm.host_id]);
 
-  const gate = (perm: string, featFlag?: keyof NonNullable<typeof features.data>): { ok: boolean; reason?: string } => {
+  const gate = (perm: string, featFlag?: keyof Features): { ok: boolean; reason?: string } => {
     if (lock) return { ok: false, reason: lock.message };
     if (!hasPerm(perm)) return { ok: false, reason: `Requires the ${perm} permission` };
     if (featFlag && features.data?.[featFlag]) return { ok: false, reason: 'Feature disabled by administrator' };
