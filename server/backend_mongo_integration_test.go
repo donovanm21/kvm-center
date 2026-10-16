@@ -384,3 +384,46 @@ func TestMongoIntegrationShutdownDrain(t *testing.T) {
 		t.Fatal("drained snapshot or private persistence field missing after reconnect")
 	}
 }
+
+// Real disposable Mongo storage with deterministic readiness failures before
+// it becomes available; this does not stop or fault-inject a Mongo service.
+func TestMongoIntegrationStartupRetryAndRestart(t *testing.T) {
+	fixture := newMongoIntegrationBackend(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := fixture.Save(ctx, bootData()); err != nil {
+		t.Fatal(err)
+	}
+	path := t.TempDir() + "/data.json"
+	attempts := 0
+	b, err := bootstrapBackendWith(ctx, "configured", path, func() Backend {
+		attempts++
+		if attempts < 3 {
+			return &bootFixtureBackend{}
+		}
+		return NewMongoBackend(fixture.uri, fixture.dbName)
+	}, bootNoDelay)
+	if err != nil || attempts != 3 {
+		t.Fatalf("startup attempts=%d err=%v", attempts, err)
+	}
+	s, err := initializeBootStore(b, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.hosts) != 1 || s.hosts["synthetic-host"] == nil {
+		t.Fatal("startup lost fixture records")
+	}
+	closeBootBackend(b)
+	b, err = bootstrapBackend(fixture.uri, fixture.dbName, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeBootBackend(b)
+	s, err = initializeBootStore(b, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.hosts) != 1 || s.hosts["synthetic-host"] == nil {
+		t.Fatal("restart lost fixture records")
+	}
+}

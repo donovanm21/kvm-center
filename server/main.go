@@ -107,13 +107,19 @@ func main() {
 	}
 
 	// Pick the persistence backend. Mongo wins when a URL is provided;
-	// otherwise we stay on the original JSON file so an existing v5.0
-	// install boots unchanged. First-boot migration from JSON → Mongo
+	// otherwise intentional JSON installations retain their backend.
+	// A prior-Mongo selection marker prevents configuration-loss downgrade. First-boot migration from JSON → Mongo
 	// happens transparently if a data.json is found alongside an empty
 	// Mongo — see bootstrapBackend for the detailed dance.
-	backend := bootstrapBackend(*mongoURL, *mongoDB, *dataFile)
+	backend, err := bootstrapBackend(*mongoURL, *mongoDB, *dataFile)
+	if err != nil {
+		log.Fatalf("backend startup: %v", err)
+	}
+	store, err := initializeBootStore(backend, *dataFile)
+	if err != nil {
+		log.Fatalf("backend startup: %v", err)
+	}
 	log.Printf("backend: using %s", backend.Name())
-	store := NewStoreWithBackend(backend, *dataFile)
 	store.mu.Lock()
 	store.historyEnabled = *historyEnabled
 	store.mu.Unlock()
