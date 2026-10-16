@@ -24,6 +24,9 @@ import (
 // makefile/Dockerfile, which centralise the injection on server/VERSION.
 var cliVersion = "dev"
 
+// GitSHA identifies the exact source used by distributable builds.
+var GitSHA = "dev"
+
 type Config struct {
 	Server string `json:"server"`
 	Token  string `json:"token"`
@@ -40,7 +43,7 @@ func main() {
 	case "login":
 		os.Exit(cmdLogin(args))
 	case "version", "--version", "-v":
-		fmt.Println("kvmctl", cliVersion)
+		fmt.Printf("kvmctl %s (%s)\n", cliVersion, GitSHA)
 	case "hosts":
 		os.Exit(cmdHosts(args))
 	case "vms":

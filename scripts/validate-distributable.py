@@ -78,11 +78,24 @@ def main():
             report['artifacts'] = []
             for p in paths:
                 metadata = subprocess.check_output(['go', 'version', '-m', str(p)], text=True, timeout=30)
-                variable = 'cliVersion' if p.name.startswith('kvmctl') else ('Version' if p.name.startswith('kvm-center-agent') else 'versionRaw')
-                report.setdefault('stamp_metadata', {})[p.name] = [line.strip() for line in metadata.splitlines() if '-ldflags=' in line]
-                if 'main.GitSHA='+source['revision'] not in metadata or f'main.{variable}={version}' not in metadata:
-                    raise ValueError('artifact identity stamp mismatch: '+p.name)
-                report['artifacts'].append(dict(name=p.name, sha256=hashlib.sha256(p.read_bytes()).hexdigest()))
+                # Go intentionally omits -ldflags build metadata with -trimpath.
+                # Check embedded stamp payloads; execute Linux version commands below.
+                raw = p.read_bytes()
+                if source['revision'].encode() not in raw or version.encode() not in raw:
+                    raise ValueError('embedded artifact stamp mismatch: '+p.name)
+                target_os = 'windows' if 'windows' in p.name else ('darwin' if 'darwin' in p.name else 'linux')
+                target_arch = 'arm64' if 'arm64' in p.name else 'amd64'
+                if 'GOOS='+target_os not in metadata or 'GOARCH='+target_arch not in metadata:
+                    raise ValueError('artifact target metadata mismatch: '+p.name)
+                report['artifacts'].append(dict(name=p.name, sha256=hashlib.sha256(raw).hexdigest(),
+                                               embedded_stamps=True, target_metadata=[line.strip() for line in metadata.splitlines() if 'GOOS=' in line or 'GOARCH=' in line]))
+            report['linux_version_commands'] = []
+            for name, flag in [('kvm-center-agent-amd64','-version'), ('kvm-tools-linux-amd64','-version'), ('kvmctl-linux-amd64','version')]:
+                # Version-only exits precede configuration access, workers and native actions.
+                text = subprocess.check_output([str(tmp / 'app/dist' / name), flag], stderr=subprocess.STDOUT, text=True, timeout=10)
+                if source['revision'] not in text or version not in text:
+                    raise ValueError('runtime tool stamp mismatch: '+name)
+                report['linux_version_commands'].append(name)
             report['version'] = version
             runtime_owned = True
             env = dict(os.environ, KVMC_PACKAGE_CONTAINER=runtime, KVMC_PACKAGE_VOLUME=volume, GOMAXPROCS='2', GOFLAGS='-p=2', KVMC_PACKAGE_IMAGE=image,

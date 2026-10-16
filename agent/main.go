@@ -19,6 +19,9 @@ import (
 // Version is injected at build time via -ldflags.
 var Version = "dev"
 
+// GitSHA identifies the exact source used by distributable builds.
+var GitSHA = "dev"
+
 func main() {
 	serverURL := flag.String("server", envOrDefault("KVM_CENTER_SERVER", "https://kvm-center:8190"), "control plane URL (TLS-only since v5.32.0)")
 	cmdPort := flag.Int("port", intEnvOrDefault("KVM_CENTER_AGENT_PORT", 8081), "command server port")
@@ -31,7 +34,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		log.Printf("kvm-center-agent %s", Version)
+		log.Printf("kvm-center-agent %s (%s)", Version, GitSHA)
 		os.Exit(0)
 	}
 	if *validationMode {
