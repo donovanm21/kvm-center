@@ -65,6 +65,9 @@ func (d *persistData) UnmarshalJSON(raw []byte) error {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return err
 	}
+	if err := validateHistorySnapshotFields(raw); err != nil {
+		return err
+	}
 	if err := uniqueTagSnapshotFields(raw); err != nil {
 		return err
 	}

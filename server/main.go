@@ -74,6 +74,7 @@ func main() {
 	caDir := flag.String("ca-dir", envOrDefault("KVM_CENTER_CA_DIR", "/var/lib/kvm-center/ca"), "directory for the cluster CA cert + private key (auto-generated on first boot)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	graceful := flag.Bool("graceful-shutdown", false, "opt in to bounded persistence drain; requires exclusive backend writer ownership")
+	historyEnabled := flag.Bool("performance-history", false, "collect bounded 48-hour host history (64 hosts maximum); requires compatible backup/rollback plan")
 	flag.Parse()
 
 	// --cert and --key must be supplied together; either flag alone is a
@@ -113,6 +114,9 @@ func main() {
 	backend := bootstrapBackend(*mongoURL, *mongoDB, *dataFile)
 	log.Printf("backend: using %s", backend.Name())
 	store := NewStoreWithBackend(backend, *dataFile)
+	store.mu.Lock()
+	store.historyEnabled = *historyEnabled
+	store.mu.Unlock()
 	serverRestorePaths.DataFile = *dataFile
 	var lifecycle *shutdownCoordinator
 	listenerErrors := make(chan error, 3)
@@ -303,6 +307,8 @@ func main() {
 			requirePerm(store, "host.manage", http.HandlerFunc(handleHostExpectedDownClear(store))).ServeHTTP(w, r)
 		case strings.HasSuffix(r.URL.Path, "/expected-down"):
 			requirePerm(store, "host.manage", http.HandlerFunc(handleHostExpectedDownSet(store))).ServeHTTP(w, r)
+		case strings.HasSuffix(r.URL.Path, "/history"):
+			requirePerm(store, "host.view", handleHostHistory(store)).ServeHTTP(w, r)
 		case strings.HasSuffix(r.URL.Path, "/metrics"):
 			handleHostMetrics(store).ServeHTTP(w, r)
 		// v5.58.0 — storage-pool lifecycle. Match before the generic

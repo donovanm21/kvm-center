@@ -52,6 +52,9 @@ func TestHandleBackup_BundlesTLSAndCA(t *testing.T) {
 	if err := store.SetVMTags(tagFixtureUUID, []string{"backup-fixture"}); err != nil {
 		t.Fatal(err)
 	}
+	store.mu.Lock()
+	store.history = historyFixture()
+	store.mu.Unlock()
 	handler := handleBackup(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/admin/backup", nil)
@@ -93,12 +96,18 @@ func TestHandleBackup_BundlesTLSAndCA(t *testing.T) {
 	if err := json.Unmarshal(got["manifest.json"], &m); err != nil {
 		t.Fatalf("manifest json: %v", err)
 	}
+	if m.FeatureSchemas["host_history_state"] != 1 {
+		t.Fatal("backup omitted history schema")
+	}
 	if m.FeatureSchemas["vm_tag_state"] != 1 {
 		t.Fatal("backup omitted tag schema requirement")
 	}
 	var snapshot persistData
 	if err := json.Unmarshal(got["store.json"], &snapshot); err != nil {
 		t.Fatal(err)
+	}
+	if snapshot.HostHistory == nil || len(snapshot.HostHistory.Hosts["fixture"].Points) != 1 {
+		t.Fatal("archive lost history")
 	}
 	if snapshot.VMTagState == nil || len(snapshot.VMTagState.ByVM[tagFixtureUUID]) != 1 {
 		t.Fatal("archive lost tag state")

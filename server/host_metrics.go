@@ -13,8 +13,8 @@ import (
 // hostMetricRing is a fixed-size circular buffer of the last
 // hostMetricCap samples per host. At the default 30 s telemetry
 // interval that's a 1 h window, which is the glance scope the in-UI
-// sparklines target. Anything longer should be read from Grafana /
-// InfluxDB.
+// sparklines target. Optional persisted history uses a separate bounded
+// store and API; external metric sinks remain available.
 const hostMetricCap = 120
 
 type hostMetricSample struct {
@@ -66,6 +66,10 @@ func (r *hostMetricRing) snapshot() []hostMetricSample {
 // from ApplyTelemetry after the host + storage maps have been updated;
 // derives storage% from the current pools on the host.
 func (s *Store) AppendHostMetric(hostID string, h *models.Host, pools []*models.StoragePool) {
+	s.appendHostMetricAt(hostID, h, pools, time.Now())
+}
+
+func (s *Store) appendHostMetricAt(hostID string, h *models.Host, pools []*models.StoragePool, observedAt time.Time) {
 	if h == nil {
 		return
 	}
@@ -96,6 +100,7 @@ func (s *Store) AppendHostMetric(hostID string, h *models.Host, pools []*models.
 	}
 	s.mu.Unlock()
 	ring.append(sample)
+	s.recordHistory(hostID, observedAt, h.CPUUsage, h.MemUsage, storagePct, h.VMCount)
 }
 
 // HostMetricsSnapshot returns the ring buffer for a host in chronological

@@ -27,7 +27,7 @@ func snapshotHashes(raw []byte) (map[string]uint64, error) {
 		return nil, err
 	}
 	names := []string{
-		"vm_tag_state", "users", "groups", "roles", "idps", "sessions", "features",
+		"host_history_state", "vm_tag_state", "users", "groups", "roles", "idps", "sessions", "features",
 		"notifications", "audit_shipping", "backup_schedule", "discord_gateway",
 		"removed_hosts", "pending_enrollments", "api_tokens", "snapshot_policies",
 		"hypervisor_certs", "command_log", "metrics", "console_secret",
@@ -197,6 +197,7 @@ func (s *Store) snapshotBytes() ([]byte, map[string]uint64, error) {
 // and backups. Caller must hold s.mu while using its pointer-valued fields.
 func (s *Store) persistDataLocked() persistData {
 	d := persistData{
+		HostHistory:        s.historyStateLocked(),
 		VMTagState:         s.tagStateLocked(),
 		Hosts:              s.hosts,
 		VMs:                s.vms,
@@ -252,6 +253,12 @@ func (s *Store) load() {
 		log.Printf("store: VM tag state load rejected: %v", err)
 		return
 	}
+	if err := d.HostHistory.validate(); err != nil {
+		log.Printf("store: host history load rejected: %v", err)
+		return
+	}
+	s.history = cloneHistory(d.HostHistory)
+	pruneHistory(s.history, time.Now().Unix())
 	if d.VMTagState != nil {
 		s.vmTags = cloneVMTags(d.VMTagState.ByVM)
 	}
