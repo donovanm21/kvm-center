@@ -446,6 +446,7 @@ func (s *Store) AsyncSave() {
 		defer s.saves.end()
 		defer func() {
 			if r := recover(); r != nil {
+				s.saves.fail(errors.New("asynchronous persistence worker panicked"))
 				log.Printf("worker: %q panicked: %v\n%s", "async-save", r, debug.Stack())
 			}
 		}()

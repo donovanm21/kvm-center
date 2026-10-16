@@ -134,7 +134,7 @@ func TestShutdownInflightAndQueuedPersistence(t *testing.T) {
 }
 
 func TestShutdownFailureAndLoadGate(t *testing.T) {
-	for _, kind := range []string{"save", "close", "load", "panic"} {
+	for _, kind := range []string{"save", "close", "load", "panic", "async-panic"} {
 		t.Run(kind, func(t *testing.T) {
 			b := &drainBackend{}
 			s := drainStore(b)
@@ -147,6 +147,10 @@ func TestShutdownFailureAndLoadGate(t *testing.T) {
 				s.saveGateOpen = false
 			case "panic":
 				s.goWork("fixture", func() { panic("fixture") })
+			case "async-panic":
+				b.save = func(context.Context, *persistData) error { panic("fixture") }
+				s.AsyncSave()
+				s.saveWG.Wait()
 			}
 			if err := testCoordinator(s).drain(context.Background()); err == nil {
 				t.Fatal("incomplete drain reported success")
