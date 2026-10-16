@@ -52,6 +52,14 @@ Actions: `START`, `STOP`, `RESTART`, `FORCESTOP`, `SNAPSHOT`,
 `REVERT_SNAPSHOT`, `DELETE_SNAPSHOT`, `MIGRATE`, `OFFLINE_MIGRATE`,
 `DELETE_VM`.
 
+`DELETE_VM` retains all disk images and attached media. Omit `delete_disks`
+(or set it to `"false"`) to force off and undefine the domain, including NVRAM,
+managed-save state, and snapshot metadata. `delete_disks="true"` is rejected
+before any VM changes because exclusive storage ownership cannot currently be
+verified. Review references, snapshots, and shared-storage dependencies before
+cleaning up retained files separately. Any other nonempty `delete_disks` value
+is rejected as invalid.
+
 `MIGRATE` / `OFFLINE_MIGRATE` honour optional params:
 
 - `migration_transport`: `"tls"` / `"ssh"` / empty (auto)
