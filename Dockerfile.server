@@ -5,9 +5,9 @@ FROM node:20-alpine AS webui
 
 WORKDIR /webui
 COPY webui-react/package.json webui-react/package-lock.jso[n] ./
-RUN npm install --no-audit --no-fund --loglevel=error
+RUN npm ci --no-audit --no-fund --loglevel=error
 COPY webui-react/ ./
-RUN npm run build
+RUN npm run test:forms && npm run build && test -s dist/index.html
 
 # ── Stage 1b: Cross-compile every distributable binary ────────────────────────
 # Produces /dist with every agent/kvm-tools/kvmctl variant + install
@@ -19,7 +19,7 @@ FROM golang:1.26.9-alpine AS artifacts
 WORKDIR /src
 COPY . .
 RUN cp /src/server/VERSION /src/kvm-tools/VERSION
-RUN go mod tidy
+RUN go mod download
 
 # GIT_SHA busts BuildKit's layer cache on every new commit so the
 # cross-compile layers re-run against the current source. bootstrap.sh
@@ -28,19 +28,20 @@ ARG GIT_SHA=dev
 RUN echo "artifacts stage @ $GIT_SHA"
 
 RUN VERSION=$(cat /src/server/VERSION) && \
-    LDF="-s -w -X main.Version=$VERSION" && \
-    KVMCTL_LDF="-s -w -X main.cliVersion=$VERSION" && \
+    LDF="-s -w -X main.Version=$VERSION -X main.GitSHA=$GIT_SHA" && \
+    GUEST_LDF="-s -w -X main.versionRaw=$VERSION -X main.GitSHA=$GIT_SHA" && \
+    KVMCTL_LDF="-s -w -X main.cliVersion=$VERSION -X main.GitSHA=$GIT_SHA" && \
     mkdir -p /dist && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvm-center-agent-amd64 ./agent && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$LDF" -o /dist/kvm-center-agent-arm64 ./agent && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvm-tools-linux-amd64 ./kvm-tools && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$LDF" -o /dist/kvm-tools-linux-arm64 ./kvm-tools && \
-    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$LDF" -o /dist/kvm-tools-windows-amd64.exe ./kvm-tools && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-linux-amd64       ./cmd/kvmctl && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-linux-arm64       ./cmd/kvmctl && \
-    CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-darwin-amd64      ./cmd/kvmctl && \
-    CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-darwin-arm64      ./cmd/kvmctl && \
-    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-windows-amd64.exe ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -mod=readonly -buildvcs=false -trimpath -ldflags="$LDF" -o /dist/kvm-center-agent-amd64 ./agent && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -mod=readonly -buildvcs=false -trimpath -ldflags="$LDF" -o /dist/kvm-center-agent-arm64 ./agent && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -mod=readonly -buildvcs=false -trimpath -ldflags="$GUEST_LDF" -o /dist/kvm-tools-linux-amd64 ./kvm-tools && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -mod=readonly -buildvcs=false -trimpath -ldflags="$GUEST_LDF" -o /dist/kvm-tools-linux-arm64 ./kvm-tools && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -mod=readonly -buildvcs=false -trimpath -ldflags="$GUEST_LDF" -o /dist/kvm-tools-windows-amd64.exe ./kvm-tools && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -mod=readonly -buildvcs=false -trimpath -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-linux-amd64       ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -mod=readonly -buildvcs=false -trimpath -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-linux-arm64       ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -mod=readonly -buildvcs=false -trimpath -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-darwin-amd64      ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -mod=readonly -buildvcs=false -trimpath -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-darwin-arm64      ./cmd/kvmctl && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -mod=readonly -buildvcs=false -trimpath -ldflags="$KVMCTL_LDF" -o /dist/kvmctl-windows-amd64.exe ./cmd/kvmctl && \
     # v5.47.1: unified Linux installer. install.sh is the canonical
     # entry point; install-agent.sh + install-kvm-tools.sh are kept as
     # symlinks so existing one-liners in operator notes keep working —
@@ -74,6 +75,7 @@ FROM --platform=$BUILDPLATFORM golang:1.26.9-alpine AS builder
 
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
+ARG GIT_SHA=dev
 
 WORKDIR /src
 COPY go.mod go.su[m] ./
@@ -83,12 +85,13 @@ COPY . .
 RUN rm -rf server/staticv4/dist
 COPY --from=webui /webui/dist ./server/staticv4/dist
 
-RUN go mod tidy
-RUN VERSION=$(cat /src/server/VERSION) && \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
-      -ldflags="-s -w -X main.Version=$VERSION" \
+RUN go mod download
+RUN test -s server/staticv4/dist/index.html && \
+    VERSION=$(cat /src/server/VERSION) && \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -mod=readonly -buildvcs=false -trimpath \
+      -ldflags="-s -w -X main.versionRaw=$VERSION -X main.GitSHA=$GIT_SHA" \
       -o /out/kvm-center-server ./server && \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -mod=readonly -buildvcs=false -trimpath \
       -ldflags="-s -w" -o /out/kvm-healthcheck ./cmd/kvm-healthcheck
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
