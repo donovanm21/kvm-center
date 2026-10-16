@@ -14,6 +14,9 @@ history for per-commit detail.
 
 ## v5.61
 
+### Added
+- Administrators can record an observed success or failure for a stranded (`unknown`) command through `POST /api/admin/command-log/resolve`. Resolutions retain the actor and note, wait for persistence before acknowledgement, and prevent late agent outcomes from replacing the decision.
+
 ### Fixed
 - MongoDB saves replace retained records without clearing the collection first. Obsolete users relinquish usernames needed by recreated identities; retained IDs are never deleted by that cleanup. Saves remain nontransactional across records and collections.
 - Backups and JSON persistence retain all control-plane state, including pairing and enrolment credentials, without exposing private fields through API model JSON. Configured security material must be readable before a backup succeeds.

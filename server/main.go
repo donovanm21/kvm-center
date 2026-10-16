@@ -335,6 +335,7 @@ func main() {
 	// Command log (v5.32.17). Admin-only: shows the last N /api/command
 	// invocations with actor + outcome, and surfaces any "unknown"
 	// entries the boot reconciler flagged.
+	mux.Handle("/api/admin/command-log/resolve", commandResolutionRoute(store))
 	mux.Handle("/api/admin/command-log", requirePerm(store, "user.manage", http.HandlerFunc(handleCommandLog(store))))
 
 	// Hypervisor PKI (v5.10.0). Admin-gated except /sign (which is

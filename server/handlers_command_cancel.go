@@ -85,7 +85,10 @@ func handleCommandCancel(store *Store) http.HandlerFunc {
 		// Mirror the agent's verdict into our command_log so the
 		// SPA reflects it immediately without waiting on the next
 		// reconciler tick. We only mark cancelled on the happy path.
-		store.commandLog.Update(id, "cancelled", reason, http.StatusOK, false)
+		if !store.commandLog.Update(id, "cancelled", reason, http.StatusOK, false) {
+			writeError(w, http.StatusConflict, "command was resolved while the cancellation was in flight; inspect the recorded resolution and agent state")
+			return
+		}
 		store.hub.Publish(EventCommand, map[string]any{
 			"request_id": id,
 			"outcome":    "cancelled",

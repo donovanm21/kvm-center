@@ -137,7 +137,9 @@ func reconcileOne(ctx context.Context, store *Store, client reconcileHTTPDoer, e
 	if addr == "" {
 		// Host has no agent IP — almost certainly removed from
 		// inventory mid-flight. Mark unknown so the operator sees it.
-		store.commandLog.Update(e.RequestID, "unknown", "host removed from inventory while command pending; outcome undetermined", 0, false)
+		if !store.commandLog.Update(e.RequestID, "unknown", "host removed from inventory while command pending; outcome undetermined", 0, false) {
+			return // operator resolution won while this poll was in flight
+		}
 		store.hub.Publish(EventCommand, eventPayload(e.RequestID, "unknown", e.HostID, e.Action))
 		auditSystem(store, "command.reconciled", "vm/"+e.VMUUID, map[string]string{
 			"request_id": e.RequestID,
@@ -195,7 +197,9 @@ func reconcileOne(ctx context.Context, store *Store, client reconcileHTTPDoer, e
 		if count >= reconcilerNotFoundEscalationThreshold {
 			notFoundCounts.Delete(e.RequestID)
 			reason := fmt.Sprintf("agent at %s returned 404 for %d consecutive polls; outcome unknown — check the target VM state and resolve manually", addr, count)
-			store.commandLog.Update(e.RequestID, "unknown", reason, 0, false)
+			if !store.commandLog.Update(e.RequestID, "unknown", reason, 0, false) {
+				return // operator resolution won while this poll was in flight
+			}
 			store.hub.Publish(EventCommand, eventPayload(e.RequestID, "unknown", e.HostID, e.Action))
 			auditSystem(store, "command.reconciled", "vm/"+e.VMUUID, map[string]string{
 				"request_id":      e.RequestID,
@@ -237,7 +241,9 @@ func reconcileOne(ctx context.Context, store *Store, client reconcileHTTPDoer, e
 		if parsed.Outcome == "failed" && parsed.Error != "" {
 			msg = parsed.Error
 		}
-		store.commandLog.Update(e.RequestID, parsed.Outcome, msg, parsed.StatusCode, false)
+		if !store.commandLog.Update(e.RequestID, parsed.Outcome, msg, parsed.StatusCode, false) {
+			return // operator resolution won while this poll was in flight
+		}
 		store.hub.Publish(EventCommand, eventPayload(e.RequestID, parsed.Outcome, e.HostID, e.Action))
 		auditSystem(store, "command.reconciled", "vm/"+e.VMUUID, map[string]string{
 			"request_id": e.RequestID,
