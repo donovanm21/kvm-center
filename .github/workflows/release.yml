@@ -16,11 +16,13 @@ jobs:
     if: github.repository == 'donovanm21/kvm-center'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      # setup-go v7 runs the exact go.mod toolchain (GOTOOLCHAIN=local).
+      - uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
+          cache-dependency-path: 'go.sum' # Preserve the pre-v6 cache key input.
 
       - name: go mod tidy
         run: go mod tidy
