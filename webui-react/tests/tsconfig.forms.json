@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmitOnError": true
+  },
+  "include": ["../src/forms/*.ts", "./forms.types.ts"],
+  "references": []
+}

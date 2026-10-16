@@ -64,6 +64,10 @@ jobs:
         working-directory: webui-react
         run: npm ci --no-audit --no-fund --loglevel=error
 
+      - name: form compatibility regressions
+        working-directory: webui-react
+        run: npm run test:forms
+
       # v5.32.11 gate: fail the build early on TypeScript or Vite
       # errors. v5.30.0 and v5.31.6 each shipped with tsc errors that
       # only surfaced at docker-build time on the deploy host.

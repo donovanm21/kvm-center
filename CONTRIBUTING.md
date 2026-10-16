@@ -108,8 +108,11 @@ make fmt             # gofmt -w .
 # Small Go-only gate: lint + tests (not release validation)
 make check
 
+# Form schema/resolver regressions (Node tests + compile-only type assertions)
+npm --prefix webui-react run test:forms
+
 # Frontend type-check + production build
-cd webui-react && npm run build   # tsc -b --noEmit && vite build
+npm --prefix webui-react run build   # tsc -b --noEmit && vite build
 ```
 
 You can also call the underlying tools directly: `go test ./...`,
@@ -153,7 +156,7 @@ emergency with `SKIP_PRE_COMMIT=1 git commit ...`.
   (`.github/workflows/test.yml`), which has these jobs:
   - **`lint-test`** — `go mod tidy`, `gofmt`, `go vet`, `go test ./...`,
     and `govulncheck` (blocking on any reachable vulnerability).
-  - **`webui-audit`** — `npm ci`, `npm run build` (tsc + vite), and
+  - **`webui-audit`** — `npm ci`, `npm run test:forms`, `npm run build` (tsc + vite), and
     `npm audit --audit-level=critical` (blocking).
   - **`gitleaks`** — full-history secret scan.
   - **`summary`** — aggregator that fails if any of the above fail.

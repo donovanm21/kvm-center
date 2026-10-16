@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT/webui-react"
 npm ci --no-audit --no-fund --loglevel=error
+npm run test:forms
 npm run build
 test -s dist/index.html
 # Do not replace a known-good embedded tree until TypeScript + Vite succeed.

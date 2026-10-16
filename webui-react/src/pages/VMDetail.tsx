@@ -2,13 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, useMatch, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { z } from 'zod';
-
 import { ActionsMenu, type ActionGroup } from '@/components/ActionsMenu';
 import { SortableTH, useSort } from '@/components/SortableTH';
 import { StatePill } from '@/components/StatePill';
 import { useZodForm } from '@/forms/useZodForm';
-import { snapshotNameSchema } from '@/forms/schemas';
+import { snapshotFormSchema } from '@/forms/schemas';
 import { MigrateModal } from '@/components/MigrateModal';
 import { Modal } from '@/components/Modal';
 import { PaginationBar, usePagination } from '@/components/Pagination';
@@ -1565,10 +1563,6 @@ function SnapshotsTab({ vm }: { vm: VM }) {
 // Zod + React Hook Form pattern (v5.41.0). Future modals migrate
 // onto the same shape: declare a Zod schema, wire `useZodForm`,
 // `register` inputs, surface errors via `formState.errors`.
-const snapshotFormSchema = z.object({
-  name: snapshotNameSchema,
-});
-
 export function CreateSnapshotModal({ vm, open, onClose }: { vm: VM; open: boolean; onClose: () => void }) {
   const create = useCreateSnapshot();
   const form = useZodForm(snapshotFormSchema, {

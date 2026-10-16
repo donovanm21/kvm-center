@@ -1,32 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { z } from 'zod';
 
 import { ErrorBanner, Field, Select, TextInput } from '@/components/FormBits';
 import { Modal } from '@/components/Modal';
-import { diskGBSchema, memMBSchema, vcpuSchema, vmNameSchema } from '@/forms/schemas';
+import { createVMSchema } from '@/forms/schemas';
 import { useHosts } from '@/hooks/useInventory';
 import { useCreateVM, useVMCreateInfo, type VMCreatePayload } from '@/hooks/useVMCreate';
-
-// Zod schema covering every field that's user-editable in the
-// wizard. Centralised here so a tweak to "what's a valid VM name"
-// lands once across snapshot creation, hardware edits, and the
-// wizard. (v5.42.0)
-const createVMSchema = z.object({
-  name: vmNameSchema,
-  memory: memMBSchema,
-  vcpus: vcpuSchema,
-  diskSize: diskGBSchema,
-  source: z.enum(['iso', 'import', 'pxe']),
-  isoPath: z.string(),
-  importDisk: z.string(),
-}).superRefine((v, ctx) => {
-  if (v.source === 'iso' && !v.isoPath) {
-    ctx.addIssue({ code: 'custom', path: ['isoPath'], message: 'Pick an ISO or switch install source.' });
-  }
-  if (v.source === 'import' && !v.importDisk.trim()) {
-    ctx.addIssue({ code: 'custom', path: ['importDisk'], message: 'Provide the path to the existing disk image.' });
-  }
-});
 
 interface Props {
   open: boolean;

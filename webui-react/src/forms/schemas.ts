@@ -67,3 +67,35 @@ export const httpsUrlSchema = z
     (s) => s.startsWith('https://') || s.startsWith('http://localhost') || s.startsWith('http://127.'),
     'Use https:// (http allowed only on localhost/127.x)',
   );
+
+// Zod schema covering every field that's user-editable in the
+// wizard. Centralised here so a tweak to "what's a valid VM name"
+// lands once across snapshot creation, hardware edits, and the
+// wizard. (v5.42.0)
+export const createVMSchema = z.object({
+  name: vmNameSchema,
+  memory: memMBSchema,
+  vcpus: vcpuSchema,
+  diskSize: diskGBSchema,
+  source: z.enum(['iso', 'import', 'pxe']),
+  isoPath: z.string(),
+  importDisk: z.string(),
+}).superRefine((v, ctx) => {
+  if (v.source === 'iso' && !v.isoPath) {
+    ctx.addIssue({ code: 'custom', path: ['isoPath'], message: 'Pick an ISO or switch install source.' });
+  }
+  if (v.source === 'import' && !v.importDisk.trim()) {
+    ctx.addIssue({ code: 'custom', path: ['importDisk'], message: 'Provide the path to the existing disk image.' });
+  }
+});
+
+// Token-name schema: the server stores arbitrary strings but a UI
+// limit keeps the audit log readable. Reuse vmName-like rules.
+export const tokenFormSchema = z.object({
+  name: z.string().trim().min(1, 'Token name is required').max(64, '64 characters maximum'),
+  days: z.number().int().min(1).max(3650),
+});
+
+export const snapshotFormSchema = z.object({
+  name: snapshotNameSchema,
+});
