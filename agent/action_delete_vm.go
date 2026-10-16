@@ -1,8 +1,6 @@
 package main
 
-// DELETE_VM action — extracted from commander.go in v5.38.0
-// (P2 #1 dispatcher refactor part 2). Pure move, no behaviour
-// change. Self-handles the response.
+// DELETE_VM action. Self-handles the response.
 
 import (
 	"log"
@@ -14,12 +12,26 @@ import (
 )
 
 // handleDeleteVM tears down a VM in stages: force-off (if still
-// running), undefine with NVRAM + managed-save + snapshot metadata
-// removal, optional disk file removal. The UI gates this behind
-// its own multi-step confirm; delete_disks defaults to false so
-// an accidental DELETE doesn't lose data.
+// running), then undefine with NVRAM + managed-save + snapshot metadata
+// removal. Disk images and attached media are always retained. The agent
+// has no authoritative record of exclusive storage ownership: neither a
+// domain XML source, pool membership, nor a filename establishes that a
+// disk is not shared, imported, or used as another image's backing file.
 func handleDeleteVM(w http.ResponseWriter, req models.CommandRequest, vmTarget string) {
-	deleteDisks := req.Params["delete_disks"] == "true"
+	// Fail before any mutation, including power-off. Silently retaining disks
+	// after a destructive request would falsely report that cleanup succeeded.
+	// Do not reintroduce automatic removal without a trusted ownership and
+	// dependency contract that also accounts for other hosts and snapshots.
+	switch req.Params["delete_disks"] {
+	case "", "false":
+		// Default and explicitly requested domain-only deletion.
+	case "true":
+		respond(w, false, "automatic disk deletion is unavailable because exclusive storage ownership cannot be verified; no changes were made. Retry with delete_disks=false to remove the VM definition and state while retaining disk files")
+		return
+	default:
+		respond(w, false, "invalid delete_disks value; use delete_disks=false to retain disk files. No changes were made")
+		return
+	}
 	if out, derr := exec.Command("virsh", "destroy", vmTarget).CombinedOutput(); derr != nil {
 		// "domain is not running" is fine; anything else aborts.
 		msg := strings.ToLower(string(out))
@@ -28,31 +40,10 @@ func handleDeleteVM(w http.ResponseWriter, req models.CommandRequest, vmTarget s
 			return
 		}
 	}
-	diskPaths := collectVMDiskPaths(vmTarget)
-	undefArgs := []string{"undefine", vmTarget, "--nvram", "--managed-save", "--snapshots-metadata"}
-	if deleteDisks {
-		// --remove-all-storage only works when the disks live in a libvirt
-		// storage pool. If that fails we retry without and unlink files
-		// ourselves below.
-		undefArgs = append(undefArgs, "--remove-all-storage")
-	}
-	out, err := exec.Command("virsh", undefArgs...).CombinedOutput()
-	if err != nil && deleteDisks && len(diskPaths) > 0 {
-		if out2, err2 := exec.Command("virsh", "undefine", vmTarget,
-			"--nvram", "--managed-save", "--snapshots-metadata").CombinedOutput(); err2 == nil {
-			out, err = out2, nil
-		}
-	}
-	if err == nil && deleteDisks {
-		for _, p := range diskPaths {
-			if rerr := removeDiskFile(p); rerr != nil {
-				log.Printf("delete_vm: could not remove %s: %v", p, rerr)
-			}
-		}
-	}
-	if err == nil && !deleteDisks && len(diskPaths) > 0 {
-		log.Printf("delete_vm: kept %d disk file(s) — delete_disks=false", len(diskPaths))
-	}
+	// Never pass --remove-all-storage (or a caller-provided storage list).
+	// libvirt's storage removal would bypass the ownership guard above.
+	out, err := exec.Command("virsh", "undefine", vmTarget,
+		"--nvram", "--managed-save", "--snapshots-metadata").CombinedOutput()
 
 	msg := strings.TrimSpace(string(out))
 	if err != nil {
@@ -61,5 +52,5 @@ func handleDeleteVM(w http.ResponseWriter, req models.CommandRequest, vmTarget s
 		return
 	}
 	log.Printf("command ok: DELETE_VM vm=%s: %s", vmTarget, msg)
-	respond(w, true, msg)
+	respond(w, true, strings.TrimSpace(msg+" Disk files retained."))
 }

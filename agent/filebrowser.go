@@ -28,9 +28,8 @@ type BrowseResponse struct {
 // defaultBrowseRoots is the always-allowed base set. Even on a host
 // whose pools haven't been enumerated yet (or where virsh fails) the
 // browser still has a safe place to land instead of falling back to
-// the filesystem root. These mirror the directories the rest of the
-// agent already treats as legitimate libvirt image locations (see
-// removeDiskFile in commander.go).
+// the filesystem root. These are browsing roots only; appearing under
+// one does not establish ownership or authorize VM disk deletion.
 var defaultBrowseRoots = []string{
 	"/var/lib/libvirt/images",
 	"/var/lib/libvirt/boot",

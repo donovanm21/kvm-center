@@ -1643,10 +1643,9 @@ function DeleteVMModal({ vm, open, onClose }: { vm: VM; open: boolean; onClose: 
   const cmd = useVMCommand();
   const [step, setStep] = useState(1);
   const [ack, setAck] = useState(false);
-  const [deleteDisks, setDeleteDisks] = useState(false);
   const [typed, setTyped] = useState('');
 
-  const reset = () => { setStep(1); setAck(false); setDeleteDisks(false); setTyped(''); };
+  const reset = () => { setStep(1); setAck(false); setTyped(''); };
   const close = () => { reset(); onClose(); };
 
   const submit = () => {
@@ -1656,7 +1655,7 @@ function DeleteVMModal({ vm, open, onClose }: { vm: VM; open: boolean; onClose: 
         vm_uuid: vm.uuid,
         vm_name: vm.name,
         action: 'DELETE_VM',
-        params: { delete_disks: deleteDisks ? 'true' : 'false' },
+        params: { delete_disks: 'false' },
       },
       {
         onSuccess: (d) => {
@@ -1714,12 +1713,12 @@ function DeleteVMModal({ vm, open, onClose }: { vm: VM; open: boolean; onClose: 
           <ol style={{ margin: '6px 0 0 20px', color: 'var(--text-body)', fontSize: 12, lineHeight: 1.7 }}>
             <li>Force-off if still running (<code style={codeChip}>virsh destroy</code>).</li>
             <li>Undefine the domain, including NVRAM, snapshot metadata, managed-save state.</li>
-            <li>Remove these disk files:</li>
+            <li>Retain all attached storage listed below.</li>
           </ol>
           <ul style={diskListStyle}>
             {diskList.length === 0 ? (
               <li style={{ color: 'var(--text-faded)', fontSize: 11, padding: '4px 0' }}>
-                No disks reported — nothing extra to unlink.
+                No storage paths reported. Attached storage will still be retained.
               </li>
             ) : (
               diskList.map((d) => (
@@ -1734,37 +1733,12 @@ function DeleteVMModal({ vm, open, onClose }: { vm: VM; open: boolean; onClose: 
       {step === 2 && (
         <>
           <p style={{ fontSize: 12, color: 'var(--text-body)', lineHeight: 1.55 }}>
-            The domain definition, snapshots, NVRAM, and managed-save state
-            are always removed — there is no trash bin. Choose what should
-            happen to the backing disk files:
+            The domain definition, snapshot metadata, NVRAM, and managed-save state
+            are always removed. All disk images, installation media, and shared
+            storage are retained. Automatic disk deletion is unavailable because
+            exclusive storage ownership cannot be verified. Review storage
+            dependencies separately before cleaning up any retained files.
           </p>
-          <label
-            style={{
-              marginTop: 12, display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer',
-              padding: '10px 12px', background: 'var(--bg-input)',
-              border: `1px solid ${deleteDisks ? '#A02929' : 'var(--border)'}`,
-              borderLeft: `3px solid ${deleteDisks ? '#F85149' : 'var(--border)'}`,
-              borderRadius: 4,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={deleteDisks}
-              onChange={(e) => setDeleteDisks(e.target.checked)}
-              style={{ marginTop: 2 }}
-            />
-            <span style={{ fontSize: 12, color: 'var(--text-body)', lineHeight: 1.5 }}>
-              <strong style={{ color: deleteDisks ? '#F85149' : 'var(--text-strong)' }}>
-                Also delete the backing disk files
-              </strong>
-              <br />
-              <span style={{ color: 'var(--text-faded)', fontSize: 11 }}>
-                {deleteDisks
-                  ? `The ${diskList.length} disk file${diskList.length === 1 ? '' : 's'} listed on the previous step will be permanently removed. This cannot be undone.`
-                  : 'Leave unchecked to keep the disk files on the host so they can be reattached to a new VM later.'}
-              </span>
-            </span>
-          </label>
           <label
             style={{
               marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer',
@@ -1774,10 +1748,8 @@ function DeleteVMModal({ vm, open, onClose }: { vm: VM; open: boolean; onClose: 
           >
             <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} style={{ marginTop: 2 }} />
             <span style={{ fontSize: 12, color: 'var(--text-body)', lineHeight: 1.5 }}>
-              I understand that the VM definition, snapshots, and metadata will
-              be permanently removed
-              {deleteDisks && ', and that the backing disk files will be deleted'}
-              .
+              I understand that the VM definition, snapshot metadata, NVRAM, and
+              managed-save state will be permanently removed. Disk files will be retained.
             </span>
           </label>
         </>

@@ -14,7 +14,7 @@ interface Row {
 // ("on = feature available") and inverts when writing.
 const ROWS: Row[] = [
   { key: 'disable_vm_create',      label: 'Create VMs',         help: 'Allow operators to provision new VMs through the wizard.' },
-  { key: 'disable_vm_delete',      label: 'Delete VMs',         help: 'Allow operators to permanently destroy VM domains and their disks.' },
+  { key: 'disable_vm_delete',      label: 'Delete VMs',         help: 'Allow operators to permanently remove VM definitions and state. Disk files are retained.' },
   { key: 'disable_snapshots',      label: 'Snapshots',          help: 'Create, revert, and delete libvirt domain snapshots.' },
   { key: 'disable_console',        label: 'Remote console',     help: 'Hide the Launch Console button and the live thumbnail click-through.' },
   { key: 'disable_migrations',     label: 'VM migrations',      help: 'Live and offline migration between hypervisors.' },

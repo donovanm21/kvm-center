@@ -9,7 +9,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -524,55 +523,6 @@ func migrationURI(dest, transport string) string {
 		return fmt.Sprintf("qemu+tls://%s/system", dest)
 	}
 	return fmt.Sprintf("qemu+ssh://kvm-migrator@%s/system?keyfile=/var/lib/kvm-migrator/.ssh/id_ed25519&no_verify=1", dest)
-}
-
-// collectVMDiskPaths scrapes the domain XML for the disk source paths so
-// we can unlink them after undefine when the disks weren't part of a
-// libvirt storage pool (very common for qcow2 images under
-// /var/lib/libvirt/images/). Returns an empty slice on any parse failure
-// — the caller already guarded the undefine itself.
-func collectVMDiskPaths(vmTarget string) []string {
-	xml, err := exec.Command("virsh", "dumpxml", vmTarget).CombinedOutput()
-	if err != nil {
-		return nil
-	}
-	var paths []string
-	for _, line := range strings.Split(string(xml), "\n") {
-		line = strings.TrimSpace(line)
-		// <source file='/var/lib/libvirt/images/vm.qcow2'/>
-		if !strings.HasPrefix(line, "<source ") {
-			continue
-		}
-		const key = "file='"
-		i := strings.Index(line, key)
-		if i < 0 {
-			continue
-		}
-		rest := line[i+len(key):]
-		j := strings.IndexByte(rest, '\'')
-		if j <= 0 {
-			continue
-		}
-		paths = append(paths, rest[:j])
-	}
-	return paths
-}
-
-func removeDiskFile(path string) error {
-	// Only operate on files under the common libvirt image directories.
-	// Refuse anything else so a compromised control plane can't use this
-	// as an arbitrary-delete primitive.
-	safe := false
-	for _, prefix := range []string{"/var/lib/libvirt/images/", "/var/lib/libvirt/boot/", "/tmp/"} {
-		if strings.HasPrefix(path, prefix) {
-			safe = true
-			break
-		}
-	}
-	if !safe {
-		return fmt.Errorf("refusing to remove %q: outside allowed libvirt image paths", path)
-	}
-	return os.Remove(path)
 }
 
 // handleCommandOutcome is the read-only lookup the server's

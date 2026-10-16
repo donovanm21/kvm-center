@@ -15,6 +15,7 @@ history for per-commit detail.
 ## v5.61
 
 ### Security
+- VM deletion retains disk images and attached media. Automatic disk cleanup is disabled until exclusive storage ownership can be verified; API requests with `delete_disks=true` fail before changing the VM.
 - The server→agent command channel is now authenticated. The server signs every command request and agents reject unsigned or forged commands once the upgraded server advertises signing. Rollout is automatic and lockout-proof; `KVM_CENTER_DISABLE_AGENT_CMD_AUTH=1` is an emergency kill-switch.
 - Agent self-update verifies an Ed25519 signature on the downloaded binary before installing it, and only updates from the configured server — closing an unsigned-binary code-execution path.
 - SSH host-key checking defaults to `accept-new` (trust-on-first-use) rather than accepting any key; full strict checking stays available via Settings.
