@@ -9,7 +9,7 @@ require (
 	github.com/yuin/goldmark v1.7.17
 	go.mongodb.org/mongo-driver v1.17.7
 	google.golang.org/grpc v1.83.2
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.50.0
 )
 
