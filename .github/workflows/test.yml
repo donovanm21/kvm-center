@@ -243,8 +243,65 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  history-acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-history
+      cancel-in-progress: true
+    env:
+      KVMC_TEST_MONGO_URI: mongodb://127.0.0.1:27017
+    services:
+      mongo:
+        image: mongo:7.0.45-jammy
+        ports:
+          - '127.0.0.1:27017:27017'
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1}).ok || quit(1)'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+          cache-dependency-path: 'go.sum'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          package-manager-cache: false
+      - name: Validate capped history and native artifact recovery
+        run: python3 scripts/validate-history.py
+      - name: Verify fixture database cleanup
+        if: always()
+        env:
+          MONGO_CONTAINER: ${{ job.services.mongo.id }}
+        run: |
+          docker exec "$MONGO_CONTAINER" mongosh --quiet --eval '
+            const left = db.adminCommand({listDatabases:1, nameOnly:true}).databases
+              .filter(d => d.name.startsWith("kvmc_validation_"));
+            if (left.length) { printjson(left.map(d => d.name)); quit(1); }
+            print("No validation databases remain");'
+      - name: Preserve validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: history-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .validation/history/report.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
   summary:
-    needs: [lint-test, webui-audit, gitleaks, mongo-integration, browser-integration]
+    needs: [lint-test, webui-audit, gitleaks, mongo-integration, browser-integration, history-acceptance]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -255,11 +312,13 @@ jobs:
           echo "gitleaks:    ${{ needs.gitleaks.result }}"
           echo "mongo:       ${{ needs.mongo-integration.result }}"
           echo "browser:     ${{ needs.browser-integration.result }}"
+          echo "history:     ${{ needs.history-acceptance.result }}"
           if [ "${{ needs.lint-test.result }}"   = "success" ] \
           && [ "${{ needs.webui-audit.result }}" = "success" ] \
           && [ "${{ needs.gitleaks.result }}"    = "success" ] \
           && [ "${{ needs.mongo-integration.result }}" = "success" ] \
-          && [ "${{ needs.browser-integration.result }}" = "success" ]; then
+          && [ "${{ needs.browser-integration.result }}" = "success" ] \
+          && [ "${{ needs.history-acceptance.result }}" = "success" ]; then
             echo "All source and integration gates passed."
           else
             echo "::error::One or more source or integration gates failed — see individual job logs."

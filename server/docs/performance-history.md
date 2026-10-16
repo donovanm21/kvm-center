@@ -121,3 +121,51 @@ save-latency/RSS/disk measurements at the supported bound, native process restar
 and interruption acceptance for the exact artifact, isolated restore/rollback,
 deployment-lineage compatibility, packaging acceptance and outstanding release
 security acceptance. Source/hosted tests alone do not establish full readiness.
+
+## Reproducible native-artifact acceptance
+
+The dedicated `history-acceptance` Actions job runs
+`python3 scripts/validate-history.py` on disposable Ubuntu 24.04 amd64 with
+loopback MongoDB 7. It builds the production SPA and the complete matrix from
+`scripts/build-release.sh`, hashes the tested native server, and exercises that
+same binary throughout. It does not publish any artifact.
+
+The non-race capacity run compares an empty Store with 64 hosts × 576 buckets,
+then records all 64 hosts and performs 20 checked saves for each backend. Each
+cycle checks that 576 buckets remain, even across a five-minute boundary.
+It reports elapsed time, save p50/p95/max, post-GC heap, process RSS high water,
+FD/goroutine deltas and logical/allocated storage. The native process also reports
+empty versus capped RSS and 20 authenticated history-read latencies. These are
+short serial regressions, not a long-duration soak or concurrent-fleet SLA.
+The test-process RSS is a cumulative high-water mark across its subtests;
+forced GC changes workload behavior. Mongo storage allocation is observed,
+not a claim that database files shrink when history expires.
+
+Regression ceilings are five seconds per checked save, two seconds per API
+read, 256 MiB retained test heap, 768 MiB process RSS, 32 MiB late retained-heap
+growth and at most eight added FDs/goroutines. These are generous test failure
+thresholds, not recommended provisioning or guaranteed performance. CI reports
+contain measured values for the exact source revision and binary SHA-256.
+
+Lifecycle checks use real HTTP telemetry and authenticated API reads with
+collection enabled. They exercise graceful SIGTERM/restart, SIGKILL after an
+independently verified durable checkpoint, all-host history comparison, actual
+backup archive checksums/schema metadata, stopped-writer restoration to an
+empty isolated target, and rollback using a pinned pre-history binary with its
+own pre-upgrade backup. The latest unacknowledged sample may survive or be lost;
+only the established durable checkpoint is required. Online restore must still
+return 503. No history chart or enabled-history UI coverage is claimed.
+
+Only sanitized JSON evidence is uploaded. Temporary binaries, raw logs,
+credentials, keys, archives and fixture data are removed; random fixture Mongo
+databases are dropped and checked separately by CI. All subprocess sessions are
+owned and terminated/reaped on failure or cancellation.
+
+Production image acceptance remains blocked by missing tracked inputs referenced
+by `Dockerfile.server`: `scripts/update-agent.sh`, `scripts/install-kvmctl.sh`,
+`scripts/install-kvmctl.ps1` and `scripts/libvirt-hooks-qemu.sh`. The current tag
+release workflow also does not invoke the fresh SPA build or explicitly stamp
+Git SHA. Passing the native release-script artifact therefore does not validate
+that image or the tag workflow's output. ARM64 runtime, sustained concurrent
+load, disk-full/backend outage, real deployment lineage/backend-native recovery,
+and outstanding release security acceptance remain separate gates.
