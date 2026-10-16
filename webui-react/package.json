@@ -22,8 +22,11 @@
   "devDependencies": {
     "@types/react": "^19.2.16",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^4.3.3",
+    "@vitejs/plugin-react": "6.1.2",
     "typescript": "7.0.2",
-    "vite": "^5.4.10"
+    "vite": "8.3.4"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }
