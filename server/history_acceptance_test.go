@@ -234,7 +234,16 @@ func startAcceptance(t *testing.T, binary, root string, b Backend, token string,
 	t.Cleanup(func() { p.stop(t, true) })
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		r, err := p.client.Get(p.url + "/health")
+		// /health includes fleet health: deliberately offline fixture hosts
+		// make it return 503 even when the API and store are ready. Require
+		// an authenticated admin API read instead of treating fleet health
+		// as process readiness.
+		req, err := http.NewRequest(http.MethodGet, p.url+"/api/admin/system-health", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+p.token)
+		r, err := p.client.Do(req)
 		if err == nil {
 			io.Copy(io.Discard, r.Body)
 			r.Body.Close()
