@@ -129,7 +129,9 @@ func (b *MongoBackend) dial(ctx context.Context) (*mongo.Database, error) {
 	pingCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
 	if err := cli.Ping(pingCtx, readpref.Primary()); err != nil {
-		_ = cli.Disconnect(context.Background())
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		_ = cli.Disconnect(closeCtx)
+		closeCancel()
 		return nil, fmt.Errorf("mongo ping: %w", err)
 	}
 	b.client = cli

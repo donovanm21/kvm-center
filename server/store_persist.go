@@ -241,7 +241,11 @@ func (s *Store) load() {
 		// Load error: do NOT open the save gate. Operator fixes
 		// backend; next restart retries Load. Periodic Save no-ops
 		// until then, preserving whatever's in the backend.
-		log.Printf("store: backend load error (%s): %v — periodic Save will be skipped until next successful boot Load", s.backend.Name(), err)
+		if s.backend.Name() == "mongo" {
+			log.Printf("store: Mongo load failed; save gate remains closed")
+		} else {
+			log.Printf("store: backend load error (%s): %v — periodic Save will be skipped until next successful boot Load", s.backend.Name(), err)
+		}
 		return
 	}
 	if d == nil {
