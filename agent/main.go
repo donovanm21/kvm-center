@@ -23,12 +23,46 @@ func main() {
 	serverURL := flag.String("server", envOrDefault("KVM_CENTER_SERVER", "https://kvm-center:8190"), "control plane URL (TLS-only since v5.32.0)")
 	cmdPort := flag.Int("port", intEnvOrDefault("KVM_CENTER_AGENT_PORT", 8081), "command server port")
 	interval := flag.Duration("interval", 15*time.Second, "telemetry interval")
+	validationMode := flag.Bool("validation", false, "run fixture-only validation runtime (no native agent workers)")
+	validationState := flag.String("validation-state-dir", "", "existing private directory for validation operation state")
+	validationPKI := flag.String("validation-pki-dir", "", "existing empty private directory reserved for validation PKI (no credentials generated)")
+	validationListen := flag.String("validation-listen", "127.0.0.1:0", "literal loopback validation listener; port 0 allocates a port")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
 	if *showVersion {
 		log.Printf("kvm-center-agent %s", Version)
 		os.Exit(0)
+	}
+	if *validationMode {
+		var incompatible string
+		flag.Visit(func(f *flag.Flag) {
+			if f.Name == "server" || f.Name == "port" || f.Name == "interval" {
+				incompatible = f.Name
+			}
+		})
+		if incompatible != "" {
+			log.Fatalf("validation: production flag -%s is unsupported", incompatible)
+		}
+		cfg, err := resolveValidationConfig(*validationState, *validationPKI, *validationListen, os.Getenv)
+		if err != nil {
+			log.Fatalf("validation: %v", err)
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		if err := runValidationAgent(ctx, cfg, func(addr string) { log.Printf("validation fixture listening on %s", addr) }); err != nil {
+			log.Fatalf("validation: %v", err)
+		}
+		return
+	}
+	var validationFlag string
+	flag.Visit(func(f *flag.Flag) {
+		if strings.HasPrefix(f.Name, "validation-") {
+			validationFlag = f.Name
+		}
+	})
+	if validationFlag != "" {
+		log.Fatalf("-%s requires -validation; production paths are unchanged", validationFlag)
 	}
 	log.Printf("kvm-center-agent starting, version=%s", Version)
 

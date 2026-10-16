@@ -15,6 +15,7 @@ history for per-commit detail.
 ## v5.61
 
 ### Added
+- The agent has an opt-in fixture-only validation runtime with separate temporary state, loopback listeners and no native host workers or command routes. It does not yet validate native VM operations or enrollment.
 - Administrators can record an observed success or failure for a stranded (`unknown`) command through `POST /api/admin/command-log/resolve`. Resolutions retain the actor and note, wait for persistence before acknowledgement, and prevent late agent outcomes from replacing the decision.
 
 ### Fixed
