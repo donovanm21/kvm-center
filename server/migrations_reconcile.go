@@ -33,7 +33,11 @@ func reconcileStrandedMigrations(store *Store) {
 	// GetVMs returns empty until agents have checked in. Without this
 	// delay we'd wrongly mark "complete" records as "failed" simply
 	// because the destination host hadn't reported its VM list yet.
-	time.Sleep(60 * time.Second)
+	select {
+	case <-serverContext().Done():
+		return
+	case <-time.After(60 * time.Second):
+	}
 
 	const inflightTimeout = 90 * time.Minute
 	now := time.Now()

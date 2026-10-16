@@ -46,7 +46,7 @@ func isPolicySnapshot(policyID, name string) bool {
 // level granularity — fine for the coarsest sensible snapshot
 // schedules (hourly / daily / weekly).
 func (s *Store) startSnapshotScheduler(ctx context.Context) {
-	go func() {
+	s.goWork("snapshot_policies", func() {
 		t := time.NewTicker(60 * time.Second)
 		defer t.Stop()
 		// Fire once at startup so a freshly-configured policy doesn't
@@ -60,7 +60,7 @@ func (s *Store) startSnapshotScheduler(ctx context.Context) {
 				s.runDueSnapshotPolicies(ctx)
 			}
 		}
-	}()
+	})
 }
 
 // runDueSnapshotPolicies iterates every policy and fires those whose
@@ -396,7 +396,7 @@ func handleSnapshotPolicy(store *Store) http.HandlerFunc {
 				writeError(w, http.StatusNotFound, "policy not found")
 				return
 			}
-			go store.runOneSnapshotPolicy(context.Background(), p, time.Now().UTC())
+			store.goWork("snapshot-policy", func() { store.runOneSnapshotPolicy(serverContext(), p, time.Now().UTC()) })
 			audit(store, r, AuditSnapPolicyRun, "policy/"+id, nil, true, "")
 			recordOperatorTask(store, r, AuditSnapPolicyRun, "policy/"+id, map[string]string{"policy_name": p.Name}, true, "")
 			writeJSON(w, http.StatusOK, map[string]string{"status": "queued"})

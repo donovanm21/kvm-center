@@ -57,8 +57,13 @@ func startExpiryWatcher(store *Store, reloader *CertReloader, ca *ClusterCA) {
 	defer t.Stop()
 	check := func() { runExpiryCheck(store, reloader, ca, state, time.Now()) }
 	check()
-	for range t.C {
-		check()
+	for {
+		select {
+		case <-serverContext().Done():
+			return
+		case <-t.C:
+			check()
+		}
 	}
 }
 

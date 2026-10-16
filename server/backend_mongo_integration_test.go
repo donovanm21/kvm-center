@@ -361,3 +361,26 @@ func TestMongoIntegrationCommandResolution(t *testing.T) {
 		t.Fatalf("resolution audit count after reload/retry=%d", count)
 	}
 }
+
+// A successful local drain must survive a fresh Mongo connection. This is not
+// evidence of transactional multi-collection writes or a coordinated file backup.
+func TestMongoIntegrationShutdownDrain(t *testing.T) {
+	b := newMongoIntegrationBackend(t)
+	s := drainStore(b)
+	s.roles["drained-role"] = &models.Role{ID: "drained-role", Name: "fixture"}
+	s.pendingEnrollments = map[string]*models.PendingEnrollment{"fixture": {ID: "fixture", HostID: "fixture", PollTokenHash: "synthetic-private-hash"}}
+	s.AsyncSave()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := testCoordinator(s).drain(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Close from drain discarded the old client; Load must reconnect.
+	got, err := b.Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Roles["drained-role"] == nil || got.PendingEnrollments["fixture"] == nil || got.PendingEnrollments["fixture"].PollTokenHash != "synthetic-private-hash" {
+		t.Fatal("drained snapshot or private persistence field missing after reconnect")
+	}
+}

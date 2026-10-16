@@ -408,9 +408,9 @@ func (s *Store) startDiscordGatewayWorkers(ctx context.Context) {
 	}
 	s.mu.Unlock()
 	c := newGatewayClient(s)
-	go pairingPoller(ctx, c)
-	go healthMonitor(ctx, c)
-	go sendWorker(ctx, c)
+	s.goWork("pairingPoller", func() { pairingPoller(ctx, c) })
+	s.goWork("healthMonitor", func() { healthMonitor(ctx, c) })
+	s.goWork("sendWorker", func() { sendWorker(ctx, c) })
 }
 
 // pairingPoller advances Pending → Approved (or Timeout). Sleeps when

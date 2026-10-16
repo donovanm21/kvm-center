@@ -106,7 +106,7 @@ func handleDiscordGatewayPut(store *Store) http.HandlerFunc {
 		store.SetDiscordGateway(merged)
 
 		if needsPair {
-			go runPairRequest(store, r)
+			store.goWork("pair-request", func() { runPairRequest(store, r) })
 		}
 
 		audit(store, r, AuditDiscordGwUpdate, "discord-gateway", map[string]string{
@@ -177,7 +177,7 @@ func handleDiscordGatewayPair(store *Store) http.HandlerFunc {
 			g.PendingSince = ""
 			g.LastHealthError = ""
 		})
-		go runPairRequest(store, r)
+		store.goWork("pair-request", func() { runPairRequest(store, r) })
 		audit(store, r, AuditDiscordGwPair, "discord-gateway", nil, true, "")
 		writeJSON(w, http.StatusOK, store.discordGatewayPublicSnapshot())
 	}
@@ -234,7 +234,7 @@ func runPairRequest(store *Store, r *http.Request) {
 	if cfg == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(serverContext(), 15*time.Second)
 	defer cancel()
 	source := map[string]string{
 		"source_kind": "kvm-center",

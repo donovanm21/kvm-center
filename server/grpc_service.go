@@ -213,6 +213,13 @@ func buildGRPCServer(store *Store) *grpc.Server {
 // GRPCRequireClientCert feature flag also applies here.
 func agentAuthUnaryInterceptor(store *Store) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if !store.work.begin() {
+			return nil, status.Error(codes.Unavailable, "server draining")
+		}
+		defer store.work.end()
+		if store.shutdown != nil && store.shutdown.draining.Load() {
+			return nil, status.Error(codes.Unavailable, "server draining")
+		}
 		if certHostID, ok := agentHostFromClientCert(ctx); ok {
 			if store.GetHost(certHostID) == nil {
 				log.Printf("grpc: refusing %s — client cert CN %q is not a known host", info.FullMethod, certHostID)
@@ -251,6 +258,13 @@ func agentAuthUnaryInterceptor(store *Store) grpc.UnaryServerInterceptor {
 // open; agents do this from `live_metrics.go` and `migrate.go`.
 func agentAuthStreamInterceptor(store *Store) grpc.StreamServerInterceptor {
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		if !store.work.begin() {
+			return status.Error(codes.Unavailable, "server draining")
+		}
+		defer store.work.end()
+		if store.shutdown != nil && store.shutdown.draining.Load() {
+			return status.Error(codes.Unavailable, "server draining")
+		}
 		// v5.44.0: prefer the cluster-CA-verified client cert when
 		// the agent presents one. The cert's CN is the host_id,
 		// pinned at enrollment time. Cryptographically authenticated
@@ -354,15 +368,18 @@ func (s *agentGRPCServer) OpenConsoleSession(ctx context.Context, req *agentpb.C
 // startGRPCServerOn binds an already-built grpc.Server to its own
 // TCP listener. Used when the operator wants a dedicated gRPC port
 // alongside the multiplexed-on-8190 path.
-func startGRPCServerOn(addr string, srv *grpc.Server) (stop func(), err error) {
+func startGRPCServerOn(addr string, srv *grpc.Server, onFailure ...func(error)) (stop func(), err error) {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 	go func() {
 		log.Printf("grpc agent service listening on %s (dedicated port)", addr)
-		if err := srv.Serve(lis); err != nil {
+		if err := srv.Serve(lis); err != nil && err != grpc.ErrServerStopped {
 			log.Printf("grpc: serve exited: %v", err)
+			for _, report := range onFailure {
+				report(err)
+			}
 		}
 	}()
 	stop = func() {

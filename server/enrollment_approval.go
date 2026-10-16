@@ -641,7 +641,7 @@ func handleEnrolmentReject(store *Store) http.HandlerFunc {
 // past their TTL as "expired" and hard-removes terminal rows older
 // than 24h so the list doesn't grow unbounded.
 func (s *Store) startEnrolmentSweeper(stop <-chan struct{}) {
-	go func() {
+	s.goWork("enrollment_approval", func() {
 		t := time.NewTicker(1 * time.Minute)
 		defer t.Stop()
 		for {
@@ -652,7 +652,7 @@ func (s *Store) startEnrolmentSweeper(stop <-chan struct{}) {
 				s.sweepEnrolments()
 			}
 		}
-	}()
+	})
 }
 
 func (s *Store) sweepEnrolments() {

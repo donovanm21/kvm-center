@@ -143,7 +143,7 @@ func backupIsDue(sc *models.BackupSchedule, now time.Time) (bool, error) {
 // the supplied context — when it's cancelled the goroutine exits
 // promptly so no tick fires during shutdown.
 func (s *Store) startBackupScheduler(ctx context.Context) {
-	go func() {
+	s.goWork("backup_scheduler", func() {
 		t := time.NewTicker(backupSchedulerTick)
 		defer t.Stop()
 		for {
@@ -154,7 +154,7 @@ func (s *Store) startBackupScheduler(ctx context.Context) {
 				s.runBackupSchedulerTick()
 			}
 		}
-	}()
+	})
 }
 
 func (s *Store) runBackupSchedulerTick() {

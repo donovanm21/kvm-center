@@ -8,6 +8,7 @@ package main
 // grouping, not a new package.
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -112,6 +113,14 @@ func (s *Store) Save() {
 // it before acknowledging security changes or other durability-sensitive
 // mutations; Save is only the logging wrapper for background persistence.
 func (s *Store) SaveChecked() error {
+	if !s.saves.begin() {
+		return errors.New("store: persistence admission closed")
+	}
+	defer s.saves.end()
+	return s.saveCheckedContext(context.Background())
+}
+
+func (s *Store) saveCheckedContext(ctx context.Context) error {
 	if s.backend == nil {
 		return errors.New("store: no persistence backend configured")
 	}
@@ -124,7 +133,9 @@ func (s *Store) SaveChecked() error {
 	// handlers, restore, command-log flush) bypassed it — under load
 	// they raced the AsyncSave goroutines and re-introduced the
 	// E11000 dup-key cycle the v5.60.4 fix was meant to end.
-	s.saveMu.Lock()
+	if err := s.saveMu.LockContext(ctx); err != nil {
+		return err
+	}
 	defer s.saveMu.Unlock()
 	// v5.60.18: clear the AsyncSave debounce flag UNDER saveMu so a
 	// mutator that lands now CASes true and spawns at most one
@@ -147,15 +158,19 @@ func (s *Store) SaveChecked() error {
 		return fmt.Errorf("store: snapshot unmarshal: %w", err)
 	}
 	snap.Dirty = dirtyCollections(s.lastSavedHashes, hashes)
-
-	ctx, cancel := contextWithTimeout(15 * time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
+
 	if err := s.backend.Save(ctx, &snap); err != nil {
 		// A backend may have committed some collections before failing.
 		// Force a full retry, including fields reverted to their last
 		// successful value since that partial write.
 		s.lastSavedHashes = nil
 		return fmt.Errorf("store: backend save (%s): %w", s.backend.Name(), err)
+	}
+	if err := ctx.Err(); err != nil {
+		s.lastSavedHashes = nil
+		return err
 	}
 	s.lastSavedHashes = hashes
 	return nil
@@ -398,8 +413,8 @@ func itoa(n int) string {
 
 // AsyncSave kicks off a non-blocking Save and registers it with
 // saveWG so tests can wait for persistence to quiesce before
-// tearing down TempDir. Production code fires and forgets; the
-// WaitGroup is inert at runtime.
+// tearing down TempDir. The saves work set independently tracks production
+// drain and atomically seals admission once all accepted saves finish.
 //
 // Wrapped in a recover() so a panic during marshal / Mongo write
 // (e.g. unexpected nil in the store from a buggy mutator) only
@@ -418,12 +433,17 @@ func itoa(n int) string {
 // saveQueued is reset right before the queued save runs, so any
 // AsyncSave during that brief window re-arms the next round.
 func (s *Store) AsyncSave() {
+	if !s.saves.begin() {
+		return
+	}
 	if !s.saveQueued.CompareAndSwap(false, true) {
+		s.saves.end()
 		return // already queued; the in-flight save will catch any pending writes
 	}
 	s.saveWG.Add(1)
 	go func() {
 		defer s.saveWG.Done()
+		defer s.saves.end()
 		defer func() {
 			if r := recover(); r != nil {
 				log.Printf("worker: %q panicked: %v\n%s", "async-save", r, debug.Stack())

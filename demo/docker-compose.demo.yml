@@ -32,6 +32,7 @@ services:
 
   kvm-center-demo-server:
     init: true
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "/app/kvm-healthcheck", "-url", "https://127.0.0.1:8190/health", "-timeout", "3s"]
       interval: 15s

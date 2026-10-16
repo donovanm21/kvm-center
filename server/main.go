@@ -7,9 +7,12 @@ import (
 	"flag"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"kvm-center/internal/models"
@@ -70,6 +73,7 @@ func main() {
 	dataFile := flag.String("data", envOrDefault("KVM_CENTER_DATA", "/var/lib/kvm-center/data.json"), "JSON persistence file")
 	caDir := flag.String("ca-dir", envOrDefault("KVM_CENTER_CA_DIR", "/var/lib/kvm-center/ca"), "directory for the cluster CA cert + private key (auto-generated on first boot)")
 	showVersion := flag.Bool("version", false, "print version and exit")
+	graceful := flag.Bool("graceful-shutdown", false, "opt in to bounded persistence drain; requires exclusive backend writer ownership")
 	flag.Parse()
 
 	// --cert and --key must be supplied together; either flag alone is a
@@ -92,24 +96,9 @@ func main() {
 	// Demo-mode posture is read once at startup.
 	loadDemoMode()
 
-	// Server-wide context. Workers (host-mark, phantom-prune, backup
-	// scheduler, drainHost) honour ctx.Done() so tests + future code
-	// can drive a clean shutdown by calling serverCancel().
-	//
-	// We deliberately do NOT install our own SIGINT/SIGTERM handler.
-	// Tried it during the v5.47 cycle and discovered that even just
-	// cancelling the context on signal lets queued AsyncSave goroutines
-	// run during docker's 10 s SIGTERM→SIGKILL grace; that flushed the
-	// pre-seed empty in-memory state right over the seeded Mongo data
-	// in our demo restart flow and broke every authed e2e test. Go's
-	// default SIGTERM handler terminates the process immediately
-	// without giving goroutines a chance to finish — losing a tick of
-	// host-mark or backup scheduler on shutdown is a non-issue, but
-	// stale-Save-overwriting-newer-data is a correctness problem. So
-	// we keep the cancellable context for the in-process clean-paths
-	// and let docker handle the actual signal.
+	// Graceful persistence is opt-in: external seed/import workflows must first
+	// stop the old writer, then seed. A loaded Store cannot detect outside writes.
 	serverCtx, serverCancel = context.WithCancel(context.Background())
-	_ = serverCancel // exposed for tests via the package-level var; not called in main
 
 	// Ensure data directory exists.
 	if err := os.MkdirAll(dirOf(*dataFile), 0755); err != nil {
@@ -125,6 +114,45 @@ func main() {
 	log.Printf("backend: using %s", backend.Name())
 	store := NewStoreWithBackend(backend, *dataFile)
 	serverRestorePaths.DataFile = *dataFile
+	var lifecycle *shutdownCoordinator
+	listenerErrors := make(chan error, 3)
+	signals := make(chan os.Signal, 2)
+	if *graceful {
+		lifecycle = &shutdownCoordinator{store: store, cancel: serverCancel, restart: make(chan struct{}, 1)}
+		store.shutdown = lifecycle
+	}
+	serve := func(srv *http.Server, tls bool) {
+		run := func() error {
+			if tls {
+				return srv.ListenAndServeTLS("", "")
+			}
+			return srv.ListenAndServe()
+		}
+		if lifecycle == nil {
+			if err := run(); err != nil {
+				log.Fatal(err)
+			}
+			return
+		}
+		srv.BaseContext = func(net.Listener) context.Context { return serverCtx }
+		srv.Handler = lifecycle.handler(srv.Handler)
+		lifecycle.servers = append(lifecycle.servers, srv)
+		go func() {
+			if err := run(); err != nil && err != http.ErrServerClosed {
+				listenerErrors <- err
+			}
+		}()
+	}
+	awaitDrain := func() {
+		if lifecycle == nil {
+			return
+		}
+		if err := lifecycle.wait(signals, listenerErrors, 20*time.Second); err != nil {
+			log.Printf("shutdown status=incomplete backup_consistent=false error=%v", err)
+			os.Exit(1)
+		}
+		log.Printf("shutdown status=drained persistence=acknowledged backup_consistent=false")
+	}
 
 	// Kick off the audit-log shipper worker. Safe to call even when
 	// no shipping config exists yet — worker no-ops until the operator
@@ -215,13 +243,13 @@ func main() {
 	// no UI signal (reported as Tier S #8, roadmapped 2026-04-20).
 	// Fires one warning per (kind, identity) transition into the
 	// threshold window so operators don't get spammed every tick.
-	goSafe("expiry-watcher", func() { startExpiryWatcher(store, reloader, clusterCA) })
+	store.goWork("expiry-watcher", func() { startExpiryWatcher(store, reloader, clusterCA) })
 
 	// Background: mark offline hosts and persist every 30 seconds.
 	// Phantom-host prune runs on a separate, slower tick (hourly) so
 	// it can't thrash the store under load and so a noisy audit log
 	// doesn't complicate a storm of MarkOfflineHosts calls.
-	goSafe("host-mark-loop", func() {
+	store.goWork("host-mark-loop", func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -234,7 +262,7 @@ func main() {
 			}
 		}
 	})
-	goSafe("phantom-prune-loop", func() {
+	store.goWork("phantom-prune-loop", func() {
 		// Stagger: first prune after 10 min, then hourly. No need to
 		// race with the post-boot reconcile storm.
 		select {
@@ -500,17 +528,17 @@ func main() {
 	// Clean up migration records stranded by a server restart (bug:
 	// live migrate HTTP response goes to a closed socket across a
 	// restart, so finalizeMigration never runs).
-	go reconcileStrandedMigrations(store)
+	store.goWork("reconcileStrandedMigrations", func() { reconcileStrandedMigrations(store) })
 	// Command log: flip any "pending" entries older than the cutoff
 	// to "unknown" so the admin UI surfaces them. We can't tell
 	// whether the agent actually ran them — hence "unknown", not
 	// "failed". Tier S #4, v5.32.17.
-	go reconcileStrandedCommands(store)
+	store.goWork("reconcileStrandedCommands", func() { reconcileStrandedCommands(store) })
 	// v5.47.2 (PR-1c): live reconciler that polls each agent's
 	// /command-outcome cache to recover the actual outcome of
 	// commands left "pending" by HTTP-call timeouts. Resolves the
 	// bookkeeping divergence salvage from the 2026-04-30 incident.
-	go runCommandReconciler(serverCtx, store)
+	store.goWork("runCommandReconciler", func() { runCommandReconciler(serverCtx, store) })
 	seedPublicURLFromEnv(store)
 	notifyStore = store
 	mux.HandleFunc("/api/setup/state", handleSetupState(store))
@@ -574,7 +602,7 @@ func main() {
 	// Purge expired sessions every 10 minutes. Honours serverCtx so a
 	// clean shutdown stops the loop instead of leaving it ticking past
 	// process cancellation.
-	goSafe("session-purger", func() {
+	store.goWork("session-purger", func() {
 		t := time.NewTicker(10 * time.Minute)
 		defer t.Stop()
 		for {
@@ -608,21 +636,36 @@ func main() {
 	// dedicated port + different firewall rules — set
 	// KVM_CENTER_GRPC_ADDR=0.0.0.0:8095 to enable. Default is the
 	// multiplex (empty → no separate listener).
+	if lifecycle != nil {
+		signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
+		defer signal.Stop(signals)
+	}
 	grpcSrv := buildGRPCServer(store)
+	if lifecycle != nil {
+		lifecycle.stopStreams = grpcSrv.Stop
+	}
 	if *grpcAddr != "" {
-		stop, err := startGRPCServerOn(*grpcAddr, grpcSrv)
+		stop, err := startGRPCServerOn(*grpcAddr, grpcSrv, func(err error) {
+			if lifecycle != nil {
+				listenerErrors <- err
+			}
+		})
 		if err != nil {
 			log.Printf("grpc: dedicated listener disabled (%v)", err)
+			if lifecycle != nil {
+				listenerErrors <- err
+			}
 		} else {
-			defer stop()
+			if lifecycle == nil {
+				defer stop()
+			}
 		}
 	}
 
 	if reloader == nil {
 		log.Printf("kvm-center server listening on %s (plain HTTP, TLS disabled)", *addr)
-		if err := http.ListenAndServe(*addr, handler); err != nil {
-			log.Fatalf("server: %v", err)
-		}
+		serve(&http.Server{Addr: *addr, Handler: handler}, false)
+		awaitDrain()
 		return
 	}
 
@@ -669,32 +712,35 @@ func main() {
 	legacyHTTP := os.Getenv("KVM_CENTER_LEGACY_HTTP") == "1"
 	disableLegacy := os.Getenv("KVM_CENTER_DISABLE_HTTP") == "1"
 	if legacyHTTP && !disableLegacy {
-		goSafe("legacy-http-listener", func() {
-			plain := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				p := r.URL.Path
-				if strings.HasPrefix(p, "/api/") || p == "/health" || strings.HasPrefix(p, "/downloads/") {
-					handler.ServeHTTP(w, r)
-					return
-				}
-				host := r.Host
-				if i := strings.Index(host, ":"); i > 0 {
-					host = host[:i]
-				}
-				target := "https://" + host + *tlsAddr + r.URL.RequestURI()
-				http.Redirect(w, r, target, http.StatusPermanentRedirect)
-			})
-			log.Printf("kvm-center server plain-HTTP on %s (legacy opt-in via KVM_CENTER_LEGACY_HTTP=1)", *addr)
-			if err := http.ListenAndServe(*addr, plain); err != nil {
-				log.Printf("server: http listener exited: %v", err)
+		plain := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p := r.URL.Path
+			if strings.HasPrefix(p, "/api/") || p == "/health" || strings.HasPrefix(p, "/downloads/") {
+				handler.ServeHTTP(w, r)
+				return
 			}
+			host := r.Host
+			if i := strings.Index(host, ":"); i > 0 {
+				host = host[:i]
+			}
+			target := "https://" + host + *tlsAddr + r.URL.RequestURI()
+			http.Redirect(w, r, target, http.StatusPermanentRedirect)
 		})
+		log.Printf("kvm-center server plain-HTTP on %s (legacy opt-in via KVM_CENTER_LEGACY_HTTP=1)", *addr)
+		if lifecycle != nil {
+			serve(&http.Server{Addr: *addr, Handler: plain}, false)
+		} else {
+			goSafe("legacy-http-listener", func() {
+				if err := http.ListenAndServe(*addr, plain); err != nil {
+					log.Printf("server: http listener exited: %v", err)
+				}
+			})
+		}
 	} else {
 		log.Printf("kvm-center server plain-HTTP listener disabled (default v5.47+; opt in with KVM_CENTER_LEGACY_HTTP=1 if pre-v5.32 kvm-tools are still in the fleet)")
 	}
 	log.Printf("kvm-center server listening on %s (TLS)", *tlsAddr)
-	if err := tlsServer.ListenAndServeTLS("", ""); err != nil {
-		log.Fatalf("server: tls: %v", err)
-	}
+	serve(tlsServer, true)
+	awaitDrain()
 }
 
 // allowedCORSOrigins is the configured allowlist for cross-origin

@@ -61,7 +61,7 @@ func (s *Store) startMetricsWorker(ctx context.Context) {
 	}
 	s.mu.Unlock()
 
-	go func() {
+	s.goWork("metrics", func() {
 		batch := make([]metricSample, 0, metricsDefaultBatchSize*2)
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
@@ -136,7 +136,7 @@ func (s *Store) startMetricsWorker(ctx context.Context) {
 			s.recordMetricsResult(nil, int64(len(batch)))
 			batch = batch[:0]
 		}
-	}()
+	})
 }
 
 // queueSample is the non-blocking producer. Drops on a full queue so
