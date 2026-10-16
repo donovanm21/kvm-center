@@ -193,25 +193,42 @@ work must remain in an explicitly authorized isolated lab.
 
 ## Recorded adoption status (16 October 2026)
 
-This is an evidence snapshot, not a release certificate. Public baseline
-`42bbf010842396560476f284a98f2aa4f5d2b5aa` contains reviewed changes
-[17](https://github.com/donovanm21/kvm-center/pull/17),
+This is an evidence snapshot, not a release certificate. Reviewed public source
+through `74ed3a1b3dcab5d9d7c2ccff18aa0e4474c7caf7` includes command recovery,
+backup/persistence and disk-ownership fixes ([17](https://github.com/donovanm21/kvm-center/pull/17),
 [18](https://github.com/donovanm21/kvm-center/pull/18),
-[19](https://github.com/donovanm21/kvm-center/pull/19),
-[20](https://github.com/donovanm21/kvm-center/pull/20), and
-[21](https://github.com/donovanm21/kvm-center/pull/21).
+[20](https://github.com/donovanm21/kvm-center/pull/20)); dependency and frontend
+compatibility work ([19](https://github.com/donovanm21/kvm-center/pull/19),
+[21](https://github.com/donovanm21/kvm-center/pull/21),
+[27](https://github.com/donovanm21/kvm-center/pull/27),
+[35](https://github.com/donovanm21/kvm-center/pull/35),
+[37](https://github.com/donovanm21/kvm-center/pull/37),
+[39](https://github.com/donovanm21/kvm-center/pull/39),
+[40](https://github.com/donovanm21/kvm-center/pull/40),
+[41](https://github.com/donovanm21/kvm-center/pull/41)); and validation, version
+metadata and Actions compatibility ([36](https://github.com/donovanm21/kvm-center/pull/36),
+[38](https://github.com/donovanm21/kvm-center/pull/38),
+[42](https://github.com/donovanm21/kvm-center/pull/42)).
 
 | Gate | Status and exact scope |
 | --- | --- |
-| Public source correctness | Passed full Go race suite on the combined command/backup/disk source and patched dependencies; PR 21 Node 20/Go/build/security CI passed. Candidate-specific reruns remain mandatory. |
-| Desktop browser | Passed 16 Chromium checks with no retries/skips on local candidate `fb007c5` (tree identical to public baseline): real server/session/JSON, synthetic inventory, exact-SHA assertion, navigation and read-only modal dismissal. |
+| Public source correctness | Passed all seven local source gates on candidate `e702b63` (tree `0d37a54146b9cc388e7465df0367b2cfa35166be`, identical to the public baseline above): 26 validation-harness tests, 420 named Go test/subtest results under race, formatting, module consistency, vet, eight form tests plus compiler fixtures, production SPA and 12 cross-builds. Candidate-specific reruns remain mandatory. |
+| CI and dependency compatibility | Exact-head [PR 42 CI](https://github.com/donovanm21/kvm-center/actions/runs/38882801274) passed with runner 2.337.0, Node 20.20.2 and Go 1.26.9. Actual `go.sum` cache restore and `GOTOOLCHAIN=local` were verified; automatic npm caching remains disabled. Docker login/QEMU dependency PRs remain held because their release-only runtime paths have not been exercised. |
+| Desktop browser and forms | Passed 19 Chromium checks with no retries/skips on `cbded20` (tree `d683afeff28aeb6aca6586a6117a35db90329cb1`, identical to public PR 27): real server/session/JSON, synthetic inventory, exact-SHA assertion, navigation, validation and repeated cancel/reset/reopen. Subsequent PR 42 changes workflow files only. Form writes were intercepted and checked before reaching the server; this does not validate actual VM or token creation. |
 | Mongo persistence | Not validated against a live Mongo service. Integration source is present; BSON/mock tests cannot replace runtime evidence. |
 | Mobile/WebKit | Blocked in the available environment by missing runtime libraries. No successful mobile-browser claim. |
-| Release packaging | Blocked by four absent installer/hook inputs. Canonical sources were located, but recovery alone is insufficient; compatibility and safety review are required before restoration. |
+| Release packaging | Public tree remains blocked by four absent installer/hook inputs. Located canonical sources require completed review before restoration; version-stamping fixes alone do not establish install, upgrade or rollback acceptance. |
 | Containers and target OS runtime | Not validated. Cross-compilation is compilation evidence only. |
 | VM lifecycle, disk/pool operations, real console and migration | Unit/handler coverage only; real multi-host acceptance has not run. Disk deletion remains disabled where ownership cannot be established. |
-| Backup and disaster recovery | Failure regressions pass; online restore is explicitly unsupported. Live Mongo crash consistency and complete isolated restore remain release blockers. |
+| Backup and disaster recovery | Failure regressions and a temporary, closed-database SQLite old/new/old reopen sequence pass; online restore is explicitly unsupported. Live Mongo crash consistency and complete isolated restore remain release blockers. |
 | Identity, trust, upgrades and recovery | Security acceptance remains incomplete. Require reviewed boundaries, secure bootstrap, supported mixed-version behavior and a tested recovery procedure before adoption. |
+
+The paired frontend migrations are TypeScript 7, Vite 8/plugin-react 6 and
+Zod 4/resolver 5, with React/runtime types 19.3. Ordinary CI now runs actual
+application-schema form regressions; its npm audit is production-dependency
+scoped and must not be presented as a complete development-toolchain audit.
+No hosted Mongo/browser jobs, release or deployment were activated by these
+changes. Production readiness remains blocked by the rows above.
 
 Do not release or deploy on the strength of a source/browser pass. Preserve
 failed and blocked reports. A regression after integration requires reverting
