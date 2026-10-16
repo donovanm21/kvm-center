@@ -79,6 +79,7 @@ def main():
             for p in paths:
                 metadata = subprocess.check_output(['go', 'version', '-m', str(p)], text=True, timeout=30)
                 variable = 'cliVersion' if p.name.startswith('kvmctl') else ('Version' if p.name.startswith('kvm-center-agent') else 'versionRaw')
+                report.setdefault('stamp_metadata', {})[p.name] = [line.strip() for line in metadata.splitlines() if '-ldflags=' in line]
                 if 'main.GitSHA='+source['revision'] not in metadata or f'main.{variable}={version}' not in metadata:
                     raise ValueError('artifact identity stamp mismatch: '+p.name)
                 report['artifacts'].append(dict(name=p.name, sha256=hashlib.sha256(p.read_bytes()).hexdigest()))
