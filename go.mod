@@ -7,7 +7,7 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.8
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/yuin/goldmark v1.7.17
-	go.mongodb.org/mongo-driver v1.17.7
+	go.mongodb.org/mongo-driver v1.17.10
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.50.0
