@@ -204,3 +204,23 @@ var _ = errAlreadyTerminal
 
 // dummy compile-time check that signal const exists.
 var _ = errors.New
+
+func TestCancelOperation_ConcurrentCompletionIsPreserved(t *testing.T) {
+	s := withOpsStore(t)
+	reqID := "complete-during-cancel"
+	if err := s.Insert(context.Background(), Operation{RequestID: reqID, Action: "MIGRATE", VMName: "test", State: OpStateRunning}); err != nil {
+		t.Fatal(err)
+	}
+	deps, _ := cancelTestDeps(t)
+	deps.domjobAbort = func(string) error {
+		return s.FinishActive(context.Background(), reqID, UpdateStateOpts{State: OpStateSuccess, Output: "completed first"})
+	}
+	state, err := cancelOperation(context.Background(), reqID, "late cancellation", *deps)
+	if err != nil || state != OpStateSuccess {
+		t.Fatalf("concurrent completion lost: state=%s err=%v", state, err)
+	}
+	got, _ := s.Get(context.Background(), reqID)
+	if got.State != OpStateSuccess || got.Output != "completed first" || got.Error != "" {
+		t.Fatalf("terminal state changed: %+v", got)
+	}
+}

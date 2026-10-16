@@ -44,12 +44,6 @@ func main() {
 		log.Printf("self-update disabled: os.Executable: %v", err)
 	}
 
-	// Start the command server in the background.
-	go StartCommandServer(cmdAddr)
-
-	// Give the command server a moment to bind.
-	time.Sleep(100 * time.Millisecond)
-
 	log.Printf("kvm-center agent  server=%s  interval=%s  cmdPort=%d",
 		*serverURL, *interval, *cmdPort)
 
@@ -91,27 +85,27 @@ func main() {
 	// /var/lib/kvm-center/operations.db (override KVM_AGENT_OPS_DB).
 	// Replaces the in-memory outcome cache so command outcomes survive
 	// agent restarts and the boot reconciler (PR-2d) can resolve any
-	// in-flight rows against libvirt reality. Failure to open is
-	// non-fatal — the agent keeps running, but slow-action durability
-	// degrades to the v5.32.17 in-memory cache.
+	// in-flight rows against libvirt reality. Failure is fatal: accepting
+	// commands without the existing history could repeat a prior operation.
 	opsDBPath := envOrDefault("KVM_AGENT_OPS_DB", DefaultOpsDBPath)
 	if store, err := OpenOperationsStore(opsDBPath); err != nil {
-		log.Printf("ops.db: open %s failed: %v — falling back to in-memory cache only", opsDBPath, err)
+		log.Fatalf("ops.db: open %s failed: %v — command listener not started; repair the operation store before restarting", opsDBPath, err)
 	} else {
 		ops = store
 		log.Printf("ops.db: opened %s", opsDBPath)
-		// PR-2d: resolve any rows the previous agent process left in
-		// `running` state by querying libvirt reality. Runs early
-		// during agent startup; the command server is already
-		// accepting new requests by this point but new requests use
-		// fresh request_ids, so there's no collision with the
-		// in-flight set being reconciled.
+		// Resolve prior in-flight rows before accepting any new commands.
+		// The durable store and cached authentication state must both be
+		// initialized before the listener can receive retries.
 		bootCtx, bootCancel := context.WithTimeout(liveCtx, 30*time.Second)
 		reconcileBoot(bootCtx, store)
 		bootCancel()
 		go runOpsGC(liveCtx, store)
 		go runOpsHeartbeat(liveCtx, store)
 	}
+
+	// Publish the command listener only after cached authentication and
+	// durable operation history are ready and boot reconciliation finishes.
+	go StartCommandServer(cmdAddr)
 
 	// v5.29.0: watch VM power-state transitions and fire an immediate
 	// telemetry POST when anything flips, so the SPA reflects a VM

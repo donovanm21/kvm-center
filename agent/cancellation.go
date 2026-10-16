@@ -14,6 +14,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -159,12 +160,17 @@ func cancelOperation(ctx context.Context, requestID, reason string, deps cancelD
 	}
 
 	now := deps.now()
-	if err := ops.UpdateState(ctx, requestID, UpdateStateOpts{
+	if err := ops.FinishActive(ctx, requestID, UpdateStateOpts{
 		State:         OpStateCancelled,
 		Error:         reason,
 		ClearChildPID: true,
 		CompletedAt:   &now,
 	}); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			if existing, readErr := ops.Get(ctx, requestID); readErr == nil && existing != nil && IsTerminalOpState(existing.State) {
+				return existing.State, nil
+			}
+		}
 		return "", err
 	}
 	return OpStateCancelled, nil
