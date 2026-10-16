@@ -116,26 +116,36 @@ func (c *captureResponseWriter) Write(p []byte) (int, error) {
 // failure — without this, an async panic would silently leave the
 // row in `running` until the boot reconciler resolved it.
 func runCommandBodyAsync(req models.CommandRequest) {
-	cap := newCaptureResponseWriter()
+	runCommandBodyAsyncWithExecutor(req, runCommandBody)
+}
+
+func runCommandBodyAsyncWithExecutor(req models.CommandRequest, execute func(http.ResponseWriter, models.CommandRequest)) {
+	executeClaimedCommand(req, execute)
+}
+
+func executeClaimedCommand(req models.CommandRequest, execute func(http.ResponseWriter, models.CommandRequest)) (cap *captureResponseWriter) {
+	cap = newCaptureResponseWriter()
 	defer func() {
 		if rec := recover(); rec != nil {
-			log.Printf("async command panic: req_id=%s action=%s: %v", req.RequestID, req.Action, rec)
-			if cap.status == 0 {
-				cap.status = http.StatusInternalServerError
-			}
-			if len(cap.body) == 0 {
-				panicBody, _ := json.Marshal(map[string]any{
-					"success": false,
-					"message": "panic in async dispatch",
-				})
-				cap.body = panicBody
-			}
+			log.Printf("command panic: req_id=%s action=%s: %v", req.RequestID, req.Action, rec)
+			cap.status = http.StatusInternalServerError
+			cap.body = []byte(`{"success":false,"message":"panic in command dispatch"}`)
 		}
 		if cap.status == 0 {
 			cap.status = http.StatusOK
 		}
+		// Hold admission until both the cache and durable lifecycle have
+		// been finalized. A retry can never slip between completion and replay.
+		commandAdmissions.Lock()
+		defer commandAdmissions.Unlock()
+		if existing := recordOpsLifecycleEnd(req.RequestID, cap.status, cap.body); existing != nil {
+			if status, body, _, ok := synthesizeOutcomeFromOp(existing); ok {
+				cap.status, cap.body = status, body
+			}
+		}
 		outcomes.put(req.RequestID, cap.status, cap.body)
-		recordOpsLifecycleEnd(req.RequestID, cap.status, cap.body)
+		delete(commandAdmissions.running, req.RequestID)
 	}()
-	runCommandBody(cap, req)
+	execute(cap, req)
+	return cap
 }

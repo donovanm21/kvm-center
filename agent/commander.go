@@ -347,6 +347,10 @@ func StartCommandServer(addr string) {
 }
 
 func handleCommand(w http.ResponseWriter, r *http.Request) {
+	handleCommandWithExecutor(w, r, runCommandBody)
+}
+
+func handleCommandWithExecutor(w http.ResponseWriter, r *http.Request, execute func(http.ResponseWriter, models.CommandRequest)) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
@@ -358,50 +362,39 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Idempotency replay check (v5.32.17, Tier S #4). If we've seen
-	// this request_id within outcomeCacheTTL, return the cached
-	// response verbatim instead of re-running the command. Empty
-	// request_id = pre-5.32.17 server or direct curl — no caching.
-	if req.RequestID != "" {
-		if e, ok := outcomes.get(req.RequestID); ok {
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("X-Command-Replayed", "true")
-			w.WriteHeader(e.status)
-			_, _ = w.Write(e.body)
-			log.Printf("command: replay req_id=%s action=%s status=%d", req.RequestID, req.Action, e.status)
-			return
-		}
-		// v5.48 PR-2b: open the ops.db lifecycle row before running
-		// the action so a crash mid-execution leaves a "running" row
-		// for the boot reconciler (PR-2d) to resolve. Best-effort —
-		// failure to insert is logged but doesn't block the action.
-		recordOpsLifecycleStart(req)
-
-		// v5.48 PR-2e: async dispatch for slow actions. Reply 202
-		// Accepted within ~100 ms, run the body in a goroutine, and
-		// rely on the server's PR-1c reconciler to resolve outcome
-		// when the agent finishes. Gated by KVM_AGENT_ASYNC_COMMANDS
-		// so the operator can opt-in per fleet during rollout.
-		if asyncEnabled() && asyncEligibleAction(req.Action) {
-			respondAccepted(w, req.RequestID)
-			go runCommandBodyAsync(req)
-			return
-		}
-
-		// Sync path: wrap the writer so the outcome cache records
-		// the response when the handler returns.
-		rec := &recorderWriter{ResponseWriter: w}
-		defer func() {
-			if rec.status == 0 {
-				rec.status = http.StatusOK
-			}
-			outcomes.put(req.RequestID, rec.status, rec.body)
-			recordOpsLifecycleEnd(req.RequestID, rec.status, rec.body)
-		}()
-		w = rec
+	if req.RequestID == "" {
+		// Legacy callers without an ID cannot participate in deduplication.
+		execute(w, req)
+		return
 	}
-
-	runCommandBody(w, req)
+	replay, running, err := claimCommand(req)
+	if err != nil {
+		log.Printf("command: cannot claim req_id=%s: %v", req.RequestID, err)
+		http.Error(w, "command state unavailable; retry with the same request_id", http.StatusServiceUnavailable)
+		return
+	}
+	if replay != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Command-Replayed", "true")
+		w.WriteHeader(replay.status)
+		_, _ = w.Write(replay.body)
+		return
+	}
+	if running {
+		respondAccepted(w, req.RequestID)
+		return
+	}
+	if asyncEnabled() && asyncEligibleAction(req.Action) {
+		respondAccepted(w, req.RequestID)
+		go runCommandBodyAsyncWithExecutor(req, execute)
+		return
+	}
+	// Buffer both paths so a panic after a partial response cannot be
+	// cached as success or sent with an already-committed success status.
+	cap := executeClaimedCommand(req, execute)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(cap.status)
+	_, _ = w.Write(cap.body)
 }
 
 // runCommandBody is the action dispatcher — vmTarget validation +

@@ -7,12 +7,9 @@ package main
 // instead of re-executing virsh. Eliminates double-applies when the
 // network drops the response mid-flight.
 //
-// Scope: in-memory, lost on agent restart. Server's command log is
-// the durable record; if the agent restarts mid-flight the boot
-// reconciler marks the entry "unknown" and the operator sees it in
-// the admin UI. We don't want to persist the cache to disk because
-// then a stale outcome could be served across an upgrade that
-// changes semantics.
+// Completed replies are kept in memory for exact replay. The operations
+// store provides durable replay across restart; command_admission.go
+// separately tracks running IDs so the cache TTL cannot admit a duplicate.
 
 import (
 	"context"

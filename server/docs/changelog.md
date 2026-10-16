@@ -14,6 +14,10 @@ history for per-commit detail.
 
 ## v5.61
 
+### Fixed
+- Agents load durable command history before accepting commands and stop safely when operation history is unavailable or corrupt. Competing cancellation/completion updates preserve the first terminal result.
+- Commands with the same request ID execute once while in flight and replay recorded outcomes after agent restarts. Unavailable operation storage now blocks dispatch safely.
+
 ### Security
 - VM deletion retains disk images and attached media. Automatic disk cleanup is disabled until exclusive storage ownership can be verified; API requests with `delete_disks=true` fail before changing the VM.
 - The server→agent command channel is now authenticated. The server signs every command request and agents reject unsigned or forged commands once the upgraded server advertises signing. Rollout is automatic and lockout-proof; `KVM_CENTER_DISABLE_AGENT_CMD_AUTH=1` is an emergency kill-switch.
