@@ -194,6 +194,17 @@ class HypervisorHarnessTests(unittest.TestCase):
 
 
 class BrowserFixtureTests(unittest.TestCase):
+    def test_mongo_normalizer_preserves_driver_query_separator(self):
+        fixture = (SCRIPT.parent / "run-browser-fixture.sh").read_text()
+        normalizer = fixture.split("<<'PYMONGO'\n", 1)[1].split("\nPYMONGO", 1)[0]
+        for raw in ("mongodb://127.0.0.1:27017", "mongodb://localhost/",
+                    "mongodb://[::1]:27017/?directConnection=true"):
+            with self.subTest(raw=raw):
+                result = subprocess.run([sys.executable, "-", raw], input=normalizer,
+                                        cwd=SCRIPT.parent.parent, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(result.stdout.strip().endswith("/?directConnection=true"))
+
     def test_dirty_candidate_stops_before_fixture_tools(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -57,5 +57,8 @@ for a JSON-backed demo (default: `mongo`). Both Docker paths forward these value
 the revision assertion fails if the deployment differs. See
 [validation gates and feature matrix](../../docs/validation.md).
 
-These commands do not activate a hosted CI job. Review and authorize disposable
-services and runner resources separately before future CI activation.
+The approved `browser-integration` GitHub job now runs this isolated fixture
+against its own disposable MongoDB 7 service, including Chromium and iPhone/WebKit.
+It checks the exact candidate, uses zero retries, verifies cleanup and retains only
+allowlisted reports for seven days. No production credentials or hypervisor are used.
+See the validation document for timeouts, evidence limits and remaining release gates.

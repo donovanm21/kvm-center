@@ -81,7 +81,7 @@ If MongoDB is unavailable, `KVMC_TEST_BACKEND=json scripts/run-browser-fixture.s
 uses a new private JSON file instead. The report labels the backend `json` and
 inventory `synthetic`, and the browser asserts the actual backend type. This
 proves browser/API/JSON behavior only. It never satisfies the separate Mongo
-integration gate. These fixture commands are manual-only; no Mongo/browser CI job is activated by this change.
+integration gate. These commands also run in the approved GitHub integration jobs described below.
 
 For an existing **local disposable** seeded demo, set `KVMC_DISPOSABLE_DEMO=1`
 and `KVMC_DEMO_URL=https://127.0.0.1:<port>`, then use `make validate-browser`.
@@ -175,21 +175,39 @@ paths; this matrix is a minimum acceptance backlog, not an exhaustive API count.
 6. Publish/merge/deploy only with the required authorization, exact-candidate CI
    and reviewed acceptance evidence. Source success is not deployment approval.
 
-## Active CI and proposed gates
+## Active CI and remaining gates
 
-Browser and Mongo fixture tooling remains manual-only. Existing GitHub jobs run:
-Go formatting/vet/unit tests and vulnerability scan, form/schema/type regressions,
-production frontend build and audit, and secret scanning. Those jobs do not establish race, Mongo, browser,
-container or hypervisor acceptance. No new dispatch, schedule, hosted service,
-workflow permission or publication action is activated here.
+GitHub Actions runs the existing Go formatting/vet/unit/vulnerability,
+frontend form/build/audit and secret-scanning jobs, plus two approved disposable
+integration jobs on pull requests and pushes to `main`:
 
-Future CI activation requires a separately reviewed change and approval for the
-disposable services and runner resources. The intended gates are source/race/
-cross-build, real Mongo, Chromium/WebKit fixture and release-input completeness.
-Every required job must report success; cancellation, skips, stale revisions and
-missing evidence must block. The supplied CI-result helpers can check exact-SHA
-runs but are not wired into release workflows in this commit. Real-hypervisor
-work must remain in an explicitly authorized isolated lab.
+- `mongo-integration`: MongoDB 7.0.45, real persistence integration tests under
+  the race detector, with a 15-minute job limit.
+- `browser-integration`: a freshly built server and SPA against a separate
+  MongoDB 7.0.45 service, Chromium and iPhone/WebKit, with a 20-minute job limit.
+
+Both jobs use synthetic data, no production credentials, loopback-bound Mongo,
+random fixture database names and read-only repository permissions. They check
+out the exact PR head or push SHA, record the Mongo image/version, and cancel
+superseded runs of the same job/ref. The browser fixture retains its exact-SHA
+and backend assertions and zero-retry/no-skip acceptance. Both jobs must succeed
+for the workflow summary to pass; failure, cancellation or skipping is not a pass.
+
+An always-run check rejects leftover validation databases. Fixture cleanup
+removes its own databases, processes and generated keys; disposal of the service
+and hosted runner is the cancellation/timeout backstop. Seven-day artifacts use
+an explicit allowlist of validation reports and stage logs/results. Raw browser
+traces/video, fixture server/seed logs, credentials, generated certificates and
+binaries are not uploaded. A failed job may have partial or absent evidence;
+missing artifacts never establish success.
+
+These jobs may consume the approved Actions allowance. No schedule, manual
+release dispatch, production deployment or Docker publication behavior changes.
+They do not establish real-hypervisor behavior, Mongo replica failover or
+cross-collection crash atomicity, native platform support, complete recovery or
+security acceptance. Source/race/cross-build, packaging and authorized real-lab
+acceptance remain separately required. The manual release runner still cannot
+self-certify real-hypervisor acceptance.
 
 ## Recorded adoption status (16 October 2026)
 
@@ -227,8 +245,10 @@ The paired frontend migrations are TypeScript 7, Vite 8/plugin-react 6 and
 Zod 4/resolver 5, with React/runtime types 19.3. Ordinary CI now runs actual
 application-schema form regressions; its npm audit is production-dependency
 scoped and must not be presented as a complete development-toolchain audit.
-No hosted Mongo/browser jobs, release or deployment were activated by these
-changes. Production readiness remains blocked by the rows above.
+That historical snapshot predates the approved integration-job activation above.
+Use the exact candidate's job reports for new Mongo/browser results; activation
+alone does not mark an untested row passed. No release or deployment is activated.
+Production readiness remains blocked by the outstanding rows above.
 
 Do not release or deploy on the strength of a source/browser pass. Preserve
 failed and blocked reports. A regression after integration requires reverting

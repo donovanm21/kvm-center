@@ -25,6 +25,8 @@ func MongoURI(raw string) (string, error) {
 			return "", fmt.Errorf("invalid validation MongoDB port")
 		}
 	}
+	// The Mongo driver requires a slash between the authority and URI options.
+	u.Path = "/"
 	u.RawQuery = "directConnection=true"
 	return u.String(), nil
 }

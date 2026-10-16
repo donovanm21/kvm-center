@@ -1,6 +1,6 @@
 name: test
 
-# GitHub Actions workflow — same gates as .gitea/workflows/test.yml.
+# GitHub Actions source gates plus approved disposable Mongo/browser validation.
 # The two are intentionally NOT byte-identical: GitHub-hosted runners
 # ship the `gh` CLI (cleaner than the Gitea-side curl/python dance),
 # and the `permissions:` block is a GitHub-ism. Keep the gate posture
@@ -103,8 +103,148 @@ jobs:
           curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /tmp
           /tmp/gitleaks detect --source . --no-banner --redact --verbose
 
+  mongo-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-mongo-integration
+      cancel-in-progress: true
+    env:
+      KVMC_TEST_MONGO_URI: mongodb://127.0.0.1:27017
+    services:
+      mongo:
+        image: mongo:7.0.45-jammy
+        ports:
+          - '127.0.0.1:27017:27017'
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1}).ok || quit(1)'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+          cache-dependency-path: 'go.sum'
+
+      - name: Record disposable database version
+        env:
+          MONGO_CONTAINER: ${{ job.services.mongo.id }}
+        run: |
+          docker inspect "$MONGO_CONTAINER" --format '{{.Config.Image}} {{.Image}}'
+          docker exec "$MONGO_CONTAINER" mongosh --quiet --eval 'db.version()'
+
+      - name: Validation harness regressions
+        run: python3 -m unittest discover -s scripts/tests -v
+
+      - name: Validate real Mongo persistence
+        run: python3 scripts/validate.py --profile mongo --timeout 600
+
+      - name: Verify fixture database cleanup
+        if: always()
+        env:
+          MONGO_CONTAINER: ${{ job.services.mongo.id }}
+        run: |
+          docker exec "$MONGO_CONTAINER" mongosh --quiet --eval '
+            const left = db.adminCommand({listDatabases:1, nameOnly:true}).databases
+              .filter(d => d.name.startsWith("kvmc_validation_"));
+            if (left.length) { printjson(left.map(d => d.name)); quit(1); }
+            print("No validation databases remain");'
+
+      - name: Preserve validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: mongo-integration-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .validation/**/report.json
+            .validation/**/mongo.log
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  browser-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-browser-integration
+      cancel-in-progress: true
+    env:
+      KVMC_TEST_MONGO_URI: mongodb://127.0.0.1:27017
+    services:
+      mongo:
+        image: mongo:7.0.45-jammy
+        ports:
+          - '127.0.0.1:27017:27017'
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1}).ok || quit(1)'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+          cache-dependency-path: 'go.sum'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          package-manager-cache: false
+      - name: Install locked browser tooling
+        working-directory: demo/e2e
+        run: |
+          npm ci --no-audit --no-fund --loglevel=error
+          npx --no-install playwright install --with-deps chromium webkit
+      - name: Record disposable database version
+        env:
+          MONGO_CONTAINER: ${{ job.services.mongo.id }}
+        run: |
+          docker inspect "$MONGO_CONTAINER" --format '{{.Config.Image}} {{.Image}}'
+          docker exec "$MONGO_CONTAINER" mongosh --quiet --eval 'db.version()'
+
+      - name: Validate Chromium and iPhone against Mongo
+        env:
+          KVMC_TEST_BACKEND: mongo
+        run: scripts/run-browser-fixture.sh
+
+      - name: Verify fixture database cleanup
+        if: always()
+        env:
+          MONGO_CONTAINER: ${{ job.services.mongo.id }}
+        run: |
+          docker exec "$MONGO_CONTAINER" mongosh --quiet --eval '
+            const left = db.adminCommand({listDatabases:1, nameOnly:true}).databases
+              .filter(d => d.name.startsWith("kvmc_validation_"));
+            if (left.length) { printjson(left.map(d => d.name)); quit(1); }
+            print("No validation databases remain");'
+
+      - name: Preserve validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: browser-integration-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .validation/**/report.json
+            .validation/**/browser.log
+            .validation/**/browser-results.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
   summary:
-    needs: [lint-test, webui-audit, gitleaks]
+    needs: [lint-test, webui-audit, gitleaks, mongo-integration, browser-integration]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -113,12 +253,16 @@ jobs:
           echo "lint-test:   ${{ needs.lint-test.result }}"
           echo "webui-audit: ${{ needs.webui-audit.result }}"
           echo "gitleaks:    ${{ needs.gitleaks.result }}"
+          echo "mongo:       ${{ needs.mongo-integration.result }}"
+          echo "browser:     ${{ needs.browser-integration.result }}"
           if [ "${{ needs.lint-test.result }}"   = "success" ] \
           && [ "${{ needs.webui-audit.result }}" = "success" ] \
-          && [ "${{ needs.gitleaks.result }}"    = "success" ]; then
-            echo "All security gates passed."
+          && [ "${{ needs.gitleaks.result }}"    = "success" ] \
+          && [ "${{ needs.mongo-integration.result }}" = "success" ] \
+          && [ "${{ needs.browser-integration.result }}" = "success" ]; then
+            echo "All source and integration gates passed."
           else
-            echo "::error::One or more security gates failed — see individual job logs."
+            echo "::error::One or more source or integration gates failed — see individual job logs."
             exit 1
           fi
 
