@@ -20,6 +20,7 @@ func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
 
 // persistData is the on-disk JSON structure.
 type persistData struct {
+	VMTagState       *vmTagState                         `json:"vm_tag_state,omitempty"`
 	Hosts            map[string]*models.Host             `json:"hosts"`
 	VMs              map[string][]*models.VM             `json:"vms"`
 	Storage          map[string][]*models.StoragePool    `json:"storage"`
@@ -86,7 +87,8 @@ const guestToolsFreshness = 5 * time.Minute
 
 // Store is the in-memory data store backed by a JSON file.
 type Store struct {
-	mu sync.RWMutex
+	vmTags map[string][]string
+	mu     sync.RWMutex
 	// saveWG tracks in-flight async Save goroutines so tests can
 	// wait for persistence before tearing down TempDir. Production
 	// shutdown uses saves to seal admission and drain without Add/Wait races.

@@ -68,17 +68,18 @@ type backupEntry struct {
 
 // backupManifest travels inside every backup tarball and records what
 // the archive contains + when it was made + which kvm-center built it.
-// Used at restore time to reject incompatible versions and to surface
-// provenance in the audit log. The Files map is a SHA-256 checksum per
+// Records feature requirements for offline compatibility inspection; it does
+// not enable online restore. The Files map is a SHA-256 checksum per
 // entry so a restore tool can verify integrity before applying.
 type backupManifest struct {
-	Version      string            `json:"version"`
-	CreatedAt    time.Time         `json:"created_at"`
-	CreatedByID  string            `json:"created_by_id,omitempty"`
-	CreatedBy    string            `json:"created_by,omitempty"`
-	StoreBytes   int64             `json:"store_bytes"`
-	SchemaFormat string            `json:"schema_format"` // JSONBackend persistData wire format
-	Files        map[string]string `json:"files"`         // tarball-path → hex(SHA-256)
+	FeatureSchemas map[string]int    `json:"feature_schemas,omitempty"`
+	Version        string            `json:"version"`
+	CreatedAt      time.Time         `json:"created_at"`
+	CreatedByID    string            `json:"created_by_id,omitempty"`
+	CreatedBy      string            `json:"created_by,omitempty"`
+	StoreBytes     int64             `json:"store_bytes"`
+	SchemaFormat   string            `json:"schema_format"` // JSONBackend persistData wire format
+	Files          map[string]string `json:"files"`         // tarball-path → hex(SHA-256)
 }
 
 // ExportSnapshot serialises the in-memory store to JSON bytes. Same
@@ -110,6 +111,11 @@ func handleBackup(store *Store) http.HandlerFunc {
 			return
 		}
 
+		featureSchemas, err := snapshotFeatureSchemas(storeBytes)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "snapshot schema: "+err.Error())
+			return
+		}
 		entries, err := collectBackupEntries(storeBytes, serverBackupPaths)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "collect backup material: "+err.Error())
@@ -117,11 +123,12 @@ func handleBackup(store *Store) http.HandlerFunc {
 		}
 
 		manifest := backupManifest{
-			Version:      Version,
-			CreatedAt:    time.Now().UTC(),
-			StoreBytes:   int64(len(storeBytes)),
-			SchemaFormat: "persistData.v2",
-			Files:        make(map[string]string, len(entries)),
+			FeatureSchemas: featureSchemas,
+			Version:        Version,
+			CreatedAt:      time.Now().UTC(),
+			StoreBytes:     int64(len(storeBytes)),
+			SchemaFormat:   "persistData.v2",
+			Files:          make(map[string]string, len(entries)),
 		}
 		for _, e := range entries {
 			sum := sha256.Sum256(e.data)
@@ -244,4 +251,16 @@ func readDirForBackup(dir, tarPrefix string) ([]backupEntry, error) {
 		out = append(out, backupEntry{tarPrefix + nm, b, mode})
 	}
 	return out, nil
+}
+
+// Derive capabilities from the exact captured bytes, never a later live read.
+func snapshotFeatureSchemas(raw []byte) (map[string]int, error) {
+	var d persistData
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return nil, err
+	}
+	if d.VMTagState == nil {
+		return nil, nil
+	}
+	return map[string]int{"vm_tag_state": d.VMTagState.Version}, nil
 }

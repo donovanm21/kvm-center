@@ -22,11 +22,9 @@ import (
 // doesn't kill server startup — the operator can still reach the UI
 // via JSON backend fallback and fix things from Settings → Database.
 //
-// Save semantics mirror the JSON backend's "replace the whole world"
-// model: drop-and-reinsert every collection inside a single logical
-// operation. Cheap at current fleet sizes and keeps the conversion
-// from persistData trivial. Per-collection dirty tracking is a v5.2
-// optimisation if we ever need it.
+// Saves replace retained records before pruning obsolete ones, and use dirty
+// hints for cold collections. Writes remain nontransactional across records and
+// collections; a failed Save requires a full-snapshot retry.
 type MongoBackend struct {
 	uri    string
 	dbName string
@@ -266,17 +264,22 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 	if err != nil {
 		return nil, err
 	}
+	tags, err := loadVMTagState(ctx, db)
+	if err != nil {
+		return nil, err
+	}
 	pd := &persistData{
-		Hosts:     map[string]*models.Host{},
-		VMs:       map[string][]*models.VM{},
-		Storage:   map[string][]*models.StoragePool{},
-		VMNotes:   map[string]string{},
-		GuestData: map[string]*guestEntry{},
-		Users:     map[string]*models.User{},
-		Groups:    map[string]*models.Group{},
-		Roles:     map[string]*models.Role{},
-		Sessions:  map[string]*models.Session{},
-		IDPs:      map[string]*models.IdentityProvider{},
+		VMTagState: tags,
+		Hosts:      map[string]*models.Host{},
+		VMs:        map[string][]*models.VM{},
+		Storage:    map[string][]*models.StoragePool{},
+		VMNotes:    map[string]string{},
+		GuestData:  map[string]*guestEntry{},
+		Users:      map[string]*models.User{},
+		Groups:     map[string]*models.Group{},
+		Roles:      map[string]*models.Role{},
+		Sessions:   map[string]*models.Session{},
+		IDPs:       map[string]*models.IdentityProvider{},
 	}
 
 	// Hosts
@@ -547,15 +550,24 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 }
 
 // Save replaces every collection's contents with the provided
-// persistData snapshot. Uses drop-and-insert inside a single logical
-// checkpoint: simple, correct, and — crucially — matches the JSON
-// backend's "full-state persist" semantics so there are zero subtle
-// differences between backends at the Store layer. Not the most
-// network-efficient pattern; that's a v5.2 problem.
+// persistData snapshot. Ordered replacement and dirty hints do not provide
+// a crash-atomic checkpoint across records or collections.
 func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	defer func() { b.invalidateOnTransientError(err) }()
+	if d == nil {
+		return errors.New("missing persistence snapshot")
+	}
+	if err := d.VMTagState.validate(); err != nil {
+		return err
+	}
 	db, err := b.dial(ctx)
 	if err != nil {
+		return err
+	}
+
+	// Reject unsupported tag namespaces before any replacement writes. This is
+	// a compatibility preflight, not a transaction or protection from outside writers.
+	if _, err := loadVMTagState(ctx, db); err != nil {
 		return err
 	}
 
@@ -901,7 +913,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 		return err
 	}
 
-	return nil
+	return saveVMTagState(ctx, db, d)
 }
 
 // isDirty returns true when the persistData carries a dirty flag for

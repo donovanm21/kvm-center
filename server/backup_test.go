@@ -49,6 +49,9 @@ func TestHandleBackup_BundlesTLSAndCA(t *testing.T) {
 	// goroutine that writes data.json AFTER this test returns. Wait for
 	// it so t.TempDir cleanup doesn't race the save and error out.
 	t.Cleanup(func() { store.saveWG.Wait() })
+	if err := store.SetVMTags(tagFixtureUUID, []string{"backup-fixture"}); err != nil {
+		t.Fatal(err)
+	}
 	handler := handleBackup(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/admin/backup", nil)
@@ -89,6 +92,16 @@ func TestHandleBackup_BundlesTLSAndCA(t *testing.T) {
 	var m backupManifest
 	if err := json.Unmarshal(got["manifest.json"], &m); err != nil {
 		t.Fatalf("manifest json: %v", err)
+	}
+	if m.FeatureSchemas["vm_tag_state"] != 1 {
+		t.Fatal("backup omitted tag schema requirement")
+	}
+	var snapshot persistData
+	if err := json.Unmarshal(got["store.json"], &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.VMTagState == nil || len(snapshot.VMTagState.ByVM[tagFixtureUUID]) != 1 {
+		t.Fatal("archive lost tag state")
 	}
 	for name, want := range m.Files {
 		data, ok := got[name]

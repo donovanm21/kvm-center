@@ -207,17 +207,22 @@ func (s *Store) runScheduledBackup(sc *models.BackupSchedule, ts time.Time) (int
 	if err != nil {
 		return 0, fmt.Errorf("export: %w", err)
 	}
+	featureSchemas, err := snapshotFeatureSchemas(storeBytes)
+	if err != nil {
+		return 0, fmt.Errorf("snapshot schema: %w", err)
+	}
 	entries, err := collectBackupEntries(storeBytes, serverBackupPaths)
 	if err != nil {
 		return 0, fmt.Errorf("collect backup material: %w", err)
 	}
 	manifest := backupManifest{
-		Version:      Version,
-		CreatedAt:    ts,
-		StoreBytes:   int64(len(storeBytes)),
-		SchemaFormat: "persistData.v2",
-		Files:        make(map[string]string, len(entries)),
-		CreatedBy:    "scheduler",
+		FeatureSchemas: featureSchemas,
+		Version:        Version,
+		CreatedAt:      ts,
+		StoreBytes:     int64(len(storeBytes)),
+		SchemaFormat:   "persistData.v2",
+		Files:          make(map[string]string, len(entries)),
+		CreatedBy:      "scheduler",
 	}
 	for _, e := range entries {
 		sum := sha256.Sum256(e.data)
