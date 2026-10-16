@@ -1,15 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { apiGet, apiPost, apiPostForm, apiPut } from '@/api/client';
+import { apiGet, apiPut } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
 
-// Settings → Backup tab (v5.39.0). Front end for /api/admin/backup
-// (download) + /api/admin/restore (upload) + /api/admin/restart
-// (post-restore reboot). Two-pane layout — left pane backs up, right
-// pane restores. Restore is gated behind a typed-confirmation step
-// because it stomps live state on the next restart.
+// Settings → Backup tab. Download and schedule backups here. Online restore
+// is unavailable until a backend-aware transactional recovery flow exists.
+// Keep all restore/restart mutations absent while the API is fail-closed.
 
 interface BackupSchedule {
   enabled: boolean;
@@ -23,22 +21,6 @@ interface BackupSchedule {
   last_run_err?: string;
   last_run_size_bytes?: number;
   next_run_at?: string;
-}
-
-interface BackupManifest {
-  version: string;
-  created_at: string;
-  store_bytes: number;
-  schema_format: string;
-  files: Record<string, string>;
-}
-
-interface RestoreSummary {
-  ok: boolean;
-  manifest: BackupManifest;
-  files_restored: string[];
-  restart_required: boolean;
-  staged_at: string;
 }
 
 export function BackupTab() {
@@ -64,33 +46,6 @@ export function BackupTab() {
       setTimeout(() => setBusy(false), 1500);
     }
   };
-
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const [chosen, setChosen] = useState<File | null>(null);
-  const [confirmText, setConfirmText] = useState('');
-  const [summary, setSummary] = useState<RestoreSummary | null>(null);
-
-  const restore = useMutation({
-    mutationFn: async () => {
-      if (!chosen) throw new Error('pick a backup tarball first');
-      const fd = new FormData();
-      fd.append('backup', chosen);
-      return apiPostForm<RestoreSummary>('/api/admin/restore', fd);
-    },
-    onSuccess: (s) => {
-      setSummary(s);
-      toast('success', `Restored ${s.files_restored.length} file(s). Restart required.`);
-    },
-    onError: (e) => toast('error', `Restore failed: ${e instanceof Error ? e.message : String(e)}`),
-  });
-
-  const restart = useMutation({
-    mutationFn: () => apiPost<{ ok: boolean; message: string }>('/api/admin/restart'),
-    onSuccess: (r) => toast('success', r?.message || 'Server restarting…'),
-    onError: (e) => toast('error', `Restart failed: ${e instanceof Error ? e.message : String(e)}`),
-  });
-
-  const confirmReady = confirmText.trim().toUpperCase() === 'RESTORE';
 
   // ── Schedule (v5.43.0) — periodic backup configuration. ───────
   const qc = useQueryClient();
@@ -156,70 +111,32 @@ export function BackupTab() {
 
       <section className="panel" style={{ padding: 18 }}>
         <h3 style={titleStyle}>Restore</h3>
-        <p style={paraStyle}>
-          Upload a backup <code>.tar.gz</code> produced by the button on the
-          left (or by the CLI export). Checksums are verified before any
-          file is written. After a successful upload the server needs to
-          restart to load the restored state — click <strong>Restart server</strong>{' '}
-          when ready.
+        <p id="restore-unavailable" style={paraStyle} role="status">
+          Online restore is temporarily unavailable. It requires a backend-aware,
+          transactional recovery workflow before it can safely apply a backup.
+          Upload, validation, and restart-on-restore are disabled. Backup downloads
+          and schedules remain available.
         </p>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+        <p style={paraStyle}>
+          For recovery, stop the service and follow the{' '}
+          <a href="/docs/backup">offline recovery guidance</a> for your storage backend.
+        </p>
+        <fieldset disabled aria-describedby="restore-unavailable" style={{ border: 0, margin: 0, padding: 0 }}>
           <input
-            ref={fileRef}
             type="file"
             accept=".tar.gz,.tgz,application/gzip"
-            onChange={(e) => setChosen(e.target.files?.[0] ?? null)}
-            style={{ flex: 1, fontSize: 12, color: 'var(--text-body)' }}
-            disabled={!canManage || restore.isPending}
+            aria-label="Restore backup file"
+            style={{ width: '100%', fontSize: 12, color: 'var(--text-body)', marginBottom: 10 }}
           />
-        </div>
-        <label style={{ display: 'block', fontSize: 11, color: 'var(--text-faded)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Type <code>RESTORE</code> to confirm
-        </label>
-        <input
-          type="text"
-          value={confirmText}
-          onChange={(e) => setConfirmText(e.target.value)}
-          style={{
-            width: '100%', height: 32, padding: '0 10px',
-            background: 'var(--bg-input)', border: '1px solid var(--border)',
-            borderRadius: 4, color: 'var(--text-body)', fontSize: 13,
-            fontFamily: "'SF Mono', monospace", marginBottom: 10,
-          }}
-          disabled={!canManage || restore.isPending}
-        />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            className="btn-danger-sm"
-            disabled={!canManage || restore.isPending || !chosen || !confirmReady}
-            onClick={() => restore.mutate()}
-          >
-            {restore.isPending ? 'Restoring…' : 'Apply restore'}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary-sm"
-            disabled={!canManage || restart.isPending || !summary?.restart_required}
-            onClick={() => restart.mutate()}
-            title={summary?.restart_required ? 'Server will exit; container restart policy brings it back' : 'No restart pending'}
-          >
-            {restart.isPending ? 'Restarting…' : 'Restart server'}
-          </button>
-        </div>
-
-        {summary && (
-          <div style={{ marginTop: 14, padding: 10, background: 'var(--surface-2)', borderRadius: 4, fontSize: 12 }}>
-            <div style={{ marginBottom: 4 }}>
-              <strong>Restored from</strong> {summary.manifest.version}{' '}
-              ({new Date(summary.manifest.created_at).toLocaleString()})
-            </div>
-            <div style={{ color: 'var(--text-muted)' }}>
-              {summary.files_restored.length} file(s) placed:{' '}
-              {summary.files_restored.map((f) => f.split('/').slice(-2).join('/')).join(', ')}
-            </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="btn-danger-sm" disabled>
+              Apply restore
+            </button>
+            <button type="button" className="btn-secondary-sm" disabled>
+              Restart server
+            </button>
           </div>
-        )}
+        </fieldset>
       </section>
 
       <section className="panel" style={{ padding: 18, gridColumn: '1 / -1' }}>

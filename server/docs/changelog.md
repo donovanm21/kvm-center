@@ -14,6 +14,11 @@ history for per-commit detail.
 
 ## v5.61
 
+### Fixed
+- Backups and JSON persistence retain all control-plane state, including pairing and enrolment credentials, without exposing private fields through API model JSON. Configured security material must be readable before a backup succeeds.
+- Failed persistence writes retain their pending changes for retry; taking a backup no longer consumes pending database updates.
+- Online restore is temporarily disabled to protect live state until a backend-aware transactional restore workflow is available. Offline recovery requires a stopped service and a verified backend-specific plan.
+
 ### Security
 - The server→agent command channel is now authenticated. The server signs every command request and agents reject unsigned or forged commands once the upgraded server advertises signing. Rollout is automatic and lockout-proof; `KVM_CENTER_DISABLE_AGENT_CMD_AUTH=1` is an emergency kill-switch.
 - Agent self-update verifies an Ed25519 signature on the downloaded binary before installing it, and only updates from the configured server — closing an unsigned-binary code-execution path.

@@ -96,6 +96,12 @@ func (b *JSONBackend) Load(_ context.Context) (*persistData, error) {
 }
 
 func (b *JSONBackend) Save(_ context.Context, d *persistData) error {
+	return b.saveWithDirSync(d, syncDirectory)
+}
+
+// The sync seam lets tests verify errors after rename are reported instead
+// of claiming durability when the directory entry has not reached disk.
+func (b *JSONBackend) saveWithDirSync(d *persistData, syncDir func(string) error) error {
 	if err := os.MkdirAll(filepath.Dir(b.Path), 0o755); err != nil {
 		return err
 	}
@@ -106,9 +112,16 @@ func (b *JSONBackend) Save(_ context.Context, d *persistData) error {
 	// Write to a sibling temp, fsync, then rename so an interrupted
 	// Save never leaves the data file half-written and a power loss
 	// after the rename still finds the bytes durably on disk.
-	tmp := b.Path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	// CreateTemp uses an exclusive private file, so a stale path, symlink,
+	// or hard link at the legacy predictable .tmp name is never truncated.
+	f, err := os.CreateTemp(filepath.Dir(b.Path), "."+filepath.Base(b.Path)+".*.tmp")
 	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp) // No-op after a successful rename.
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
 		return err
 	}
 	if _, err := f.Write(buf); err != nil {
@@ -122,7 +135,23 @@ func (b *JSONBackend) Save(_ context.Context, d *persistData) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp, b.Path)
+	if err := os.Rename(tmp, b.Path); err != nil {
+		return err
+	}
+	if err := syncDir(filepath.Dir(b.Path)); err != nil {
+		return fmt.Errorf("json backend: sync parent directory: %w", err)
+	}
+	return nil
+}
+
+// syncDirectory makes a successful rename durable, not just its file data.
+func syncDirectory(path string) error {
+	dir, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 
 func (b *JSONBackend) Close(_ context.Context) error { return nil }

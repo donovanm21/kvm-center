@@ -17,12 +17,12 @@ A kvm-center backup tarball contains:
 | File | Contents |
 |------|----------|
 | `manifest.json` | Version, timestamp, operator identity, schema format, bytes |
-| `store.json` | The full `persistData` snapshot — users, groups, roles, API tokens, hosts, VM inventory, snapshot policies, audit events, features, notifications config, metrics config, hypervisor certs, console secret |
+| `store.json` | The full `persistData` snapshot — users, groups, roles, API tokens, hosts, VM inventory, snapshot policies, audit events, features, notifications config, metrics config, hypervisor certs, console secret, command history, gateway pairing, retired hosts and pending enrolments |
+| `tls/server.crt`, `tls/server.key` | Configured HTTPS certificate and key |
+| `ca/*` | Cluster CA, grant signer and secret-box material |
 
 Not included (out-of-band — back up separately):
 
-- TLS server cert + key at `$KVM_CENTER_TLS_DIR`
-- Cluster CA material at `$KVM_CENTER_CA_DIR`
 - `.env` (contains `KVM_MONGO_PASSWORD`)
 - MongoDB data volume (alternative to `store.json` for same-version restore)
 
@@ -42,9 +42,9 @@ The response is saved as `kvm-center-backup-YYYYMMDD-HHMMSS.tar.gz`.
 
 ### From the docker host
 
-For a full disaster-recovery backup that includes the TLS + CA
-material, pair the API export with a filesystem copy of the server's
-data volume:
+The API export includes configured TLS and CA files and fails if
+configured material cannot be read. For an additional disaster-recovery
+copy, pair it with a filesystem copy of the server's data volume:
 
 ```sh
 ssh <your-docker-host> '
@@ -64,26 +64,22 @@ ssh <your-docker-host> '
 
 ## Restore
 
-There are two ways to restore. Both write the staged files into the
-live volumes and require a server restart to load the new state —
-the difference is whether you do that from the SPA or the host.
+Online restore is temporarily disabled. `POST /api/admin/restore`
+returns **503** without reading the upload or changing live files.
+A safe replacement must restore the active backend and security files
+transactionally, with live writers stopped. The current API does not
+provide a validation-only or dry-run mode.
 
-### From the SPA (v5.39.0+)
+### Offline recovery
 
-**Settings → Backup → Restore.** Pick the backup `.tar.gz`, type
-`RESTORE` to confirm, click **Apply restore**. Checksums in
-`manifest.json` are verified before any file is touched. After the
-upload succeeds the **Restart server** button enables — clicking it
-saves any pending state, exits the process, and lets the container
-restart policy bring it back against the restored data.
+Plan and rehearse recovery on an isolated deployment first. Preserve a
+separate, verified copy of the existing database and security volumes
+before replacing anything. Use a backup from a trusted source and verify
+all manifest checksums and TLS/CA material before copying files.
 
-Requires `user.manage`. Audit events: `backup.restore` for the
-upload, then again for the restart.
-
-### From the docker host (CLI)
-
-Same effect, useful when the SPA isn't reachable (DR scenarios where
-the cluster is being rebuilt from scratch).
+The steps below apply only to a deployment using the **JSON backend**.
+For MongoDB, see the backend-specific requirements below; copying
+`data.json` does not replace an existing Mongo database.
 
 1. Stop the stack: `docker compose -f /opt/kvm-center/docker-compose.yml stop kvm-center-server`
 2. Extract the backup tarball and inspect `manifest.json` to confirm
@@ -105,14 +101,17 @@ the cluster is being rebuilt from scratch).
 
 ## Mongo notes
 
-Since v5.1 the canonical state lives in MongoDB, not the
-`data.json` file. The API export above (`/api/admin/backup`)
-serializes the in-memory store — which has been hydrated from
-Mongo at boot — so you get a consistent snapshot regardless of
-backend. **You do not need to dump Mongo separately for a
-control-plane restore.** The legacy JSON file is kept on disk as
-a parallel cache and the migration path; if Mongo goes empty on
-restart, the server hydrates from the JSON file.
+When MongoDB is configured, it is the authoritative persistent store.
+The API backup serializes the in-memory state loaded from that backend,
+including storage-only credential fields, but restoring `data.json`
+alone does **not** replace a populated Mongo database. It is not a live
+parallel cache.
+
+Use a tested MongoDB-native restore plan, or import the snapshot into a
+separate fresh recovery database and verify it before changing the server's
+configuration. Keep the original database intact until recovery is
+validated. The legacy bootstrap restore helper does not provide an atomic
+Mongo restore and must not be treated as a one-step recovery workflow.
 
 For a Mongo-level point-in-time backup (e.g. against a
 filesystem-corruption scenario), use mongodump:
@@ -137,15 +136,16 @@ MigrationRecord under a write lock that blocks the export
 momentarily; the export resumes once the writer releases. Worst
 case: the export takes a few seconds longer than usual.
 
-A *restore* (`POST /api/admin/restore`) refuses to run while any
-migration is in `running` state — the server returns 409 with a
-list of in-flight IDs. Cancel or wait for them before restoring.
+Online restore remains disabled even when no migrations are running.
+Offline recovery requires stopping the service and accounting for any
+in-flight hypervisor operations before replacing control-plane state.
 
 ## Rollback
 
-If restore goes wrong, the previous `store.json` is still in Mongo's
-`data.json.migrated` (v5.1+ migration artefact) or in the pre-restore
-volume snapshot you should have taken. Roll back by reversing step 3.
+Use the verified database and security-volume copies taken before recovery.
+Do not assume a migration artefact such as `data.json.migrated` contains
+the latest state. Validate login, pairing, inventory and command history in
+an isolated recovery deployment before resuming normal operations.
 
 ## Scheduling
 

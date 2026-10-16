@@ -103,6 +103,8 @@ type Store struct {
 	// earlier collection's E11000 before reaching the discord_gateway
 	// collection.
 	saveMu sync.Mutex
+	// Fingerprints of the last successful backend write; guarded by saveMu.
+	lastSavedHashes map[string]uint64
 	// saveQueued (v5.60.4) coalesces concurrent AsyncSave invocations
 	// to at most one in-flight + one pending. AsyncSave atomically
 	// CASs false→true to claim the queue slot; the goroutine resets
