@@ -35,11 +35,11 @@ for (const scenario of [
   await page.route('**/api/command', async route => { commands.push(route.request().postDataJSON().action); await route.fulfill({ status: 409, json: { error: 'Synthetic request intercepted' } }); });
   const modal = await fixture(page, scenario.state, scenario.status, scenario.age);
   await expect(modal.getByRole('button', { name: 'Shut Down & Migrate', exact: true })).toBeEnabled();
-  await modal.getByRole('button', { name: 'Live', exact: true }).click();
+  await modal.getByRole('tab', { name: 'Live', exact: true }).click();
   await expect(modal.getByRole('button', { name: 'Live Migrate', exact: true })).toBeDisabled();
   await expect(modal.getByText(scenario.reason)).toBeVisible();
   expect(commands).toEqual([]);
-  await modal.getByRole('button', { name: 'Offline (Recommended)', exact: true }).click();
+  await modal.getByRole('tab', { name: 'Offline (Recommended)', exact: true }).click();
   await expect(modal.getByText(/Shuts down the VM/)).toBeVisible();
   await modal.getByRole('button', { name: 'Shut Down & Migrate', exact: true }).click();
   await expect.poll(() => commands).toEqual(['OFFLINE_MIGRATE']);
@@ -52,7 +52,7 @@ test('fresh running source submits live action and surfaces execution-time rejec
     await route.fulfill({ status: 409, json: { success: false, message: 'Source stopped before execution; no live migration started.' } });
   });
   const modal = await fixture(page, 'running');
-  await modal.getByRole('button', { name: 'Live', exact: true }).click();
+  await modal.getByRole('tab', { name: 'Live', exact: true }).click();
   await expect(modal.getByRole('button', { name: 'Live Migrate', exact: true })).toBeEnabled();
   await modal.getByRole('button', { name: 'Live Migrate', exact: true }).click();
   await expect(page.getByText('MIGRATE failed: Source stopped before execution; no live migration started.', { exact: true })).toBeVisible();
@@ -65,7 +65,7 @@ test('an open live dialog ages out stale source telemetry', async ({ page }) => 
   let calls = 0;
   await page.route('**/api/command', async route => { calls++; await route.fulfill({ status: 409, json: { error: 'Synthetic interception' } }); });
   const modal = await fixture(page, 'running');
-  await modal.getByRole('button', { name: 'Live', exact: true }).click();
+  await modal.getByRole('tab', { name: 'Live', exact: true }).click();
   await expect(modal.getByRole('button', { name: 'Live Migrate', exact: true })).toBeEnabled();
   await page.clock.fastForward(121_000);
   await expect(modal.getByRole('button', { name: 'Live Migrate', exact: true })).toBeDisabled();
