@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
@@ -123,6 +124,8 @@ func handleConsoleWSProxy(store *Store) http.HandlerFunc {
 			return
 		}
 		defer browserConn.Close()
+		stopBrowser := context.AfterFunc(r.Context(), func() { _ = browserConn.Close() })
+		defer stopBrowser()
 
 		// Step 2: dial the agent's /ws/<vm> endpoint as a WS client,
 		// carrying the token that proves this call came from the server.
@@ -137,6 +140,8 @@ func handleConsoleWSProxy(store *Store) http.HandlerFunc {
 			return
 		}
 		defer agentConn.Close()
+		stopAgent := context.AfterFunc(r.Context(), func() { _ = agentConn.Close() })
+		defer stopAgent()
 
 		log.Printf("console-proxy: session start vm=%s host=%s", vmName, hostID)
 		spliceWS(browserConn, browserRW, agentConn, agentRW)

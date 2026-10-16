@@ -89,8 +89,7 @@ type Store struct {
 	mu sync.RWMutex
 	// saveWG tracks in-flight async Save goroutines so tests can
 	// wait for persistence before tearing down TempDir. Production
-	// code never needs to wait — the fire-and-forget pattern is
-	// correct for the hot path.
+	// shutdown uses saves to seal admission and drain without Add/Wait races.
 	saveWG sync.WaitGroup
 	// saveMu serialises backend.Save calls (v5.60.4). Pre-fix, every
 	// AsyncSave spawned its own goroutine and races between them tripped
@@ -102,7 +101,10 @@ type Store struct {
 	// stranded in memory because its Save would error out on an
 	// earlier collection's E11000 before reaching the discord_gateway
 	// collection.
-	saveMu sync.Mutex
+	saveMu   contextMutex
+	work     workSet
+	saves    workSet
+	shutdown *shutdownCoordinator
 	// Fingerprints of the last successful backend write; guarded by saveMu.
 	lastSavedHashes map[string]uint64
 	// saveQueued (v5.60.4) coalesces concurrent AsyncSave invocations
@@ -468,16 +470,16 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 
 	// Metrics side effects — fan out outside the lock. Tight loop
 	// so the per-VM emit stays bounded on a large fleet.
-	go func() {
+	s.goWork("telemetry-fanout", func() {
 		s.EmitHostMetrics(&hostCopy, prefix)
 		s.EmitVMMetrics(vmsCopy, prefix)
 		// v5.17: feed the in-UI sparkline ring alongside the Influx
 		// write. Cheap (~1 µs) and memory-only.
 		s.AppendHostMetric(p.HostID, &hostCopy, poolsCopy)
-	}()
+	})
 
 	// Notification side effects — fan out outside the lock.
-	go func() {
+	s.goWork("telemetry-fanout", func() {
 		if knownHost && !wasOnline {
 			// v5.56.0 — auto-clear any operator-set "expected down"
 			// flag now that the host is reporting again. Without this,
@@ -518,7 +520,7 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // applyVMSideData rehydrates notes and merges guest-tools data onto a VM record.

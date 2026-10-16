@@ -66,7 +66,7 @@ func (s *Store) startNotificationDispatcher(ctx context.Context) {
 		s.notifyQueue = make(chan *models.NotificationEvent, notifyQueueSize)
 	}
 	s.mu.Unlock()
-	go func() {
+	s.goWork("notifications", func() {
 		for {
 			select {
 			case <-ctx.Done():
@@ -75,7 +75,7 @@ func (s *Store) startNotificationDispatcher(ctx context.Context) {
 				s.dispatchNotification(ev)
 			}
 		}
-	}()
+	})
 }
 
 // fireNotification is the single entry point every trigger calls.

@@ -631,7 +631,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 			if action == "OFFLINE_MIGRATE" {
 				// Offline migrations run async on the agent; mirror the
 				// /migrate-status feed onto the record until terminal.
-				go pollMigrationStatus(store, migRec, agentAddr)
+				store.goWork("migration-poll", func() { pollMigrationStatus(store, migRec, agentAddr) })
 			}
 		}
 

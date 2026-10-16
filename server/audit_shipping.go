@@ -44,7 +44,7 @@ func (s *Store) startAuditShipper(ctx context.Context) {
 	}
 	s.mu.Unlock()
 
-	go func() {
+	s.goWork("audit_shipping", func() {
 		batch := make([]*models.AuditEvent, 0, defaultBatchSize*2)
 		flushTicker := time.NewTicker(1 * time.Second) // outer tick; actual flush cadence comes from config
 		defer flushTicker.Stop()
@@ -108,7 +108,7 @@ func (s *Store) startAuditShipper(ctx context.Context) {
 			s.recordShipResult(nil, int64(len(batch)))
 			batch = batch[:0]
 		}
-	}()
+	})
 }
 
 func shouldFlushByAge(oldest time.Time, maxAge time.Duration) bool {

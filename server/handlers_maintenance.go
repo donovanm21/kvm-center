@@ -76,7 +76,7 @@ func handleMaintenanceEnter(store *Store) http.HandlerFunc {
 			}
 			// Use the server-wide context so a clean shutdown stops the
 			// drain mid-VM rather than leaving an orphan migration in flight.
-			go drainHost(serverCtx, store, hostID, mode, actorID)
+			store.goWork("maintenance-drain", func() { drainHost(serverCtx, store, hostID, mode, actorID) })
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}

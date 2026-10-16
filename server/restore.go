@@ -124,6 +124,13 @@ func handleRestart(store *Store) http.HandlerFunc {
 			"ok":      true,
 			"message": "Server is restarting; reconnect in a few seconds.",
 		})
+		if store.shutdown != nil {
+			select {
+			case store.shutdown.restart <- struct{}{}:
+			default:
+			}
+			return
+		}
 		// Force a synchronous Save so anything not yet persisted
 		// (in-flight migration mutations, audit events) survives
 		// the bounce.
