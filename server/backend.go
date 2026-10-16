@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"time"
 )
 
@@ -36,7 +37,8 @@ type Backend interface {
 	// *persistData with a nil error is legitimate (fresh install).
 	Load(ctx context.Context) (*persistData, error)
 
-	// Save atomically commits the entire in-memory state. Runs on the
+	// Save persists the in-memory snapshot. Mongo writes are not atomic across
+	// records or collections. Runs on the
 	// 30-second persist ticker and after RBAC mutations.
 	Save(ctx context.Context, d *persistData) error
 
@@ -55,8 +57,8 @@ type BackendInfo struct {
 }
 
 // JSONBackend keeps kvm-center on the pre-v5.1 single-file store.
-// Preserves the exact on-disk format so downgrading to v5.0.x
-// boot-straps without a migration.
+// Versioned feature payloads require a compatible reader. Older JSON codecs
+// discard fields they do not know; downgrade requires offline recovery.
 type JSONBackend struct {
 	Path string
 }
@@ -201,6 +203,22 @@ func verifyBackendRoundTrip(ctx context.Context, src *persistData, dst Backend) 
 	}
 	if back == nil {
 		return errors.New("read-back returned nil persistData")
+	}
+	if err := src.VMTagState.validate(); err != nil {
+		return err
+	}
+	if err := back.VMTagState.validate(); err != nil {
+		return err
+	}
+	var sourceTags, loadedTags map[string][]string
+	if src.VMTagState != nil {
+		sourceTags = src.VMTagState.ByVM
+	}
+	if back.VMTagState != nil {
+		loadedTags = back.VMTagState.ByVM
+	}
+	if (len(sourceTags) != 0 || len(loadedTags) != 0) && !reflect.DeepEqual(sourceTags, loadedTags) {
+		return errors.New("VM tag state content mismatch")
 	}
 	type check struct {
 		name     string

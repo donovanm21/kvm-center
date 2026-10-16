@@ -6,7 +6,9 @@ package main
 // Older snapshots without the sidecar continue to decode normally.
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -59,6 +61,20 @@ func (d persistData) MarshalJSON() ([]byte, error) {
 }
 
 func (d *persistData) UnmarshalJSON(raw []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return err
+	}
+	if err := uniqueTagSnapshotFields(raw); err != nil {
+		return err
+	}
+	if _, present := fields["vm_tags"]; present {
+		return errors.New("legacy unversioned vm_tags requires an explicit offline conversion")
+	}
+	if value, present := fields["vm_tag_state"]; present && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		return errors.New("VM tag state must be absent or a versioned object, not null")
+	}
+
 	// Decode into a fresh value so absent legacy fields cannot retain stale
 	// credentials if a caller reuses a destination struct.
 	var decoded persistData
