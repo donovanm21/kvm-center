@@ -51,6 +51,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"kvm-center/internal/models"
+	"kvm-center/internal/validationfixture"
 )
 
 // Deterministic RNG so successive seed runs produce the same data —
@@ -75,6 +76,18 @@ const (
 const demoAPIToken = "kvmc_demo0001.00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
 
 func main() {
+	if output := os.Getenv("KVMC_VALIDATION_JSON"); output != "" {
+		if os.Getenv("KVMC_VALIDATION_FIXTURE") != "1" {
+			log.Fatal("JSON fixture export requires KVMC_VALIDATION_FIXTURE=1")
+		}
+		fx := buildFixtures()
+		isolateValidationFixtures(fx)
+		if err := writeValidationJSON(output, fx); err != nil {
+			log.Fatal(err)
+		}
+		log.Print("wrote isolated JSON fixture; no MongoDB or hypervisor coverage")
+		return
+	}
 	uri := os.Getenv("KVM_CENTER_DEMO_MONGO_URL")
 	if uri == "" {
 		log.Fatal("KVM_CENTER_DEMO_MONGO_URL is required")
@@ -82,6 +95,16 @@ func main() {
 	dbName := os.Getenv("KVM_CENTER_DEMO_MONGO_DB")
 	if dbName == "" {
 		dbName = "kvm-center-demo"
+	}
+	validationMode := os.Getenv("KVMC_VALIDATION_FIXTURE") == "1"
+	if os.Getenv("KVMC_VALIDATION_CLEANUP") == "1" && !validationMode {
+		log.Fatal("validation cleanup requires KVMC_VALIDATION_FIXTURE=1")
+	}
+	if validationMode {
+		if err := validateFixtureTarget(uri, dbName); err != nil {
+			log.Fatal(err)
+		}
+		uri, _ = validationfixture.MongoURI(uri) // validated above; disable replica discovery
 	}
 	ver := os.Getenv("KVM_CENTER_DEMO_VERSION")
 	if ver != "" {
@@ -100,6 +123,13 @@ func main() {
 		log.Fatalf("mongo ping: %v", err)
 	}
 	db := client.Database(dbName)
+	if validationMode && os.Getenv("KVMC_VALIDATION_CLEANUP") == "1" {
+		if err := db.Drop(ctx); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("removed validation fixture %s", dbName)
+		return
+	}
 
 	// Drop every collection so re-seeding is idempotent.
 	cols, err := db.ListCollectionNames(ctx, bson.D{})
@@ -114,6 +144,9 @@ func main() {
 	log.Printf("demo-seed: wiped %d collections", len(cols))
 
 	fx := buildFixtures()
+	if validationMode {
+		isolateValidationFixtures(fx)
+	}
 	if err := writeFixtures(ctx, db, fx); err != nil {
 		log.Fatalf("write: %v", err)
 	}

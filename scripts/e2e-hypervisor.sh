@@ -16,6 +16,7 @@
 #   KVMC_TOKEN=kvmc_... ./scripts/e2e-hypervisor.sh --scenario B1   # one
 #   KVMC_TOKEN=kvmc_... ./scripts/e2e-hypervisor.sh --clean         # sweep
 #   KVMC_TOKEN=kvmc_... ./scripts/e2e-hypervisor.sh --with-retire   # incl M
+#   KVMC_TOKEN=kvmc_... ./scripts/e2e-hypervisor.sh --strict --with-retire # no skips
 #
 # Env knobs:
 #   KVMC_SERVER       default https://server.example.com:8190
@@ -27,7 +28,6 @@
 
 set -uo pipefail
 
-: "${KVMC_TOKEN:?KVMC_TOKEN env var required (kvmc_<id>.<secret>)}"
 : "${KVMC_SERVER:=https://server.example.com:8190}"
 : "${KVMC_HOST:=hostD.example.com}"
 : "${KVMC_PEER:=hostA.example.com}"
@@ -37,27 +37,23 @@ set -uo pipefail
 CLEAN_ONLY=0
 WITH_RETIRE=0
 LIST_ONLY=0
+STRICT=0
 SELECTED=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --strict)       STRICT=1; shift ;;
     --clean)        CLEAN_ONLY=1; shift ;;
     --list)         LIST_ONLY=1; shift ;;
     --with-retire)  WITH_RETIRE=1; shift ;;
-    --scenario)     SELECTED="$2"; shift 2 ;;
-    --server)       KVMC_SERVER="$2"; shift 2 ;;
-    --host)         KVMC_HOST="$2"; shift 2 ;;
-    --peer)         KVMC_PEER="$2"; shift 2 ;;
+    --scenario)     [[ $# -ge 2 && "$2" != --* ]] || { echo "--scenario requires a value" >&2; exit 2; }; SELECTED="$2"; shift 2 ;;
+    --server) [[ $# -ge 2 && "$2" != --* ]] || { echo "--server requires a value" >&2; exit 2; }; KVMC_SERVER="$2"; shift 2 ;;
+    --host) [[ $# -ge 2 && "$2" != --* ]] || { echo "--host requires a value" >&2; exit 2; }; KVMC_HOST="$2"; shift 2 ;;
+    --peer) [[ $# -ge 2 && "$2" != --* ]] || { echo "--peer requires a value" >&2; exit 2; }; KVMC_PEER="$2"; shift 2 ;;
     -h|--help)
       sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
   esac
 done
-
-# ── output dir ────────────────────────────────────────────────────
-OUTDIR="${KVMC_E2E_OUTDIR:-/tmp/kvmc-e2e-$$}"
-mkdir -p "$OUTDIR"
-LOG="$OUTDIR/run.log"
-: > "$LOG"
 
 RUN_TS="$(date -u +%Y%m%dT%H%M%SZ)"
 # `e2eharness-` (not `e2e-`) so the harness's test resources are
@@ -1705,6 +1701,15 @@ if (( LIST_ONLY == 1 )); then
   exit 0
 fi
 
+: "${KVMC_TOKEN:?KVMC_TOKEN env var required (kvmc_<id>.<secret>)}"
+
+# Initialize output only for an authorized execution path. --help and --list
+# must not create files or overwrite a previous lab run's evidence.
+OUTDIR="${KVMC_E2E_OUTDIR:-/tmp/kvmc-e2e-$$}"
+mkdir -p "$OUTDIR"
+LOG="$OUTDIR/run.log"
+: > "$LOG"
+
 if (( CLEAN_ONLY == 1 )); then
   sweep_orphans
   exit 0
@@ -1753,5 +1758,9 @@ log ""
 log "  ${C_GREEN}pass=$pass${C_NC}  ${C_RED}fail=$fail${C_NC}  ${C_YELLOW}skip=$skip${C_NC}  total=$((pass+fail+skip))"
 log "  output dir: $OUTDIR"
 
-if (( fail > 0 )); then exit 1; fi
+if (( fail > 0 || pass == 0 )); then exit 1; fi
+if (( STRICT == 1 && skip > 0 )); then
+  log "strict acceptance failed: skipped scenarios are not passes"
+  exit 1
+fi
 exit 0

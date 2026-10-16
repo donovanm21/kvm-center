@@ -87,7 +87,12 @@ npm run dev          # Vite dev server; proxy is configured for :8190 (TLS)
 
 ## Tests, linting, and build gates
 
-Run these before pushing — they mirror what CI checks:
+Start with `make validate`. It records source, race-test, frontend and release
+cross-build evidence. Real MongoDB and browser fixture checks are separate;
+see [validation and the feature matrix](docs/validation.md). Missing services
+or release sources are blockers, not successful tests.
+
+The smaller commands below remain useful while iterating:
 
 ```sh
 # Go tests across every package
@@ -100,7 +105,7 @@ make lint
 # Format Go in place
 make fmt             # gofmt -w .
 
-# Full quality gate: lint + tests
+# Small Go-only gate: lint + tests (not release validation)
 make check
 
 # Frontend type-check + production build
@@ -152,6 +157,9 @@ emergency with `SKIP_PRE_COMMIT=1 git commit ...`.
     `npm audit --audit-level=critical` (blocking).
   - **`gitleaks`** — full-history secret scan.
   - **`summary`** — aggregator that fails if any of the above fail.
+- **Manual acceptance is separate.** The new source/race/Mongo/browser/packaging
+  harness is not automatically enabled in CI. Consult the validation matrix;
+  missing or blocked runtime evidence must remain visible.
 - **Keep PRs focused.** One concern per PR — a bug fix and an unrelated
   refactor belong in separate PRs.
 - **Lint clean.** `make lint` must pass locally before you push.

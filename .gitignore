@@ -22,3 +22,14 @@ migration-keys/
 
 # internal-only artifacts (kept locally, excluded from the public repo)
 .internal/
+
+# Release inputs must stay versioned; root-level generated copies stay ignored.
+!scripts/update-agent.sh
+!scripts/install-kvmctl.sh
+!scripts/install-kvmctl.ps1
+!scripts/libvirt-hooks-qemu.sh
+.validation/
+__pycache__/
+*.tsbuildinfo
+demo/e2e/output/
+demo/e2e/playwright-report/

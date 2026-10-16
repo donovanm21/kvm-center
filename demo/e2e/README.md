@@ -13,8 +13,9 @@ is wrong.
 # Default — local demo on port 8290
 scripts/run-e2e.sh
 
-# Against a remote demo
-KVMC_DEMO_URL=https://10.0.0.1:8290 scripts/run-e2e.sh
+# Against an authorized disposable remote demo at a known revision
+KVMC_EXPECTED_SHA=<40-character-deployed-SHA> KVMC_EXPECTED_BACKEND=mongo \
+  KVMC_DEMO_URL=https://10.0.0.1:8290 scripts/run-e2e.sh
 
 # One spec
 scripts/run-e2e.sh specs/auth.spec.ts
@@ -36,9 +37,25 @@ screenshot under `demo/e2e/output/<test-id>/` for post-mortem.
 - **docs** — sidebar tree + rendered article; embedded WebP media
   endpoint returns 200 + image/webp content-type.
 
-## Why this isn't in CI yet
+## Manual isolated native fixture
 
-Needs a demo backend. Adding to CI means standing up the demo
-stack inside the runner (`docker compose up` + seed) before each
-test pass. Future work — the suite itself is structured to make
-that straightforward.
+The manual fixture builds a local server and seeds a random disposable
+MongoDB with outbound notifications and scheduled mutations disabled. It runs
+Chromium + iPhone/WebKit assertions with zero retries and checks the server's
+Git SHA. This is real browser/API/Mongo coverage with synthetic inventory;
+it is not real-hypervisor validation.
+
+```sh
+npm ci --prefix demo/e2e
+cd demo/e2e && npx --no-install playwright install chromium webkit && cd ../..
+KVMC_TEST_MONGO_URI=mongodb://127.0.0.1:27017 scripts/run-browser-fixture.sh
+```
+
+For existing demo runs, set `KVMC_EXPECTED_SHA` to the exact deployed server
+revision (defaults to the current checkout), and set `KVMC_EXPECTED_BACKEND=json`
+for a JSON-backed demo (default: `mongo`). Both Docker paths forward these values;
+the revision assertion fails if the deployment differs. See
+[validation gates and feature matrix](../../docs/validation.md).
+
+These commands do not activate a hosted CI job. Review and authorize disposable
+services and runner resources separately before future CI activation.
