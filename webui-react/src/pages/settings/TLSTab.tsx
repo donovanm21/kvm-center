@@ -480,7 +480,7 @@ function KV({ label, value, mono, wrap }: { label: string; value?: string; mono?
   );
 }
 
-function FilePicker({ label, inputRef, accept }: { label: string; inputRef: React.RefObject<HTMLInputElement>; accept: string }) {
+function FilePicker({ label, inputRef, accept }: { label: string; inputRef: React.RefObject<HTMLInputElement | null>; accept: string }) {
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
