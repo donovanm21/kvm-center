@@ -567,12 +567,6 @@ func runUIWatchdog(ctx context.Context, c UIWatchConfig, d Driver, recovery bool
 	ticker := time.NewTicker(timing.poll)
 	defer ticker.Stop()
 	active := prepareCtx
-	var stopArmed context.CancelFunc
-	defer func() {
-		if stopArmed != nil {
-			stopArmed()
-		}
-	}()
 	for {
 		select {
 		case <-active.Done():
@@ -636,7 +630,9 @@ func runUIWatchdog(ctx context.Context, c UIWatchConfig, d Driver, recovery bool
 			next.ArmedDeadline = now.Add(45 * time.Second)
 			// The runtime deadline retains the monotonic clock and starts BEFORE fsync
 			// and acknowledgment. No signal, retry, poll or observation can extend it.
-			active, stopArmed = context.WithDeadline(ctx, now.Add(timing.armed))
+			armedCtx, stopArmed := context.WithDeadline(ctx, now.Add(timing.armed))
+			defer stopArmed()
+			active = armedCtx
 			if err = save(next); err != nil {
 				return err
 			}
