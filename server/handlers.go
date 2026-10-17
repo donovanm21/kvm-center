@@ -713,7 +713,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 		}
 		defer resp.Body.Close()
 
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, responseReadErr := io.ReadAll(resp.Body)
 		// Resolve the command log outcome. 2xx → success. 4xx →
 		// failed (agent intentionally rejected the request). 5xx →
 		// pending: agent had an internal error, which doesn't tell us
@@ -787,6 +787,9 @@ func handleCommand(store *Store) http.HandlerFunc {
 		}
 		if auditOutcome == "success" && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
 			auditOutcome, auditMessage = "failed", "agent HTTP response: "+strconv.Itoa(resp.StatusCode)
+		}
+		if responseReadErr != nil {
+			auditOutcome, auditMessage = "pending", "agent response incomplete; outcome unconfirmed"
 		}
 		if auditOutcome == "failed" && auditMessage == "" {
 			auditMessage = "agent rejected command"

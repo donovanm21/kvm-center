@@ -21,6 +21,7 @@ func TestCommandAuditMatchesObservedOutcome(t *testing.T) {
 		{"nonowned rejection", 403, `{"success":false,"message":"not owned"}`, "failed", false},
 		{"successful command", 200, `{"success":true,"message":"done"}`, "success", true},
 		{"application failure", 200, `{"success":false,"message":"already active"}`, "failed", false},
+		{"truncated response", 200, `{"success":true}`, "pending", false},
 		{"async", 202, `{"success":true,"message":"accepted"}`, "pending", false},
 		{"unknown server error", 500, `unavailable`, "pending", false},
 		{"rejection without flag", 409, `{"message":"conflict"}`, "failed", false},
@@ -30,6 +31,9 @@ func TestCommandAuditMatchesObservedOutcome(t *testing.T) {
 			s, u := migrationFixture(t)
 			s.roles["migration-role"].Permissions = []string{models.PermVMLifecycle}
 			agent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.name == "truncated response" {
+					w.Header().Set("Content-Length", "1000")
+				}
 				w.WriteHeader(tc.status)
 				_, _ = w.Write([]byte(tc.body))
 			}))
@@ -86,5 +90,42 @@ func TestCommandAuditEarlyRefusalAndCachedOutcome(t *testing.T) {
 				t.Fatal(events[0].Detail)
 			}
 		})
+	}
+}
+
+func TestCommandAuditTransportUncertainty(t *testing.T) {
+	s, u := migrationFixture(t)
+	s.roles["migration-role"].Permissions = []string{models.PermVMLifecycle}
+	agent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		_ = conn.Close()
+	}))
+	defer agent.Close()
+	_, port, _ := net.SplitHostPort(strings.TrimPrefix(agent.URL, "http://"))
+	s.hosts["source"].AgentPort, _ = strconv.Atoi(port)
+	w := migrationRequest(s, u, models.APICommandRequest{HostID: "source", VMUUID: "fixture-uuid", Action: "START", RequestID: "transport-audit"})
+	if w.Code != 502 {
+		t.Fatal(w.Code)
+	}
+	events, _ := s.GetAuditEvents(AuditFilter{})
+	if len(events) != 1 || events[0].Success || events[0].Detail["outcome"] != "pending" {
+		t.Fatalf("uncertainty lost: %+v", events)
+	}
+}
+func TestCommandAuditPendingLiveReplay(t *testing.T) {
+	s, u := migrationFixture(t)
+	s.hosts["source"].AgentPort = 1
+	s.commandLog.Record(&models.CommandLogEntry{RequestID: "pending-audit", Action: "MIGRATE", HostID: "source", VMUUID: "fixture-uuid", Outcome: "pending"})
+	w := migrationRequest(s, u, models.APICommandRequest{HostID: "source", VMUUID: "fixture-uuid", Action: "MIGRATE", RequestID: "pending-audit"})
+	if w.Code != 202 {
+		t.Fatal(w.Code, w.Body)
+	}
+	events, _ := s.GetAuditEvents(AuditFilter{})
+	if len(events) != 1 || events[0].Success || events[0].Action != AuditMigrationStart || events[0].Detail["outcome"] != "pending" {
+		t.Fatalf("pending replay audit: %+v", events)
 	}
 }
