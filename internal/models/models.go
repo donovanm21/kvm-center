@@ -342,8 +342,8 @@ type MetricsConfig struct {
 type AuditEvent struct {
 	ID        string            `json:"id"`
 	At        time.Time         `json:"at"`
-	ActorID   string            `json:"actor_id,omitempty"`   // user ID; empty for unauthenticated (e.g. pre-session)
-	ActorName string            `json:"actor_name,omitempty"` // denormalised for UI without a join
+	ActorID   string            `json:"actor_id,omitempty" bson:"actor_id"` // user ID; empty for unauthenticated (e.g. pre-session)
+	ActorName string            `json:"actor_name,omitempty"`               // denormalised for UI without a join
 	ActorIP   string            `json:"actor_ip,omitempty"`
 	Action    string            `json:"action"`             // "vm.start", "role.update", "tls.upload", etc.
 	Resource  string            `json:"resource,omitempty"` // "vm/<uuid>", "host/<id>", "role/<id>", free-form
@@ -374,7 +374,7 @@ type VMNetwork struct {
 type VM struct {
 	UUID          string      `json:"uuid"`
 	Name          string      `json:"name"`
-	HostID        string      `json:"host_id"`
+	HostID        string      `json:"host_id" bson:"host_id"`
 	State         VMState     `json:"state"`
 	CPUCount      int         `json:"cpu_count"`
 	CPUUsage      float64     `json:"cpu_usage"`
@@ -870,7 +870,7 @@ type Session struct {
 	Token     string    `json:"token"`
 	UserID    string    `json:"user_id"`
 	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"`
+	ExpiresAt time.Time `json:"expires_at" bson:"expires_at"`
 	UserAgent string    `json:"user_agent,omitempty"`
 }
 
@@ -1004,10 +1004,10 @@ type MigrationRecord struct {
 	VMName      string `json:"vm_name"`
 	SourceHost  string `json:"source_host"`
 	DestHost    string `json:"dest_host"`
-	Mode        string `json:"mode"`                // "offline" | "live"
-	Transport   string `json:"transport,omitempty"` // "tls" | "ssh" (v5.10.7)
-	Status      string `json:"status"`              // "running" | "complete" | "failed"
-	StartedAt   int64  `json:"started_at"`          // unix seconds
+	Mode        string `json:"mode"`                         // "offline" | "live"
+	Transport   string `json:"transport,omitempty"`          // "tls" | "ssh" (v5.10.7)
+	Status      string `json:"status"`                       // "running" | "complete" | "failed"
+	StartedAt   int64  `json:"started_at" bson:"started_at"` // unix seconds
 	CompletedAt int64  `json:"completed_at,omitempty"`
 	ElapsedSec  int64  `json:"elapsed_sec,omitempty"`
 	DiskSizeMB  int64  `json:"disk_size_mb,omitempty"`
