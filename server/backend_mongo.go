@@ -378,11 +378,11 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 		}
 		defer cur.Close(ctx)
 		for cur.Next(ctx) {
-			var doc struct {
-				UUID  string     `bson:"vm_uuid"`
-				Entry guestEntry `bson:"entry,inline"`
+			var doc mongoGuestDocument
+			if err := cur.Decode(&doc); err != nil {
+				return fmt.Errorf("guest data decode: %w", err)
 			}
-			if err := cur.Decode(&doc); err == nil && doc.UUID != "" {
+			if doc.UUID != "" {
 				e := doc.Entry
 				pd.GuestData[doc.UUID] = &e
 			}
@@ -1108,4 +1108,10 @@ func mapToDocs[T any](m map[string]*T, toDoc func(*T) any) []any {
 		out = append(out, toDoc(v))
 	}
 	return out
+}
+
+// mongoGuestDocument matches the nested envelope written by Save.
+type mongoGuestDocument struct {
+	UUID  string     `bson:"vm_uuid"`
+	Entry guestEntry `bson:"entry"`
 }
