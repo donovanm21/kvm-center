@@ -146,6 +146,9 @@ func normalize(collection string, raw bson.Raw) (bson.Raw, []string, error) {
 	}
 	out = append(out, 0)
 	binary.LittleEndian.PutUint32(out, uint32(len(out)))
+	if err := validateRaw(bson.Raw(out), 0, false); err != nil {
+		return nil, nil, err
+	}
 	return bson.Raw(out), changes, nil
 }
 
@@ -285,7 +288,7 @@ func validateIndexes(collection string, data []byte, docs []bson.Raw) error {
 			return errors.New("duplicate index key pattern")
 		}
 		keys[signature] = true
-		if m, ok := mappings[collection]; ok && strings.EqualFold(key, m.alias) {
+		if m, ok := mappings[collection]; ok && (strings.EqualFold(key, m.alias) || (key != m.canonical && strings.EqualFold(key, m.canonical))) {
 			return errors.New("legacy alias index requires explicit resolution")
 		}
 		flag := func(k string) (bool, error) {
@@ -350,6 +353,9 @@ func validateIndexes(collection string, data []byte, docs []bson.Raw) error {
 		seen := map[string]bool{}
 		for _, doc := range docs {
 			v := doc.Lookup(key)
+			if v.Type == bsontype.Array {
+				return errors.New("multikey index values require a separate contract")
+			}
 			if ttl.Type != 0 && v.Type != 0 && v.Type != bsontype.DateTime {
 				return errors.New("TTL value must be a date")
 			}

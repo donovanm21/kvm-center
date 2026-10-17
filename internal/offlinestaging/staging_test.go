@@ -2,13 +2,16 @@ package offlinestaging
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -410,5 +413,119 @@ func TestAliasesPreserveOrderAndOptionalAbsence(t *testing.T) {
 	n, _, e := normalize("audit_events", r)
 	if e != nil || !bytes.Equal(r, n) {
 		t.Fatal("optional absent altered")
+	}
+}
+
+func TestSourceRecheckDetectsCoherentReplacement(t *testing.T) {
+	for _, mode := range []string{"new output", "verified no-op"} {
+		t.Run(mode, func(t *testing.T) {
+			src, data, idx := fixture(t)
+			out := freshOutput(t)
+			if mode == "verified no-op" {
+				if _, e := Convert(src, out); e != nil {
+					t.Fatal(e)
+				}
+			}
+			changed := false
+			_, e := convert(src, out, func(step string) error {
+				if !changed {
+					changed = true
+					data["future_collection"] = raw(t, bson.D{{Key: "_id", Value: "replacement"}})
+					saveFixture(t, src, data, idx)
+				}
+				return nil
+			})
+			if e == nil || !changed {
+				t.Fatal("changed input accepted", e)
+			}
+			if mode == "new output" {
+				if _, e = Verify(out); e == nil {
+					t.Fatal("changed-source output marked ready")
+				}
+			} else {
+				if _, e = Verify(out); e != nil {
+					t.Fatal("valid original output changed", e)
+				}
+			}
+		})
+	}
+}
+func TestTargetUniqueConstraintsWithoutIndexMetadata(t *testing.T) {
+	for _, collection := range []string{"vms", "users"} {
+		t.Run(collection, func(t *testing.T) {
+			src, data, idx := fixture(t)
+			field := "username"
+			if collection == "vms" {
+				field = "uuid"
+			}
+			data[collection] = nil
+			for _, id := range []string{"a", "b"} {
+				d := bson.D{{Key: "_id", Value: id}, {Key: field, Value: "collision"}}
+				if collection == "vms" {
+					d = append(d, bson.E{Key: "host_id", Value: "host-1"})
+				}
+				data[collection] = append(data[collection], raw(t, d)...)
+			}
+			idx[collection] = nil
+			saveFixture(t, src, data, idx)
+			if _, e := Convert(src, freshOutput(t)); e == nil {
+				t.Fatal("target collision accepted without metadata")
+			}
+		})
+	}
+}
+func TestOfflineBundleProcessReopen(t *testing.T) {
+	if path := os.Getenv("KVM_SYNTHETIC_REOPEN_BUNDLE"); path != "" {
+		m, e := Verify(path)
+		if e != nil {
+			os.Exit(3)
+		}
+		records, e := History(path)
+		if e != nil || len(records) != 2 || m.Activation {
+			os.Exit(4)
+		}
+		os.Exit(0)
+	}
+	src, _, _ := fixture(t)
+	out := freshOutput(t)
+	if _, e := Convert(src, out); e != nil {
+		t.Fatal(e)
+	}
+	// Fresh process has no converter memory or open files. No database/network.
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestOfflineBundleProcessReopen$")
+	cmd.Env = append(os.Environ(), "KVM_SYNTHETIC_REOPEN_BUNDLE="+out)
+	if b, e := cmd.CombinedOutput(); e != nil {
+		t.Fatalf("fresh process: %v %s", e, b)
+	}
+}
+
+func TestNormalizationMustStayWithinBSONLimit(t *testing.T) {
+	doc := bson.D{{Key: "_id", Value: "vm"}, {Key: "hostid", Value: "host-1"}, {Key: "blob", Value: primitive.Binary{Data: nil}}}
+	empty := raw(t, doc)
+	doc[2].Value = primitive.Binary{Data: make([]byte, maxDocument-len(empty))}
+	r := raw(t, doc)
+	if len(r) != maxDocument {
+		t.Fatal("ineffective boundary fixture")
+	}
+	if e := validateRaw(r, 0, false); e != nil {
+		t.Fatal(e)
+	}
+	if _, _, e := normalize("vms", r); e == nil {
+		t.Fatal("oversized normalized BSON accepted")
+	}
+	doc[2].Value = primitive.Binary{Data: make([]byte, maxDocument-len(empty)-1)}
+	r = raw(t, doc)
+	n, _, e := normalize("vms", r)
+	if e != nil || len(n) != maxDocument {
+		t.Fatal("valid boundary refused", e)
+	}
+}
+func TestNonuniqueMultikeyIndexRefused(t *testing.T) {
+	index := raw(t, bson.D{{Key: "name", Value: "field"}, {Key: "key", Value: bson.D{{Key: "field", Value: int32(1)}}}})
+	doc := raw(t, bson.D{{Key: "_id", Value: "a"}, {Key: "field", Value: bson.A{"a", "b"}}})
+	if e := validateIndexes("future_collection", index, []bson.Raw{doc}); e == nil {
+		t.Fatal("multikey semantics accepted")
 	}
 }

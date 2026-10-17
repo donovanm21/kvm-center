@@ -398,6 +398,11 @@ func convert(source, output string, hook func(string) error) (*Manifest, error) 
 		if !bytes.Equal(a, b) {
 			return nil, errors.New("existing output differs")
 		}
+		if hook != nil {
+			if e := hook("noop:before-source-recheck"); e != nil {
+				return nil, e
+			}
+		}
 		again, reloadErr := loadInput(src)
 		if reloadErr != nil {
 			return nil, reloadErr
