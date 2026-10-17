@@ -16,15 +16,31 @@ spec.loader.exec_module(history)
 
 class HistoryEvidenceTests(unittest.TestCase):
     def fixture(self):
-        return [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': kind, 'data': {'backend': backend}})})
+        return [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': kind, 'data': {'backend': backend}}) + '\n'})
                 for kind in ('cap_costs', 'artifact_cap', 'artifact_lifecycle') for backend in ('json', 'mongo')]
 
     def test_requires_every_backend_and_phase_once(self):
         rows = self.fixture()
-        self.assertEqual(len(history.measurements('\n'.join(rows))), 6)
+        rows.append(json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind':'legacy_refusal','data':{'backend':'mongo'}}) + '\n'}))
+        self.assertEqual(len(history.measurements('\n'.join(rows))), 7)
         for bad in (rows[:-1], rows + [rows[0]], []):
             with self.assertRaises(ValueError):
                 history.measurements('\n'.join(bad))
+
+    def test_fragmented_interleaved_evidence(self):
+        rows = self.fixture()
+        payload = 'HISTORY_EVIDENCE ' + json.dumps({
+            'kind': 'legacy_refusal', 'data': {'backend': 'mongo',
+            'checksums': {str(i): 'a' * 64 for i in range(60)}}}) + '\n'
+        chunks = [payload[i:i + 511] for i in range(0, len(payload), 511)]
+        for chunk in chunks:
+            rows.append(json.dumps({'Package': 'server', 'Test': 'legacy', 'Output': chunk}))
+            rows.append(json.dumps({'Package': 'server', 'Test': 'other', 'Output': 'noise\n'}))
+        result = history.measurements('\n'.join(rows))
+        self.assertEqual(len(result), 7)
+        self.assertEqual(len(result[-1]['data']['checksums']), 60)
+        with self.assertRaises(ValueError):
+            history.measurements('\n'.join(rows[:-2]))
 
     @unittest.skipUnless(sys.platform == 'linux', 'owned Linux process-group regression runs in hosted CI')
     def test_nonzero_leader_cleans_owned_descendant(self):

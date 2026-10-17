@@ -1,0 +1,65 @@
+{
+  "fixture_schema": "synthetic-saved-c018b31-bson-v1",
+  "source_commit": "c018b31b74d7d75ed8c49921dc0812bf5999d81f",
+  "declarations": {
+    "APIToken": "internal/models/models.go",
+    "AffinityRule": "internal/models/models.go",
+    "Alarm": "internal/models/models.go",
+    "AuditEvent": "internal/models/models.go",
+    "AuditShipping": "internal/models/models.go",
+    "BackupSchedule": "internal/models/models.go",
+    "CommandLogEntry": "internal/models/models.go",
+    "CommandProgressFrame": "internal/models/models.go",
+    "DiscordGateway": "internal/models/models.go",
+    "ExternalIdentity": "internal/models/models.go",
+    "Features": "internal/models/models.go",
+    "Group": "internal/models/models.go",
+    "GuestFS": "internal/models/models.go",
+    "GuestGrowResult": "internal/models/models.go",
+    "GuestInterface": "internal/models/models.go",
+    "GuestTelemetryPayload": "internal/models/models.go",
+    "Host": "internal/models/models.go",
+    "HostPCIDevice": "internal/models/models.go",
+    "HostStatus": "internal/models/models.go",
+    "HypervisorCert": "internal/models/models.go",
+    "IdentityProvider": "internal/models/models.go",
+    "LDAPConfig": "internal/models/models.go",
+    "MetricsConfig": "internal/models/models.go",
+    "MigrationRecord": "internal/models/models.go",
+    "NotificationChannel": "internal/models/models.go",
+    "NotificationConfig": "internal/models/models.go",
+    "PendingEnrollment": "internal/models/models.go",
+    "RemovedHost": "internal/models/models.go",
+    "Role": "internal/models/models.go",
+    "SAMLConfig": "internal/models/models.go",
+    "Session": "internal/models/models.go",
+    "Snapshot": "internal/models/models.go",
+    "SnapshotPolicy": "internal/models/models.go",
+    "StoragePool": "internal/models/models.go",
+    "User": "internal/models/models.go",
+    "VM": "internal/models/models.go",
+    "VMDisk": "internal/models/models.go",
+    "VMNetwork": "internal/models/models.go",
+    "VMPCIDevice": "internal/models/models.go",
+    "VMState": "internal/models/models.go",
+    "guestEntry": "server/store.go",
+    "historyPoint": "server/history.go",
+    "persistData": "server/store.go",
+    "persistedHistory": "server/history.go"
+  },
+  "source_files": [
+    {
+      "path": "internal/models/models.go",
+      "sha256": "ee9871153d6e98476537de0e993040e4fb3bea11352364fba0413b376669123b"
+    },
+    {
+      "path": "server/store.go",
+      "sha256": "0899bd901304bffdd7797d392ecd43b98d8d4f08e514e704f13a38e42776f48d"
+    },
+    {
+      "path": "server/history.go",
+      "sha256": "af054407880f055516ccb2ea1157c06fed476a3faacc30fd80fb7cdda9f70068"
+    }
+  ],
+  "scope": "Data declarations extracted from exact saved source. Synthetic generated values are not deployed data or proof of deployed artifact lineage."
+}
