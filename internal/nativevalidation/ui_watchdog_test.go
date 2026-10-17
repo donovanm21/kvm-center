@@ -407,3 +407,33 @@ func TestUITransientGuardFailureNeverRetriesCleanup(t *testing.T) {
 		})
 	}
 }
+
+func TestUISignalTemporaryDisappearanceDuringInventory(t *testing.T) {
+	for _, name := range []string{"arm.tmp", "finish.tmp"} {
+		t.Run(name, func(t *testing.T) {
+			c, _ := uiFixture(t)
+			root, digest, e := uiConfig(c)
+			if e != nil {
+				t.Fatal(e)
+			}
+			temp := filepath.Join(root, name)
+			b, _ := json.Marshal(uiSignal{digest, c.Identity})
+			if e = os.WriteFile(temp, b, 0600); e != nil {
+				t.Fatal(e)
+			}
+			if e = uiEntriesObserved(root, false, func() {
+				if err := os.Rename(temp, strings.TrimSuffix(temp, ".tmp")); err != nil {
+					t.Fatal(err)
+				}
+			}); e != nil {
+				t.Fatal("normal publication refused", e)
+			}
+			if e = os.Symlink(strings.TrimSuffix(temp, ".tmp"), temp); e != nil {
+				t.Fatal(e)
+			}
+			if e = uiEntries(root, false); e == nil {
+				t.Fatal("unsafe temp accepted")
+			}
+		})
+	}
+}

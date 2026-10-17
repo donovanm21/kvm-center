@@ -245,10 +245,14 @@ func uiJournal(root, digest string, id Identity) (UIJournal, error) {
 	}
 	return j, nil
 }
-func uiEntries(root string, recovery bool) error {
+func uiEntries(root string, recovery bool) error { return uiEntriesObserved(root, recovery, nil) }
+func uiEntriesObserved(root string, recovery bool, enumerated func()) error {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return err
+	}
+	if enumerated != nil {
+		enumerated()
 	}
 	for _, e := range entries {
 		allowed := e.Name() == "owner.lock" || e.Name() == "journal.json" || e.Name() == "arm" || e.Name() == "finish" || e.Name() == "arm.tmp" || e.Name() == "finish.tmp" || (recovery && e.Name() == "journal.tmp")
@@ -256,6 +260,9 @@ func uiEntries(root string, recovery bool) error {
 			return errors.New("unexpected state entry")
 		}
 		if _, err = privateUIFile(filepath.Join(root, e.Name())); err != nil {
+			if (e.Name() == "arm.tmp" || e.Name() == "finish.tmp") && errors.Is(err, os.ErrNotExist) {
+				continue
+			}
 			return err
 		}
 	}
