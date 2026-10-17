@@ -37,7 +37,7 @@ def measurements(text):
         for line in output.splitlines():
             if 'HISTORY_EVIDENCE ' in line:
                 result.append(json.loads(line.split('HISTORY_EVIDENCE ', 1)[1]))
-    expected = {(kind, backend) for kind in ('cap_costs', 'artifact_cap', 'artifact_lifecycle') for backend in ('json', 'mongo')} | {('legacy_refusal', 'mongo')}
+    expected = {(kind, backend) for kind in ('cap_costs', 'artifact_cap', 'artifact_lifecycle') for backend in ('json', 'mongo')} | {('legacy_refusal', 'mongo'), ('deployed_legacy_refusal', 'mongo')}
     keys = [(r['kind'], r['data']['backend']) for r in result]
     if set(keys) != expected or len(keys) != len(expected):
         raise ValueError('Missing or duplicate history acceptance measurements')

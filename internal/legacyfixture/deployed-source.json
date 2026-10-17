@@ -1,0 +1,29 @@
+{
+  "fixture_schema": "synthetic-deployed-6db8c723-bson-v1",
+  "source_commit": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+  "source_tree": "2cb3d80967e3ea83223309a6a88cd520aebef7b3",
+  "source_files": [
+    {
+      "path": "internal/models/models.go",
+      "sha256": "85185c6c0abd3d662f4fe9d1f1c82b84501f9a101314830740d454dca537be79"
+    },
+    {
+      "path": "server/store.go",
+      "sha256": "e8cd19d25247231dbc59686f127269437cc4b8dd8703d6ec5011e12bbf05cad8"
+    },
+    {
+      "path": "server/history.go",
+      "sha256": "af054407880f055516ccb2ea1157c06fed476a3faacc30fd80fb7cdda9f70068"
+    },
+    {
+      "path": "server/backend_mongo.go",
+      "sha256": "be6cb0e0bd550bf6f825a4abe50370173ef880a20a6b2d4e49ddbb9afa956274"
+    },
+    {
+      "path": "server/store_persist.go",
+      "sha256": "9599f4a613ec4ed977606f93998fa2232ce6163e7b29f4ee8d765ebe8c8fa766"
+    }
+  ],
+  "contract": "28 deployed persisted collections plus one intentionally unknown collection; no vm_tags. Shared BSON declarations match saved c018b31: its added VM.Tags field is BSON-excluded. Persistence-source comparison finds only the later vm_tags addition. Unknown fields/history tiers are intentional refusal cases, not declared deployed semantics.",
+  "artifact_lineage": "Source contract only; identical deployed server artifact and rollback remain unverified."
+}

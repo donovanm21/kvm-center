@@ -21,12 +21,16 @@ import (
 
 const Source = "c018b31b74d7d75ed8c49921dc0812bf5999d81f"
 const Schema = "synthetic-saved-c018b31-bson-v1"
+const DeployedSource = "6db8c7237bd7cf507532391c0dc0c2e36a70f696"
+const DeployedSchema = "synthetic-deployed-6db8c723-bson-v1"
 const HostID = "synthetic-host"
 const VMID = "11111111-1111-4111-8111-111111111111"
 
 var clock = time.Date(2024, 1, 1, 0, 0, 0, 123000000, time.UTC)
 
 type Bundle struct {
+	Schema    string
+	Source    string
 	Documents map[string][]byte
 	Indexes   map[string][]byte
 	Checksums map[string]string
@@ -132,7 +136,14 @@ func document(id string, v any) bson.D {
 
 // Generate includes exact legacy wrappers plus an intentionally unsupported
 // field and collection. These must survive preservation and block compatibility.
-func Generate() Bundle {
+func Generate() Bundle { return generate(Schema, Source, true) }
+
+// GenerateDeployed uses the verified deployed-source persistence contract.
+// vm_tags was introduced after this revision; it is never generated here.
+// All legacy history and unknown semantics remain, so startup still refuses.
+func GenerateDeployed() Bundle { return generate(DeployedSchema, DeployedSource, false) }
+
+func generate(schema, source string, includeTags bool) Bundle {
 	docs := map[string]bson.D{}
 	host := entity[Host]()
 	host.ID = HostID
@@ -190,7 +201,9 @@ func Generate() Bundle {
 	affinity.Kind = "separate"
 	affinity.Strength = "should"
 	docs["affinity_rules"] = document(affinity.ID, affinity)
-	docs["vm_tags"] = bson.D{{Key: "_id", Value: VMID}, {Key: "tags", Value: bson.A{"synthetic-tag"}}}
+	if includeTags {
+		docs["vm_tags"] = bson.D{{Key: "_id", Value: VMID}, {Key: "tags", Value: bson.A{"synthetic-tag"}}}
+	}
 	point := historyPoint{T: 1704067200, CPUAvg: 12.125, CPUMax: 25.5, MemAvg: 20.125, MemMax: 30.5, StorageAvg: 5.125, StorageMax: 6.5, VMs: 1, N: 7}
 	docs["perf_history"] = bson.D{{Key: "_id", Value: HostID}, {Key: "host", Value: HostID}, {Key: "tiers", Value: bson.D{{Key: "5m", Value: []historyPoint{point}}, {Key: "1h", Value: []historyPoint{point}}, {Key: "1d", Value: []historyPoint{point}}, {Key: "unknown-preserve", Value: []historyPoint{point}}}}}
 	docs["notifications"] = document("singleton", entity[NotificationConfig]())
@@ -220,7 +233,7 @@ func Generate() Bundle {
 	}
 	docs["command_log"] = document(command.RequestID, command)
 	docs["unknown_future"] = bson.D{{Key: "_id", Value: "synthetic-future"}, {Key: "typed", Value: primitive.Binary{Subtype: 0x80, Data: []byte{1, 0, 255}}}}
-	out := Bundle{Documents: map[string][]byte{}, Indexes: map[string][]byte{}, Checksums: map[string]string{}}
+	out := Bundle{Schema: schema, Source: source, Documents: map[string][]byte{}, Indexes: map[string][]byte{}, Checksums: map[string]string{}}
 	for name, d := range docs {
 		d = append(d, bson.E{Key: "unsupported_extra", Value: bson.D{{Key: "nested", Value: bson.A{int32(3), int64(4), nil, primitive.DateTime(-1), primitive.NewDecimal128(7, 9)}}}})
 		out.Documents[name] = marshal(d)
@@ -264,7 +277,7 @@ func Generate() Bundle {
 }
 
 func Write(dir string, s Bundle) error {
-	m := offlinestaging.Input{Contract: offlinestaging.Contract, SourceSchema: Schema, SourceBuild: Source, TargetArtifactSHA256: strings.Repeat("a", 64), VerificationClock: clock.Format(time.RFC3339Nano), ConsistencyEvidence: "single deterministic synthetic generator; no live data", CompanionEvidence: "synthetic only; no deployed artifact or recovery claim"}
+	m := offlinestaging.Input{Contract: offlinestaging.Contract, SourceSchema: s.Schema, SourceBuild: s.Source, TargetArtifactSHA256: strings.Repeat("a", 64), VerificationClock: clock.Format(time.RFC3339Nano), ConsistencyEvidence: "single deterministic synthetic generator; no live data", CompanionEvidence: "synthetic only; no deployed artifact or recovery claim"}
 	names := []string{}
 	for n := range s.Documents {
 		names = append(names, n)
