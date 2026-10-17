@@ -40,11 +40,18 @@ func newMongoIntegrationBackend(t *testing.T) *MongoBackend {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		db, err := b.dial(ctx)
+		// Cleanup must not activate indexes or pass application compatibility
+		// preflight: refusal tests intentionally leave incompatible fixtures.
+		cli, err := mongo.Connect(ctx, options.Client().ApplyURI(b.uri))
 		if err != nil {
-			t.Errorf("reconnect to clean test database %s: %v", b.dbName, err)
-		} else if err := db.Drop(ctx); err != nil {
-			t.Errorf("clean test database %s: %v", b.dbName, err)
+			t.Errorf("connect to clean test database %s: %v", b.dbName, err)
+		} else {
+			defer cli.Disconnect(ctx)
+		}
+		if cli != nil {
+			if err := cli.Database(b.dbName).Drop(ctx); err != nil {
+				t.Errorf("clean test database %s: %v", b.dbName, err)
+			}
 		}
 		if err := b.Close(ctx); err != nil {
 			t.Errorf("close test MongoDB: %v", err)

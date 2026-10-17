@@ -134,8 +134,17 @@ func (b *MongoBackend) dial(ctx context.Context) (*mongo.Database, error) {
 		closeCancel()
 		return nil, fmt.Errorf("mongo ping: %w", err)
 	}
+	db := cli.Database(b.dbName)
+	// Refuse known legacy representations before creating any indexes. TTL
+	// activation is a write-side effect even when Load later returns an error.
+	if err := rejectLegacyCollections(ctx, db); err != nil {
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		_ = cli.Disconnect(closeCtx)
+		closeCancel()
+		return nil, err
+	}
 	b.client = cli
-	b.db = cli.Database(b.dbName)
+	b.db = db
 	if err := b.ensureIndexes(ctx); err != nil {
 		return nil, fmt.Errorf("mongo indexes: %w", err)
 	}
