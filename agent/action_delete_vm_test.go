@@ -194,7 +194,9 @@ func TestDeleteVMRefusalRecordedAsFailure(t *testing.T) {
 		RequestID: "req_delete_unowned_disk", Action: "DELETE_VM", VMName: "test-vm",
 		Params: map[string]string{"delete_disks": "true"},
 	}
-	recordOpsLifecycleStart(req)
+	if _, _, err := claimCommand(req); err != nil {
+		t.Fatal(err)
+	}
 	// Run the async body synchronously: no goroutine or real virsh needed.
 	runCommandBodyAsync(req)
 	got, err := s.Get(context.Background(), req.RequestID)

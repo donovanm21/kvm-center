@@ -64,9 +64,7 @@ func TestLiveMigrationExecutionChecks(t *testing.T) {
 }
 func TestLiveMigrationRechecksAfterDispatchWaitAndCachesRejection(t *testing.T) {
 	resetOutcomes(t)
-	prev := ops
-	ops = nil
-	t.Cleanup(func() { ops = prev })
+	withOpsStore(t)
 	started, release, done := make(chan struct{}), make(chan struct{}), make(chan *httptest.ResponseRecorder, 1)
 	var stopped atomic.Bool
 	reads, migrations := 0, 0

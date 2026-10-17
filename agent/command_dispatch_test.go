@@ -22,7 +22,7 @@ func dispatchForTest(req models.CommandRequest, execute func(http.ResponseWriter
 }
 
 func TestCommandDispatch_ConcurrentRetriesExecuteOnce(t *testing.T) {
-	for _, mode := range []string{"memory", "durable-sync", "durable-async"} {
+	for _, mode := range []string{"durable-sync", "durable-async"} {
 		t.Run(mode, func(t *testing.T) {
 			resetOutcomes(t)
 			if mode == "memory" {

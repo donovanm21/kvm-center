@@ -111,6 +111,11 @@ func handleMigrateWithChecks(w http.ResponseWriter, req models.CommandRequest, v
 // handleOfflineMigrate kicks the async offline-migrate worker and
 // returns immediately. Operator polls /migrate-status.
 func handleOfflineMigrate(w http.ResponseWriter, req models.CommandRequest, vmTarget string) {
+	handleOfflineMigrateWithStarter(w, req, vmTarget, startOfflineMigrate)
+}
+
+func handleOfflineMigrateWithStarter(w http.ResponseWriter, req models.CommandRequest, vmTarget string,
+	start func(string, string, string, bool, string, MTLSOptions)) {
 	dest := req.Params["destination"]
 	if dest == "" {
 		respond(w, false, "OFFLINE_MIGRATE requires params.destination")
@@ -139,7 +144,7 @@ func handleOfflineMigrate(w http.ResponseWriter, req models.CommandRequest, vmTa
 	}
 	log.Printf("command: offline-migrate vm=%s → %s keep_raw=%v transport=%s pool=%q rename=%q regen_mac=%v (async)",
 		vmTarget, dest, keepRaw, req.Params["migration_transport"], opts.TargetPool, opts.NewVMName, opts.RegenerateMAC)
-	startOfflineMigrate(vmTarget, dest, req.Params["migration_id"], keepRaw, req.Params["migration_transport"], opts)
+	start(vmTarget, dest, req.Params["migration_id"], keepRaw, req.Params["migration_transport"], opts)
 	respond(w, true, "offline migration started — poll /migrate-status for progress")
 }
 

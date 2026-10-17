@@ -22,6 +22,7 @@ package main
 // synchronously and old servers / kvmctl callers see no change.
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -141,6 +142,18 @@ func executeClaimedCommand(req models.CommandRequest, execute func(http.Response
 		if existing := recordOpsLifecycleEnd(req.RequestID, cap.status, cap.body); existing != nil {
 			if status, body, _, ok := synthesizeOutcomeFromOp(existing); ok {
 				cap.status, cap.body = status, body
+			}
+		}
+		if ops == nil {
+			cap.status = http.StatusServiceUnavailable
+			cap.body = []byte(`{"success":false,"message":"durable completion unavailable"}`)
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), opsLookupDeadline)
+			err := ops.workerReturned(ctx, req.RequestID)
+			cancel()
+			if err != nil {
+				cap.status = http.StatusServiceUnavailable
+				cap.body = []byte(`{"success":false,"message":"worker returned but durable completion is unconfirmed"}`)
 			}
 		}
 		outcomes.put(req.RequestID, cap.status, cap.body)

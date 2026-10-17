@@ -197,7 +197,7 @@ func applyOpsSchema(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
-	return nil
+	return applyCommandLedger(ctx, db)
 }
 
 // Close shuts down the underlying database. Only used at agent
@@ -570,6 +570,10 @@ func recordOpsLifecycleEnd(requestID string, status int, body []byte) *Operation
 	ctx, cancel := context.WithTimeout(context.Background(), opsLookupDeadline)
 	defer cancel()
 
+	var requested int
+	if err := ops.db.QueryRowContext(ctx, `SELECT cancellation_requested FROM command_admissions WHERE request_id=?`, requestID).Scan(&requested); err == nil && requested == 1 {
+		state = OpStateCancelled
+	}
 	now := time.Now()
 	output, errMsg := parseLifecycleBody(body, state)
 	opts := UpdateStateOpts{
@@ -588,6 +592,11 @@ func recordOpsLifecycleEnd(requestID string, status int, body []byte) *Operation
 			}
 		} else {
 			log.Printf("ops.db: update terminal state req_id=%s: %v", requestID, err)
+		}
+	}
+	if state == OpStateCancelled {
+		if op, err := ops.Get(ctx, requestID); err == nil {
+			return op
 		}
 	}
 	return nil

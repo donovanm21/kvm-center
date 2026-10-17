@@ -379,7 +379,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 			needPerm = models.PermVMSnapshot
 		case "MIGRATE", "OFFLINE_MIGRATE":
 			needPerm = models.PermVMMigrate
-		case "DELETE_VM":
+		case "DELETE_VM", "CLOSE_VM_COMMANDS":
 			needPerm = models.PermVMDelete
 		case "CHANGE_MEDIA", "EDIT_VM":
 			// CDROM eject / insert + hardware edits (vcpus, memory) —

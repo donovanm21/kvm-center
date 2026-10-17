@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // HostStatus represents the connectivity state of a hypervisor.
 type HostStatus string
@@ -1102,11 +1105,12 @@ type CommandProgressFrame struct {
 // that as "no opinion, keep waiting" and falls back to the boot-
 // reconcile timer (45 min) after the deadline passes.
 type CommandOutcomeResponse struct {
-	RequestID  string `json:"request_id"`
-	Outcome    string `json:"outcome"`
-	StatusCode int    `json:"status_code,omitempty"`
-	Message    string `json:"message,omitempty"`
-	Error      string `json:"error,omitempty"`
+	Dispatch   json.RawMessage `json:"dispatch,omitempty"`
+	RequestID  string          `json:"request_id"`
+	Outcome    string          `json:"outcome"`
+	StatusCode int             `json:"status_code,omitempty"`
+	Message    string          `json:"message,omitempty"`
+	Error      string          `json:"error,omitempty"`
 	// CachedAt is when the agent finished the action and stored its
 	// reply. Server uses this to attribute the outcome's duration.
 	CachedAt time.Time `json:"cached_at,omitempty"`

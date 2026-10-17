@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -347,10 +349,13 @@ func StartCommandServer(addr string) {
 }
 
 func handleCommand(w http.ResponseWriter, r *http.Request) {
-	handleCommandWithExecutor(w, r, runCommandBody)
+	handleCommandWithResolver(w, r, runCommandBody, resolveNativeCommandTarget)
 }
 
 func handleCommandWithExecutor(w http.ResponseWriter, r *http.Request, execute func(http.ResponseWriter, models.CommandRequest)) {
+	handleCommandWithResolver(w, r, execute, func(req models.CommandRequest) (models.CommandRequest, error) { return req, nil })
+}
+func handleCommandWithResolver(w http.ResponseWriter, r *http.Request, execute func(http.ResponseWriter, models.CommandRequest), resolve func(models.CommandRequest) (models.CommandRequest, error)) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
@@ -362,11 +367,21 @@ func handleCommandWithExecutor(w http.ResponseWriter, r *http.Request, execute f
 		return
 	}
 
-	if req.RequestID == "" {
-		// Legacy callers without an ID cannot participate in deduplication.
-		execute(w, req)
+	if ops == nil {
+		http.Error(w, "durable command store unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	if req.RequestID == "" {
+		// Legacy calls still execute, but every owner participates in the
+		// durable target fence. Clients must reuse this returned ID to retry.
+		var id [16]byte
+		if _, err := rand.Read(id[:]); err != nil {
+			http.Error(w, "request ID unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		req.RequestID = "legacy-" + hex.EncodeToString(id[:])
+	}
+	w.Header().Set("X-Request-Id", req.RequestID)
 	replay, running, err := claimCommand(req)
 	if err != nil {
 		log.Printf("command: cannot claim req_id=%s: %v", req.RequestID, err)
@@ -384,14 +399,29 @@ func handleCommandWithExecutor(w http.ResponseWriter, r *http.Request, execute f
 		respondAccepted(w, req.RequestID)
 		return
 	}
+	boundExecute := func(w http.ResponseWriter, submitted models.CommandRequest) {
+		resolved, err := resolve(submitted)
+		if err != nil {
+			http.Error(w, "target binding failed: "+err.Error(), http.StatusConflict)
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), opsLookupDeadline)
+		err = ops.bindResolved(ctx, submitted, resolved)
+		cancel()
+		if err != nil {
+			http.Error(w, "resolved target admission failed", http.StatusServiceUnavailable)
+			return
+		}
+		execute(w, resolved)
+	}
 	if asyncEnabled() && asyncEligibleAction(req.Action) {
 		respondAccepted(w, req.RequestID)
-		go runCommandBodyAsyncWithExecutor(req, execute)
+		go runCommandBodyAsyncWithExecutor(req, boundExecute)
 		return
 	}
 	// Buffer both paths so a panic after a partial response cannot be
 	// cached as success or sent with an already-committed success status.
-	cap := executeClaimedCommand(req, execute)
+	cap := executeClaimedCommand(req, boundExecute)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(cap.status)
 	_, _ = w.Write(cap.body)
@@ -408,10 +438,21 @@ func runCommandBody(w http.ResponseWriter, req models.CommandRequest) {
 		return
 	}
 
-	vmTarget := req.VMName
-	if vmTarget == "" {
-		vmTarget = req.VMUUID
+	if strings.ToUpper(req.Action) == "CLOSE_VM_COMMANDS" {
+		ctx, cancel := context.WithTimeout(context.Background(), opsLookupDeadline)
+		defer cancel()
+		if ops == nil {
+			respond(w, false, "durable command store unavailable")
+			return
+		}
+		if err := ops.closeTarget(ctx, req); err != nil {
+			respond(w, false, err.Error())
+			return
+		}
+		respond(w, true, "Target command admission permanently closed; query dispatch evidence and independently verify native state before cleanup")
+		return
 	}
+	vmTarget := commandExecutionTarget(req)
 	if vmTarget == "" {
 		respond(w, false, "vm_name or vm_uuid required")
 		return
@@ -547,6 +588,23 @@ func handleCommandOutcome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status, body, cachedAt, ok := outcomes.lookup(id)
+	if !ok && ops != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), opsLookupDeadline)
+		evidence, err := ops.dispatchEvidence(ctx, id)
+		cancel()
+		if err == nil {
+			outcome := "unknown"
+			lookupCtx, stop := context.WithTimeout(r.Context(), opsLookupDeadline)
+			if op, readErr := ops.Get(lookupCtx, id); readErr == nil && op != nil && (op.State == OpStateRunning || op.State == OpStatePending) {
+				outcome = "running"
+			}
+			stop()
+			raw, _ := json.Marshal(evidence)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(models.CommandOutcomeResponse{RequestID: id, Outcome: outcome, Message: "Retained dispatch evidence is separate from logical outcome", Dispatch: raw})
+			return
+		}
+	}
 	if !ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -560,6 +618,13 @@ func handleCommandOutcome(w http.ResponseWriter, r *http.Request) {
 		RequestID:  id,
 		StatusCode: status,
 		CachedAt:   cachedAt,
+	}
+	if ops != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), opsLookupDeadline)
+		if evidence, err := ops.dispatchEvidence(ctx, id); err == nil {
+			resp.Dispatch, _ = json.Marshal(evidence)
+		}
+		cancel()
 	}
 	switch {
 	case status >= 200 && status < 300:
