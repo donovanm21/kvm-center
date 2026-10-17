@@ -76,26 +76,47 @@ func handleCommandCancel(store *Store) http.HandlerFunc {
 			return
 		}
 		defer resp.Body.Close()
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			writeError(w, http.StatusBadGateway, "incomplete agent cancellation response; outcome remains pending")
+			return
+		}
 		if resp.StatusCode >= 400 {
 			writeError(w, resp.StatusCode, "agent rejected cancel: "+string(respBody))
 			return
 		}
 
-		// Mirror the agent's verdict into our command_log so the
-		// SPA reflects it immediately without waiting on the next
-		// reconciler tick. We only mark cancelled on the happy path.
-		if !store.commandLog.Update(id, "cancelled", reason, http.StatusOK, false) {
+		var result struct {
+			RequestID string `json:"request_id"`
+			State     string `json:"state"`
+		}
+		if json.Unmarshal(respBody, &result) != nil || result.RequestID != id {
+			writeError(w, http.StatusBadGateway, "unconfirmed agent cancellation response; outcome remains pending")
+			return
+		}
+		switch result.State {
+		case "cancellation_requested", "pending", "running":
+			// Retain the original pending deadline and reconciliation. A signal
+			// request is not terminal execution, and must not emit completion.
+			writeJSON(w, http.StatusAccepted, map[string]string{"request_id": id, "state": "cancellation_requested"})
+			return
+		case "success", "failed", "cancelled", "unknown":
+		default:
+			writeError(w, http.StatusBadGateway, "unknown cancellation state; outcome remains pending")
+			return
+		}
+
+		if !store.commandLog.Update(id, result.State, reason, http.StatusOK, false) {
 			writeError(w, http.StatusConflict, "command was resolved while the cancellation was in flight; inspect the recorded resolution and agent state")
 			return
 		}
 		store.hub.Publish(EventCommand, map[string]any{
 			"request_id": id,
-			"outcome":    "cancelled",
+			"outcome":    result.State,
 			"host_id":    target.HostID,
 			"action":     target.Action,
 		})
-		auditSystem(store, "command.cancelled", "vm/"+target.VMUUID, map[string]string{
+		auditSystem(store, "command.cancellation_result", "vm/"+target.VMUUID, map[string]string{
 			"request_id": id,
 			"action":     target.Action,
 			"host_id":    target.HostID,
@@ -109,7 +130,7 @@ func handleCommandCancel(store *Store) http.HandlerFunc {
 			HostID:    target.HostID,
 			VMUUID:    target.VMUUID,
 			VMName:    target.VMName,
-		}, "cancelled", reason)
+		}, result.State, reason)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(respBody)

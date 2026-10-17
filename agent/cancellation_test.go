@@ -92,18 +92,18 @@ func TestCancelOperation_SIGTERMWithChildPID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
-	if state != OpStateCancelled {
+	if state != "cancellation_requested" {
 		t.Fatalf("state = %s, want cancelled", state)
 	}
 	if stubs.signals.Load() == 0 {
 		t.Fatal("expected at least one signal sent")
 	}
 	got, _ := s.Get(context.Background(), "req_run")
-	if got.State != OpStateCancelled || got.Error != "stuck" {
+	if got.State != OpStateRunning || got.Error != "stuck" {
 		t.Fatalf("ops.db row not marked cancelled: %+v", got)
 	}
-	if got.ChildPID != 0 {
-		t.Fatalf("ChildPID should be cleared post-cancel, got %d", got.ChildPID)
+	if got.ChildPID != pid || got.CompletedAt != nil {
+		t.Fatalf("PID and completion must remain unresolved post-cancel, got %d", got.ChildPID)
 	}
 }
 
@@ -118,7 +118,7 @@ func TestCancelOperation_MigrationCallsDomjobabort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
-	if state != OpStateCancelled {
+	if state != "cancellation_requested" {
 		t.Fatalf("state = %s", state)
 	}
 	if stubs.domabort["biggun"] != 1 {
@@ -152,11 +152,11 @@ func TestHandleCancelCommand_HappyPath(t *testing.T) {
 	}
 	var got map[string]string
 	_ = json.Unmarshal(rr.Body.Bytes(), &got)
-	if got["state"] != OpStateCancelled {
+	if got["state"] != "cancellation_requested" {
 		t.Fatalf("body = %+v", got)
 	}
 	row, _ := s.Get(context.Background(), "req_h")
-	if row.State != OpStateCancelled || row.Error != "test" {
+	if row.State != OpStateRunning || row.Error != "test" {
 		t.Fatalf("ops.db row: %+v", row)
 	}
 }

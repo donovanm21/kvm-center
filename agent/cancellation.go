@@ -14,7 +14,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -126,6 +125,10 @@ func cancelOperation(ctx context.Context, requestID, reason string, deps cancelD
 		return op.State, nil
 	}
 
+	if err := ops.requestCancellation(ctx, requestID); err != nil {
+		return "", err
+	}
+
 	// For live + offline migrations, asking libvirtd to abort is
 	// kinder than SIGKILLing virsh out from under it — gives qemu
 	// a chance to clean up the migration state machine.
@@ -159,19 +162,17 @@ func cancelOperation(ctx context.Context, requestID, reason string, deps cancelD
 		}
 	}
 
-	now := deps.now()
-	if err := ops.FinishActive(ctx, requestID, UpdateStateOpts{
-		State:         OpStateCancelled,
-		Error:         reason,
-		ClearChildPID: true,
-		CompletedAt:   &now,
-	}); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			if existing, readErr := ops.Get(ctx, requestID); readErr == nil && existing != nil && IsTerminalOpState(existing.State) {
-				return existing.State, nil
-			}
-		}
+	// Signalling is only a request. Retain PID and omit completed_at until
+	// the owning executor actually returns; process disappearance is not proof.
+	if _, err := ops.db.ExecContext(ctx, `UPDATE operations SET error=? WHERE request_id=? AND state IN (?,?)`, reason, requestID, OpStatePending, OpStateRunning); err != nil {
 		return "", err
 	}
-	return OpStateCancelled, nil
+	current, err := ops.Get(ctx, requestID)
+	if err != nil {
+		return "", err
+	}
+	if current != nil && IsTerminalOpState(current.State) {
+		return current.State, nil
+	}
+	return "cancellation_requested", nil
 }
