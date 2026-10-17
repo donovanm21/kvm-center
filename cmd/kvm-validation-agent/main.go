@@ -15,6 +15,7 @@ func main() {
 	var v nativevalidation.Virsh
 	flag.BoolVar(&c.OptIn, "allow-disposable-libvirt", false, "explicitly allow only this manifest's disposable domain mutations")
 	flag.BoolVar(&c.CleanupOnly, "cleanup", false, "cleanup saved owned domain only; never define or start")
+	flag.BoolVar(&c.CleanupStopped, "cleanup-stopped", false, "with cleanup: require shutoff and never destroy a running guest")
 	flag.StringVar(&c.Identity.UUID, "uuid", "", "explicit disposable UUIDv4")
 	flag.StringVar(&c.Identity.Name, "name", "", "explicit kvmc-validation-* name")
 	flag.StringVar(&c.Identity.Owner, "owner", "", "unique 64-character lowercase hex ownership marker")

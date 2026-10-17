@@ -17,10 +17,10 @@ const MaxRuntime = 45 * time.Second
 const CleanupBudget = 15 * time.Second
 
 type Config struct {
-	OptIn, CleanupOnly           bool
-	Identity                     Identity
-	StateDir, SecretFile, Listen string
-	Runtime                      time.Duration
+	OptIn, CleanupOnly, CleanupStopped bool
+	Identity                           Identity
+	StateDir, SecretFile, Listen       string
+	Runtime                            time.Duration
 }
 
 func privateRoot(path string) (string, error) {
@@ -79,6 +79,9 @@ func saveJournal(root string, j Journal) error {
 	return dir.Sync()
 }
 func Run(ctx context.Context, c Config, d Driver, ready func(string)) (result error) {
+	if c.CleanupStopped && !c.CleanupOnly {
+		return errors.New("stopped-only recovery requires cleanup mode")
+	}
 	if !c.OptIn {
 		return errors.New("explicit disposable-libvirt opt-in required")
 	}
@@ -129,6 +132,11 @@ func Run(ctx context.Context, c Config, d Driver, ready func(string)) (result er
 		if j.Identity != c.Identity {
 			return errors.New("cleanup identity does not match journal")
 		}
+		if c.CleanupStopped {
+			if err = stoppedRecoveryJournal(j); err != nil {
+				return err
+			}
+		}
 		// Only a valid committed journal can authorize discarding an uncommitted
 		// partial update. Never follow a symlink or use temp contents as ownership.
 		temp := filepath.Join(root, "journal.tmp")
@@ -157,6 +165,9 @@ func Run(ctx context.Context, c Config, d Driver, ready func(string)) (result er
 		}
 		cleanup, cancel := context.WithTimeout(context.Background(), CleanupBudget)
 		defer cancel()
+		if c.CleanupStopped {
+			return a.CleanupStopped(cleanup)
+		}
 		return a.Cleanup(cleanup)
 	}
 	secret, err := ReadPrivate(c.SecretFile)
