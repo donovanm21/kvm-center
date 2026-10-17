@@ -169,3 +169,33 @@ visibility on the existing local socket. Successful enumeration cannot detect
 ACL-filtered results or reserve identity against concurrent changes: exclusive
 fixture ownership and a quiescent validation window remain prerequisites.
 No additional host, credentials, VM resources, or lifecycle operations are added.
+
+### Recovery after interrupted normalized definition
+
+Ownership validation now compares the complete parsed XML against the original
+empty-guest profile or one explicitly reviewed normalized profile: x86_64
+`pc-i440fx-rhel7.6.0`, qemu64 CPU, `/usr/libexec/qemu-kvm`, disabled USB and
+balloon, PCI root, exactly one PS/2 mouse and keyboard, and audio id 1 of type
+`none`. Identity/owner and 1 vCPU/256 MiB remain exact. Additional elements,
+attributes, devices, namespaces, duplicates or external backing fail closed.
+Other libvirt normalizations require separate review, not a broader device list.
+
+For an interrupted definition that never executed commands, use **both**
+`-cleanup -cleanup-stopped` with the existing private state directory and exact
+manifest identity. This mode requires an empty request journal, never defines,
+starts or destroys a guest, and refuses any state other than verified shutoff
+with autostart disabled. It opens no listener and needs no signing secret. A
+pending definition without a fingerprint is checked against the full profile,
+then its exact XML fingerprint is durably saved before undefine. Configuration
+and state are re-read before removal; any save/read/state/configuration failure
+retains the resource and journal. A clean journal cannot adopt an existing guest.
+A pinned interrupted recovery can be retried without clearing the fingerprint.
+
+The lab owner must refresh its artifact hashes and independently review the
+exact cleanup-only manifest. Retain the original evidence, confirm no competing
+process or identity mutation, and verify disappearance and the unchanged shared
+baseline before removing only the approved fixture files. Do not erase/edit a
+journal, strip devices, substitute broad virsh commands or switch to normal
+lifecycle mode to force cleanup. Read checks do not eliminate concurrent-change
+races; exclusive fixture ownership remains required. Recovery approval does not
+start another native lifecycle test, release, deploy or change credentials.

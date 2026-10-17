@@ -1,5 +1,5 @@
 // Package nativevalidation implements a deliberately separate disposable-domain
-// adapter. It never starts the production agent or discovers host-wide inventory.
+// adapter. It never starts the production agent; absence checks read only identifiers.
 package nativevalidation
 
 import (
@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -78,64 +77,6 @@ func XML(id Identity) string {
 	return fmt.Sprintf(`<domain type="kvm"><name>%s</name><uuid>%s</uuid><metadata><ownership xmlns="urn:kvm-center:validation:1">%s</ownership></metadata><memory unit="KiB">262144</memory><currentMemory unit="KiB">262144</currentMemory><vcpu>1</vcpu><os><type arch="x86_64">hvm</type><boot dev="hd"/></os><on_poweroff>destroy</on_poweroff><on_reboot>destroy</on_reboot><on_crash>destroy</on_crash><devices><controller type="usb" model="none"/><memballoon model="none"/></devices></domain>`, id.Name, id.UUID, id.Owner)
 }
 func hash(s string) string { h := sha256.Sum256([]byte(s)); return hex.EncodeToString(h[:]) }
-func owned(raw string, id Identity) error {
-	var d struct {
-		Name     string `xml:"name"`
-		UUID     string `xml:"uuid"`
-		Metadata struct {
-			Owner string `xml:"urn:kvm-center:validation:1 ownership"`
-		} `xml:"metadata"`
-	}
-	if xml.Unmarshal([]byte(raw), &d) != nil || d.Name != id.Name || d.UUID != id.UUID || d.Metadata.Owner != id.Owner {
-		return errors.New("domain ownership mismatch; refusing mutation")
-	}
-	var bounds struct {
-		Memory struct {
-			Unit  string `xml:"unit,attr"`
-			Value int    `xml:",chardata"`
-		} `xml:"memory"`
-		Current struct {
-			Unit  string `xml:"unit,attr"`
-			Value int    `xml:",chardata"`
-		} `xml:"currentMemory"`
-		CPU int `xml:"vcpu"`
-	}
-	if xml.Unmarshal([]byte(raw), &bounds) != nil || bounds.Memory.Unit != "KiB" || bounds.Memory.Value != 262144 || bounds.Current.Unit != "KiB" || bounds.Current.Value != 262144 || bounds.CPU != 1 {
-		return errors.New("domain resource bounds changed")
-	}
-	// Fail closed on any device beyond libvirt's fixed empty-guest defaults.
-	dec := xml.NewDecoder(strings.NewReader(raw))
-	depth := 0
-	devices := false
-	for {
-		tok, err := dec.Token()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		switch t := tok.(type) {
-		case xml.StartElement:
-			depth++
-			if t.Name.Local == "devices" {
-				devices = true
-			} else if devices && depth == 3 && t.Name.Local != "emulator" && t.Name.Local != "controller" && t.Name.Local != "memballoon" {
-				return errors.New("unexpected guest device")
-			}
-			switch t.Name.Local {
-			case "loader", "nvram", "kernel", "initrd", "cmdline", "commandline", "memoryBacking":
-				return errors.New("unexpected guest execution configuration")
-			}
-		case xml.EndElement:
-			if t.Name.Local == "devices" {
-				devices = false
-			}
-			depth--
-		}
-	}
-	return nil
-}
 
 // Prepare refuses any existing UUID OR name, including a matching marker.
 // Recover never adopts by name; it requires the private journal created before
@@ -199,27 +140,66 @@ func (a *Adapter) check(ctx context.Context) (string, error) {
 	}
 	return raw, nil
 }
-func (a *Adapter) Cleanup(ctx context.Context) error {
+func (a *Adapter) Cleanup(ctx context.Context) error { return a.cleanup(ctx, false) }
+
+// CleanupStopped never starts or destroys a guest; recovery refuses a running guest.
+func (a *Adapter) CleanupStopped(ctx context.Context) error { return a.cleanup(ctx, true) }
+
+func stoppedRecoveryJournal(j Journal) error {
+	if (j.Pending && j.Fingerprint != "") || len(j.Requests) != 0 || (j.Fingerprint == "" && !j.Pending && !j.Clean) || (j.Fingerprint != "" && !ownerPattern.MatchString(j.Fingerprint)) {
+		return errors.New("unsupported stopped-only recovery journal")
+	}
+	return nil
+}
+
+func (a *Adapter) cleanup(ctx context.Context, stoppedOnly bool) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.closed = true
+	if stoppedOnly {
+		if err := stoppedRecoveryJournal(a.journal); err != nil {
+			return err
+		}
+	}
 	if _, err := a.check(ctx); errors.Is(err, ErrAbsent) {
 		a.journal.Clean = true
 		return a.save(a.journal)
 	} else if err != nil {
 		return err
 	}
+	if stoppedOnly && a.journal.Clean {
+		return errors.New("clean journal cannot authorize a retained domain")
+	}
 	state, err := a.driver.State(ctx, a.journal.Identity.UUID)
 	if err != nil {
 		return err
 	}
 	if state != "shut off" {
+		if stoppedOnly {
+			return errors.New("stopped-only recovery requires verified shutoff; refusing mutation")
+		}
 		if _, err = a.check(ctx); err != nil {
 			return err
 		}
 		if err = a.driver.Destroy(ctx, a.journal.Identity.UUID); err != nil {
 			return err
 		}
+	}
+	// Pin a fully validated interrupted definition before removal. Subsequent
+	// reads must match these exact bytes, even when the original journal had
+	// not yet recorded the post-define fingerprint.
+	raw, err := a.check(ctx)
+	if err != nil {
+		return err
+	}
+	if a.journal.Fingerprint == "" {
+		next := a.journal
+		next.Fingerprint = hash(raw)
+		next.Pending = false
+		if err = a.save(next); err != nil {
+			return err
+		}
+		a.journal = next
 	}
 	if _, err = a.check(ctx); err != nil {
 		return err
