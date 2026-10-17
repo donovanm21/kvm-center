@@ -21,7 +21,8 @@ class HistoryEvidenceTests(unittest.TestCase):
 
     def test_requires_every_backend_and_phase_once(self):
         rows = self.fixture()
-        self.assertEqual(len(history.measurements('\n'.join(rows))), 6)
+        rows.append(json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind':'legacy_refusal','data':{'backend':'mongo'}})}))
+        self.assertEqual(len(history.measurements('\n'.join(rows))), 7)
         for bad in (rows[:-1], rows + [rows[0]], []):
             with self.assertRaises(ValueError):
                 history.measurements('\n'.join(bad))
