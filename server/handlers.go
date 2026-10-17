@@ -317,40 +317,39 @@ func handleCommand(store *Store) http.HandlerFunc {
 			}
 		}
 		w.Header().Set("X-Request-Id", req.RequestID)
-		// Audit every command that reaches this handler, regardless of
-		// outcome. We re-audit with success=false in the error paths
-		// below; RBAC/feature rejections are covered in the overarching
-		// middleware which already 401/403s before we get here.
-		migrationPreflightError := ""
+		// Audit this request's observed outcome, never an unconditional success.
+		// Pending/unknown is not proof of completion. Keep dispatch, response,
+		// reconciliation and authorization behavior unchanged.
+		auditOutcome, auditMessage := "failed", "command rejected before dispatch"
 		defer func() {
 			// Detail tag records which agent was called and which action
 			// verb; lifecycle/snapshot ops all funnel through /api/command
 			// so the action column alone isn't specific enough.
-			detail := map[string]string{"action": action, "host_id": req.HostID}
+			detail := map[string]string{"action": action, "host_id": req.HostID, "request_id": req.RequestID, "outcome": auditOutcome}
 			resource := "vm/" + req.VMUUID
 			switch action {
 			case "START", "STOP", "FORCESTOP", "RESTART", "POWER_CYCLE":
-				audit(store, r, AuditVMAction, resource, detail, true, "")
+				audit(store, r, AuditVMAction, resource, detail, auditOutcome == "success", auditMessage)
 			case "SNAPSHOT":
-				audit(store, r, AuditVMSnapshot, resource, detail, true, "")
+				audit(store, r, AuditVMSnapshot, resource, detail, auditOutcome == "success", auditMessage)
 			case "CHANGE_MEDIA":
 				for k, v := range req.Params {
 					if k == "media_action" || k == "target" || k == "path" {
 						detail[k] = v
 					}
 				}
-				audit(store, r, AuditVMAction, resource, detail, true, "")
+				audit(store, r, AuditVMAction, resource, detail, auditOutcome == "success", auditMessage)
 			case "EDIT_VM":
 				for k, v := range req.Params {
 					if k == "vcpus" || k == "mem_mb" {
 						detail[k] = v
 					}
 				}
-				audit(store, r, AuditVMAction, resource, detail, true, "")
+				audit(store, r, AuditVMAction, resource, detail, auditOutcome == "success", auditMessage)
 			case "REVERT_SNAPSHOT":
-				audit(store, r, AuditVMRevert, resource, detail, true, "")
+				audit(store, r, AuditVMRevert, resource, detail, auditOutcome == "success", auditMessage)
 			case "DELETE_SNAPSHOT":
-				audit(store, r, AuditVMSnapDelete, resource, detail, true, "")
+				audit(store, r, AuditVMSnapDelete, resource, detail, auditOutcome == "success", auditMessage)
 			case "MIGRATE", "OFFLINE_MIGRATE":
 				// Carry the chosen transport into the audit detail so
 				// the trail makes the SSH-vs-mTLS choice explicit.
@@ -367,9 +366,9 @@ func handleCommand(store *Store) http.HandlerFunc {
 				} else {
 					detail["mode"] = "live"
 				}
-				audit(store, r, AuditMigrationStart, resource, detail, migrationPreflightError == "", migrationPreflightError)
+				audit(store, r, AuditMigrationStart, resource, detail, auditOutcome == "success", auditMessage)
 			case "DELETE_VM":
-				audit(store, r, AuditVMDelete, resource, detail, true, "")
+				audit(store, r, AuditVMDelete, resource, detail, auditOutcome == "success", auditMessage)
 			}
 		}()
 		var needPerm string
@@ -552,6 +551,15 @@ func handleCommand(store *Store) http.HandlerFunc {
 			if status == 0 {
 				status = http.StatusOK
 			}
+			auditOutcome, auditMessage = existing.Outcome, existing.Message
+			if auditOutcome == "success" && (status < 200 || status >= 300) {
+				auditOutcome = "failed"
+			}
+			if auditOutcome == "success" {
+				auditMessage = ""
+			} else if auditMessage == "" {
+				auditMessage = "command outcome: " + auditOutcome
+			}
 			w.WriteHeader(status)
 			_ = json.NewEncoder(w).Encode(models.CommandResponse{
 				RequestID: existing.RequestID,
@@ -566,6 +574,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 		// outcome when telemetry changes. New live requests must pass admission;
 		// the agent revalidates native state when execution actually begins.
 		if action == "MIGRATE" && replay {
+			auditOutcome, auditMessage = "pending", "command outcome pending"
 			// A pending retry is not permission to start a second migration or
 			// reinterpret telemetry as its outcome. The reconciler owns it.
 			writeJSON(w, http.StatusAccepted, map[string]string{
@@ -576,7 +585,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 		}
 		if action == "MIGRATE" {
 			if err := store.liveMigrationSource(req, time.Now()); err != nil {
-				migrationPreflightError = err.Error()
+				auditMessage = err.Error()
 				store.commandLog.Update(req.RequestID, "failed", err.Error(), http.StatusConflict, false)
 				writeError(w, http.StatusConflict, err.Error())
 				return
@@ -697,13 +706,14 @@ func handleCommand(store *Store) http.HandlerFunc {
 				finalizeMigration(store, migRec, "failed", "agent unreachable: "+err.Error())
 			}
 			deadline := time.Now().Add(outcomeReconcileWindow)
+			auditOutcome, auditMessage = "pending", "agent response unavailable; outcome pending"
 			store.commandLog.MarkPending(req.RequestID, deadline, "agent call timed out: "+err.Error()+"; outcome will be reconciled")
 			writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
 			return
 		}
 		defer resp.Body.Close()
 
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, responseReadErr := io.ReadAll(resp.Body)
 		// Resolve the command log outcome. 2xx → success. 4xx →
 		// failed (agent intentionally rejected the request). 5xx →
 		// pending: agent had an internal error, which doesn't tell us
@@ -736,6 +746,7 @@ func handleCommand(store *Store) http.HandlerFunc {
 		hasExplicitOutcome := json.Unmarshal(respBody, &bodySuccess) == nil && bodySuccess.Success != nil
 		switch {
 		case resp.StatusCode == http.StatusAccepted:
+			auditOutcome, auditMessage = "pending", "agent accepted; outcome pending"
 			// v5.48 PR-2e: agent accepted the action and will run
 			// it asynchronously. Server treats this as pending; the
 			// PR-1c reconciler polls /command-outcome to recover
@@ -743,17 +754,20 @@ func handleCommand(store *Store) http.HandlerFunc {
 			deadline := time.Now().Add(outcomeReconcileWindow)
 			store.commandLog.MarkPending(req.RequestID, deadline, "agent accepted async (202); outcome will be reconciled")
 		case hasExplicitOutcome && !*bodySuccess.Success:
+			auditOutcome, auditMessage = "failed", msg
 			// Deterministic application error — agent has a body and
 			// has declared the operation failed. Terminal.
 			if store.commandLog.Update(req.RequestID, "failed", msg, resp.StatusCode, replayed) {
 				notifyTaskOutcome(store, existing, "failed", msg)
 			}
 		case hasExplicitOutcome && *bodySuccess.Success:
+			auditOutcome, auditMessage = "success", ""
 			// Body says success=true. Trust it.
 			if store.commandLog.Update(req.RequestID, "success", msg, resp.StatusCode, replayed) {
 				notifyTaskOutcome(store, existing, "success", msg)
 			}
 		case resp.StatusCode >= 500:
+			auditOutcome, auditMessage = "pending", "agent error; outcome pending"
 			// 5xx without an explicit body outcome: genuine transport /
 			// internal failure where the agent didn't get a chance to
 			// frame its answer. Keep pending and let the reconciler
@@ -761,14 +775,26 @@ func handleCommand(store *Store) http.HandlerFunc {
 			deadline := time.Now().Add(outcomeReconcileWindow)
 			store.commandLog.MarkPending(req.RequestID, deadline, "agent returned "+strconv.Itoa(resp.StatusCode)+": "+msg+"; outcome will be reconciled")
 		case resp.StatusCode >= 400:
+			auditOutcome, auditMessage = "failed", msg
 			if store.commandLog.Update(req.RequestID, "failed", msg, resp.StatusCode, replayed) {
 				notifyTaskOutcome(store, existing, "failed", msg)
 			}
 		default:
+			auditOutcome, auditMessage = "success", ""
 			if store.commandLog.Update(req.RequestID, "success", msg, resp.StatusCode, replayed) {
 				notifyTaskOutcome(store, existing, "success", msg)
 			}
 		}
+		if auditOutcome == "success" && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+			auditOutcome, auditMessage = "failed", "agent HTTP response: "+strconv.Itoa(resp.StatusCode)
+		}
+		if responseReadErr != nil {
+			auditOutcome, auditMessage = "pending", "agent response incomplete; outcome unconfirmed"
+		}
+		if auditOutcome == "failed" && auditMessage == "" {
+			auditMessage = "agent rejected command"
+		}
+
 		if replayed {
 			w.Header().Set("X-Command-Replayed", "true")
 		}
