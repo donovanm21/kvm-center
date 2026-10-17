@@ -620,8 +620,8 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 			}
 			seenVM[id] = true
 			vmDocs = append(vmDocs, struct {
-				ID         string `bson:"_id"`
-				*models.VM `bson:",inline"`
+				ID string     `bson:"_id"`
+				VM *models.VM `bson:",inline"`
 			}{id, v})
 		}
 	}
@@ -673,9 +673,9 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	var migDocs []any
 	for _, m := range d.Migrations {
 		doc := struct {
-			ID                      string `bson:"_id"`
-			*models.MigrationRecord `bson:",inline"`
-			ExpiresAt               *time.Time `bson:"expires_at,omitempty"`
+			ID              string                  `bson:"_id"`
+			MigrationRecord *models.MigrationRecord `bson:",inline"`
+			ExpiresAt       *time.Time              `bson:"expires_at,omitempty"`
 		}{ID: m.ID, MigrationRecord: m}
 		if isTerminalMigration(m.Status) && m.CompletedAt > 0 {
 			t := time.Unix(m.CompletedAt, 0).Add(migrationRetentionDays * 24 * time.Hour)
@@ -725,8 +725,8 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 		var sessDocs []any
 		for tok, s := range d.Sessions {
 			sessDocs = append(sessDocs, struct {
-				ID              string `bson:"_id"`
-				*models.Session `bson:",inline"`
+				ID      string          `bson:"_id"`
+				Session *models.Session `bson:",inline"`
 			}{tok, s})
 		}
 		if err := replaceMap(ctx, db, mcoSessions, sessDocs); err != nil {
@@ -778,8 +778,8 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 		}
 		seenAudit[ev.ID] = true
 		auditDocs = append(auditDocs, struct {
-			ID                 string `bson:"_id"`
-			*models.AuditEvent `bson:",inline"`
+			ID         string             `bson:"_id"`
+			AuditEvent *models.AuditEvent `bson:",inline"`
 		}{ev.ID, ev})
 	}
 	if err := replaceMap(ctx, db, mcoAuditEvents, auditDocs); err != nil {

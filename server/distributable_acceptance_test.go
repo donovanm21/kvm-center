@@ -189,8 +189,8 @@ func TestDistributableLegacyRefusal(t *testing.T) {
 	if _, err := b.Load(ctx); err == nil || !strings.Contains(err.Error(), "explicit offline conversion") {
 		t.Fatal("legacy history must explicitly refuse loading")
 	}
-	// Independently expose shared-field decode incompatibility without writing
-	// the decoded state back. These findings block release, not this packaging gate.
+	// Verify the shared-field compatibility codecs without saving decoded state.
+	// Full-schema compatibility and legacy history remain separate blockers.
 	fields := []struct {
 		name     string
 		doc      bson.M
@@ -235,6 +235,9 @@ func TestDistributableLegacyRefusal(t *testing.T) {
 			t.Fatal(err)
 		}
 		findings[f.name] = f.retained()
+		if !findings[f.name] {
+			t.Fatalf("shared field lost: %s", f.name)
+		}
 	}
 	for collection := range fixtures {
 		n, err := db.Collection(collection).CountDocuments(ctx, bson.D{})
