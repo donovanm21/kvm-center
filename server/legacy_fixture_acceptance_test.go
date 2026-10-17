@@ -20,6 +20,14 @@ import (
 )
 
 func TestHistoryAcceptanceLegacyFixtureRefusal(t *testing.T) {
+	testLegacyFixtureRefusal(t, legacyfixture.Generate(), "legacy_refusal")
+}
+
+func TestHistoryAcceptanceDeployedLegacyFixtureRefusal(t *testing.T) {
+	testLegacyFixtureRefusal(t, legacyfixture.GenerateDeployed(), "deployed_legacy_refusal")
+}
+
+func testLegacyFixtureRefusal(t *testing.T, fixture legacyfixture.Bundle, kind string) {
 	binary := os.Getenv("KVMC_HISTORY_BINARY")
 	if binary == "" {
 		t.Fatal("pinned current binary required")
@@ -46,7 +54,6 @@ func TestHistoryAcceptanceLegacyFixtureRefusal(t *testing.T) {
 	if err := os.Mkdir(src, 0700); err != nil {
 		t.Fatal(err)
 	}
-	fixture := legacyfixture.Generate()
 	if err := legacyfixture.Write(src, fixture); err != nil {
 		t.Fatal(err)
 	}
@@ -114,5 +121,5 @@ func TestHistoryAcceptanceLegacyFixtureRefusal(t *testing.T) {
 	if _, err := offlinestaging.Verify(stage); err != nil {
 		t.Fatal(err)
 	}
-	emitAcceptance(t, "legacy_refusal", map[string]any{"backend": "mongo", "schema": legacyfixture.Schema, "source": legacyfixture.Source, "current_artifact_refused": true, "collections": len(fixture.Documents), "original_checksums": fixture.Checksums, "indexes_unchanged": true, "originals_unchanged": true, "active_compatible": false, "legacy_rollback_verified": false})
+	emitAcceptance(t, kind, map[string]any{"backend": "mongo", "schema": fixture.Schema, "source": fixture.Source, "current_artifact_refused": true, "collections": len(fixture.Documents), "original_checksums": fixture.Checksums, "indexes_unchanged": true, "originals_unchanged": true, "active_compatible": false, "legacy_rollback_verified": false})
 }

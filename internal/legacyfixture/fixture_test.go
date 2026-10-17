@@ -15,14 +15,26 @@ import (
 )
 
 func TestPinnedLegacyPreservation(t *testing.T) {
-	b := Generate()
-	second := Generate()
+	for _, makeFixture := range []func() Bundle{Generate, GenerateDeployed} {
+		b := makeFixture()
+		t.Run(b.Schema, func(t *testing.T) { testPinnedLegacyPreservation(t, b, makeFixture()) })
+	}
+}
+
+func testPinnedLegacyPreservation(t *testing.T, b, second Bundle) {
 	for name, raw := range b.Documents {
 		if !bytes.Equal(raw, second.Documents[name]) {
 			t.Fatalf("nondeterministic fixture: %s", name)
 		}
 	}
-	if len(b.Documents) != 30 {
+	wantCollections := 30
+	if b.Schema == DeployedSchema {
+		wantCollections = 29
+		if b.Source != DeployedSource || b.Documents["vm_tags"] != nil {
+			t.Fatal("deployed source profile mismatch")
+		}
+	}
+	if len(b.Documents) != wantCollections {
 		t.Fatalf("collections=%d", len(b.Documents))
 	}
 	root, err := filepath.EvalSymlinks(t.TempDir())
@@ -123,6 +135,6 @@ func TestPinnedLegacyPreservation(t *testing.T) {
 			t.Fatal("update expected unsupported accounting")
 		}
 	}
-	evidence, _ := json.Marshal(map[string]any{"schema": Schema, "source": Source, "collections": len(b.Documents), "original_checksums": b.Checksums, "offline_preserved": true, "history_raw_unchanged": true, "raw_restore_reconversion": true, "active_compatible": false, "refused_semantics": []string{"unknown fields/collection", "alarms/affinity", "extended host/VM/guest fields", "legacy tiered history and tags", "expiry and executable jobs"}})
+	evidence, _ := json.Marshal(map[string]any{"schema": b.Schema, "source": b.Source, "collections": len(b.Documents), "original_checksums": b.Checksums, "offline_preserved": true, "history_raw_unchanged": true, "raw_restore_reconversion": true, "active_compatible": false, "refused_semantics": []string{"unknown fields/collection", "alarms/affinity", "extended host/VM/guest fields", "legacy tiered history and tags", "expiry and executable jobs"}})
 	t.Log("LEGACY_FIXTURE_EVIDENCE " + string(evidence))
 }
