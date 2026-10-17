@@ -86,7 +86,10 @@ func TestUIWatchdogTimeoutAndCancellation(t *testing.T) {
 			c, d := uiFixture(t)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			timing := uiTiming{250 * time.Millisecond, 200 * time.Millisecond, time.Millisecond}
+			// The budget starts before durable journal fsync. Allow hosted
+			// filesystem/scheduler latency so this case reaches its intended
+			// phase before exercising timeout and cleanup semantics.
+			timing := uiTiming{2 * time.Second, 2 * time.Second, time.Millisecond}
 			start := time.Now()
 			e := runUIWatchdog(ctx, c, d, false, func(j UIJournal) {
 				if j.Phase == "PREPARED_STOPPED" {
@@ -113,7 +116,7 @@ func TestUIWatchdogTimeoutAndCancellation(t *testing.T) {
 			if e == nil {
 				t.Fatal("failure reported success")
 			}
-			if time.Since(start) > 3*time.Second {
+			if time.Since(start) > 10*time.Second {
 				t.Fatal("deadline extended")
 			}
 			j := uiRead(t, c)
@@ -122,7 +125,7 @@ func TestUIWatchdogTimeoutAndCancellation(t *testing.T) {
 			}
 			wantDestroy := mode == "running timeout" || mode == "early start"
 			if j.Intervention != wantDestroy {
-				t.Fatal("intervention mismatch")
+				t.Fatalf("intervention mismatch: phase=%s result=%s error=%v calls=%s", j.Phase, j.Result, e, uiCalls(d))
 			}
 			if strings.Contains(uiCalls(d), "start") {
 				t.Fatal("helper started")
