@@ -23,14 +23,20 @@ PRIOR = 'b8bdcbc5bbd72f4799f5ec14d80d8805601cd12c'
 
 def measurements(text):
     result = []
+    # test2json may split a long output line across multiple events. Keep
+    # streams separate so interleaved tests cannot splice evidence together.
+    streams = {}
     for line in text.splitlines():
         try:
             event = json.loads(line)
         except ValueError:
             continue
-        output = event.get('Output', '')
-        if 'HISTORY_EVIDENCE ' in output:
-            result.append(json.loads(output.split('HISTORY_EVIDENCE ', 1)[1]))
+        key = (event.get('Package', ''), event.get('Test', ''))
+        streams[key] = streams.get(key, '') + event.get('Output', '')
+    for output in streams.values():
+        for line in output.splitlines():
+            if 'HISTORY_EVIDENCE ' in line:
+                result.append(json.loads(line.split('HISTORY_EVIDENCE ', 1)[1]))
     expected = {(kind, backend) for kind in ('cap_costs', 'artifact_cap', 'artifact_lifecycle') for backend in ('json', 'mongo')} | {('legacy_refusal', 'mongo')}
     keys = [(r['kind'], r['data']['backend']) for r in result]
     if set(keys) != expected or len(keys) != len(expected):
