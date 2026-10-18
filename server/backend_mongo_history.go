@@ -14,11 +14,7 @@ const mcoHostHistory = "host_history_state"
 
 // Never infer a destructive conversion from the independent local history format.
 func loadHostHistory(ctx context.Context, db *mongo.Database) (*historyState, error) {
-	err := db.Collection("perf_history").FindOne(ctx, bson.D{}, options.FindOne().SetProjection(bson.D{{Key: "_id", Value: 1}})).Err()
-	if err == nil {
-		return nil, errors.New("legacy perf_history collection requires explicit offline conversion")
-	}
-	if err != mongo.ErrNoDocuments {
+	if _, err := loadLegacyHistory(ctx, db); err != nil {
 		return nil, err
 	}
 	cur, err := db.Collection(mcoHostHistory).Find(ctx, bson.D{}, options.Find().SetLimit(2))

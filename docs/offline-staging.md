@@ -159,3 +159,38 @@ restore/reconversion. The full deployed fixture remains intact and refuses its
 unknown semantics. This does not admit legacy history into the application's
 current history store, prove app history read/write/restart, or establish old
 writer rollback. Existing archive versions and full-schema refusal gates remain.
+
+## Bounded application history archive
+
+`-mode legacy-history-state` exports a version-1 `legacy_history_state` value
+from the same verified bundle. Place this value under that key in a separate
+staging snapshot. It retains each exact original BSON record; it does not replace
+the immutable source bundle. Admission is limited to 64 host records and 2 MiB
+of raw BSON, with identities addressable by the existing history API. Oversized
+or unsupported inputs refuse without trimming. Preserve rejected originals too.
+
+Fresh Mongo recovery uses the existing entirely-empty destination guard, including
+before startup index initialization. It writes the original `perf_history`
+records and a `legacy_history_contract` marker binding the complete record set,
+source contract and schema version. Only the ordinary identity index is allowed
+on these collections. Normal writes never modify or delete these records. Changed,
+missing or additional records, mismatched markers and other indexes refuse load,
+save and backup, including on a cached connection. Concurrent external writers
+are unsupported. A partially failed recovery requires a new empty destination.
+
+Authenticated `GET /api/hosts/<id>/history?source=legacy` requires `host.view` and
+returns the original stored tiers, hash, units and aggregate meanings, explicitly
+marked read-only. Historical hosts need not remain in current inventory. Range
+and tier filtering are refused; points are never aged out. Default/current reads
+and new telemetry use the independent current history store. No missing samples,
+fixed-point sums or exact last-sample timestamps are inferred, and old aggregation
+jobs are never resumed.
+
+Application snapshots carry both stores; backup manifests declare
+`legacy_history_state: 1`. Existing overlay archive versions 1–8 remain supported.
+The native acceptance gate checks explicit offline export, app boot/read/current
+write/restart, fresh backup restore and a second backup/restart against unchanged
+raw history. This closes only the bounded immutable-history application component;
+full legacy fixture activation, unknown semantics, continuation of old aggregation
+and post-upgrade-write rollback remain unproven. UI, native quiescence, deployment
+and release authorization are separate gates.

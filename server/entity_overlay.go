@@ -265,6 +265,9 @@ func (b *MongoBackend) captureEntityOverlay(ctx context.Context, d *persistData)
 	if err != nil {
 		return nil, err
 	}
+	if err := preflightLegacyHistorySave(ctx, db, d, false); err != nil {
+		return nil, err
+	}
 	if err := rejectLegacyCollections(ctx, db); err != nil {
 		return nil, err
 	}
@@ -291,7 +294,14 @@ func (b *MongoBackend) captureEntityOverlay(ctx context.Context, d *persistData)
 // destination; discard that isolated destination and retry from the unchanged
 // archive. It never authorizes ordinary Save to resurrect absent identities.
 func (b *MongoBackend) restoreEntitySnapshot(ctx context.Context, d *persistData) error {
-	overlay, err := reconcileOverlay(d, d.EntityOverlay)
+	if d == nil {
+		return errors.New("missing restore snapshot")
+	}
+	originalOverlay := d.EntityOverlay
+	if originalOverlay == nil {
+		originalOverlay = &entityOverlay{Version: 8, Collections: map[string]map[string][]byte{}}
+	}
+	overlay, err := reconcileOverlay(d, originalOverlay)
 	if err != nil {
 		return err
 	}
@@ -300,6 +310,7 @@ func (b *MongoBackend) restoreEntitySnapshot(ctx context.Context, d *persistData
 	}
 	copy := *d
 	copy.EntityOverlay = nil
+	copy.restoreLegacyHistory = true
 	copy.restoreOverlay = overlay
 	copy.Dirty = nil
 	if err := b.Save(ctx, &copy); err != nil {
@@ -312,6 +323,9 @@ func (b *MongoBackend) restoreEntitySnapshot(ctx context.Context, d *persistData
 	got, err := b.captureEntityOverlay(ctx, back)
 	if err != nil {
 		return err
+	}
+	if !reflect.DeepEqual(back.LegacyHistory, d.LegacyHistory) {
+		return errors.New("legacy history restore verification mismatch")
 	}
 	if !reflect.DeepEqual(got, overlay) {
 		return errors.New("entity overlay restore verification mismatch")
@@ -329,6 +343,9 @@ func restoreEntityRecords(d *persistData, col string) map[string][]byte {
 func validateEntitySnapshot(d *persistData) error {
 	if d == nil {
 		return errors.New("missing entity snapshot")
+	}
+	if err := d.LegacyHistory.Validate(); err != nil {
+		return err
 	}
 	if err := validateAlarmInventory(d); err != nil {
 		return err
