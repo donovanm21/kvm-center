@@ -26,6 +26,10 @@ func entitySchema(collection string) (reflect.Type, map[string]string, error) {
 		value = models.Group{}
 	case mcoRoles:
 		value = models.Role{}
+	case mcoStorage:
+		value = models.StoragePool{}
+	case mcoVMNotes:
+		value = entityVMNote{}
 	default:
 		return nil, nil, errors.New("unsupported entity collection")
 	}
@@ -61,6 +65,25 @@ func entityIdentity(raw bson.Raw, collection string) (string, error) {
 		if want != id {
 			return "", errors.New("VM identity mismatch")
 		}
+	case mcoStorage:
+		if raw.Lookup("host_id").Type != 0 {
+			return "", errors.New("unsupported storage host_id alias")
+		}
+		var pool models.StoragePool
+		if err := bson.Unmarshal(raw, &pool); err != nil {
+			return "", err
+		}
+		if pool.HostID == "" || pool.Name == "" || strings.Contains(pool.HostID, "|") || strings.Contains(pool.Name, "|") || id != pool.HostID+"|"+pool.Name {
+			return "", errors.New("ambiguous storage identity")
+		}
+	case mcoVMNotes:
+		var note entityVMNote
+		if err := bson.Unmarshal(raw, &note); err != nil {
+			return "", err
+		}
+		if note.UUID != id || id != strings.ToLower(strings.TrimSpace(id)) {
+			return "", errors.New("ambiguous VM note identity")
+		}
 	case mcoUsers, mcoGroups, mcoRoles:
 		typ, _, err := entitySchema(collection)
 		if err != nil {
@@ -79,8 +102,8 @@ func entityIdentity(raw bson.Raw, collection string) (string, error) {
 	return id, nil
 }
 
-// prepareEntityDocuments completes compatibility preflight before either host
-// or VM collection is written. Unknown semantics remain opaque, not supported
+// prepareEntityDocuments completes compatibility preflight before supported
+// entity collections are written. Unknown semantics remain opaque, not supported
 // behavior. Like the existing snapshot replacement contract, this requires a
 // single application writer: it is not a transaction/CAS against other clients.
 func prepareEntityDocuments(ctx context.Context, db *mongo.Database, collection string, docs []any) ([]any, error) {

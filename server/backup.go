@@ -275,7 +275,15 @@ func snapshotFeatureSchemas(raw []byte) (map[string]int, error) {
 	}
 	features := map[string]int{}
 	if d.EntityOverlay != nil {
-		features["entity_bson_overlay"] = d.EntityOverlay.Version
+		// Decoding persistData may upgrade a supported overlay. The manifest
+		// describes the original archive bytes, not that upgraded snapshot.
+		var wire struct {
+			Overlay *entityOverlay `json:"entity_bson_overlay"`
+		}
+		if err := json.Unmarshal(raw, &wire); err != nil {
+			return nil, err
+		}
+		features["entity_bson_overlay"] = wire.Overlay.Version
 	}
 	if d.VMTagState != nil {
 		features["vm_tag_state"] = d.VMTagState.Version
