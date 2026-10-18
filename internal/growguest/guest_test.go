@@ -155,7 +155,7 @@ func TestJournalUncertaintyAndStaleRestore(t *testing.T) {
 			if stage == "terminal-before-grow" {
 				a.before = func() {
 					o := Result(r, "refused_identity", 0)
-					state := State{1, []Record{{r, "reported", &o}}}
+					state := State{Version: 1, Records: []Record{{Request: r, Phase: "reported", Outcome: &o}}}
 					raw, _ := json.Marshal(state)
 					g.db.Exec(`UPDATE grow_ledger SET payload=?`, string(raw))
 				}
