@@ -59,3 +59,20 @@ func TestStore_ListRemovedHosts_SnapshotIsDefensiveCopy(t *testing.T) {
 		t.Errorf("snapshot mutation leaked into store: got %q", again[0].Reason)
 	}
 }
+
+func TestStore_RetirementUpdatePreservesSpellingAndExactUnretire(t *testing.T) {
+	s := newTestStore(t)
+	s.MarkHostRemoved("Retired.Example", "actor", "old")
+	s.MarkHostRemoved("retired.example", "actor", "edited")
+	rows := s.ListRemovedHosts()
+	if len(rows) != 1 || rows[0].HostID != "Retired.Example" || rows[0].Reason != "edited" {
+		t.Fatal("retained retirement spelling lost")
+	}
+	s.MarkHostRemoved("retired.other", "actor", "other")
+	if s.UnmarkHostRemoved("retired") {
+		t.Fatal("ambiguous short identity deleted a domain record")
+	}
+	if !s.UnmarkHostRemoved("retired.example") || !s.IsHostRemoved("retired.other") {
+		t.Fatal("exact unretire changed distinct identity")
+	}
+}

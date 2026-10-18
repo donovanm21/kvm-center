@@ -77,6 +77,10 @@ func (s *Store) MarkHostRemoved(hostID, removedBy, reason string) {
 	if s.removedHosts == nil {
 		s.removedHosts = map[string]*models.RemovedHost{}
 	}
+	// Preserve original persisted spelling for a retained identity.
+	if prior := s.removedHosts[low]; prior != nil {
+		hostID = prior.HostID
+	}
 	s.removedHosts[low] = &models.RemovedHost{
 		HostID:    hostID,
 		RemovedAt: time.Now().UTC(),

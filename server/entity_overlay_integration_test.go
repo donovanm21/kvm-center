@@ -173,3 +173,53 @@ func TestMongoIntegrationPassivePreflightBeforeEntityWrites(t *testing.T) {
 		t.Fatal("ambiguous storage alias loaded")
 	}
 }
+
+func TestMongoIntegrationRetirementCasePreservationAndRefusal(t *testing.T) {
+	b := newMongoIntegrationBackend(t)
+	ctx := t.Context()
+	original, _ := bson.Marshal(bson.D{{Key: "_id", Value: "Retired.Example"}, {Key: "hostid", Value: "Retired.Example"}, {Key: "reason", Value: "original"}, {Key: "opaque", Value: []byte{1, 0, 255}}})
+	if _, err := b.db.Collection(mcoRemovedHosts).InsertOne(ctx, bson.Raw(original)); err != nil {
+		t.Fatal(err)
+	}
+	d, err := b.Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.RemovedHosts["retired.example"].HostID != "Retired.Example" {
+		t.Fatal("case-preserving lookup lost")
+	}
+	d.RemovedHosts["retired.example"].Reason = "edited"
+	if err := b.Save(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	back, err := b.Load(ctx)
+	if err != nil || back.RemovedHosts["retired.example"].Reason != "edited" {
+		t.Fatal("retirement edit lost", err)
+	}
+	var got bson.Raw
+	if err := b.db.Collection(mcoRemovedHosts).FindOne(ctx, bson.D{}).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if !equalRaw(got.Lookup("opaque"), bson.Raw(original).Lookup("opaque")) {
+		t.Fatal("retirement opaque data lost")
+	}
+	d.RemovedHosts["retired.example"].HostID = "retired.example"
+	if err := b.Save(ctx, d); err == nil {
+		t.Fatal("retained identity recased without refusal")
+	}
+	collision := bson.D{{Key: "_id", Value: "retired.example"}, {Key: "hostid", Value: "retired.example"}}
+	if _, err := b.db.Collection(mcoRemovedHosts).InsertOne(ctx, collision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Load(ctx); err == nil {
+		t.Fatal("case collision silently loaded")
+	}
+	d.RemovedHosts["retired.example"].HostID = "Retired.Example"
+	d.Hosts = map[string]*models.Host{"would-write": {ID: "would-write"}}
+	if err := b.Save(ctx, d); err == nil {
+		t.Fatal("case collision accepted by save")
+	}
+	if n, err := b.db.Collection(mcoHosts).CountDocuments(ctx, bson.D{}); err != nil || n != 0 {
+		t.Fatal("write before retirement refusal", err)
+	}
+}
