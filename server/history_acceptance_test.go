@@ -547,9 +547,8 @@ func TestHistoryAcceptanceArtifactLifecycle(t *testing.T) {
 			var restoreBackend Backend = NewJSONBackend(filepath.Join(restoredRoot, "state.json"))
 			if mode == "mongo" {
 				restoreBackend = newMongoIntegrationBackend(t)
-				if err := restoreBackend.Save(context.Background(), snapshot); err != nil {
-					t.Fatal(err)
-				}
+				// The actual server bootstrap consumes the verified backup in
+				// this fresh destination; do not pre-populate it via Save.
 			}
 			restored := startAcceptance(t, binary, restoredRoot, restoreBackend, token, true)
 			for id, h := range snapshot.HostHistory.Hosts {
