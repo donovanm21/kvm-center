@@ -330,6 +330,9 @@ func validateEntitySnapshot(d *persistData) error {
 	if d == nil {
 		return errors.New("missing entity snapshot")
 	}
+	if err := validateAlarmInventory(d); err != nil {
+		return err
+	}
 	if err := validateAlarmSnapshot(d.Alarms); err != nil {
 		return err
 	}

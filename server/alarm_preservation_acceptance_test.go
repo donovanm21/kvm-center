@@ -60,7 +60,7 @@ func TestHistoryAcceptanceResourceAlarmLifecycle(t *testing.T) {
 		return read()
 	}
 	metricBytes := p.request(t, "GET", "/api/alarms/metrics", nil, 200)
-	if !bytes.Contains(metricBytes, []byte(alarmHostCPU)) || !bytes.Contains(metricBytes, []byte(alarmHostMemory)) || bytes.Contains(metricBytes, []byte("host.offline")) {
+	if !bytes.Contains(metricBytes, []byte(alarmHostCPU)) || !bytes.Contains(metricBytes, []byte(alarmHostMemory)) || bytes.Contains(metricBytes, []byte("future.unknown_metric")) {
 		t.Fatal("supported metric list wrong")
 	}
 	config := cloneAlarms(read())
@@ -87,7 +87,7 @@ func TestHistoryAcceptanceResourceAlarmLifecycle(t *testing.T) {
 	}
 	// Unsupported disabled definitions and explicit null must not alter the set.
 	bad := cloneAlarms(config)
-	bad[0].Metric = "host.offline"
+	bad[0].Metric = "future.unknown_metric"
 	bad[0].Enabled = false
 	raw, _ := json.Marshal(bad)
 	p.request(t, "PUT", "/api/alarms", raw, 400)
@@ -220,5 +220,5 @@ func TestHistoryAcceptanceResourceAlarmLifecycle(t *testing.T) {
 	verify()
 	p.stop(t, false)
 	sum := sha256.Sum256(original)
-	emitAcceptance(t, "resource_alarm_lifecycle", map[string]any{"backend": "mongo", "fixture_schema": "synthetic-resource-alarms-bson-v1", "original_sha256": hex.EncodeToString(sum[:]), "cpu_memory_scope_duration_hysteresis": true, "edit_disable_delete_restart": true, "transient_state_reconstructed": true, "application_backup_fresh_restore": true, "second_backup_restart": true, "opaque_preserved": true, "originals_unchanged": true, "ttl_monitor_disabled": true, "remote_delivery_verified": false, "other_alarm_metrics_supported": false, "full_legacy_compatible": false})
+	emitAcceptance(t, "resource_alarm_lifecycle", map[string]any{"backend": "mongo", "fixture_schema": "synthetic-resource-alarms-bson-v1", "original_sha256": hex.EncodeToString(sum[:]), "cpu_memory_scope_duration_hysteresis": true, "edit_disable_delete_restart": true, "transient_state_reconstructed": true, "application_backup_fresh_restore": true, "second_backup_restart": true, "opaque_preserved": true, "originals_unchanged": true, "ttl_monitor_disabled": true, "remote_delivery_verified": false, "other_alarm_metrics_supported": true, "full_legacy_compatible": false})
 }

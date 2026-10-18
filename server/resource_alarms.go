@@ -5,14 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"kvm-center/internal/models"
-	"math"
 	"reflect"
 	"sort"
 	"strings"
 	"time"
 )
 
-type alarmTarget struct{ AlarmID, HostID string }
+type alarmTarget struct{ AlarmID, Target string }
 type alarmState struct {
 	BreachedSince time.Time
 	Firing        bool
@@ -27,7 +26,7 @@ func (s *Store) GetResourceAlarms() []*models.Alarm {
 	for _, a := range out {
 		for key, state := range s.alarmStates {
 			if key.AlarmID == a.ID && state.Firing {
-				a.FiringOn = append(a.FiringOn, key.HostID)
+				a.FiringOn = append(a.FiringOn, key.Target)
 			}
 		}
 		sort.Strings(a.FiringOn)
@@ -103,11 +102,15 @@ func appliesAlarmHost(a *models.Alarm, id string) bool {
 	return false
 }
 
-// evaluateResourceAlarms uses the deployed >= trigger and <= threshold-5 clear
-// boundaries, stored telemetry (including offline hosts), and per-target duration.
+// evaluateResourceAlarms follows the deployed stored-inventory metric predicates.
+// Skipped pool/VM targets retain episodes; actual removed targets are forgotten.
 func (s *Store) evaluateResourceAlarms(now time.Time) []*models.NotificationEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	d := &persistData{Alarms: s.alarms, Hosts: s.hosts, VMs: s.vms, Storage: s.storage}
+	if validateAlarmInventory(d) != nil {
+		return nil
+	}
 	if s.alarmStates == nil {
 		s.alarmStates = map[alarmTarget]*alarmState{}
 	}
@@ -117,27 +120,22 @@ func (s *Store) evaluateResourceAlarms(now time.Time) []*models.NotificationEven
 		if !a.Enabled {
 			continue
 		}
-		for id, h := range s.hosts {
-			if !appliesAlarmHost(a, id) {
-				continue
-			}
-			value := h.CPUUsage
-			if a.Metric == alarmHostMemory {
-				value = h.MemUsage
-			}
-			if math.IsNaN(value) || math.IsInf(value, 0) {
-				continue
-			}
-			key := alarmTarget{a.ID, id}
+		advance := func(target string, value float64, breached, percent, skip bool) {
+			key := alarmTarget{a.ID, target}
 			seen[key] = true
+			if skip || !finiteAlarmValue(value) {
+				return
+			}
 			state := s.alarmStates[key]
 			if state == nil {
 				state = &alarmState{}
 				s.alarmStates[key] = state
 			}
-			breached := value >= a.Threshold
-			if state.Firing {
-				breached = value > a.Threshold-5
+			if percent {
+				breached = value >= a.Threshold
+				if state.Firing {
+					breached = value > a.Threshold-5
+				}
 			}
 			eventType := ""
 			severity := a.Severity
@@ -158,7 +156,51 @@ func (s *Store) evaluateResourceAlarms(now time.Time) []*models.NotificationEven
 				}
 			}
 			if eventType != "" {
-				events = append(events, &models.NotificationEvent{Type: eventType, Title: a.Name, Message: fmt.Sprintf("%s: %s %.2f%% (threshold %.2f%%)", id, a.Metric, value, a.Threshold), Resource: id, Severity: severity, At: now, Detail: map[string]string{"alarm_id": a.ID, "metric": a.Metric, "target": id, "value": fmt.Sprint(value), "threshold": fmt.Sprint(a.Threshold)}})
+				message := fmt.Sprintf("%s: %s condition changed", target, a.Metric)
+				if percent {
+					message = fmt.Sprintf("%s: %s %.2f%% (threshold %.2f%%)", target, a.Metric, value, a.Threshold)
+				}
+				if a.Metric == alarmHostOffline {
+					message = fmt.Sprintf("%s: %.0f seconds since last report (threshold %.0f seconds)", target, value, a.Threshold)
+				}
+				events = append(events, &models.NotificationEvent{Type: eventType, Title: a.Name, Message: message, Resource: target, Severity: severity, At: now, Detail: map[string]string{"alarm_id": a.ID, "metric": a.Metric, "target": target, "value": fmt.Sprint(value), "threshold": fmt.Sprint(a.Threshold)}})
+			}
+		}
+		for id, h := range s.hosts {
+			if a.Metric != alarmVMStopped && !appliesAlarmHost(a, id) {
+				continue
+			}
+			switch a.Metric {
+			case alarmHostCPU:
+				advance(id, h.CPUUsage, false, true, false)
+			case alarmHostMemory:
+				advance(id, h.MemUsage, false, true, false)
+			case alarmHostOffline:
+				silent := now.Sub(h.LastSeen).Seconds()
+				if h.LastSeen.IsZero() {
+					silent = 0
+				}
+				advance(id, silent, !h.LastSeen.IsZero() && silent >= a.Threshold, false, false)
+			case alarmAgentVersion:
+				want := strings.TrimPrefix(strings.TrimSpace(Version), "v")
+				got := strings.TrimPrefix(strings.TrimSpace(h.AgentVersion), "v")
+				advance(id, 0, want != "" && got != "" && want != got, false, false)
+			case alarmPoolUsed:
+				for _, p := range s.storage[id] {
+					target := id + "/" + p.Name
+					if !alarmHostOnline(h, now) || p.CapacityGB <= 0 {
+						advance(target, 0, false, true, true)
+						continue
+					}
+					value := (p.CapacityGB - p.AvailableGB) / p.CapacityGB * 100
+					advance(target, value, false, true, false)
+				}
+			case alarmVMStopped:
+				for _, v := range s.vms[id] {
+					if appliesAlarmVM(a, v) {
+						advance(v.Name, 0, v.Autostart && !strings.EqualFold(string(v.State), "running"), false, !alarmHostOnline(h, now))
+					}
+				}
 			}
 		}
 	}
@@ -168,6 +210,15 @@ func (s *Store) evaluateResourceAlarms(now time.Time) []*models.NotificationEven
 		}
 	}
 	return events
+}
+
+func (s *Store) resourceAlarmEvaluationError() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if err := validateAlarmInventory(&persistData{Alarms: s.alarms, Hosts: s.hosts, VMs: s.vms, Storage: s.storage}); err != nil {
+		return err.Error()
+	}
+	return ""
 }
 func (s *Store) startResourceAlarmWorker(ctx context.Context) {
 	s.goWork("resource-alarms", func() {

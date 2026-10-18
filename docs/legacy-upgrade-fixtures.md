@@ -268,3 +268,41 @@ Malformed alarms remain covered by pre-index startup refusal and synchronous
 cached-backend save/export refusal. This does not establish safe concurrent
 external database writers; native quiescence remains a separate required gate.
 The earlier cached-alarm fixture and reports remain retained as historical evidence.
+
+
+## Six-metric alarm compatibility (same overlay v8)
+
+The bounded alarm component now admits all six deployed metric names. CPU/memory
+rules are unchanged. Host silence uses seconds since LastSeen, requires a threshold
+of at least 60 seconds, treats zero/future LastSeen as non-breaching, and has no
+percentage hysteresis. Agent mismatch trims whitespace and one lowercase `v`,
+then compares strings for inequality; it does not establish which version is older.
+An empty version on either side is non-breaching. Stateful thresholds must be zero;
+nonzero legacy values refuse rather than being silently rewritten.
+
+Pool usage is `(capacity-available)/capacity*100`, with host scope and the same
+five-point percentage hysteresis. Nonpositive capacity pauses evaluation. Pool and
+VM metrics evaluate online hosts only, including the deployed two-minute LastSeen
+projection; skipped targets retain their episodes until reporting resumes. Deleted
+targets are forgotten. VM matching uses UUID or name case-insensitively and ignores
+Hosts scope, as deployed. The predicate is Autostart and state not equal-fold
+`running`; it cannot distinguish operator shutdown from an unexpected stop.
+The declared stopped/paused/crashed/unknown states and absent state retain that
+predicate; undeclared states explicitly refuse.
+
+Legacy display targets remain `hostID/poolName` and VM name. Ambiguous combined
+pool targets or case-colliding selected VM names refuse, including offline inventory.
+Checks run before startup indexes, configuration replacement, telemetry mutation,
+save/export and snapshot decode. Unexpected invalid in-memory inventory blocks
+evaluation and appears as `evaluation_error` on the alarm API. No target is silently
+rekeyed or selected arbitrarily. Malformed BSON types/aliases and nonfinite pool
+figures refuse. The single-application-writer limitation remains in force.
+
+Native synthetic acceptance exercises all four additional predicates, real worker
+fire/clear, rejected telemetry without mutation, edits, restart reconstruction,
+backup/fresh restore and second backup/restart. Four immutable BSON originals with
+opaque values are retained. Original v1–v8 archives remain readable; the format
+stays v8 because no persisted field changed. PR95's failed run and PR96's correction
+remain historical evidence. Remote notification delivery, VM stop-intent inference,
+full-schema activation, lossless ongoing archived-writer rollback, native quiescence,
+UI and promotion are not established by this component.

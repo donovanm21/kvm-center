@@ -18,16 +18,33 @@ import (
 const alarmAdmissionMax = 256
 const alarmHostCPU = "host.cpu_percent"
 const alarmHostMemory = "host.memory_percent"
+const alarmHostOffline = "host.offline"
+const alarmPoolUsed = "pool.used_percent"
+const alarmVMStopped = "vm.unexpectedly_stopped"
+const alarmAgentVersion = "agent.version_mismatch"
 
 func validateAlarm(a *models.Alarm) error {
 	if a == nil || a.ID == "" || strings.TrimSpace(a.ID) != a.ID || strings.TrimSpace(a.Name) == "" {
 		return errors.New("unsupported alarms: missing or ambiguous identity/name")
 	}
-	if a.Metric != alarmHostCPU && a.Metric != alarmHostMemory {
-		return errors.New("unsupported alarms: only CPU and memory metrics admitted")
-	}
-	if math.IsNaN(a.Threshold) || math.IsInf(a.Threshold, 0) || a.Threshold <= 5 || a.Threshold > 100 || a.ForSeconds < 0 || a.ForSeconds > 86400 {
+	if math.IsNaN(a.Threshold) || math.IsInf(a.Threshold, 0) || a.ForSeconds < 0 || a.ForSeconds > 86400 {
 		return errors.New("unsupported alarms: threshold or duration")
+	}
+	switch a.Metric {
+	case alarmHostCPU, alarmHostMemory, alarmPoolUsed:
+		if a.Threshold <= 5 || a.Threshold > 100 {
+			return errors.New("unsupported alarms: percentage threshold")
+		}
+	case alarmHostOffline:
+		if a.Threshold < 60 {
+			return errors.New("unsupported alarms: silence threshold below 60 seconds")
+		}
+	case alarmVMStopped, alarmAgentVersion:
+		if a.Threshold != 0 {
+			return errors.New("unsupported alarms: stateful threshold must be zero")
+		}
+	default:
+		return errors.New("unsupported alarms: unknown metric")
 	}
 	if a.Severity != "info" && a.Severity != "warning" && a.Severity != "critical" {
 		return errors.New("unsupported alarms: severity")

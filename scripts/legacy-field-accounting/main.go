@@ -107,8 +107,8 @@ func main() {
 				}
 			}
 			if (n == "Alarm" || (n == "persistData" && name == "Alarms")) && exists && a.Type == b.Type && a.BSON == b.BSON {
-				status = "resource_alarm_cpu_memory_bounded"
-				reason = "CPU/memory only: scoped duration/hysteresis evaluation, edits, restart and recovery; opaque retained definitions; other metrics refuse; firing state transient; remote delivery unverified"
+				status = "alarm_six_metrics_bounded"
+				reason = "Six pinned alarm predicates: scoped holds, percentage hysteresis, skipped-target retention, ambiguity refusal before mutation, restart/recovery; opaque originals retained; transient firing state; remote delivery and VM stop intent unverified"
 			}
 			if n == "Session" && exists && a.Type == b.Type && a.BSON == b.BSON {
 				status = "session_auth_recovery_bounded"

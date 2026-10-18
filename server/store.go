@@ -354,8 +354,12 @@ func (s *Store) ensureBuiltInRoles() {
 // the snapshots they capture are owned by this invocation (copies
 // of *Host / []*VM / []*StoragePool) — no shared mutable state
 // crosses the goroutine boundary.
-func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
+func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) error {
 	s.mu.Lock()
+	if err := s.preflightAlarmTelemetry(p); err != nil {
+		s.mu.Unlock()
+		return err
+	}
 	observedAt := time.Now() // server observation order, independent of agent timestamps
 
 	host, ok := s.hosts[p.HostID]
@@ -535,6 +539,7 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) {
 			}
 		}
 	})
+	return nil
 }
 
 // applyVMSideData rehydrates notes and merges guest-tools data onto a VM record.

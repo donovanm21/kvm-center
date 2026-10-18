@@ -104,3 +104,50 @@ func TestMongoIntegrationAlarmEmptyArraysAndAdmission(t *testing.T) {
 		t.Fatal("refusal changed original")
 	}
 }
+
+func TestMongoIntegrationAlarmInventoryRefusal(t *testing.T) {
+	b := newMongoIntegrationBackend(t)
+	original := remainingAlarmFixture(t, "vm-alarm", alarmVMStopped)
+	if _, err := b.db.Collection(mcoAlarms).InsertOne(t.Context(), original); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"a", "b"} {
+		name := "fixture-vm"
+		if id == "b" {
+			name = "other-vm"
+		}
+		if _, err := b.db.Collection(mcoHosts).InsertOne(t.Context(), bson.D{{Key: "_id", Value: id}, {Key: "id", Value: id}}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.db.Collection(mcoVMs).InsertOne(t.Context(), bson.D{{Key: "_id", Value: id}, {Key: "uuid", Value: id}, {Key: "host_id", Value: id}, {Key: "name", Value: name}, {Key: "state", Value: "stopped"}, {Key: "autostart", Value: true}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := preflightCollections(t.Context(), b.db); err != nil {
+		t.Fatal("valid nonempty inventory refused", err)
+	}
+	if _, err := b.Load(t.Context()); err != nil {
+		t.Fatal("valid nonempty inventory load", err)
+	}
+	if _, err := b.db.Collection(mcoVMs).UpdateOne(t.Context(), bson.D{{Key: "_id", Value: "b"}}, bson.D{{Key: "$set", Value: bson.D{{Key: "name", Value: "fixture-vm"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if preflightCollections(t.Context(), b.db) == nil {
+		t.Fatal("ambiguous VM target admitted before indexes")
+	}
+	if _, err := b.Load(t.Context()); err == nil {
+		t.Fatal("ambiguous VM target loaded")
+	}
+	var got bson.Raw
+	if err := b.db.Collection(mcoAlarms).FindOne(t.Context(), bson.D{}).Decode(&got); err != nil || !bytes.Equal(got, original) {
+		t.Fatal("refusal changed alarm original")
+	}
+	// A stale cached snapshot cannot erase the unsupported raw inventory on Save/export.
+	clean := &persistData{}
+	if _, err := prepareEntityDocuments(t.Context(), b.db, mcoAlarms, nil); err == nil {
+		t.Fatal("cached preservation erased ambiguous inventory")
+	}
+	if _, err := b.captureEntityOverlay(t.Context(), clean); err == nil {
+		t.Fatal("cached export accepted ambiguous inventory")
+	}
+}
