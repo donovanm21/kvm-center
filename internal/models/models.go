@@ -467,9 +467,18 @@ type VMPCIDevice struct {
 	HostDesc   string `json:"host_desc"`   // resolved lspci description
 }
 
+// GuestGrowResult retains a guest-reported result; it does not queue a grow operation.
+type GuestGrowResult struct {
+	Device string `json:"device"`
+	Result string `json:"result,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
 // GuestTelemetryPayload is sent by the kvm-tools daemon running inside a VM
 // directly to POST /api/guest-telemetry on the kvm-center server.
 type GuestTelemetryPayload struct {
+	Arch            string           `json:"arch,omitempty"`
+	GrowResult      *GuestGrowResult `json:"grow_result,omitempty"`
 	VMUUID          string           `json:"vm_uuid"`
 	Hostname        string           `json:"hostname"`
 	OS              string           `json:"os"`

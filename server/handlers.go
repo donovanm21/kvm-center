@@ -1023,7 +1023,11 @@ func handleGuestTelemetry(store *Store) http.HandlerFunc {
 			return
 		}
 		originalUUID := p.VMUUID
-		canonical := store.ApplyGuestTelemetry(&p)
+		canonical, err := store.ApplyGuestTelemetry(&p)
+		if err != nil {
+			writeError(w, http.StatusConflict, "guest report refused: incompatible retained data or unavailable persistence preflight")
+			return
+		}
 		log.Printf("guest-telemetry: uuid=%s host=%s os=%q kvm-tools=%s", canonical, p.Hostname, p.OS, p.KVMToolsVersion)
 		// If the operator queued a kvm-tools self-update for this VM,
 		// hand back the binary URL so the in-guest daemon downloads it

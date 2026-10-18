@@ -30,6 +30,8 @@ func entitySchema(collection string) (reflect.Type, map[string]string, error) {
 		value = models.StoragePool{}
 	case mcoVMNotes:
 		value = entityVMNote{}
+	case mcoGuestData:
+		value = entityGuestReport{}
 	case mcoRemovedHosts:
 		value = models.RemovedHost{}
 	default:
@@ -77,6 +79,10 @@ func entityIdentity(raw bson.Raw, collection string) (string, error) {
 		}
 		if pool.HostID == "" || pool.Name == "" || strings.Contains(pool.HostID, "|") || strings.Contains(pool.Name, "|") || id != pool.HostID+"|"+pool.Name {
 			return "", errors.New("ambiguous storage identity")
+		}
+	case mcoGuestData:
+		if err := validateGuestRecord(raw); err != nil {
+			return "", err
 		}
 	case mcoVMNotes:
 		var note entityVMNote
