@@ -30,6 +30,31 @@ func handleHostHistory(s *Store) http.HandlerFunc {
 			writeError(w, 400, "invalid host id")
 			return
 		}
+		source := r.URL.Query().Get("source")
+		if len(r.URL.Query()["source"]) > 1 || (source != "" && source != "current" && source != "legacy") {
+			writeError(w, 400, "source must be current or legacy")
+			return
+		}
+		if source == "legacy" {
+			if r.URL.Query().Has("range") || r.URL.Query().Has("tier") {
+				writeError(w, 400, "legacy history returns all retained tiers; range and tier are unsupported")
+				return
+			}
+			s.mu.RLock()
+			state := s.legacyHistory.Clone()
+			s.mu.RUnlock()
+			if state == nil || state.Records[id] == nil {
+				writeError(w, 404, "legacy history not found")
+				return
+			}
+			view, err := state.View(id)
+			if err != nil {
+				writeError(w, 409, "legacy history validation failed")
+				return
+			}
+			writeJSON(w, 200, map[string]any{"source": "legacy", "read_only": true, "source_contract": view.SourceContract, "host": view.Host, "original_sha256": view.OriginalSHA256, "timestamp_unit": view.TimestampUnit, "metric_unit": view.MetricUnit, "vm_count_meaning": view.VMCountMeaning, "retention_meaning": view.RetentionMeaning, "tiers": view.Tiers})
+			return
+		}
 		if s.GetHost(id) == nil {
 			writeError(w, 404, "host not found")
 			return

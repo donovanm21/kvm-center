@@ -24,28 +24,30 @@ type persistData struct {
 	EntityOverlay  *entityOverlay  `json:"entity_bson_overlay,omitempty"`
 	restoreOverlay *entityOverlay
 
-	HostHistory      *historyState                       `json:"host_history_state,omitempty"`
-	VMTagState       *vmTagState                         `json:"vm_tag_state,omitempty"`
-	Hosts            map[string]*models.Host             `json:"hosts"`
-	VMs              map[string][]*models.VM             `json:"vms"`
-	Storage          map[string][]*models.StoragePool    `json:"storage"`
-	VMNotes          map[string]string                   `json:"vm_notes"`
-	GuestData        map[string]*guestEntry              `json:"guest_data"`
-	Migrations       []*models.MigrationRecord           `json:"migrations,omitempty"`
-	Users            map[string]*models.User             `json:"users,omitempty"`
-	Groups           map[string]*models.Group            `json:"groups,omitempty"`
-	Roles            map[string]*models.Role             `json:"roles,omitempty"`
-	Sessions         map[string]*models.Session          `json:"sessions,omitempty"`
-	IDPs             map[string]*models.IdentityProvider `json:"idps,omitempty"`
-	Features         *models.Features                    `json:"features,omitempty"`
-	Audit            []*models.AuditEvent                `json:"audit,omitempty"`
-	AuditShipping    *models.AuditShipping               `json:"audit_shipping,omitempty"`
-	SnapshotPolicies map[string]*models.SnapshotPolicy   `json:"snapshot_policies,omitempty"`
-	Notifications    *models.NotificationConfig          `json:"notifications,omitempty"`
-	Metrics          *models.MetricsConfig               `json:"metrics,omitempty"`
-	APITokens        map[string]*models.APIToken         `json:"api_tokens,omitempty"`
-	HypervisorCerts  map[string]*models.HypervisorCert   `json:"hypervisor_certs,omitempty"`
-	CommandLog       map[string]*models.CommandLogEntry  `json:"command_log,omitempty"`
+	LegacyHistory        *legacyHistoryState                 `json:"legacy_history_state,omitempty"`
+	restoreLegacyHistory bool                                `json:"-"`
+	HostHistory          *historyState                       `json:"host_history_state,omitempty"`
+	VMTagState           *vmTagState                         `json:"vm_tag_state,omitempty"`
+	Hosts                map[string]*models.Host             `json:"hosts"`
+	VMs                  map[string][]*models.VM             `json:"vms"`
+	Storage              map[string][]*models.StoragePool    `json:"storage"`
+	VMNotes              map[string]string                   `json:"vm_notes"`
+	GuestData            map[string]*guestEntry              `json:"guest_data"`
+	Migrations           []*models.MigrationRecord           `json:"migrations,omitempty"`
+	Users                map[string]*models.User             `json:"users,omitempty"`
+	Groups               map[string]*models.Group            `json:"groups,omitempty"`
+	Roles                map[string]*models.Role             `json:"roles,omitempty"`
+	Sessions             map[string]*models.Session          `json:"sessions,omitempty"`
+	IDPs                 map[string]*models.IdentityProvider `json:"idps,omitempty"`
+	Features             *models.Features                    `json:"features,omitempty"`
+	Audit                []*models.AuditEvent                `json:"audit,omitempty"`
+	AuditShipping        *models.AuditShipping               `json:"audit_shipping,omitempty"`
+	SnapshotPolicies     map[string]*models.SnapshotPolicy   `json:"snapshot_policies,omitempty"`
+	Notifications        *models.NotificationConfig          `json:"notifications,omitempty"`
+	Metrics              *models.MetricsConfig               `json:"metrics,omitempty"`
+	APITokens            map[string]*models.APIToken         `json:"api_tokens,omitempty"`
+	HypervisorCerts      map[string]*models.HypervisorCert   `json:"hypervisor_certs,omitempty"`
+	CommandLog           map[string]*models.CommandLogEntry  `json:"command_log,omitempty"`
 	// ConsoleSecret is the HMAC-SHA256 key the server uses to mint
 	// per-session VM console tokens (see console_token.go). Generated
 	// on first use; persisted so agents that cached it don't need a
@@ -92,6 +94,7 @@ const guestToolsFreshness = 5 * time.Minute
 
 // Store is the in-memory data store backed by a JSON file.
 type Store struct {
+	legacyHistory  *legacyHistoryState
 	alarms         []*models.Alarm
 	alarmStates    map[alarmTarget]*alarmState
 	history        *historyState // guarded by mu; never shared across Stores

@@ -12,7 +12,10 @@ import (
 // Collection membership is a necessary gate, not full-schema approval. Keep
 // checks at load/save/export too: cached connections cannot approve new data.
 func rejectLegacyCollections(ctx context.Context, db *mongo.Database) error {
-	for _, name := range []string{"perf_history", "vm_tags"} {
+	if _, err := loadLegacyHistory(ctx, db); err != nil {
+		return err
+	}
+	for _, name := range []string{"vm_tags"} {
 		err := db.Collection(name).FindOne(ctx, bson.D{}, options.FindOne().SetProjection(bson.D{{Key: "_id", Value: 1}})).Err()
 		if err == nil {
 			return fmt.Errorf("legacy %s collection requires explicit offline conversion", name)
@@ -49,5 +52,6 @@ var supportedMongoCollections = map[string]bool{
 	mcoSessions: true, mcoIDPs: true, mcoFeatures: true, mcoServerMeta: true, mcoAuditEvents: true,
 	mcoSnapshotPolicies: true, mcoNotifications: true, mcoMetrics: true, mcoAuditShipping: true,
 	mcoBackupSchedule: true, mcoDiscordGateway: true, mcoRemovedHosts: true, mcoPendingEnrol: true,
+	mcoLegacyHistory: true, mcoLegacyHistoryContract: true,
 	mcoAlarms: true, mcoAPITokens: true, mcoHypervisorCerts: true, mcoHostHistory: true, mcoVMTagState: true,
 }

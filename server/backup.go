@@ -291,6 +291,9 @@ func snapshotFeatureSchemas(raw []byte) (map[string]int, error) {
 	if d.VMTagState != nil {
 		features["vm_tag_state"] = d.VMTagState.Version
 	}
+	if d.LegacyHistory != nil {
+		features["legacy_history_state"] = d.LegacyHistory.Version
+	}
 	if d.HostHistory != nil {
 		features["host_history_state"] = d.HostHistory.Version
 	}

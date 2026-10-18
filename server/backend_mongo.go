@@ -280,6 +280,10 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 	if err := rejectLegacyCollections(ctx, db); err != nil {
 		return nil, err
 	}
+	legacy, err := loadLegacyHistory(ctx, db)
+	if err != nil {
+		return nil, err
+	}
 	history, err := loadHostHistory(ctx, db)
 	if err != nil {
 		return nil, err
@@ -289,19 +293,20 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 		return nil, err
 	}
 	pd := &persistData{
-		VMTagState:   tags,
-		HostHistory:  history,
-		Hosts:        map[string]*models.Host{},
-		VMs:          map[string][]*models.VM{},
-		Storage:      map[string][]*models.StoragePool{},
-		VMNotes:      map[string]string{},
-		GuestData:    map[string]*guestEntry{},
-		Users:        map[string]*models.User{},
-		Groups:       map[string]*models.Group{},
-		Roles:        map[string]*models.Role{},
-		Sessions:     map[string]*models.Session{},
-		IDPs:         map[string]*models.IdentityProvider{},
-		RemovedHosts: map[string]*models.RemovedHost{},
+		VMTagState:    tags,
+		HostHistory:   history,
+		LegacyHistory: legacy,
+		Hosts:         map[string]*models.Host{},
+		VMs:           map[string][]*models.VM{},
+		Storage:       map[string][]*models.StoragePool{},
+		VMNotes:       map[string]string{},
+		GuestData:     map[string]*guestEntry{},
+		Users:         map[string]*models.User{},
+		Groups:        map[string]*models.Group{},
+		Roles:         map[string]*models.Role{},
+		Sessions:      map[string]*models.Session{},
+		IDPs:          map[string]*models.IdentityProvider{},
+		RemovedHosts:  map[string]*models.RemovedHost{},
 	}
 
 	// Hosts
@@ -590,6 +595,9 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 		return err
 	}
 
+	if err := preflightLegacyHistorySave(ctx, db, d, d.restoreLegacyHistory); err != nil {
+		return err
+	}
 	// Hosts. Every embed below uses bson:",inline" so the entity's
 	// fields land at the document root rather than nested under the
 	// Go struct's field name — otherwise the default decoder can't
@@ -673,6 +681,11 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 			return fmt.Errorf("%s preservation preflight: %w", col, err)
 		}
 		passivePlans[col] = prepared
+	}
+	if d.restoreLegacyHistory {
+		if err := restoreLegacyHistoryRecords(ctx, db, d.LegacyHistory); err != nil {
+			return err
+		}
 	}
 	if err := replaceMap(ctx, db, mcoHosts, hostDocs); err != nil {
 		return err

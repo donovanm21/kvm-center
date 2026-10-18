@@ -36,6 +36,9 @@ type persistWire struct {
 }
 
 func (d persistData) MarshalJSON() ([]byte, error) {
+	if err := d.LegacyHistory.Validate(); err != nil {
+		return nil, err
+	}
 	if err := validateAlarmInventory(&d); err != nil {
 		return nil, err
 	}
@@ -113,6 +116,9 @@ func (d *persistData) UnmarshalJSON(raw []byte) error {
 		return errors.New("VM tag state must be absent or a versioned object, not null")
 	}
 
+	if value, ok := fields["legacy_history_state"]; ok && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		return errors.New("null legacy history state")
+	}
 	if value, ok := fields["entity_bson_overlay"]; ok && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 		return errors.New("null entity overlay")
 	}

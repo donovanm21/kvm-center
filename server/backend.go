@@ -187,7 +187,7 @@ func migrateBackend(ctx context.Context, src, dst Backend) error {
 		}
 	}
 	var saveErr error
-	if target, ok := dst.(*MongoBackend); ok && d.EntityOverlay != nil {
+	if target, ok := dst.(*MongoBackend); ok && (d.EntityOverlay != nil || d.LegacyHistory != nil) {
 		saveErr = target.restoreEntitySnapshot(ctx, d)
 	} else {
 		saveErr = dst.Save(ctx, d)
@@ -215,6 +215,15 @@ func verifyBackendRoundTrip(ctx context.Context, src *persistData, dst Backend) 
 	}
 	if back == nil {
 		return errors.New("read-back returned nil persistData")
+	}
+	if err := src.LegacyHistory.Validate(); err != nil {
+		return err
+	}
+	if err := back.LegacyHistory.Validate(); err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(src.LegacyHistory, back.LegacyHistory) {
+		return errors.New("legacy history round-trip mismatch")
 	}
 	if err := src.HostHistory.validate(); err != nil {
 		return err

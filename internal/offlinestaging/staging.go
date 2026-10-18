@@ -78,7 +78,9 @@ func digest(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(
 
 // reject duplicate JSON keys before decoding into structs (which otherwise use
 // last-key-wins). Bound input before tokenization; reject unknown struct fields.
-func decode(data []byte, target any) error {
+func decode(data []byte, target any) error { return decodeKeys(data, target, true) }
+
+func decodeKeys(data []byte, target any, lowercase bool) error {
 	if len(data) > 4<<20 {
 		return errors.New("JSON too large")
 	}
@@ -105,7 +107,7 @@ func decode(data []byte, target any) error {
 					return e
 				}
 				k, ok := t.(string)
-				if !ok || k != strings.ToLower(k) || seen[k] {
+				if !ok || (lowercase && k != strings.ToLower(k)) || seen[k] {
 					return errors.New("duplicate JSON key")
 				}
 				seen[k] = true
