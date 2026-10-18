@@ -87,6 +87,28 @@ func unknownBelow(old, projected bson.RawValue, t reflect.Type) (bool, error) {
 	if old.Type != projected.Type {
 		return false, errors.New("unsupported BSON type conversion")
 	}
+	if old.Type == bsontype.EmbeddedDocument && t.Kind() == reflect.Map {
+		if t.Key().Kind() != reflect.String || t.Elem().Kind() != reflect.String {
+			return false, errors.New("unsupported BSON map schema")
+		}
+		a, err := rawFields(bson.Raw(old.Value))
+		if err != nil {
+			return false, err
+		}
+		b, err := rawFields(bson.Raw(projected.Value))
+		if err != nil {
+			return false, err
+		}
+		if len(a) != len(b) {
+			return false, errors.New("BSON string map projection changed")
+		}
+		for key, value := range a {
+			if value.Type != bsontype.String || !equalRaw(value, b[key]) {
+				return false, errors.New("BSON string map value changed type or value")
+			}
+		}
+		return false, nil
+	}
 	if old.Type == bsontype.EmbeddedDocument {
 		fields, err := bsonFields(t)
 		if err != nil {
@@ -213,6 +235,13 @@ func preserveEntityBSON(old, candidate bson.Raw, entity reflect.Type, aliases ma
 		u, err := unknownBelow(value, p[name], ft)
 		if err != nil {
 			return nil, err
+		}
+		// An unchanged string map keeps its original raw order. Re-marshalling
+		// Go maps may reorder entries and break exact restore verification.
+		if ft.Kind() == reflect.Map && ft.Key().Kind() == reflect.String && ft.Elem().Kind() == reflect.String && value.Type == bsontype.EmbeddedDocument {
+			if _, same := unknownBelow(value, b[name], ft); same == nil {
+				retained[name] = value
+			}
 		}
 		if u {
 			if !equalRaw(b[name], p[name]) {

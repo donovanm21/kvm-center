@@ -76,6 +76,9 @@ func validateGuestRecord(raw bson.Raw) error {
 }
 
 func preflightCollections(ctx context.Context, db *mongo.Database) error {
+	if _, err := loadAuditRecords(ctx, db); err != nil {
+		return err
+	}
 	if err := rejectLegacyCollections(ctx, db); err != nil {
 		return err
 	}

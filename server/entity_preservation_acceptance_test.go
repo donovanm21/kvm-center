@@ -238,6 +238,7 @@ func TestHistoryAcceptanceEntityOpaqueLifecycle(t *testing.T) {
 func TestHistoryAcceptanceOverlayV1ArchiveRestore(t *testing.T) { priorOverlayArchiveRestore(t, 1) }
 func TestHistoryAcceptanceOverlayV2ArchiveRestore(t *testing.T) { priorOverlayArchiveRestore(t, 2) }
 func TestHistoryAcceptanceOverlayV3ArchiveRestore(t *testing.T) { priorOverlayArchiveRestore(t, 3) }
+func TestHistoryAcceptanceOverlayV4ArchiveRestore(t *testing.T) { priorOverlayArchiveRestore(t, 4) }
 func priorOverlayArchiveRestore(t *testing.T, version int) {
 	d := overlayFixture(t)
 	d.EntityOverlay.Version = version
@@ -246,17 +247,27 @@ func priorOverlayArchiveRestore(t *testing.T, version int) {
 		d.Storage = map[string][]*models.StoragePool{"prior": {{HostID: "prior", Name: "Pool"}}}
 		d.EntityOverlay.Collections[mcoStorage] = map[string][]byte{"prior|Pool": raw}
 	}
-	if version == 3 {
+	if version >= 3 {
 		raw, _ := bson.Marshal(bson.D{{Key: "_id", Value: "prior-retired"}, {Key: "hostid", Value: "prior-retired"}, {Key: "opaque", Value: primitive.NewDecimal128(67, 71)}})
 		d.RemovedHosts = map[string]*models.RemovedHost{"prior-retired": {HostID: "prior-retired"}}
 		d.EntityOverlay.Collections[mcoRemovedHosts] = map[string][]byte{"prior-retired": raw}
 	}
+	if version >= 4 {
+		raw := guestFixture(t, false)
+		var report entityGuestReport
+		if err := bson.Unmarshal(raw, &report); err != nil {
+			t.Fatal(err)
+		}
+		d.GuestData = map[string]*guestEntry{report.UUID: &report.Entry}
+		d.EntityOverlay.Collections[mcoGuestData] = map[string][]byte{report.UUID: raw}
+	}
 	raw, err := json.Marshal(struct {
+		GuestData    map[string]*guestEntry           `json:"guest_data,omitempty"`
 		RemovedHosts map[string]*models.RemovedHost   `json:"removed_hosts,omitempty"`
 		Groups       map[string]*models.Group         `json:"groups"`
 		Storage      map[string][]*models.StoragePool `json:"storage,omitempty"`
 		Overlay      *entityOverlay                   `json:"entity_bson_overlay"`
-	}{d.RemovedHosts, d.Groups, d.Storage, d.EntityOverlay})
+	}{d.GuestData, d.RemovedHosts, d.Groups, d.Storage, d.EntityOverlay})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,11 +311,17 @@ func priorOverlayArchiveRestore(t *testing.T, version int) {
 			t.Fatal("v2 archive lost storage overlay")
 		}
 	}
-	if version == 3 {
+	if version >= 3 {
 		var retired bson.Raw
 		if err := b.db.Collection(mcoRemovedHosts).FindOne(t.Context(), bson.D{}).Decode(&retired); err != nil || retired.Lookup("opaque").Type == 0 {
 			t.Fatal("v3 retirement lost", err)
 		}
 	}
-	emitAcceptance(t, fmt.Sprintf("overlay_v%d_archive_restore", version), map[string]any{"backend": "mongo", "original_wire_version": version, "validated_manifest_version": version, "upgraded_version": 4, "fresh_restore": true, "opaque_preserved": true})
+	if version >= 4 {
+		var got bson.Raw
+		if err := b.db.Collection(mcoGuestData).FindOne(t.Context(), bson.D{}).Decode(&got); err != nil || got.Lookup("opaque").Type == 0 {
+			t.Fatal("v4 guest overlay lost", err)
+		}
+	}
+	emitAcceptance(t, fmt.Sprintf("overlay_v%d_archive_restore", version), map[string]any{"backend": "mongo", "original_wire_version": version, "validated_manifest_version": version, "upgraded_version": 5, "fresh_restore": true, "opaque_preserved": true})
 }

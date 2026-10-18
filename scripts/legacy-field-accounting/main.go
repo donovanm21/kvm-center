@@ -106,6 +106,10 @@ func main() {
 					reason = "Raw root field retained through host/VM writes; no interpretation or operational compatibility claimed"
 				}
 			}
+			if n == "AuditEvent" && exists && a.Type == b.Type && a.BSON == b.BSON {
+				status = "audit_read_append_recovery_bounded"
+				reason = "Canonical audit read/filter/append/chronological retention/recovery; at most 10000 records, TTL inactive, raw originals retained; shipping and historical replay excluded"
+			}
 			switch n {
 			case "GuestTelemetryPayload", "GuestGrowResult", "guestEntry", "HostPCIDevice", "VMNetwork", "VMDisk", "VMPCIDevice", "GuestFS", "GuestInterface":
 				if exists && a.Type == b.Type && a.BSON == b.BSON {

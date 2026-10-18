@@ -116,10 +116,22 @@ func (s *Store) AddAuditEvent(ev *models.AuditEvent) {
 		ev.ID = newAuditID()
 	}
 	if ev.At.IsZero() {
-		ev.At = time.Now().UTC()
+		ev.At = time.Now().UTC().Truncate(time.Millisecond)
 	}
 	s.mu.Lock()
-	s.audit = append(s.audit, ev)
+	for _, existing := range s.audit {
+		if existing.ID == ev.ID {
+			s.mu.Unlock()
+			log.Printf("audit: duplicate identity refused")
+			return
+		}
+	}
+	if err := validateAuditSnapshot([]*models.AuditEvent{ev}); err != nil {
+		s.mu.Unlock()
+		log.Printf("audit: invalid event refused")
+		return
+	}
+	s.audit = insertAudit(s.audit, ev)
 	if len(s.audit) > auditRetentionMax {
 		// Drop the oldest entries so retention stays bounded. We trim
 		// in chunks to avoid a re-alloc storm at steady state.

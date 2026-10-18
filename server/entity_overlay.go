@@ -16,6 +16,7 @@ import (
 // Entity overlays are private backup data, never public model/API fields.
 // Version 1 supports five startup collections; version 2 adds storage and notes.
 // Version 3 adds retirement records; version 4 adds cached guest reports.
+// Version 5 adds bounded audit read/append/retention and recovery.
 // None establishes full legacy activation or authorizes TTL expiry of originals.
 type entityOverlay struct {
 	Version     int                          `json:"version"`
@@ -28,18 +29,24 @@ type entityVMNote struct {
 	Text string `bson:"notes"`
 }
 
-var overlayCollections = []string{mcoHosts, mcoVMs, mcoUsers, mcoGroups, mcoRoles, mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData}
+var overlayCollections = []string{mcoHosts, mcoVMs, mcoUsers, mcoGroups, mcoRoles, mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData, mcoAuditEvents}
 
 func (o *entityOverlay) validate() error {
 	if o == nil {
 		return nil
 	}
-	if (o.Version < 1 || o.Version > 4) || o.Collections == nil || len(o.Collections) > len(overlayCollections) {
+	if (o.Version < 1 || o.Version > 5) || o.Collections == nil || len(o.Collections) > len(overlayCollections) {
 		return errors.New("unsupported entity overlay schema")
 	}
 	size := 0
 	count := 0
 	for col, records := range o.Collections {
+		if o.Version < 5 && col == mcoAuditEvents {
+			return errors.New("audit events require entity overlay version 5")
+		}
+		if col == mcoAuditEvents && len(records) > auditRetentionMax {
+			return errors.New("audit overlay exceeds active retention bound")
+		}
 		if o.Version < 4 && col == mcoGuestData {
 			return errors.New("guest reports require entity overlay version 4")
 		}
@@ -65,7 +72,9 @@ func (o *entityOverlay) validate() error {
 				retiredIDs[low] = true
 			}
 			size += len(raw)
-			count++
+			if col != mcoAuditEvents {
+				count++
+			}
 			if len(raw) > 1<<20 || size > 16<<20 || count > 10000 {
 				return errors.New("entity overlay exceeds bounds")
 			}
@@ -171,6 +180,12 @@ func overlayCandidates(d *persistData) map[string][]any {
 			Entry     *guestEntry `bson:"entry"`
 		}{uuid, uuid, entry.UpdatedAt, entry})
 	}
+	for _, ev := range d.Audit {
+		out[mcoAuditEvents] = append(out[mcoAuditEvents], struct {
+			ID                 string `bson:"_id"`
+			*models.AuditEvent `bson:",inline"`
+		}{ev.ID, ev})
+	}
 	return out
 }
 
@@ -186,7 +201,7 @@ func reconcileOverlay(d *persistData, old *entityOverlay) (*entityOverlay, error
 	if err := old.validate(); err != nil {
 		return nil, err
 	}
-	next := &entityOverlay{Version: 4, Collections: map[string]map[string][]byte{}}
+	next := &entityOverlay{Version: 5, Collections: map[string]map[string][]byte{}}
 	for col, docs := range overlayCandidates(d) {
 		typ, aliases, _ := entitySchema(col)
 		records := map[string][]byte{}
@@ -226,7 +241,7 @@ func (b *MongoBackend) captureEntityOverlay(ctx context.Context, d *persistData)
 	if err := rejectLegacyCollections(ctx, db); err != nil {
 		return nil, err
 	}
-	o := &entityOverlay{Version: 4, Collections: map[string]map[string][]byte{}}
+	o := &entityOverlay{Version: 5, Collections: map[string]map[string][]byte{}}
 	for col, docs := range overlayCandidates(d) {
 		prepared, err := prepareEntityDocuments(ctx, db, col, docs)
 		if err != nil {
@@ -287,6 +302,9 @@ func restoreEntityRecords(d *persistData, col string) map[string][]byte {
 func validateEntitySnapshot(d *persistData) error {
 	if d == nil {
 		return errors.New("missing entity snapshot")
+	}
+	if err := validateAuditSnapshot(d.Audit); err != nil {
+		return err
 	}
 	for _, name := range []string{"Hosts", "Users", "Groups", "Roles"} {
 		values := reflect.ValueOf(d).Elem().FieldByName(name)
