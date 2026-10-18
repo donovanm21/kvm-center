@@ -223,6 +223,9 @@ func (b *MongoBackend) captureEntityOverlay(ctx context.Context, d *persistData)
 	if err != nil {
 		return nil, err
 	}
+	if err := rejectLegacyCollections(ctx, db); err != nil {
+		return nil, err
+	}
 	o := &entityOverlay{Version: 4, Collections: map[string]map[string][]byte{}}
 	for col, docs := range overlayCandidates(d) {
 		prepared, err := prepareEntityDocuments(ctx, db, col, docs)

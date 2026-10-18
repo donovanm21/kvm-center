@@ -276,6 +276,9 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := rejectLegacyCollections(ctx, db); err != nil {
+		return nil, err
+	}
 	history, err := loadHostHistory(ctx, db)
 	if err != nil {
 		return nil, err
@@ -586,6 +589,10 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	}
 	db, err := b.dial(ctx)
 	if err != nil {
+		return err
+	}
+
+	if err := rejectLegacyCollections(ctx, db); err != nil {
 		return err
 	}
 

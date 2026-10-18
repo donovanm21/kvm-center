@@ -92,3 +92,33 @@ in-memory cache may subsequently rewrite an expired record. Stale VM guest field
 also have separate lifetime behavior. A migration must keep legacy TTL/jobs
 inactive and retain raw originals indefinitely; full-schema activation remains
 blocked until those and remaining semantic gates are addressed.
+
+
+### Unsupported namespace refusal
+
+Populated Mongo namespaces without a current persistence representation, including
+legacy `alarms` and `affinity_rules`, now refuse before index initialization.
+Cached connections repeat that gate on Load, Save and application snapshot export;
+no backup archive is started when export cannot account for a namespace. Empty
+unknown collections are left intact but are not declared compatible. Namespace
+inspection errors refuse rather than being treated as an empty database.
+
+JSON snapshots refuse unknown top-level fields, including null/empty unsupported
+feature fields, before mutating the destination. Export remains closed after a
+failed initial load, preventing an empty/default backup from omitting refused data.
+The current private sidecar and
+supported backup formats are unchanged. Nested model-field handling is outside
+this batch; all previous overlay v1–v4 acceptance remains required.
+
+Independent `synthetic-unsupported-namespace-bson-v1` refusal fixtures cover
+alarms, affinity and a future namespace alongside an expired record. Offline
+copy-to-staging precedes actual-app startup refusal, with originals and indexes
+unchanged. A separate running-app test first exports a readable backup, then
+verifies repeated export refusal after unsupported data appears on the cached
+connection, with no partial archive or changed original. Neither full-schema
+fixture is stripped or altered to force boot.
+
+This closes namespace omission paths under the single-application-writer contract.
+Inspection is not atomic against an external concurrent writer, and an allowlisted
+collection does not establish compatibility of all its fields, indexes or behavior.
+Alarms/affinity implementation and complete legacy activation remain unmet.

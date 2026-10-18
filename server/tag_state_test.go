@@ -80,10 +80,11 @@ func TestTagFoundationStrictJSON(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Existing unrelated snapshot fields retain their prior permissive policy.
+	// The namespace gate now refuses unrelated unrepresented state instead of
+	// silently dropping it on rewrite. Supported tag snapshots above still decode.
 	var d persistData
-	if err := json.Unmarshal([]byte(`{"future_unrelated":true}`), &d); err != nil {
-		t.Fatal(err)
+	if err := json.Unmarshal([]byte(`{"future_unrelated":true}`), &d); err == nil {
+		t.Fatal("unrepresented snapshot namespace accepted")
 	}
 }
 func TestTagFoundationStrictBSON(t *testing.T) {

@@ -9,7 +9,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 )
@@ -100,6 +102,10 @@ func (d *persistData) UnmarshalJSON(raw []byte) error {
 		return errors.New("null entity overlay")
 	}
 
+	if err := validateSnapshotNamespaces(fields); err != nil {
+		return err
+	}
+
 	// Decode into a fresh value so absent legacy fields cannot retain stale
 	// credentials if a caller reuses a destination struct.
 	var decoded persistData
@@ -130,5 +136,33 @@ func (d *persistData) UnmarshalJSON(raw []byte) error {
 	}
 	decoded.EntityOverlay = overlay
 	*d = decoded
+	return nil
+}
+
+// Unknown top-level state cannot be dropped by a typed save or backup restore.
+// Known namespaces still have their own value/type/operational compatibility gates.
+func validateSnapshotNamespaces(fields map[string]json.RawMessage) error {
+	known := map[string]bool{"_private": true}
+	typ := reflect.TypeOf(persistDataAlias{})
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
+		name := strings.Split(field.Tag.Get("json"), ",")[0]
+		if name != "" && name != "-" {
+			known[name] = true
+		}
+	}
+	names := make([]string, 0, len(fields))
+	for name := range fields {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if !known[name] {
+			return fmt.Errorf("unsupported snapshot namespace %q requires explicit offline preservation and compatibility review", name)
+		}
+	}
 	return nil
 }

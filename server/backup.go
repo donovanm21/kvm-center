@@ -99,6 +99,9 @@ func (s *Store) ExportSnapshot() ([]byte, error) {
 	defer s.saveMu.Unlock()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if !s.saveGateOpen {
+		return nil, fmt.Errorf("snapshot export is blocked until the initial backend load succeeds")
+	}
 	d := s.persistDataLocked()
 	if b, ok := s.backend.(*MongoBackend); ok {
 		var err error

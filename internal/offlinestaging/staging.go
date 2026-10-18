@@ -221,7 +221,7 @@ func parseSnapshot(source []byte, files map[string][]byte) (*snapshot, error) {
 	if err := decode(source, &m); err != nil {
 		return nil, err
 	}
-	if m.Contract != Contract || (m.SourceSchema != "synthetic-full-bson-v1" && m.SourceSchema != "synthetic-saved-c018b31-bson-v1" && m.SourceSchema != "synthetic-deployed-6db8c723-bson-v1") || m.SourceBuild == "" || !hashPattern.MatchString(m.TargetArtifactSHA256) || m.VerificationClock == "" || m.ConsistencyEvidence == "" || m.CompanionEvidence == "" {
+	if m.Contract != Contract || (m.SourceSchema != "synthetic-full-bson-v1" && m.SourceSchema != "synthetic-saved-c018b31-bson-v1" && m.SourceSchema != "synthetic-deployed-6db8c723-bson-v1" && m.SourceSchema != "synthetic-unsupported-namespace-bson-v1") || m.SourceBuild == "" || !hashPattern.MatchString(m.TargetArtifactSHA256) || m.VerificationClock == "" || m.ConsistencyEvidence == "" || m.CompanionEvidence == "" {
 		return nil, errors.New("unsupported/incomplete source contract (synthetic snapshots only)")
 	}
 	if _, err := time.Parse(time.RFC3339Nano, m.VerificationClock); err != nil || !strings.HasSuffix(m.VerificationClock, "Z") {

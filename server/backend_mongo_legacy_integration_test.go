@@ -15,7 +15,7 @@ import (
 )
 
 func TestMongoIntegrationLegacyRefusalBeforeIndexes(t *testing.T) {
-	for _, legacy := range []string{"perf_history", "vm_tags"} {
+	for _, legacy := range []string{"perf_history", "vm_tags", "alarms", "affinity_rules", "future_feature"} {
 		t.Run(legacy, func(t *testing.T) {
 			b := newMongoIntegrationBackend(t)
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -48,14 +48,14 @@ func TestMongoIntegrationLegacyRefusalBeforeIndexes(t *testing.T) {
 			}
 			// Repeated calls must not cache a connection that bypasses refusal.
 			for i := 0; i < 2; i++ {
-				if _, err := b.Load(ctx); err == nil || !strings.Contains(err.Error(), "legacy "+legacy) {
+				if _, err := b.Load(ctx); err == nil || !strings.Contains(err.Error(), legacy) {
 					t.Fatalf("wrong refusal: %v", err)
 				}
 				if b.client != nil || b.db != nil {
 					t.Fatal("rejected connection cached")
 				}
 			}
-			if err := b.Save(ctx, &persistData{}); err == nil || !strings.Contains(err.Error(), "legacy "+legacy) {
+			if err := b.Save(ctx, &persistData{}); err == nil || !strings.Contains(err.Error(), legacy) {
 				t.Fatalf("write did not refuse: %v", err)
 			}
 			names, err := db.ListCollectionNames(ctx, bson.D{})
