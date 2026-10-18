@@ -30,6 +30,10 @@ func tagView(s *Store, vm *models.VM) vmTagView {
 }
 func vmDetailRoute(s *Store) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/passthrough-evidence") {
+			requirePerm(s, "vm.view", handlePassthroughEvidence(s)).ServeHTTP(w, r)
+			return
+		}
 		if strings.HasSuffix(r.URL.Path, "/tags") {
 			perm := "vm.view"
 			if r.Method != http.MethodGet {
