@@ -959,7 +959,7 @@ func writeFixtures(ctx context.Context, db *mongo.Database, fx *fixtures) error 
 	var storageDocs []any
 	for hostID, pools := range fx.storage {
 		for _, p := range pools {
-			id := hostID + "/" + p.Name
+			id := hostID + "|" + p.Name
 			storageDocs = append(storageDocs, inlineDoc(id, p))
 		}
 	}
