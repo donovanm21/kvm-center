@@ -115,3 +115,17 @@ func TestRestoredOriginalRejectsMalformedArray(t *testing.T) {
 		t.Fatal("restored malformed BSON accepted")
 	}
 }
+
+func TestOriginalExactBSONFraming(t *testing.T) {
+	raw := rule("rule", "separate", "must", a, b)
+	for _, bad := range [][]byte{append(append([]byte(nil), raw...), 0), append(append([]byte(nil), raw...), raw...), raw[:len(raw)-1], nil} {
+		if _, err := Decode(bad); err == nil {
+			t.Fatal("nonexact original framing accepted")
+		}
+		encoded, _ := json.Marshal(wire{Version: 1, SourceContract: Source, Originals: map[string][]byte{"rule": bad}})
+		var restored State
+		if json.Unmarshal(encoded, &restored) == nil {
+			t.Fatal("state restoration accepted nonexact original framing")
+		}
+	}
+}

@@ -4,6 +4,7 @@ package affinitypolicy
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,6 +49,9 @@ func textOK(s string) bool {
 }
 func Decode(raw []byte) (Rule, error) {
 	var r Rule
+	if len(raw) < 5 || uint64(binary.LittleEndian.Uint32(raw[:4])) != uint64(len(raw)) {
+		return r, errors.New("affinity BSON must contain exactly one complete document")
+	}
 	d := bson.Raw(raw)
 	if len(raw) > MaxBytes {
 		return r, errors.New("affinity original exceeds limit")
