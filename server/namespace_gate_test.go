@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -37,6 +38,14 @@ func TestSnapshotUnknownNamespaceRefusalPreservesOriginal(t *testing.T) {
 			store.saveWG.Wait()
 			if err := store.SaveChecked(); err == nil {
 				t.Fatal("refused load permitted write")
+			}
+			if snapshot, err := store.ExportSnapshot(); err == nil || len(snapshot) != 0 {
+				t.Fatal("refused JSON load exported incomplete snapshot")
+			}
+			response := httptest.NewRecorder()
+			handleBackup(store)(response, httptest.NewRequest("GET", "/api/admin/backup", nil))
+			if response.Code != 500 || response.Header().Get("Content-Type") == "application/gzip" || bytes.HasPrefix(response.Body.Bytes(), []byte{0x1f, 0x8b}) {
+				t.Fatal("refused JSON load returned partial backup")
 			}
 			disk, err := os.ReadFile(path)
 			if err != nil || !bytes.Equal(disk, raw) {

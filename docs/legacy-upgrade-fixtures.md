@@ -104,7 +104,9 @@ unknown collections are left intact but are not declared compatible. Namespace
 inspection errors refuse rather than being treated as an empty database.
 
 JSON snapshots refuse unknown top-level fields, including null/empty unsupported
-feature fields, before mutating the destination. The current private sidecar and
+feature fields, before mutating the destination. Export remains closed after a
+failed initial load, preventing an empty/default backup from omitting refused data.
+The current private sidecar and
 supported backup formats are unchanged. Nested model-field handling is outside
 this batch; all previous overlay v1–v4 acceptance remains required.
 
