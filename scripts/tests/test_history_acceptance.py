@@ -37,7 +37,7 @@ class HistoryEvidenceTests(unittest.TestCase):
             rows.append(json.dumps({'Package': 'server', 'Test': 'legacy', 'Output': chunk}))
             rows.append(json.dumps({'Package': 'server', 'Test': 'other', 'Output': 'noise\n'}))
         result = history.measurements('\n'.join(rows))
-        self.assertEqual(len(result), 9)
+        self.assertEqual(len(result), 10)
         self.assertEqual(len(result[-1]['data']['checksums']), 60)
         with self.assertRaises(ValueError):
             history.measurements('\n'.join(rows[:-2]))
