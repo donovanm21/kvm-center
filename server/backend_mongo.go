@@ -481,8 +481,8 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 	}
 
 	// API tokens (v5.5) keyed map.
-	pd.APITokens = map[string]*models.APIToken{}
-	if err := loadMapByID[models.APIToken](ctx, db, mcoAPITokens, pd.APITokens, func(t *models.APIToken) string { return t.ID }); err != nil {
+	pd.APITokens, err = loadTokenRecords(ctx, db)
+	if err != nil {
 		return nil, err
 	}
 
@@ -674,7 +674,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	}
 	passivePlans := map[string][]any{}
 	candidates := overlayCandidates(d)
-	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData, mcoAuditEvents} {
+	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData, mcoAuditEvents, mcoAPITokens} {
 		prepared, err := prepareEntityDocumentsFrom(ctx, db, col, candidates[col], restoreEntityRecords(d, col))
 		if err != nil {
 			return fmt.Errorf("%s preservation preflight: %w", col, err)
@@ -784,13 +784,8 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 		return err
 	}
 
-	// API tokens
-	if err := replaceMapIfDirty(ctx, db, mcoAPITokens, "api_tokens", d, mapToDocs(d.APITokens, func(t *models.APIToken) any {
-		return struct {
-			ID               string `bson:"_id"`
-			*models.APIToken `bson:",inline"`
-		}{t.ID, t}
-	})); err != nil {
+	// Preserve tokens even when a dirty hint omits their known fields.
+	if err := replaceMap(ctx, db, mcoAPITokens, passivePlans[mcoAPITokens]); err != nil {
 		return err
 	}
 

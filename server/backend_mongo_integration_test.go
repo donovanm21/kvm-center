@@ -69,7 +69,7 @@ func TestMongoIntegrationRoundTrip(t *testing.T) {
 		VMs:                map[string][]*models.VM{"host-one": {{UUID: "vm-one", HostID: "host-one", Name: "fixture-vm"}}},
 		Users:              map[string]*models.User{"user-one": {ID: "user-one", Username: "fixture-user", PasswordHash: "fixture-hash", Enabled: true}},
 		Sessions:           map[string]*models.Session{"session-one": {Token: "session-one", UserID: "user-one", ExpiresAt: time.Now().Add(time.Hour)}},
-		APITokens:          map[string]*models.APIToken{"token-one": {ID: "token-one", OwnerID: "user-one", Hash: "fixture-token-hash", Scopes: []string{"vm.view"}}},
+		APITokens:          map[string]*models.APIToken{"token-one": {ID: "token-one", OwnerID: "user-one", Hash: "7b153990b8a7e0e16c250d00f79750c65b35e04e1c431d84a924a286077684c1", Scopes: []string{"vm.view"}}},
 		PendingEnrollments: map[string]*models.PendingEnrollment{"enroll-one": {ID: "enroll-one", HostID: "host-one", PollTokenHash: "fixture-poll-hash", IssuedCertPEM: "fixture-cert", IssuedCAPEM: "fixture-ca", ExpiresAt: time.Now().Add(time.Hour)}},
 		DiscordGateway:     &models.DiscordGateway{Enabled: true, Token: "fixture-gateway-token"},
 		Features:           &models.Features{DisableVMCreate: true},
@@ -95,7 +95,7 @@ func TestMongoIntegrationRoundTrip(t *testing.T) {
 	if session := got.Sessions["session-one"]; session == nil || session.UserID != "user-one" {
 		t.Fatal("session did not round-trip")
 	}
-	if token := got.APITokens["token-one"]; token == nil || token.Hash != "fixture-token-hash" || !token.AllowsPermission("vm.view") || token.AllowsPermission("vm.delete") {
+	if token := got.APITokens["token-one"]; token == nil || token.Hash != "7b153990b8a7e0e16c250d00f79750c65b35e04e1c431d84a924a286077684c1" || !token.AllowsPermission("vm.view") || token.AllowsPermission("vm.delete") {
 		t.Fatal("token hash/scope did not round-trip")
 	}
 	if enrol := got.PendingEnrollments["enroll-one"]; enrol == nil || enrol.PollTokenHash != "fixture-poll-hash" || enrol.IssuedCertPEM != "fixture-cert" || enrol.IssuedCAPEM != "fixture-ca" {

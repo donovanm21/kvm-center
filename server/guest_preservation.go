@@ -76,10 +76,13 @@ func validateGuestRecord(raw bson.Raw) error {
 }
 
 func preflightCollections(ctx context.Context, db *mongo.Database) error {
+	if err := rejectLegacyCollections(ctx, db); err != nil {
+		return err
+	}
 	if _, err := loadAuditRecords(ctx, db); err != nil {
 		return err
 	}
-	if err := rejectLegacyCollections(ctx, db); err != nil {
+	if _, err := loadTokenRecords(ctx, db); err != nil {
 		return err
 	}
 	cur, err := db.Collection(mcoGuestData).Find(ctx, bson.D{})

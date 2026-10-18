@@ -1,14 +1,14 @@
 legacy_field,legacy_bson,legacy_type,current_bson,current_type,accounting,behavior_or_blocker
-APIToken.CreatedAt,createdat,time.Time,createdat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-APIToken.ExpiresAt,expiresat,time.Time,expiresat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-APIToken.Hash,hash,string,hash,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-APIToken.ID,id,string,id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-APIToken.Kind,kind,string,kind,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-APIToken.LastUsedAt,lastusedat,time.Time,lastusedat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-APIToken.Name,name,string,name,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-APIToken.OwnerID,ownerid,string,ownerid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-APIToken.Revoked,revoked,bool,revoked,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-APIToken.Scopes,scopes,[]string,scopes,[]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+APIToken.CreatedAt,createdat,time.Time,createdat,time.Time,token_auth_recovery_bounded,Canonical token mint/auth/scopes/expiry/revoke/graceful restart/recovery; immutable opaque originals; bounded admission; asynchronous persistence is not crash-durable acknowledgement
+APIToken.ExpiresAt,expiresat,time.Time,expiresat,time.Time,token_auth_recovery_bounded,Canonical token mint/auth/scopes/expiry/revoke/graceful restart/recovery; immutable opaque originals; bounded admission; asynchronous persistence is not crash-durable acknowledgement
+APIToken.Hash,hash,string,hash,string,token_auth_recovery_bounded,Canonical token mint/auth/scopes/expiry/revoke/graceful restart/recovery; immutable opaque originals; bounded admission; asynchronous persistence is not crash-durable acknowledgement
+APIToken.ID,id,string,id,string,token_auth_recovery_bounded,Canonical token mint/auth/scopes/expiry/revoke/graceful restart/recovery; immutable opaque originals; bounded admission; asynchronous persistence is not crash-durable acknowledgement
+APIToken.Kind,kind,string,kind,string,token_auth_recovery_bounded,Canonical token mint/auth/scopes/expiry/revoke/graceful restart/recovery; immutable opaque originals; bounded admission; asynchronous persistence is not crash-durable acknowledgement
+APIToken.LastUsedAt,lastusedat,time.Time,lastusedat,time.Time,token_auth_recovery_bounded,Canonical token mint/auth/scopes/expiry/revoke/graceful restart/recovery; immutable opaque originals; bounded admission; asynchronous persistence is not crash-durable acknowledgement
+APIToken.Name,name,string,name,string,token_auth_recovery_bounded,Canonical token mint/auth/scopes/expiry/revoke/graceful restart/recovery; immutable opaque originals; bounded admission; asynchronous persistence is not crash-durable acknowledgement
+APIToken.OwnerID,ownerid,string,ownerid,string,token_auth_recovery_bounded,Canonical token mint/auth/scopes/expiry/revoke/graceful restart/recovery; immutable opaque originals; bounded admission; asynchronous persistence is not crash-durable acknowledgement
+APIToken.Revoked,revoked,bool,revoked,bool,token_auth_recovery_bounded,Canonical token mint/auth/scopes/expiry/revoke/graceful restart/recovery; immutable opaque originals; bounded admission; asynchronous persistence is not crash-durable acknowledgement
+APIToken.Scopes,scopes,[]string,scopes,[]string,token_auth_recovery_bounded,Canonical token mint/auth/scopes/expiry/revoke/graceful restart/recovery; immutable opaque originals; bounded admission; asynchronous persistence is not crash-durable acknowledgement
 AffinityRule.CreatedAt,createdat,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
 AffinityRule.Enabled,enabled,bool,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
 AffinityRule.ID,id,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
