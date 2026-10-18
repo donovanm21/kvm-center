@@ -173,3 +173,26 @@ acceptance and the separate promotion gates remain release blockers.
 Audit shipping/Discord delivery, new filtering features, indefinite active audit
 retention and replay of historical actions are optional or separate components;
 none is required to establish this bounded local audit reader/append/recovery path.
+
+## Bounded API-token compatibility (overlay v6)
+
+Canonical `api_tokens` records preserve all ten deployed fields and opaque BSON
+through authentication usage updates, revocation, restart and backup recovery.
+Missing Kind retains historical system-kind normalization; empty scopes inherit
+owner permissions, while nonempty scopes intersect them. Expired, revoked,
+orphaned and disabled-owner records remain preserved but cannot authenticate.
+Unknown kinds/scopes, conflicting or noncanonical BSON aliases, mismatched IDs,
+malformed hashes and incorrect field types refuse before indexes or writes.
+
+Admission is bounded by 10,000 tokens, the existing shared 10,000 non-audit overlay
+records and 16 MiB raw overlay total. Mint validates the candidate overlay before
+mutation. Original BSON remains immutable, with no token TTL or pruning. Original
+v1–v5 archive manifests remain readable. Bearer secrets are returned only at mint;
+API record reads redact hashes, while private backups necessarily retain hashes.
+
+The native synthetic acceptance exercises mint/auth/scope intersection, inactive
+record refusal, LastUsedAt, revocation, graceful restart, backup/fresh restore and
+second backup/restart. Mint/revoke retain existing asynchronous persistence;
+crash-durable acknowledgement is not claimed. Token UI, rotation and permission
+redesign are separate work. Full-schema activation, original-snapshot rollback,
+post-upgrade-write accounting and release/UI gates remain incomplete.

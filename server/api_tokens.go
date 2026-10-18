@@ -59,9 +59,9 @@ func (s *Store) listTokensFiltered(keep func(*models.APIToken) bool) []*models.A
 		if !keep(t) {
 			continue
 		}
-		cp := *t
+		cp := copyAPIToken(t)
 		cp.Hash = "" // never leak the hash
-		out = append(out, &cp)
+		out = append(out, cp)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
 	return out
@@ -72,9 +72,9 @@ func (s *Store) GetAPIToken(id string) *models.APIToken {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if t, ok := s.apiTokens[id]; ok {
-		cp := *t
+		cp := copyAPIToken(t)
 		cp.Hash = ""
-		return &cp
+		return cp
 	}
 	return nil
 }
@@ -108,6 +108,9 @@ func validateScopes(scopes []string) ([]string, error) {
 		seen[s] = true
 		cleaned = append(cleaned, s)
 	}
+	if len(cleaned) == 0 {
+		return nil, errors.New("nonempty scopes must contain a permission")
+	}
 	sort.Strings(cleaned)
 	return cleaned, nil
 }
@@ -120,7 +123,7 @@ func (s *Store) CreateAPIToken(name, ownerID, kind string, expiresAt time.Time, 
 	if name == "" {
 		return "", nil, errors.New("name required")
 	}
-	if ownerID == "" {
+	if ownerID == "" || strings.TrimSpace(ownerID) != ownerID {
 		return "", nil, errors.New("owner required")
 	}
 	if kind != "user" && kind != "system" {
@@ -159,10 +162,41 @@ func (s *Store) CreateAPIToken(name, ownerID, kind string, expiresAt time.Time, 
 	if s.apiTokens == nil {
 		s.apiTokens = map[string]*models.APIToken{}
 	}
+	if _, exists := s.apiTokens[id]; exists {
+		s.mu.Unlock()
+		return "", nil, errors.New("token identity collision; retry mint")
+	}
+	if len(s.apiTokens) >= tokenAdmissionMax {
+		s.mu.Unlock()
+		return "", nil, errors.New("API token admission exceeds bound")
+	}
+	candidate := s.persistDataLocked()
+	candidate.APITokens = make(map[string]*models.APIToken, len(s.apiTokens)+1)
+	for key, value := range s.apiTokens {
+		candidate.APITokens[key] = value
+	}
+	candidate.APITokens[id] = t
+	admissionOverlay := candidate.EntityOverlay
+	if admissionOverlay == nil {
+		admissionOverlay = &entityOverlay{Version: 6, Collections: map[string]map[string][]byte{}}
+	}
+	var admissionErr error
+	if mongoBackend, ok := s.backend.(*MongoBackend); ok {
+		ctx, cancel := contextWithTimeout(15 * time.Second)
+		_, admissionErr = mongoBackend.captureEntityOverlay(ctx, &candidate)
+		cancel()
+	} else {
+		_, admissionErr = reconcileOverlay(&candidate, admissionOverlay)
+	}
+	if admissionErr != nil {
+		s.mu.Unlock()
+		return "", nil, fmt.Errorf("token admission cannot preserve snapshot: %w", admissionErr)
+	}
 	s.apiTokens[id] = t
+	result := copyAPIToken(t)
 	s.mu.Unlock()
 	s.AsyncSave()
-	return full, t, nil
+	return full, result, nil
 }
 
 func (s *Store) RevokeAPIToken(id string) error {
@@ -200,55 +234,38 @@ func (s *Store) LookupAPITokenWithID(bearer string) (*models.User, string) {
 // but the record vanished, which would indicate a torn read in the
 // store.
 func (s *Store) LookupAPITokenWithRecord(bearer string) (*models.User, *models.APIToken) {
-	u := s.LookupAPIToken(bearer)
-	if u == nil {
+	if !strings.HasPrefix(bearer, tokenPrefix) {
 		return nil, nil
 	}
 	rest := strings.TrimPrefix(bearer, tokenPrefix)
 	dot := strings.IndexByte(rest, '.')
 	if dot <= 0 {
-		return u, nil
-	}
-	id := rest[:dot]
-	s.mu.RLock()
-	t := s.apiTokens[id]
-	s.mu.RUnlock()
-	return u, t
-}
-
-func (s *Store) LookupAPIToken(bearer string) *models.User {
-	if !strings.HasPrefix(bearer, tokenPrefix) {
-		return nil
-	}
-	rest := strings.TrimPrefix(bearer, tokenPrefix)
-	dot := strings.IndexByte(rest, '.')
-	if dot <= 0 {
-		return nil
+		return nil, nil
 	}
 	id, secret := rest[:dot], rest[dot+1:]
-	s.mu.RLock()
-	t, ok := s.apiTokens[id]
-	s.mu.RUnlock()
-	if !ok || t.Revoked {
-		return nil
-	}
-	if !t.ExpiresAt.IsZero() && time.Now().After(t.ExpiresAt) {
-		return nil
+	// Authentication and last-used update share one lock with revocation.
+	// Return snapshots so middleware cannot race later record mutations.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t := s.apiTokens[id]
+	if t == nil || t.Revoked || (!t.ExpiresAt.IsZero() && !time.Now().Before(t.ExpiresAt)) {
+		return nil, nil
 	}
 	sum := sha256.Sum256([]byte(secret))
-	want, _ := hex.DecodeString(t.Hash)
-	if subtle.ConstantTimeCompare(sum[:], want) != 1 {
-		return nil
+	want, err := hex.DecodeString(t.Hash)
+	if err != nil || len(want) != sha256.Size || subtle.ConstantTimeCompare(sum[:], want) != 1 {
+		return nil, nil
 	}
-	u := s.GetUserByID(t.OwnerID)
+	u := s.users[t.OwnerID]
 	if u == nil || !u.Enabled {
-		return nil
+		return nil, nil
 	}
-	// Stamp last-used outside the request hot path. Not async-safe in
-	// the strict sense, but worst case we drop one tick.
-	s.mu.Lock()
 	t.LastUsedAt = time.Now().UTC()
-	s.mu.Unlock()
+	owner := *u
+	return &owner, copyAPIToken(t)
+}
+func (s *Store) LookupAPIToken(bearer string) *models.User {
+	u, _ := s.LookupAPITokenWithRecord(bearer)
 	return u
 }
 
