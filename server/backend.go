@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"kvm-center/internal/growprotocol"
 	"log"
 	"os"
 	"path/filepath"
@@ -109,6 +110,9 @@ func (b *JSONBackend) saveWithDirSync(d *persistData, syncDir func(string) error
 		return err
 	}
 	if old != nil {
+		if err = growprotocol.Transition(old.GuestGrows, d.GuestGrows); err != nil {
+			return err
+		}
 		if err = guestUpdateTransition(old.GuestUpdates, d.GuestUpdates); err != nil {
 			return err
 		}
@@ -196,7 +200,7 @@ func migrateBackend(ctx context.Context, src, dst Backend) error {
 		}
 	}
 	var saveErr error
-	if target, ok := dst.(*MongoBackend); ok && (d.EntityOverlay != nil || d.LegacyHistory != nil || d.Affinity != nil || d.GuestUpdates != nil) {
+	if target, ok := dst.(*MongoBackend); ok && (d.EntityOverlay != nil || d.LegacyHistory != nil || d.Affinity != nil || d.GuestUpdates != nil || d.GuestGrows != nil) {
 		saveErr = target.restoreEntitySnapshot(ctx, d)
 	} else {
 		saveErr = dst.Save(ctx, d)
@@ -224,6 +228,9 @@ func verifyBackendRoundTrip(ctx context.Context, src *persistData, dst Backend) 
 	}
 	if back == nil {
 		return errors.New("read-back returned nil persistData")
+	}
+	if validateGuestGrows(src.GuestGrows) != nil || validateGuestGrows(back.GuestGrows) != nil || !reflect.DeepEqual(src.GuestGrows, back.GuestGrows) {
+		return errors.New("guest grow ledger round-trip mismatch")
 	}
 	if err := src.GuestUpdates.Validate(); err != nil {
 		return err

@@ -99,6 +99,9 @@ func (s *Store) ExportSnapshot() ([]byte, error) {
 	defer s.saveMu.Unlock()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if s.guestGrowUncertain {
+		return nil, fmt.Errorf("guest grow durability uncertain; export refused")
+	}
 	if len(s.guestUpdateUncertain) > 0 {
 		return nil, fmt.Errorf("guest update durability uncertain; export refused")
 	}
@@ -280,6 +283,9 @@ func snapshotFeatureSchemas(raw []byte) (map[string]int, error) {
 		return nil, err
 	}
 	features := map[string]int{}
+	if d.GuestGrows != nil {
+		features[guestGrowCollection] = d.GuestGrows.Version
+	}
 	if d.GuestUpdates != nil {
 		features[guestUpdateCollection] = d.GuestUpdates.Version
 	}

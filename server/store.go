@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"kvm-center/internal/growprotocol"
 	"log"
 	"strings"
 	"sync"
@@ -21,6 +22,7 @@ func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
 
 // persistData is the on-disk JSON structure.
 type persistData struct {
+	GuestGrows     *growprotocol.State   `json:"guest_grow_state,omitempty"`
 	GuestUpdates   *guestUpdateState     `json:"guest_update_state,omitempty"`
 	Affinity       *affinitypolicy.State `json:"affinity_state,omitempty"`
 	Alarms         []*models.Alarm       `json:"alarms,omitempty"`
@@ -97,6 +99,11 @@ const guestToolsFreshness = 5 * time.Minute
 
 // Store is the in-memory data store backed by a JSON file.
 type Store struct {
+	guestGrows           *growprotocol.State
+	guestGrowMu          sync.Mutex
+	guestGrowOwners      map[string]bool
+	guestGrowUncertain   bool
+	growSessions         map[string]growSession
 	guestUpdates         *guestUpdateState
 	guestUpdateMu        sync.Mutex
 	guestUpdateOwners    map[string]bool

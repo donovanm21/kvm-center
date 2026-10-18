@@ -1073,8 +1073,16 @@ func handleGuestTelemetry(store *Store) http.HandlerFunc {
 			return
 		}
 		var p models.GuestTelemetryPayload
-		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		raw, readErr := io.ReadAll(io.LimitReader(r.Body, (8<<20)+1))
+		var fields map[string]json.RawMessage
+		valid := readErr == nil && len(raw) <= 8<<20 && uniqueJSONKeys(raw) == nil && json.Unmarshal(raw, &fields) == nil
+		for key, value := range fields {
+			if strings.EqualFold(key, "grow_v1") && (key != "grow_v1" || bytes.Equal(bytes.TrimSpace(value), []byte("null"))) {
+				valid = false
+			}
+		}
+		if !valid || json.Unmarshal(raw, &p) != nil {
+			writeError(w, http.StatusBadRequest, "invalid guest report JSON")
 			return
 		}
 		if p.VMUUID == "" {
@@ -1088,7 +1096,19 @@ func handleGuestTelemetry(store *Store) http.HandlerFunc {
 			return
 		}
 		log.Printf("guest-telemetry: uuid=%s host=%s os=%q kvm-tools=%s", canonical, p.Hostname, p.OS, p.KVMToolsVersion)
-		reply := map[string]string{"status": "ok"}
+		reply := map[string]any{"status": "ok"}
+		if p.GrowV1 != nil {
+			if canonical != originalUUID {
+				reply["grow_status"] = "refused_identity"
+			} else {
+				request, err := store.ProcessGrowReport(canonical, *p.GrowV1)
+				if err != nil {
+					reply["grow_status"] = "refused_or_recovery_fenced"
+				} else if request != nil {
+					reply["grow_request_v1"] = request
+				}
+			}
+		}
 		updateID, offer, offerErr := store.OfferGuestUpdate(canonical, p.UpdateOS, p.Arch, kvmToolsBinaryURL(r, p.UpdateOS))
 		if updateID != "" {
 			reply["update_request_id"] = updateID
