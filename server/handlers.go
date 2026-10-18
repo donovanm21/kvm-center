@@ -68,7 +68,10 @@ func handleTelemetry(store *Store) http.HandlerFunc {
 			return
 		}
 
-		store.ApplyTelemetry(&payload)
+		if err := store.ApplyTelemetry(&payload); err != nil {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
 		// Log once every 5 minutes per host instead of every tick, so
 		// large fleets don't drown the log shipper. The audit log
 		// captures the per-tick state machine; this log line is just

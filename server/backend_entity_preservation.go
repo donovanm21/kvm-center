@@ -160,7 +160,11 @@ func prepareEntityDocuments(ctx context.Context, db *mongo.Database, collection 
 
 func prepareEntityDocumentsFrom(ctx context.Context, db *mongo.Database, collection string, docs []any, source map[string][]byte) ([]any, error) {
 	if collection == mcoAlarms {
-		if _, err := loadAlarmRecords(ctx, db); err != nil {
+		alarms, err := loadAlarmRecords(ctx, db)
+		if err != nil {
+			return nil, err
+		}
+		if err := preflightAlarmInventory(ctx, db, alarms); err != nil {
 			return nil, err
 		}
 	}

@@ -12,7 +12,7 @@ func handleResourceAlarms(s *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, 200, map[string]any{"alarms": s.GetResourceAlarms(), "warning": resourceAlarmDeliveryWarning(s)})
+			writeJSON(w, 200, map[string]any{"alarms": s.GetResourceAlarms(), "warning": resourceAlarmDeliveryWarning(s), "evaluation_error": s.resourceAlarmEvaluationError()})
 		case http.MethodPut:
 			raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20+1))
 			if err != nil || len(raw) > 1<<20 {
@@ -70,7 +70,7 @@ func handleResourceAlarms(s *Store) http.HandlerFunc {
 				writeError(w, 400, err.Error())
 				return
 			}
-			writeJSON(w, 200, map[string]any{"alarms": s.GetResourceAlarms(), "warning": resourceAlarmDeliveryWarning(s)})
+			writeJSON(w, 200, map[string]any{"alarms": s.GetResourceAlarms(), "warning": resourceAlarmDeliveryWarning(s), "evaluation_error": s.resourceAlarmEvaluationError()})
 		default:
 			writeError(w, 405, "GET or PUT")
 		}
@@ -82,7 +82,14 @@ func handleResourceAlarmMetrics() http.HandlerFunc {
 			writeError(w, 405, "GET only")
 			return
 		}
-		writeJSON(w, 200, []map[string]any{{"key": alarmHostCPU, "label": "Hypervisor CPU usage (%)", "unit": "%", "stateful": false}, {"key": alarmHostMemory, "label": "Hypervisor memory usage (%)", "unit": "%", "stateful": false}})
+		writeJSON(w, 200, []map[string]any{
+			{"key": alarmHostCPU, "label": "Hypervisor CPU usage (%)", "unit": "%", "stateful": false},
+			{"key": alarmHostMemory, "label": "Hypervisor memory usage (%)", "unit": "%", "stateful": false},
+			{"key": alarmHostOffline, "label": "Hypervisor stopped reporting", "unit": "seconds", "stateful": false},
+			{"key": alarmPoolUsed, "label": "Storage pool used (%)", "unit": "%", "stateful": false},
+			{"key": alarmVMStopped, "label": "Autostart VM is not running", "unit": "", "stateful": true},
+			{"key": alarmAgentVersion, "label": "Agent version differs from control plane", "unit": "", "stateful": true},
+		})
 	}
 }
 

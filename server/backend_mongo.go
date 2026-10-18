@@ -419,6 +419,9 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 	if pd.Alarms, err = loadAlarmRecords(ctx, db); err != nil {
 		return nil, err
 	}
+	if err := validateAlarmInventory(pd); err != nil {
+		return nil, err
+	}
 
 	// Users / Groups / Roles / IDPs
 	if err := loadMapByID[models.User](ctx, db, mcoUsers, pd.Users, func(u *models.User) string { return u.ID }); err != nil {

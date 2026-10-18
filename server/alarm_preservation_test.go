@@ -87,7 +87,7 @@ func TestAlarmStrictAdmission(t *testing.T) {
 			case "derived":
 				set("firing_on", bson.A{"host"})
 			case "unsupported-disabled":
-				set("metric", "host.offline")
+				set("metric", "future.unknown_metric")
 				set("enabled", false)
 			case "nan":
 				set("threshold", math.NaN())
@@ -184,7 +184,7 @@ func TestResourceAlarmOperationalSemantics(t *testing.T) {
 		t.Fatal("unchanged config reset episode")
 	}
 	bad := cloneAlarms(s.alarms)
-	bad[0].Metric = "host.offline"
+	bad[0].Metric = "future.unknown_metric"
 	before := s.GetResourceAlarms()
 	if s.SetResourceAlarms(bad) == nil || !reflect.DeepEqual(before, s.GetResourceAlarms()) {
 		t.Fatal("refused edit mutated config or state")
