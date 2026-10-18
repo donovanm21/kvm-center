@@ -117,7 +117,7 @@ func TestAffinityMigrationEnforcementRecovery(t *testing.T) {
 				t.Fatal(err)
 			}
 			schemas, err := snapshotFeatureSchemas(raw)
-			if err != nil || schemas["affinity_state"] != 1 {
+			if err != nil || schemas["affinity_state"] != 2 {
 				t.Fatal("missing archive schema", err)
 			}
 			restored := newTestStore(t)

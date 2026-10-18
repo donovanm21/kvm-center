@@ -93,6 +93,16 @@ func affinityAcceptance(t *testing.T, mode string, drain bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Exercise the process-owned pre-dispatch abort before starting the native
+	// application. Recovery must retain its replay tombstone and admit a new ID.
+	q := affinityReservationFor("native-affinity-aborted")
+	_, lease, err := s.reserveAffinity(q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = lease.abortPrepared(); err != nil {
+		t.Fatal(err)
+	}
 	s.saveWG.Wait()
 	if err = s.SaveChecked(); err != nil {
 		t.Fatal(err)
@@ -110,6 +120,11 @@ func affinityAcceptance(t *testing.T, mode string, drain bool) {
 	request := func(dest string) []byte {
 		raw, _ := json.Marshal(models.APICommandRequest{RequestID: "native-affinity-request", Action: "MIGRATE", HostID: "source", VMUUID: legacyfixture.VMID, VMName: "one", Params: map[string]string{"destination": dest}})
 		return raw
+	}
+	oldRequest, _ := json.Marshal(models.APICommandRequest{RequestID: "native-affinity-aborted", Action: "MIGRATE", HostID: "source", VMUUID: legacyfixture.VMID, VMName: "one", Params: map[string]string{"destination": "192.0.2.3"}})
+	p.request(t, "POST", "/api/command", oldRequest, 409)
+	if calls.Load() != 0 {
+		t.Fatal("aborted request replayed after native boot")
 	}
 	refused := p.request(t, "POST", "/api/command", request("192.0.2.2"), 409)
 	if !bytes.Contains(refused, []byte("affinity")) || calls.Load() != 0 {
@@ -148,7 +163,7 @@ func affinityAcceptance(t *testing.T, mode string, drain bool) {
 	p.stop(t, false)
 	restored := t.TempDir()
 	snapshot := unpackAcceptance(t, archive, restored, 0)
-	if snapshot.Affinity == nil || snapshot.Affinity.Reservation == nil || !reflect.DeepEqual(snapshot.Affinity.Originals, state.Originals) {
+	if snapshot.Affinity == nil || snapshot.Affinity.Reservation == nil || snapshot.Affinity.Version != 2 || snapshot.Affinity.ReservationPhase != "dispatch_possible" || len(snapshot.Affinity.Aborted) != 1 || !reflect.DeepEqual(snapshot.Affinity.Originals, state.Originals) {
 		t.Fatal("backup lost original rules or reservation")
 	}
 	want := snapshot.Affinity.Clone()
@@ -195,5 +210,5 @@ func affinityAcceptance(t *testing.T, mode string, drain bool) {
 	if drain {
 		kind = "affinity_drain_lifecycle"
 	}
-	emitAcceptance(t, kind, map[string]any{"backend": mode, "fixture_schema": fixture.Schema, "source_contract": fixture.Source, "original_sha256": fixture.Checksums["affinity_rules.bson"], "index_sha256": fixture.Checksums["affinity_rules.indexes.bson"], "required_refusal_before_dispatch": true, "accepted_synthetic_dispatch": true, "durable_unresolved_reservation": true, "replay_refused": true, "restart": true, "application_backup_fresh_restore": true, "second_backup_restart": true, "originals_unchanged": true, "raw_restore_reconversion": true, "reservation_reconciliation": false, "name_or_tag_selectors": false, "native_migration_success": false, "full_legacy_compatible": false})
+	emitAcceptance(t, kind, map[string]any{"backend": mode, "fixture_schema": fixture.Schema, "source_contract": fixture.Source, "original_sha256": fixture.Checksums["affinity_rules.bson"], "index_sha256": fixture.Checksums["affinity_rules.indexes.bson"], "required_refusal_before_dispatch": true, "accepted_synthetic_dispatch": true, "durable_unresolved_reservation": true, "replay_refused": true, "restart": true, "application_backup_fresh_restore": true, "second_backup_restart": true, "originals_unchanged": true, "raw_restore_reconversion": true, "reservation_reconciliation": false, "predispatch_abort_retained": true, "aborted_replay_refused": true, "new_identity_after_abort": true, "affinity_state_version": 2, "name_or_tag_selectors": false, "native_migration_success": false, "full_legacy_compatible": false})
 }

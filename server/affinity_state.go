@@ -85,15 +85,7 @@ func preflightAffinitySave(ctx context.Context, db *mongo.Database, d *persistDa
 	if old == nil && d.Affinity != nil && !d.restoreLegacyHistory {
 		return errors.New("affinity installation requires explicit fresh-destination restore")
 	}
-	if old != nil {
-		if d.Affinity == nil || !reflect.DeepEqual(old.Originals, d.Affinity.Originals) {
-			return errors.New("immutable affinity originals changed")
-		}
-		if old.Reservation != nil && !reflect.DeepEqual(old.Reservation, d.Affinity.Reservation) {
-			return errors.New("unresolved affinity reservation cannot be cleared or replaced")
-		}
-	}
-	return nil
+	return affinitypolicy.ValidateTransition(old, d.Affinity)
 }
 func saveAffinityState(ctx context.Context, db *mongo.Database, d *persistData) error {
 	if d.Affinity == nil || !isDirty(d, "affinity_state") {
@@ -163,26 +155,25 @@ func (s *Store) affinityDestination(destination string) (string, error) {
 	return found, nil
 }
 
-// Reserve once, before grants or dispatch. There is deliberately no release API:
-// neither terminal migration history nor an HTTP reply proves source absence and
-// destination presence. Recovery retains the barrier and never retries execution.
-func (s *Store) reserveAffinity(q affinitypolicy.Reservation) ([]string, error) {
+// Prepare before grants or dispatch. Only the returned process-local owner can
+// abort a prepared reservation; native outcomes never authorize release.
+func (s *Store) reserveAffinity(q affinitypolicy.Reservation) ([]string, *affinityLease, error) {
 	s.affinityMu.Lock()
 	defer s.affinityMu.Unlock()
 	s.mu.Lock()
 	if s.affinity == nil {
 		s.mu.Unlock()
-		return nil, nil
+		return nil, nil, nil
 	}
 	warnings, err := s.affinityViewLocked(q, time.Now())
 	if err != nil {
 		s.mu.Unlock()
-		return nil, err
+		return nil, nil, err
 	}
 	for _, m := range s.migrations {
 		if m != nil && !isTerminalMigration(m.Status) {
 			s.mu.Unlock()
-			return nil, errors.New("existing migration uncertainty blocks affinity admission")
+			return nil, nil, errors.New("existing migration uncertainty blocks affinity admission")
 		}
 	}
 	if s.commandLog != nil {
@@ -190,18 +181,36 @@ func (s *Store) reserveAffinity(q affinitypolicy.Reservation) ([]string, error) 
 			a := strings.ToUpper(c.Action)
 			if (a == "MIGRATE" || a == "OFFLINE_MIGRATE") && (c.Outcome == "pending" || c.Outcome == "unknown") {
 				s.mu.Unlock()
-				return nil, errors.New("existing command uncertainty blocks affinity admission")
+				return nil, nil, errors.New("existing command uncertainty blocks affinity admission")
 			}
 		}
 	}
 	next := s.affinity.Clone()
+	next.Version = 2
+	next.ReservationPhase = "prepared"
 	next.Reservation = &q
+	// Reserve enough ledger capacity for an abort before admitting the owner.
+	aborted := next.Clone()
+	aborted.Reservation = nil
+	aborted.ReservationPhase = ""
+	if aborted.Aborted == nil {
+		aborted.Aborted = map[string]affinitypolicy.Reservation{}
+	}
+	aborted.Aborted[q.RequestID] = q
+	if err := next.Validate(); err != nil {
+		s.mu.Unlock()
+		return nil, nil, err
+	}
+	if err := aborted.Validate(); err != nil {
+		s.mu.Unlock()
+		return nil, nil, err
+	}
 	s.affinity = next
 	s.mu.Unlock()
 	if err := s.SaveChecked(); err != nil {
-		return nil, errors.New("affinity reservation durability uncertain; dispatch refused and reservation retained")
+		return nil, nil, errors.New("affinity reservation durability uncertain; dispatch refused and reservation retained")
 	}
-	return warnings, nil
+	return warnings, &affinityLease{store: s, reservation: q}, nil
 }
 func (s *Store) recheckAffinity(q affinitypolicy.Reservation) error {
 	s.mu.Lock()
@@ -215,7 +224,73 @@ func (s *Store) recheckAffinity(q affinitypolicy.Reservation) error {
 	saved := s.affinity
 	s.affinity = saved.Clone()
 	s.affinity.Reservation = nil
+	s.affinity.ReservationPhase = ""
 	_, err := s.affinityViewLocked(q, time.Now())
 	s.affinity = saved
 	return err
+}
+
+// A lease is deliberately process-local and never reconstructed from a backup.
+// The sole handler owner may abort before dispatch becomes possible. Recovered
+// prepared reservations conservatively remain blocked.
+type affinityLease struct {
+	store       *Store
+	reservation affinitypolicy.Reservation
+	crossed     bool
+}
+
+func (l *affinityLease) dispatchPossible() error {
+	if l == nil {
+		return nil
+	}
+	// Set before persistence: an uncertain write must never permit deferred abort.
+	l.crossed = true
+	s := l.store
+	s.affinityMu.Lock()
+	defer s.affinityMu.Unlock()
+	s.mu.Lock()
+	if s.affinity == nil || s.affinity.Version != 2 || s.affinity.ReservationPhase != "prepared" || !reflect.DeepEqual(s.affinity.Reservation, &l.reservation) {
+		s.mu.Unlock()
+		return errors.New("affinity preparation ownership lost")
+	}
+	next := s.affinity.Clone()
+	next.ReservationPhase = "dispatch_possible"
+	s.affinity = next
+	s.mu.Unlock()
+	if err := s.SaveChecked(); err != nil {
+		return errors.New("affinity dispatch transition uncertain; no grant or command permitted")
+	}
+	return nil
+}
+func (l *affinityLease) abortPrepared() error {
+	if l == nil || l.crossed {
+		return nil
+	}
+	s := l.store
+	s.affinityMu.Lock()
+	defer s.affinityMu.Unlock()
+	s.mu.Lock()
+	if s.affinity == nil || s.affinity.Version != 2 || s.affinity.ReservationPhase != "prepared" || !reflect.DeepEqual(s.affinity.Reservation, &l.reservation) {
+		s.mu.Unlock()
+		return errors.New("affinity preparation ownership lost")
+	}
+	old := s.affinity
+	next := old.Clone()
+	if next.Aborted == nil {
+		next.Aborted = map[string]affinitypolicy.Reservation{}
+	}
+	next.Aborted[l.reservation.RequestID] = l.reservation
+	next.Reservation = nil
+	next.ReservationPhase = ""
+	s.affinity = next
+	s.mu.Unlock()
+	if err := s.SaveChecked(); err != nil {
+		// The write may have committed. Retain an in-memory barrier and do not
+		// retry execution; recovery can use the durable aborted identity if present.
+		s.mu.Lock()
+		s.affinity = old
+		s.mu.Unlock()
+		return errors.New("affinity abort durability uncertain; admission remains blocked")
+	}
+	return nil
 }

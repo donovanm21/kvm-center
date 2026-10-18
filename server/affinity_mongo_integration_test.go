@@ -27,7 +27,13 @@ func TestMongoIntegrationAffinityRecovery(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got.Affinity, state) {
 		t.Fatal("originals lost", err)
 	}
+	got.Affinity.Version = 2
+	got.Affinity.ReservationPhase = "prepared"
 	got.Affinity.Reservation = &affinitypolicy.Reservation{RequestID: "pending", UUID: legacyfixture.VMID, Name: "one", Source: "source", Destination: "target", DestinationAddress: "192.0.2.3"}
+	if err = b.Save(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	got.Affinity.ReservationPhase = "dispatch_possible"
 	if err = b.Save(ctx, got); err != nil {
 		t.Fatal(err)
 	}
@@ -117,5 +123,58 @@ func TestMongoIntegrationAffinityOnlyBootstrap(t *testing.T) {
 	}
 	if _, err := bootstrapBackendWith(ctx, "configured", second, func() Backend { return target }, bootNoDelay); err == nil {
 		t.Fatal("nonempty affinity restore allowed")
+	}
+}
+
+func TestMongoIntegrationAffinityPreparedAbortLedger(t *testing.T) {
+	ctx := context.Background()
+	b := newMongoIntegrationBackend(t)
+	d := &persistData{Affinity: affinityFixtureState(t)}
+	if err := b.restoreEntitySnapshot(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	d.Affinity.Version = 2
+	q := affinityReservationFor("aborted-first")
+	d.Affinity.Reservation = &q
+	d.Affinity.ReservationPhase = "prepared"
+	if err := b.Save(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	d.Affinity.Reservation = nil
+	d.Affinity.ReservationPhase = ""
+	d.Affinity.Aborted = map[string]affinitypolicy.Reservation{q.RequestID: q}
+	if err := b.Save(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	restored := newMongoIntegrationBackend(t)
+	if err := restored.restoreEntitySnapshot(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	got, err := restored.Load(ctx)
+	if err != nil || !reflect.DeepEqual(got.Affinity, d.Affinity) {
+		t.Fatal("aborted identity lost", err)
+	}
+	removed := *got
+	removed.Affinity = got.Affinity.Clone()
+	removed.Affinity.Aborted = nil
+	if err = restored.Save(ctx, &removed); err == nil {
+		t.Fatal("aborted identity removed")
+	}
+	q2 := q
+	q2.RequestID = "second"
+	got.Affinity.Reservation = &q2
+	got.Affinity.ReservationPhase = "prepared"
+	if err = restored.Save(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	got.Affinity.ReservationPhase = "dispatch_possible"
+	if err = restored.Save(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	got.Affinity.Reservation = nil
+	got.Affinity.ReservationPhase = ""
+	got.Affinity.Aborted[q2.RequestID] = q2
+	if err = restored.Save(ctx, got); err == nil {
+		t.Fatal("dispatched reservation aborted")
 	}
 }

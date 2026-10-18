@@ -27,24 +27,54 @@ Drain filters candidates and repeats admission before dispatch. Unplaceable
 members receive an explicit audit reason. VM creation is refused while this
 bounded policy is active because creation admission is not implemented.
 
-An accepted placement first saves a durable reservation. One unresolved
-reservation blocks all later placement operations, including replay of the same
-request. Persistence errors keep the in-memory barrier and prevent dispatch.
-An HTTP result, timeout, cancellation, migration history entry or telemetry update
-never clears it. There is intentionally **no reservation reconciliation or rule
-editing API yet**. This batch proves one admitted operation and subsequent safe
-refusal, not repeated production migration or successful host drain. Do not use
-an older backup, edit the state, delete the singleton or reimport the original
-rules to bypass an unresolved reservation. Safe reconciliation needs a separate
-reviewed evidence contract before broader activation.
+A new placement upgrades unreserved version 1 state to a version 2 ledger and
+first saves a `prepared` reservation. Only the owning in-process handler receives
+an abort lease. If its final pre-grant check refuses, it can durably replace the
+prepared reservation with an immutable aborted request record. A different
+request ID can then undergo fresh admission; the aborted ID cannot replay.
+Aborted records are never pruned. At 256 records, admission refuses rather than
+losing replay protection. Original raw rule BSON remains unchanged.
 
-JSON snapshots and Mongo fresh-destination restoration retain the originals and
-reservation. Backup feature schema `affinity_state: 1` records the capability.
-Restoring a backup with a reservation remains blocked and does not replay the
-command. Mongo ordinary saves refuse original changes, reservation clearing and
-missing previously reserved state. Concurrent external database writers are not
-supported. Historical backups taken before a reservation do not prove that a
-later placement never happened; post-upgrade-write rollback remains unproven.
+Before any migration grant is exposed or command dispatched, the handler saves
+`dispatch_possible`. After crossing this boundary, HTTP success/refusal/failure,
+timeout, cancellation, migration history and telemetry never release the
+reservation. A failed prepare or dispatch-state write keeps the barrier; an
+uncertain abort write also keeps the running process blocked. If that abort
+actually committed, restart loads its aborted identity and can admit a new ID.
+Recovery never manufactures a process-local abort lease: recovered `prepared`
+reservations remain blocked. Existing version 1 reservations have no dispatch
+phase and remain unresolved. No clearing or reconciliation endpoint is provided.
+
+This is repeated admission after a proven pre-dispatch abort, not repeated native
+migration or successful host drain. There is no release after possible dispatch.
+JSON snapshots and Mongo fresh-destination restore retain originals, phase and
+aborted identities; backup feature schema records `affinity_state: 2` for upgraded
+state. Version 1 backups remain readable without inventing execution evidence.
+Mongo saves reject ledger downgrade, removed/changed aborted records, altered
+originals and any release of a dispatch-possible reservation. Concurrent external
+database writers remain unsupported. Do not use an earlier backup, edit/delete
+the singleton or reimport rules to bypass uncertainty. Historical backups do not
+establish the outcome of later moves; post-upgrade-write rollback is unproven.
+
+## Native acceptance dependency
+
+Releasing a potentially dispatched reservation requires a separate, versioned,
+request-correlated native evidence protocol. It must bind the exact UUID, source,
+destination, immutable command identity and execution generation; establish that
+all relevant workers, libvirt jobs and partial offline transfer/finalization paths
+have stopped; and exclude competing writers through observation and subsequent
+admission. Under that barrier, complete fresh inventories must prove source
+absence and destination presence for success, or unchanged placement after a
+verified abort. A source query error is not absence. A generic `active=false`,
+worker return, exit status, cancellation request or recent telemetry timestamp is
+not such proof. PR82 command closure remains narrower than native quiescence.
+
+Native acceptance must cover live/offline success, pre-effect refusal, partial
+failure/copy, timeout/lost response, cancellation, agent/server restart, stale or
+reordered observations, replay and competing placement. Synthetic injected
+results can test the protocol's state machine, but cannot certify that its native
+producer excludes residual jobs or other writers. No existing protocol supplies
+that proof, so dispatched reservations remain blocked.
 
 Acceptance uses synthetic inventory and intercepted HTTP dispatch only. It does
 not prove actual native migration, source absence, destination presence or native
