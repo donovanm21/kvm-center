@@ -15,7 +15,7 @@ import (
 
 // Entity overlays are private backup data, never public model/API fields.
 // Version 1 supports five startup collections; version 2 adds storage and notes.
-// Neither version establishes full legacy activation.
+// Version 3 adds retirement deny-list records; none establishes full legacy activation.
 type entityOverlay struct {
 	Version     int                          `json:"version"`
 	Collections map[string]map[string][]byte `json:"collections"`
@@ -27,18 +27,21 @@ type entityVMNote struct {
 	Text string `bson:"notes"`
 }
 
-var overlayCollections = []string{mcoHosts, mcoVMs, mcoUsers, mcoGroups, mcoRoles, mcoStorage, mcoVMNotes}
+var overlayCollections = []string{mcoHosts, mcoVMs, mcoUsers, mcoGroups, mcoRoles, mcoStorage, mcoVMNotes, mcoRemovedHosts}
 
 func (o *entityOverlay) validate() error {
 	if o == nil {
 		return nil
 	}
-	if (o.Version != 1 && o.Version != 2) || o.Collections == nil || len(o.Collections) > len(overlayCollections) {
+	if (o.Version < 1 || o.Version > 3) || o.Collections == nil || len(o.Collections) > len(overlayCollections) {
 		return errors.New("unsupported entity overlay schema")
 	}
 	size := 0
 	count := 0
 	for col, records := range o.Collections {
+		if o.Version < 3 && col == mcoRemovedHosts {
+			return errors.New("retirement requires entity overlay version 3")
+		}
 		if o.Version == 1 && (col == mcoStorage || col == mcoVMNotes) {
 			return errors.New("collection requires entity overlay version 2")
 		}
@@ -48,7 +51,15 @@ func (o *entityOverlay) validate() error {
 		if records == nil {
 			return errors.New("null entity overlay collection")
 		}
+		retiredIDs := map[string]bool{}
 		for id, raw := range records {
+			if col == mcoRemovedHosts {
+				low := strings.ToLower(id)
+				if retiredIDs[low] {
+					return errors.New("case-colliding retirement overlay")
+				}
+				retiredIDs[low] = true
+			}
 			size += len(raw)
 			count++
 			if len(raw) > 1<<20 || size > 16<<20 || count > 10000 {
@@ -142,6 +153,12 @@ func overlayCandidates(d *persistData) map[string][]any {
 			Note entityVMNote `bson:",inline"`
 		}{uuid, entityVMNote{uuid, notes}})
 	}
+	out[mcoRemovedHosts] = mapToDocs(d.RemovedHosts, func(v *models.RemovedHost) any {
+		return struct {
+			ID                  string `bson:"_id"`
+			*models.RemovedHost `bson:",inline"`
+		}{v.HostID, v}
+	})
 	return out
 }
 
@@ -157,7 +174,7 @@ func reconcileOverlay(d *persistData, old *entityOverlay) (*entityOverlay, error
 	if err := old.validate(); err != nil {
 		return nil, err
 	}
-	next := &entityOverlay{Version: 2, Collections: map[string]map[string][]byte{}}
+	next := &entityOverlay{Version: 3, Collections: map[string]map[string][]byte{}}
 	for col, docs := range overlayCandidates(d) {
 		typ, aliases, _ := entitySchema(col)
 		records := map[string][]byte{}
@@ -194,7 +211,7 @@ func (b *MongoBackend) captureEntityOverlay(ctx context.Context, d *persistData)
 	if err != nil {
 		return nil, err
 	}
-	o := &entityOverlay{Version: 2, Collections: map[string]map[string][]byte{}}
+	o := &entityOverlay{Version: 3, Collections: map[string]map[string][]byte{}}
 	for col, docs := range overlayCandidates(d) {
 		prepared, err := prepareEntityDocuments(ctx, db, col, docs)
 		if err != nil {
@@ -273,6 +290,11 @@ func validateEntitySnapshot(d *persistData) error {
 				return errors.New("null, duplicate or ambiguous storage identity")
 			}
 			seen[pool.Name] = true
+		}
+	}
+	for key, record := range d.RemovedHosts {
+		if record == nil || record.HostID == "" || strings.TrimSpace(record.HostID) != record.HostID || key != strings.ToLower(record.HostID) {
+			return errors.New("null or mismatched retirement snapshot identity")
 		}
 	}
 	for uuid := range d.VMNotes {

@@ -35,7 +35,7 @@ func TestEntityOverlayJSONRoundTripAndDeletion(t *testing.T) {
 		t.Fatal("typed edit or opaque value lost")
 	}
 	features, err := snapshotFeatureSchemas(raw)
-	if err != nil || features["entity_bson_overlay"] != 2 {
+	if err != nil || features["entity_bson_overlay"] != 3 {
 		t.Fatal("missing overlay requirement")
 	}
 	path := filepath.Join(t.TempDir(), "state.json")
@@ -73,8 +73,8 @@ func TestEntityOverlayRefusals(t *testing.T) {
 	for name, raw := range map[string][]byte{
 		"null":               []byte(`{"entity_bson_overlay":null}`),
 		"case":               []byte(`{"ENTITY_BSON_OVERLAY":null}`),
-		"version":            bytes.Replace(valid, []byte(`"version":2`), []byte(`"version":99`), 1),
-		"duplicate":          bytes.Replace(valid, []byte(`"version":2`), []byte(`"version":2,"version":2`), 1),
+		"version":            bytes.Replace(valid, []byte(`"version":3`), []byte(`"version":99`), 1),
+		"duplicate":          bytes.Replace(valid, []byte(`"version":3`), []byte(`"version":3,"version":3`), 1),
 		"unknown collection": bytes.Replace(valid, []byte(`"collections":{"groups"`), []byte(`"collections":{"unsupported"`), 1),
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -97,7 +97,7 @@ func TestEntityOverlayRefusals(t *testing.T) {
 }
 func TestBSONPreservationDeployedStartupEntities(t *testing.T) {
 	f := legacyfixture.GenerateDeployed()
-	for _, col := range []string{mcoUsers, mcoGroups, mcoRoles, mcoStorage} {
+	for _, col := range []string{mcoUsers, mcoGroups, mcoRoles, mcoStorage, mcoRemovedHosts} {
 		t.Run(col, func(t *testing.T) {
 			typ, aliases, err := entitySchema(col)
 			if err != nil {
@@ -114,6 +114,10 @@ func TestBSONPreservationDeployedStartupEntities(t *testing.T) {
 			}
 			changed := "description"
 			field := "Description"
+			if col == mcoRemovedHosts {
+				changed = "reason"
+				field = "Reason"
+			}
 			if col == mcoStorage {
 				changed = "path"
 				field = "Path"
@@ -242,7 +246,50 @@ func TestOverlayV1ManifestRequirementsRemainV1(t *testing.T) {
 	if err := json.Unmarshal(raw, &upgraded); err != nil {
 		t.Fatal(err)
 	}
-	if upgraded.EntityOverlay.Version != 2 {
+	if upgraded.EntityOverlay.Version != 3 {
 		t.Fatal("validated v1 failed upgrade")
+	}
+}
+
+func TestRetirementOverlayVersionsAndIdentity(t *testing.T) {
+	original := bson.D{{Key: "_id", Value: "Retired.Example"}, {Key: "hostid", Value: "Retired.Example"}, {Key: "reason", Value: "old"}, {Key: "opaque", Value: primitive.NewDecimal128(41, 43)}}
+	raw, _ := bson.Marshal(original)
+	d := &persistData{RemovedHosts: map[string]*models.RemovedHost{"retired.example": {HostID: "Retired.Example", Reason: "edited"}}, EntityOverlay: &entityOverlay{Version: 3, Collections: map[string]map[string][]byte{mcoRemovedHosts: {"Retired.Example": raw}}}}
+	encoded, err := json.Marshal(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back persistData
+	if err := json.Unmarshal(encoded, &back); err != nil {
+		t.Fatal(err)
+	}
+	got := bson.Raw(back.EntityOverlay.Collections[mcoRemovedHosts]["Retired.Example"])
+	if got.Lookup("reason").StringValue() != "edited" || !equalRaw(got.Lookup("opaque"), bson.Raw(raw).Lookup("opaque")) {
+		t.Fatal("retirement values lost")
+	}
+	for _, version := range []int{1, 2} {
+		d.EntityOverlay.Version = version
+		if _, err := json.Marshal(d); err == nil {
+			t.Fatal("old overlay accepted retirement", version)
+		}
+	}
+	d.EntityOverlay.Version = 3
+	d.RemovedHosts = map[string]*models.RemovedHost{"Retired.Example": {HostID: "Retired.Example"}}
+	if _, err := json.Marshal(d); err == nil {
+		t.Fatal("noncanonical lookup key accepted")
+	}
+	d.RemovedHosts = back.RemovedHosts
+	other, _ := bson.Marshal(bson.D{{Key: "_id", Value: "retired.example"}, {Key: "hostid", Value: "retired.example"}})
+	d.EntityOverlay.Collections[mcoRemovedHosts]["retired.example"] = other
+	if _, err := json.Marshal(d); err == nil {
+		t.Fatal("case-colliding retirement overlay accepted")
+	}
+	for _, alias := range []string{"host_id", "HOST_ID", "removed_at", "Removed_By"} {
+		doc := append(bson.D(nil), original...)
+		doc = append(doc, bson.E{Key: alias, Value: "ambiguous"})
+		bad, _ := bson.Marshal(doc)
+		if _, err := entityIdentity(bad, mcoRemovedHosts); err == nil {
+			t.Fatal("retirement alias accepted", alias)
+		}
 	}
 }

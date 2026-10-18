@@ -97,10 +97,10 @@ func main() {
 					reason = "Declared type or BSON spelling differs; mapping must be explicitly validated"
 				}
 			}
-			if n == "Host" || n == "VM" || n == "User" || n == "Group" || n == "Role" || n == "StoragePool" {
+			if n == "Host" || n == "VM" || n == "User" || n == "Group" || n == "Role" || n == "StoragePool" || n == "RemovedHost" {
 				if exists && a.Type == b.Type && a.BSON == b.BSON {
 					status = "known_write_preserved"
-					reason = "Retained-identity Mongo Host/VM/User/Group/Role/StoragePool known-field write preservation tested; operational behavior remains current implementation"
+					reason = "Retained-identity Mongo Host/VM/User/Group/Role/StoragePool/RemovedHost known-field write preservation tested; operational behavior remains current implementation"
 				} else if !exists {
 					status = "opaque_preserved_behavior_blocked"
 					reason = "Raw root field retained through host/VM writes; no interpretation or operational compatibility claimed"

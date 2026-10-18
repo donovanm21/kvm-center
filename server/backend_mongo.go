@@ -285,18 +285,19 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 		return nil, err
 	}
 	pd := &persistData{
-		VMTagState:  tags,
-		HostHistory: history,
-		Hosts:       map[string]*models.Host{},
-		VMs:         map[string][]*models.VM{},
-		Storage:     map[string][]*models.StoragePool{},
-		VMNotes:     map[string]string{},
-		GuestData:   map[string]*guestEntry{},
-		Users:       map[string]*models.User{},
-		Groups:      map[string]*models.Group{},
-		Roles:       map[string]*models.Role{},
-		Sessions:    map[string]*models.Session{},
-		IDPs:        map[string]*models.IdentityProvider{},
+		VMTagState:   tags,
+		HostHistory:  history,
+		Hosts:        map[string]*models.Host{},
+		VMs:          map[string][]*models.VM{},
+		Storage:      map[string][]*models.StoragePool{},
+		VMNotes:      map[string]string{},
+		GuestData:    map[string]*guestEntry{},
+		Users:        map[string]*models.User{},
+		Groups:       map[string]*models.Group{},
+		Roles:        map[string]*models.Role{},
+		Sessions:     map[string]*models.Session{},
+		IDPs:         map[string]*models.IdentityProvider{},
+		RemovedHosts: map[string]*models.RemovedHost{},
 	}
 
 	// Hosts
@@ -333,7 +334,7 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 
 	// Strictly load passive inventory; malformed or duplicate records must not
 	// disappear when the typed snapshot is later saved.
-	for _, col := range []string{mcoStorage, mcoVMNotes} {
+	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts} {
 		cur, err := db.Collection(col).Find(ctx, bson.D{})
 		if err != nil {
 			return nil, err
@@ -346,11 +347,15 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 				cur.Close(ctx)
 				return nil, err
 			}
-			if seen[id] {
+			seenID := id
+			if col == mcoRemovedHosts {
+				seenID = strings.ToLower(id)
+			}
+			if seen[seenID] {
 				cur.Close(ctx)
 				return nil, errors.New("duplicate passive entity identity")
 			}
-			seen[id] = true
+			seen[seenID] = true
 			typ, aliases, _ := entitySchema(col)
 			// Use the typed projection as candidate, validating all original
 			// values without silently interpreting an opaque alias.
@@ -373,6 +378,9 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 			if col == mcoStorage {
 				pool := model.(*models.StoragePool)
 				pd.Storage[pool.HostID] = append(pd.Storage[pool.HostID], pool)
+			} else if col == mcoRemovedHosts {
+				record := model.(*models.RemovedHost)
+				pd.RemovedHosts[strings.ToLower(record.HostID)] = record
 			} else {
 				note := model.(*entityVMNote)
 				pd.VMNotes[note.UUID] = note.Text
@@ -564,14 +572,6 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 		return nil, err
 	}
 
-	// RemovedHosts (v5.54.0) — deny-list keyed by host_id. Survives
-	// restart so a straggling agent that was retired pre-restart
-	// stays rejected without operator intervention.
-	pd.RemovedHosts = map[string]*models.RemovedHost{}
-	if err := loadMapByID[models.RemovedHost](ctx, db, mcoRemovedHosts, pd.RemovedHosts, func(rh *models.RemovedHost) string { return rh.HostID }); err != nil {
-		return nil, err
-	}
-
 	// PendingEnrollments (v5.55.0) — keyed by enrolment ID. Survives
 	// restart so an in-flight approval workflow can resume across
 	// kvm-center bounces without making the operator re-submit.
@@ -694,7 +694,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	}
 	passivePlans := map[string][]any{}
 	candidates := overlayCandidates(d)
-	for _, col := range []string{mcoStorage, mcoVMNotes} {
+	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts} {
 		prepared, err := prepareEntityDocumentsFrom(ctx, db, col, candidates[col], restoreEntityRecords(d, col))
 		if err != nil {
 			return fmt.Errorf("%s preservation preflight: %w", col, err)
@@ -907,17 +907,8 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 		}
 	}
 
-	// RemovedHosts (v5.54.0) — keyed by host_id, replace on every
-	// save to mirror the in-memory deny-list. Cheap (small set).
-	if isDirty(d, "removed_hosts") {
-		if err := replaceMap(ctx, db, mcoRemovedHosts, mapToDocs(d.RemovedHosts, func(rh *models.RemovedHost) any {
-			return struct {
-				ID                  string `bson:"_id"`
-				*models.RemovedHost `bson:",inline"`
-			}{rh.HostID, rh}
-		})); err != nil {
-			return err
-		}
+	if err := replaceMapIfDirty(ctx, db, mcoRemovedHosts, "removed_hosts", d, passivePlans[mcoRemovedHosts]); err != nil {
+		return err
 	}
 
 	// PendingEnrollments (v5.55.0) — keyed by enrolment ID.

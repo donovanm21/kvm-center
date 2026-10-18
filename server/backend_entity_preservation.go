@@ -30,6 +30,8 @@ func entitySchema(collection string) (reflect.Type, map[string]string, error) {
 		value = models.StoragePool{}
 	case mcoVMNotes:
 		value = entityVMNote{}
+	case mcoRemovedHosts:
+		value = models.RemovedHost{}
 	default:
 		return nil, nil, errors.New("unsupported entity collection")
 	}
@@ -84,6 +86,20 @@ func entityIdentity(raw bson.Raw, collection string) (string, error) {
 		if note.UUID != id || id != strings.ToLower(strings.TrimSpace(id)) {
 			return "", errors.New("ambiguous VM note identity")
 		}
+	case mcoRemovedHosts:
+		fields, _ := raw.Elements()
+		for _, field := range fields {
+			if strings.EqualFold(field.Key(), "host_id") || strings.EqualFold(field.Key(), "removed_at") || strings.EqualFold(field.Key(), "removed_by") {
+				return "", errors.New("unsupported retirement BSON alias")
+			}
+		}
+		var retired models.RemovedHost
+		if err := bson.Unmarshal(raw, &retired); err != nil {
+			return "", err
+		}
+		if retired.HostID != id || strings.TrimSpace(id) != id {
+			return "", errors.New("retirement identity mismatch")
+		}
 	case mcoUsers, mcoGroups, mcoRoles:
 		typ, _, err := entitySchema(collection)
 		if err != nil {
@@ -121,7 +137,15 @@ func prepareEntityDocumentsFrom(ctx context.Context, db *mongo.Database, collect
 	}
 	defer cur.Close(ctx)
 	existing := map[string]bson.Raw{}
+	retiredIDs := map[string]string{}
 	for id, raw := range source {
+		if collection == mcoRemovedHosts {
+			low := strings.ToLower(id)
+			if prior, ok := retiredIDs[low]; ok && prior != id {
+				return nil, errors.New("case-colliding retirement identities")
+			}
+			retiredIDs[low] = id
+		}
 		existing[id] = bson.Raw(raw)
 	}
 	for cur.Next(ctx) {
@@ -129,6 +153,13 @@ func prepareEntityDocumentsFrom(ctx context.Context, db *mongo.Database, collect
 		id, err := entityIdentity(raw, collection)
 		if err != nil {
 			return nil, err
+		}
+		if collection == mcoRemovedHosts {
+			low := strings.ToLower(id)
+			if prior, ok := retiredIDs[low]; ok && prior != id {
+				return nil, errors.New("case-colliding retirement identities")
+			}
+			retiredIDs[low] = id
 		}
 		existing[id] = raw
 	}
@@ -145,6 +176,11 @@ func prepareEntityDocumentsFrom(ctx context.Context, db *mongo.Database, collect
 		id, err := entityIdentity(raw, collection)
 		if err != nil {
 			return nil, err
+		}
+		if collection == mcoRemovedHosts {
+			if prior, ok := retiredIDs[strings.ToLower(id)]; ok && prior != id {
+				return nil, errors.New("retirement spelling changed for retained identity")
+			}
 		}
 		if seen[id] {
 			return nil, errors.New("duplicate entity identity")
