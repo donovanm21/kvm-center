@@ -194,3 +194,44 @@ raw history. This closes only the bounded immutable-history application componen
 full legacy fixture activation, unknown semantics, continuation of old aggregation
 and post-upgrade-write rollback remain unproven. UI, native quiescence, deployment
 and release authorization are separate gates.
+
+## Saved-source tag assignment conversion
+
+`-mode legacy-tag-state` exports the existing version-1 `vm_tag_state` value
+from a verified bundle declaring saved source
+`c018b31b74d7d75ed8c49921dc0812bf5999d81f`. Tags were introduced after deployed
+source `6db8c723`; that deployed profile has no `vm_tags` and is not accepted
+as tag-conversion provenance. The source declaration selects a contract, not
+proof of a deployed executable.
+
+Place the exported value under `vm_tag_state` in a separate fresh staging
+snapshot. This conversion accepts only exact `{_id,tags}` BSON records with
+canonical lowercase UUIDs and sorted, unique, nonempty arrays of 1–24 canonical
+ASCII tags. It does not normalize ambiguous originals. Unknown fields, aliases,
+types, duplicate identities, unsupported index semantics and mixed current tag
+state refuse. Only the ordinary `_id` index is admitted. The current limits of
+4,096 assigned identities and 1 MiB encoded state apply by refusal, never trimming.
+The ordinary application's refusal of populated legacy `vm_tags` is unchanged.
+
+Retain the original offline bundle, raw BSON, indexes and provenance indefinitely,
+separately from application backups. **Application backups contain editable tag
+assignments, not original BSON/indexes or conversion provenance.** Recovery must
+retain both artifacts. Restoring a current application backup restores its latest
+assignments, including intentional clearing; it must not reapply the original
+export and resurrect old tags. Raw-original restoration/reconversion remains a
+separate, explicit path and is not rollback of post-conversion edits.
+
+The separate `synthetic-legacy-tags-c018b31-v1` component fixture includes a live
+assignment and an orphan. Native JSON and Mongo acceptance use the built offline
+converter and application to prove reads, inventory filtering, conditional edits,
+new assignments, stale-edit refusal, clearing, restart, backup/fresh restore and
+a second backup/restart. Orphans stay stored and backed up even though per-VM tag
+GET/PUT requires inventory. Original BSON/index hashes remain unchanged through
+active edits and raw restore/reconversion. Full-schema fixtures remain intact;
+existing archive versions 1–8 remain supported.
+
+This proves bounded assignment compatibility. Saved-source `tag:<name>` alarm
+and affinity selectors are not enabled or verified. Saved-source missing-VM
+pruning is not resumed: current tags deliberately survive inventory omission.
+It does not prove full saved-source behavior, full-schema activation, UI/native
+operations or lossless post-upgrade-write rollback. Existing holds remain.

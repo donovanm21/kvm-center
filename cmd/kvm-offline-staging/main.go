@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	mode := flag.String("mode", "verify", "convert, verify, history, legacy-history, or legacy-history-state")
+	mode := flag.String("mode", "verify", "convert, verify, history, legacy-history, legacy-history-state, or legacy-tag-state")
 	source := flag.String("source", "", "synthetic offline snapshot directory (convert only)")
 	output := flag.String("bundle", "", "new staging directory, or existing bundle to verify/read")
 	raw := flag.Bool("raw-history", false, "write original concatenated history BSON to stdout, instead of metadata")
@@ -34,6 +34,12 @@ func main() {
 		m, err = offlinestaging.Verify(*output)
 		if err == nil {
 			fmt.Println(offlinestaging.Summary(m))
+		}
+	case "legacy-tag-state":
+		state, exportErr := offlinestaging.ExportLegacyTagState(*output)
+		err = exportErr
+		if err == nil {
+			err = json.NewEncoder(os.Stdout).Encode(state)
 		}
 	case "legacy-history-state":
 		var state *offlinestaging.LegacyHistoryState

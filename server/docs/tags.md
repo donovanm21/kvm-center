@@ -80,3 +80,14 @@ are tested in Go against a synthetic failing wrapper around JSON persistence.
 Hosted Mongo tests exercise API writes and fresh Store reload after reconnect.
 A browser reload alone does not prove process-restart durability. These tests
 use synthetic inventory and do not validate native hypervisor operations.
+
+## Legacy assignment imports
+
+The offline `legacy-tag-state` exporter supports the bounded canonical tag
+assignment contract from saved source `c018b31`; deployed v5.61.58 predates tags.
+It refuses unsupported or ambiguous originals and exports the existing versioned
+state for a separate staging snapshot. Original raw BSON, indexes and provenance
+must remain in the separately retained immutable offline bundle. Application
+backups preserve editable assignments, including clears and orphans; they do not
+contain those raw originals. See [offline staging](../../docs/offline-staging.md).
+Legacy tag-based rule selectors and missing-inventory pruning are not restored.
