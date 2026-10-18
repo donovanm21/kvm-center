@@ -82,6 +82,9 @@ func hash(s string) string { h := sha256.Sum256([]byte(s)); return hex.EncodeToS
 // Recover never adopts by name; it requires the private journal created before
 // definition. The marker handles uncertain define completion before hash save.
 func Prepare(ctx context.Context, d Driver, id Identity, secret string, save Save) (*Adapter, error) {
+	if err := nativeMutationReadiness(d); err != nil {
+		return nil, err
+	}
 	if err := id.Validate(); err != nil {
 		return nil, err
 	}
@@ -119,6 +122,9 @@ func Prepare(ctx context.Context, d Driver, id Identity, secret string, save Sav
 	return a, nil
 }
 func Recover(d Driver, j Journal, save Save) (*Adapter, error) {
+	if err := nativeMutationReadiness(d); err != nil {
+		return nil, err
+	}
 	if err := j.Identity.Validate(); err != nil {
 		return nil, err
 	}

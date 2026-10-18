@@ -481,3 +481,6 @@ func TestFatalNativeCommandFailsRuntimeEvenAfterSuccessfulCleanup(t *testing.T) 
 		t.Fatal("uncertainty erased")
 	}
 }
+
+// Only this synthetic in-memory driver qualifies the test workflow.
+func (d *fakeDriver) NativeMutationReadiness() error { return nil }

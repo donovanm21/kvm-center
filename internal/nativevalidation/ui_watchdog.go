@@ -447,6 +447,9 @@ func RunUIWatchdog(ctx context.Context, c UIWatchConfig, d Driver, recovery bool
 	return runUIWatchdog(ctx, c, d, recovery, ready, uiBudgets)
 }
 func runUIWatchdog(ctx context.Context, c UIWatchConfig, d Driver, recovery bool, ready func(UIJournal), timing uiTiming) (result error) {
+	if err := nativeMutationReadiness(d); err != nil {
+		return err
+	}
 	root, digest, err := uiConfig(c)
 	if err != nil {
 		return err
