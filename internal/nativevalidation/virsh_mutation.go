@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -87,17 +89,40 @@ func (m *VirshMutation) run(ctx context.Context, v Virsh, cmd *exec.Cmd, input s
 		return errors.New("tracked mutation binding mismatch")
 	}
 	m.mu.Unlock()
+	root, scopeErr := powerScope(v, m.identity)
+	if scopeErr != nil {
+		return scopeErr
+	}
+	lock, scopeErr := powerLock(root)
+	if scopeErr != nil {
+		return scopeErr
+	}
+	defer lock.Close()
+	if _, e := os.Lstat(filepath.Join(root, "scope.json")); !errors.Is(e, os.ErrNotExist) {
+		return errors.New("domain belongs to managed power scope")
+	}
+	// Any managed scope marker, including incomplete/corrupt state, refuses legacy mode.
+	if _, e := os.Lstat(filepath.Join(root, "epoch.json")); !errors.Is(e, os.ErrNotExist) {
+		return errors.New("domain belongs to managed power epochs")
+	}
+	if _, e := os.Lstat(filepath.Join(root, "epoch.tmp")); !errors.Is(e, os.ErrNotExist) {
+		return errors.New("uncertain managed power adoption")
+	}
+
+	if err := bindPowerPredecessor(root, m.journal.ScopeID()); err != nil {
+		return err
+	}
 	raw, _ := json.Marshal(struct {
 		Binary, Socket, Home, Input string
 		Identity                    Identity
 		Args                        []string
 	}{v.Binary, v.Socket, v.Home, input, m.identity, args})
 	req := nativework.Request{ID: m.request, AttemptID: m.attempt, Action: "VIRSH_" + strings.ToUpper(m.action), ParamsSHA256: hash(string(raw)), Target: nativework.Target{UUID: m.identity.UUID, Name: m.identity.Name}}
-	root, err := m.journal.Begin(ctx, req, unresolvedNativeObserver{})
+	rootLease, err := m.journal.Begin(ctx, req, unresolvedNativeObserver{})
 	if err != nil {
 		return err
 	}
-	child, err := m.journal.Child(ctx, root, "virsh-direct-process", unresolvedNativeObserver{})
+	child, err := m.journal.Child(ctx, rootLease, "virsh-direct-process", unresolvedNativeObserver{})
 	if err != nil {
 		return err
 	}
@@ -121,7 +146,7 @@ func (m *VirshMutation) run(ctx context.Context, v Virsh, cmd *exec.Cmd, input s
 	}
 	if ctx.Err() != nil {
 		recordCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		err = errors.Join(err, m.journal.Cancel(recordCtx, root), m.journal.Cancel(recordCtx, child))
+		err = errors.Join(err, m.journal.Cancel(recordCtx, rootLease), m.journal.Cancel(recordCtx, child))
 		cancel()
 	}
 	// Never Complete either lease. Process exit is not native effects cessation.

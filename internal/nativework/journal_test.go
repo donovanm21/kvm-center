@@ -479,3 +479,68 @@ func TestClosedJournalCopyPreservesScopedEvidenceAndReplay(t *testing.T) {
 		t.Fatal("copy reopened sealed target")
 	}
 }
+
+func TestHandoffRetainsWritersAndPermanentSeal(t *testing.T) {
+	j, _ := openTest(t)
+	rev, err := j.Handoff(ctx, target, nil)
+	if err != nil || rev != 0 {
+		t.Fatal(rev, err)
+	}
+	l, o := begin(t, j, "pending")
+	if _, err = j.Handoff(ctx, target, &rev); !errors.Is(err, ErrBlocked) {
+		t.Fatal("pending writer handoff", err)
+	}
+	stop(t, j, l, o)
+	rev, err = j.Handoff(ctx, target, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := j.Handoff(ctx, target, &rev)
+	if err != nil || sealed != rev+1 {
+		t.Fatal(sealed, err)
+	}
+	if _, err = j.Handoff(ctx, target, &rev); err != nil {
+		t.Fatal("intent retry failed", err)
+	}
+	if _, err = j.Handoff(ctx, target, nil); !errors.Is(err, ErrBlocked) {
+		t.Fatal("unrelated adoption reused seal", err)
+	}
+	wrong := rev + 2
+	if _, err = j.Handoff(ctx, target, &wrong); !errors.Is(err, ErrBlocked) {
+		t.Fatal("wrong intent accepted", err)
+	}
+	if _, err = j.Begin(ctx, request("new"), &syntheticObserver{}); !errors.Is(err, ErrBlocked) {
+		t.Fatal("seal reopened", err)
+	}
+	e := evidence(t, j)
+	if e.RegisteredWriters != 1 || e.RegisteredWritersUnresolved != 0 || !e.TargetAdmissionClosed {
+		t.Fatal(e)
+	}
+}
+func TestHandoffAcknowledgementLossUsesExactRetainedRevision(t *testing.T) {
+	j, path := openTest(t)
+	rev, err := j.Handoff(ctx, target, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := j.ScopeID()
+	j.afterCommit = func() error { return errors.New("lost seal acknowledgement") }
+	if _, err = j.Handoff(ctx, target, &rev); !errors.Is(err, ErrUncertain) {
+		t.Fatal(err)
+	}
+	j.Close()
+	next, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer next.Close()
+	if next.ScopeID() != scope {
+		t.Fatal("scope changed on restart")
+	}
+	if _, err = next.Handoff(ctx, target, nil); !errors.Is(err, ErrBlocked) {
+		t.Fatal("lost acknowledgement reset", err)
+	}
+	if sealed, err := next.Handoff(ctx, target, &rev); err != nil || sealed != rev+1 {
+		t.Fatal(sealed, err)
+	}
+}

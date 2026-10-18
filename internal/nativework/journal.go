@@ -6,10 +6,12 @@ package nativework
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -64,6 +66,7 @@ func (l *Lease) Identity() Identity {
 }
 
 type Journal struct {
+	scope             string
 	db                *sql.DB
 	session           string
 	mu                sync.Mutex
@@ -102,7 +105,19 @@ func Open(path string) (*Journal, error) {
 	if path == "" || strings.ContainsAny(path, "?\x00") || path == ":memory:" || strings.HasPrefix(path, "file:") {
 		return nil, errors.New("dedicated filesystem journal path required")
 	}
-	db, err := sql.Open("sqlite", path)
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(absolute))
+	if err != nil {
+		return nil, err
+	}
+	absolute = filepath.Join(parent, filepath.Base(absolute))
+	if resolved, resolveErr := filepath.EvalSymlinks(absolute); resolveErr == nil {
+		absolute = resolved
+	}
+	db, err := sql.Open("sqlite", absolute)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +165,7 @@ func Open(path string) (*Journal, error) {
 	if _, err = rand.Read(token); err != nil {
 		return fail(err)
 	}
-	return &Journal{db: db, session: hex.EncodeToString(token)}, nil
+	return &Journal{scope: absolute, db: db, session: hex.EncodeToString(token)}, nil
 }
 func (j *Journal) usable() error {
 	j.mu.Lock()
@@ -492,4 +507,64 @@ func (j *Journal) Evidence(ctx context.Context, t Target) (Evidence, error) {
 	e.RegisteredWriterDrainVerified = closed && e.RegisteredWriters > 0 && e.RegisteredWritersUnresolved == 0
 	// NativeQuiescenceVerified and WriterCoverageComplete deliberately remain false.
 	return e, nil
+}
+
+// ScopeID binds an application handoff to this canonical journal location.
+// Moving/copying a journal is not a new admission authority.
+func (j *Journal) ScopeID() string {
+	sum := sha256.Sum256([]byte(j.scope))
+	return hex.EncodeToString(sum[:])
+}
+
+// Handoff prepares (expected=nil) or seals (expected!=nil) a drained target.
+// The successor must durably record the returned revision before sealing. This
+// never clears writers or reopens a seal. A matching seal is idempotent only for
+// a caller that holds that exact retained handoff intent and application lock.
+func (j *Journal) Handoff(ctx context.Context, t Target, expected *int64) (int64, error) {
+	if expected != nil && (*expected < 0 || *expected == 1<<63-1) {
+		return 0, ErrBlocked
+	}
+	tx, err := j.write(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	closed, err := targetRow(ctx, tx, t, true)
+	if err != nil {
+		return 0, err
+	}
+	var pending int
+	var revision int64
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM native_writers w JOIN native_requests r ON r.id=w.request WHERE r.target=? AND w.stopped=0`, t.UUID).Scan(&pending); err != nil {
+		return 0, err
+	}
+	if err = tx.QueryRowContext(ctx, `SELECT revision FROM native_targets WHERE uuid=?`, t.UUID).Scan(&revision); err != nil {
+		return 0, err
+	}
+	if pending != 0 {
+		return 0, ErrBlocked
+	}
+	if expected == nil {
+		if closed {
+			return 0, ErrBlocked
+		}
+	} else {
+		if closed {
+			if revision != *expected+1 {
+				return 0, ErrBlocked
+			}
+		} else {
+			if revision != *expected {
+				return 0, ErrBlocked
+			}
+			if _, err = tx.ExecContext(ctx, `UPDATE native_targets SET closed=1,revision=revision+1 WHERE uuid=?`, t.UUID); err != nil {
+				return 0, err
+			}
+			revision++
+		}
+	}
+	if err = j.commit(tx); err != nil {
+		return 0, err
+	}
+	return revision, nil
 }

@@ -22,6 +22,7 @@ import (
 type Virsh struct {
 	Binary, Socket, Home string
 	mutation             *VirshMutation
+	power                *powerInvocation
 }
 
 func (v Virsh) Validate() error {
@@ -77,10 +78,14 @@ func (v Virsh) runRaw(ctx context.Context, input string, args ...string) (string
 	var err error
 	switch args[0] {
 	case "define", "start", "destroy", "undefine":
-		if v.mutation == nil {
+		if v.power != nil {
+			err = v.power.run(v, cmd, input, args)
+		} else if v.mutation == nil {
 			return "", ErrMutationTrackingRequired
 		}
-		err = v.mutation.run(ctx, v, cmd, input, args)
+		if v.power == nil {
+			err = v.mutation.run(ctx, v, cmd, input, args)
+		}
 	default:
 		err = cmd.Run()
 	}
