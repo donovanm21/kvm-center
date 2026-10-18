@@ -122,3 +122,40 @@ companion backup, prove runtime preservation on separate synthetic copies, pin
 both executable identities, and obtain explicit approval for a bounded write-free
 transition and fresh-database rollback. Never start an old binary on converted
 new writes. Originals and history must never be expired, pruned or discarded.
+
+## Pinned legacy aggregate reader (synthetic only)
+
+`kvm-offline-staging -mode legacy-history -bundle /tmp/new-stage` reads the
+`perf_history` writer contract at source `6db8c7237bd7cf507532391c0dc0c2e36a70f696`
+(v5.61.58). The verified snapshot must declare that exact source build. That
+manifest declaration selects an interpretation; it is not deployed executable
+provenance. The versioned output is `legacy-history-6db8c723-reader-v1` and
+includes each original record's SHA-256. Explicit use prints host identities
+and historical values; protect the output as source data.
+
+The three tiers are 5 minutes / 576 points, 1 hour / 720 points and 1 day / 365
+points. Timestamps are UTC bucket starts in Unix seconds. CPU, memory and storage
+averages and peaks are stored percentages. Each tier was folded independently
+from raw samples. `n` is its raw sample count; `vms` is the last raw sample's VM
+count. Stored floating-point values are returned unchanged, including rounding
+that can put an average slightly above its peak. The reader does not compute
+rollups or infer missing samples, coverage, downtime or cross-tier consistency.
+Retention is by point count, not elapsed wall time: old valid points are read
+without expiry, trimming or deletion.
+
+This is a bounded reader: it accepts exact fields and BSON types, integer counts,
+finite percentages in [0,100], positive sample counts, nonnegative VM counts,
+strictly increasing aligned timestamps from 2000 onward and the pinned tier
+size limits. These limits are admission restrictions, not a claim that the old
+writer enforced every one. Unknown fields/tiers, aliases, malformed arrays,
+null tier arrays, mixed current history, other source contracts and out-of-bound
+values refuse before any semantic output. Raw `history` reading and the original
+bytes remain available after semantic refusal. Empty or absent tiers represent
+no stored points; no missing tier is synthesized.
+
+The separate `synthetic-legacy-history-reader-v1` fixture exercises averages,
+peaks and sample counts across all tiers, process reopen and fresh offline
+restore/reconversion. The full deployed fixture remains intact and refuses its
+unknown semantics. This does not admit legacy history into the application's
+current history store, prove app history read/write/restart, or establish old
+writer rollback. Existing archive versions and full-schema refusal gates remain.

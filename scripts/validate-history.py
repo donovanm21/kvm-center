@@ -63,7 +63,7 @@ def measurements(text):
         for line in output.splitlines():
             if 'HISTORY_EVIDENCE ' in line:
                 result.append(json.loads(line.split('HISTORY_EVIDENCE ', 1)[1]))
-    expected = {(kind, backend) for kind in ('cap_costs', 'artifact_cap', 'artifact_lifecycle') for backend in ('json', 'mongo')} | {('legacy_refusal', 'mongo'), ('deployed_legacy_refusal', 'mongo'), ('entity_opaque_lifecycle', 'mongo'), ('overlay_v1_archive_restore', 'mongo'), ('overlay_v2_archive_restore', 'mongo'), ('overlay_v3_archive_restore', 'mongo'), ('overlay_v4_archive_restore', 'mongo'), ('overlay_v5_archive_restore', 'mongo'), ('overlay_v6_archive_restore', 'mongo'), ('overlay_v7_archive_restore', 'mongo'), ('overlay_v8_archive_restore', 'mongo'), ('remaining_alarm_metrics_lifecycle', 'mongo'), ('resource_alarm_lifecycle', 'mongo'), ('session_lifecycle', 'mongo'), ('token_lifecycle', 'mongo'), ('audit_lifecycle', 'mongo'), ('guest_report_lifecycle', 'mongo'), ('alarm_namespace_refusal', 'mongo'), ('affinity_namespace_refusal', 'mongo'), ('unknown_namespace_refusal', 'mongo'), ('cached_namespace_backup_refusal', 'mongo')}
+    expected = {(kind, backend) for kind in ('cap_costs', 'artifact_cap', 'artifact_lifecycle') for backend in ('json', 'mongo')} | {('legacy_history_reader', 'offline'), ('legacy_refusal', 'mongo'), ('deployed_legacy_refusal', 'mongo'), ('entity_opaque_lifecycle', 'mongo'), ('overlay_v1_archive_restore', 'mongo'), ('overlay_v2_archive_restore', 'mongo'), ('overlay_v3_archive_restore', 'mongo'), ('overlay_v4_archive_restore', 'mongo'), ('overlay_v5_archive_restore', 'mongo'), ('overlay_v6_archive_restore', 'mongo'), ('overlay_v7_archive_restore', 'mongo'), ('overlay_v8_archive_restore', 'mongo'), ('remaining_alarm_metrics_lifecycle', 'mongo'), ('resource_alarm_lifecycle', 'mongo'), ('session_lifecycle', 'mongo'), ('token_lifecycle', 'mongo'), ('audit_lifecycle', 'mongo'), ('guest_report_lifecycle', 'mongo'), ('alarm_namespace_refusal', 'mongo'), ('affinity_namespace_refusal', 'mongo'), ('unknown_namespace_refusal', 'mongo'), ('cached_namespace_backup_refusal', 'mongo')}
     keys = [(r['kind'], r['data']['backend']) for r in result]
     if set(keys) != expected or len(keys) != len(expected):
         raise ValueError('Missing or duplicate history acceptance measurements')
@@ -133,6 +133,9 @@ def main():
             run(['bash', 'scripts/build-release.sh', str(temp / 'artifacts')], temp / 'build.log', env)
             binary = temp / 'artifacts/kvm-center-server-linux-amd64'
             report['binary_sha256'] = hashlib.sha256(binary.read_bytes()).hexdigest()
+            offline = temp / 'kvm-offline-staging'
+            run(['go', 'build', '-mod=readonly', '-trimpath', '-o', str(offline), './cmd/kvm-offline-staging'], temp / 'offline-build.log', env)
+            report['offline_binary_sha256'] = hashlib.sha256(offline.read_bytes()).hexdigest()
             report['toolchain'] = subprocess.check_output(['go', 'version'], text=True).strip()
             report['release_script_matrix'] = (temp / 'artifacts/SHA256SUMS').read_text().splitlines()
             prior = temp / 'prior'
@@ -146,7 +149,7 @@ def main():
                      f'-ldflags=-s -w -X main.versionRaw={version} -X main.GitSHA={PRIOR}',
                      '-o', str(old), './server'], temp / 'old-build.log', dict(env, CGO_ENABLED='0'), prior)
                 report['prior_binary_sha256'] = hashlib.sha256(old.read_bytes()).hexdigest()
-                testenv = dict(env, KVMC_HISTORY_BINARY=str(binary), KVMC_HISTORY_OLD_BINARY=str(old), KVMC_HISTORY_SHA=report['source']['revision'])
+                testenv = dict(env, KVMC_OFFLINE_BINARY=str(offline), KVMC_HISTORY_BINARY=str(binary), KVMC_HISTORY_OLD_BINARY=str(old), KVMC_HISTORY_SHA=report['source']['revision'])
                 log = temp / 'acceptance.jsonl'
                 try:
                     # Native alarm acceptance exercises the deployed 30-second worker cadence.
