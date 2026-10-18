@@ -19,7 +19,10 @@ import (
 
 // Virsh is restricted to an existing local Unix socket and an explicit binary.
 // It never uses default URI, SSH, credential helpers or the caller's environment.
-type Virsh struct{ Binary, Socket, Home string }
+type Virsh struct {
+	Binary, Socket, Home string
+	mutation             *VirshMutation
+}
 
 func (v Virsh) Validate() error {
 	for _, p := range []string{v.Binary, v.Socket, v.Home} {
@@ -71,7 +74,16 @@ func (v Virsh) runRaw(ctx context.Context, input string, args ...string) (string
 	var output, diagnostic limitedOutput
 	cmd.Stdout = &output
 	cmd.Stderr = &diagnostic
-	err := cmd.Run()
+	var err error
+	switch args[0] {
+	case "define", "start", "destroy", "undefine":
+		if v.mutation == nil {
+			return "", ErrMutationTrackingRequired
+		}
+		err = v.mutation.run(ctx, v, cmd, input, args)
+	default:
+		err = cmd.Run()
+	}
 	if output.exceeded || diagnostic.exceeded {
 		return "", errors.New("virsh output exceeded limit")
 	}

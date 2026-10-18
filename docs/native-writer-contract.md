@@ -112,3 +112,52 @@ Until these producer, exclusion and consumer gates pass, issues #65/#81 and the
 UI validation execution hold remain open. Guest lifecycle/routing and the complete
 legacy compatibility inventory remain tracked in #65; this batch changes none of
 those semantics. Public release and deployment remain on hold.
+
+## Second slice: tracked direct Virsh mutation, daemon effects unresolved
+
+`TrackVirshMutation` now binds one exact Define/Start/Destroy/Undefine invocation
+in the real `Virsh.runRaw` execution path. Untracked mutations refuse before
+spawn. The tracker binds the explicit executable/socket/private environment,
+owned fixture identity, request/attempt, action and argument/input digest. Define
+accepts only the canonical fixture XML for that identity. The capability is
+consumed before validation or registration uncertainty and never reset.
+
+A daemon-effect root and direct-process child are durably registered before
+`exec.Cmd.Start`. Only the retained exact command handle is waited, once.
+`ProcessReceipt.direct_process_reaped` is separate diagnostic evidence of that
+handle's reaping after `Wait`, including bounded pipe handling. It is not a stop
+observation, does not survive restart, and cannot complete either journal writer.
+No PID disappearance, cancellation, successful exit, error output, missing handle,
+late response or restart establishes cessation of native effects. A subprocess
+may have descendants or the daemon may continue work after its caller exits.
+Both writers therefore remain unresolved, permanently blocking another mutation
+of that target through this journal. Failed registration never spawns; failed
+start still retains the conservative registrations. Cancellation intent is saved
+when the invocation returns, where persistence remains available; it never clears
+unknown work. If persistence fails, the retained unknown writers still block.
+
+The exact direct-process receipt is the only observation supplied by this slice.
+There is still **no qualified daemon-side cessation producer**. This tracking API
+is not a supported operational workflow: it cannot safely run automatic cleanup.
+Adapter Prepare/Recover and watchdog run/recovery refuse a Virsh driver before
+activation, even if a tracker was supplied. This also prevents the earlier opt-in
+native acceptance harness from progressing to fixture effects. Missing or hidden readiness capabilities also refuse. Synthetic drivers
+explicitly qualify only within isolated test code. Other agent routes and out-of-band writers
+are not covered, and native quiescence/complete writer coverage remain false.
+
+### Lab handoff status
+
+**Native acceptance is not ready for execution.** No host action is authorized by
+this change. The executable synthetic acceptance uses real local helper processes
+through the same execution seam to test registration, mismatches, simultaneous
+reuse, cancellation, delayed pipe completion, failed starts/exits, lost responses,
+and active-owner restart. It calls no libvirt service.
+
+Before a native lab handoff can be marked READY, the next review must qualify a
+request/attempt/generation-bound daemon operation observer, account for descendants
+and every competing route, and provide a safe cleanup strategy under that barrier.
+In particular, successful `virsh` exit alone must never be mapped to `Complete`.
+The lab matrix above remains mandatory; current production paths, affinity
+reconciliation, UI execution, deployment and release remain on hold. Retain the
+journal and raw originals indefinitely; deleting or replacing it cannot authorize
+a retry or cleanup.

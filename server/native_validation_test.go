@@ -128,3 +128,6 @@ func exerciseValidationAPI(t *testing.T, h *integrationHarness, agentURL string,
 		t.Fatal("non-owned mutation admitted")
 	}
 }
+
+// Synthetic API driver has no native processes or daemon effects.
+func (d *validationAPIDriver) NativeMutationReadiness() error { return nil }

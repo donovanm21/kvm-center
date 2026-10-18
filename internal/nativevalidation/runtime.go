@@ -79,6 +79,9 @@ func saveJournal(root string, j Journal) error {
 	return dir.Sync()
 }
 func Run(ctx context.Context, c Config, d Driver, ready func(string)) (result error) {
+	if err := nativeMutationReadiness(d); err != nil {
+		return err
+	}
 	if c.CleanupStopped && !c.CleanupOnly {
 		return errors.New("stopped-only recovery requires cleanup mode")
 	}
