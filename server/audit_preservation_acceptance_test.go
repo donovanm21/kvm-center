@@ -87,7 +87,7 @@ func TestHistoryAcceptanceAuditLifecycle(t *testing.T) {
 	p.stop(t, false)
 	restoreRoot := t.TempDir()
 	snapshot := unpackAcceptance(t, archive, restoreRoot, 0)
-	if snapshot.EntityOverlay.Version != 7 || len(snapshot.EntityOverlay.Collections[mcoAuditEvents]) < 2 {
+	if snapshot.EntityOverlay.Version != 8 || len(snapshot.EntityOverlay.Collections[mcoAuditEvents]) < 2 {
 		t.Fatal("audit backup incomplete")
 	}
 	b = newMongoIntegrationBackend(t)

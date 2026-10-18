@@ -20,7 +20,8 @@ func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
 
 // persistData is the on-disk JSON structure.
 type persistData struct {
-	EntityOverlay  *entityOverlay `json:"entity_bson_overlay,omitempty"`
+	Alarms         []*models.Alarm `json:"alarms,omitempty"`
+	EntityOverlay  *entityOverlay  `json:"entity_bson_overlay,omitempty"`
 	restoreOverlay *entityOverlay
 
 	HostHistory      *historyState                       `json:"host_history_state,omitempty"`
@@ -91,6 +92,8 @@ const guestToolsFreshness = 5 * time.Minute
 
 // Store is the in-memory data store backed by a JSON file.
 type Store struct {
+	alarms         []*models.Alarm
+	alarmStates    map[alarmTarget]*alarmState
 	history        *historyState // guarded by mu; never shared across Stores
 	historyEnabled bool          // collection only; persisted state is always preserved
 	vmTags         map[string][]string

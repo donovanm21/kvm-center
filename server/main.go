@@ -208,6 +208,7 @@ func main() {
 	store.startAuditShipper(serverCtx)
 	store.startSnapshotScheduler(serverCtx)
 	store.startNotificationDispatcher(serverCtx)
+	store.startResourceAlarmWorker(serverCtx)
 	store.startBackupScheduler(serverCtx)
 	store.startDiscordGatewayWorkers(serverCtx)
 	// v5.55.0 — enrolment-approval sweeper expires pending CSRs
@@ -341,6 +342,8 @@ func main() {
 	mux.Handle("/api/snapshot-policies/", requirePerm(store, "vm.snapshot", http.HandlerFunc(handleSnapshotPolicy(store))))
 	mux.Handle("/api/settings/audit-shipping", requirePerm(store, "user.manage", http.HandlerFunc(auditShippingRouter(store))))
 	mux.Handle("/api/settings/audit-shipping/test", requirePerm(store, "user.manage", http.HandlerFunc(handleAuditShippingTest(store))))
+	mux.Handle("/api/alarms", requirePerm(store, "user.manage", handleResourceAlarms(store)))
+	mux.Handle("/api/alarms/metrics", requirePerm(store, "user.manage", handleResourceAlarmMetrics()))
 	mux.Handle("/api/settings/notifications", requirePerm(store, "user.manage", http.HandlerFunc(handleNotifications(store))))
 	mux.Handle("/api/settings/notifications/test", requirePerm(store, "user.manage", http.HandlerFunc(handleNotificationTest(store))))
 	// Discord Gateway settings hold a bearer-credential-grade token and

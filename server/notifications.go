@@ -45,6 +45,7 @@ const (
 // AllNotifyTypes drives the UI checkbox list. Add new constants here
 // when wiring new triggers.
 var AllNotifyTypes = []string{
+	"alarm.fired", "alarm.cleared",
 	NotifyVMCrashed,
 	NotifyVMRecovered,
 	NotifyHostOffline,

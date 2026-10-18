@@ -17,7 +17,7 @@ import (
 )
 
 func TestHistoryAcceptanceAlarmNamespaceRefusal(t *testing.T) {
-	testLegacyFixtureRefusal(t, unsupportedNamespaceFixture(t, "alarms"), "alarm_namespace_refusal", `unsupported Mongo collection "alarms"`)
+	testLegacyFixtureRefusal(t, unsupportedNamespaceFixture(t, "alarms"), "alarm_namespace_refusal", `unsupported alarms`)
 }
 func TestHistoryAcceptanceAffinityNamespaceRefusal(t *testing.T) {
 	testLegacyFixtureRefusal(t, unsupportedNamespaceFixture(t, "affinity_rules"), "affinity_namespace_refusal", `unsupported Mongo collection "affinity_rules"`)
@@ -47,7 +47,7 @@ func TestHistoryAcceptanceCachedBackupNamespaceRefusal(t *testing.T) {
 	}
 	for i := 0; i < 2; i++ {
 		response := p.request(t, "GET", "/api/admin/backup", nil, 500)
-		if !bytes.Contains(response, []byte("unsupported Mongo collection")) || bytes.HasPrefix(response, []byte{0x1f, 0x8b}) {
+		if !bytes.Contains(response, []byte("unsupported alarms")) || bytes.HasPrefix(response, []byte{0x1f, 0x8b}) {
 			t.Fatal("unsupported cached backup returned archive or wrong refusal")
 		}
 	}
@@ -68,7 +68,7 @@ func TestHistoryAcceptanceCachedBackupNamespaceRefusal(t *testing.T) {
 	}
 	p.client.CloseIdleConnections()
 	log, err := os.ReadFile(filepath.Join(root, "process.log"))
-	if err != nil || !bytes.Contains(log, []byte("shutdown status=incomplete backup_consistent=false error=final persistence:")) || !bytes.Contains(log, []byte(`unsupported Mongo collection "alarms"`)) {
+	if err != nil || !bytes.Contains(log, []byte("shutdown status=incomplete backup_consistent=false error=final persistence:")) || !bytes.Contains(log, []byte(`unsupported alarms`)) {
 		t.Fatal("shutdown did not report refused final checkpoint")
 	}
 	var got bson.Raw

@@ -49,5 +49,5 @@ var supportedMongoCollections = map[string]bool{
 	mcoSessions: true, mcoIDPs: true, mcoFeatures: true, mcoServerMeta: true, mcoAuditEvents: true,
 	mcoSnapshotPolicies: true, mcoNotifications: true, mcoMetrics: true, mcoAuditShipping: true,
 	mcoBackupSchedule: true, mcoDiscordGateway: true, mcoRemovedHosts: true, mcoPendingEnrol: true,
-	mcoAPITokens: true, mcoHypervisorCerts: true, mcoHostHistory: true, mcoVMTagState: true,
+	mcoAlarms: true, mcoAPITokens: true, mcoHypervisorCerts: true, mcoHostHistory: true, mcoVMTagState: true,
 }

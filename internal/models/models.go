@@ -1192,3 +1192,19 @@ type CommandLogEntry struct {
 	// haven't streamed any progress.
 	LastProgress *CommandProgressFrame `json:"last_progress,omitempty" bson:"last_progress,omitempty"`
 }
+
+// Alarm is the deployed definition. FiringOn is derived runtime status only.
+type Alarm struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Enabled    bool     `json:"enabled"`
+	Metric     string   `json:"metric"`
+	Threshold  float64  `json:"threshold"`
+	ForSeconds int      `json:"for_seconds"`
+	Severity   string   `json:"severity"`
+	Hosts      []string `json:"hosts,omitempty"`
+	VMs        []string `json:"vms,omitempty"`
+	CreatedAt  string   `json:"created_at,omitempty"`
+	UpdatedAt  string   `json:"updated_at,omitempty"`
+	FiringOn   []string `json:"firing_on,omitempty" bson:"-"`
+}

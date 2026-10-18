@@ -36,6 +36,9 @@ type persistWire struct {
 }
 
 func (d persistData) MarshalJSON() ([]byte, error) {
+	if err := validateAlarmSnapshot(d.Alarms); err != nil {
+		return nil, err
+	}
 	if err := validateSessionSnapshot(d.Sessions); err != nil {
 		return nil, err
 	}
@@ -147,6 +150,9 @@ func (d *persistData) UnmarshalJSON(raw []byte) error {
 		return err
 	}
 	sortAudit(decoded.Audit)
+	if err := validateAlarmSnapshot(decoded.Alarms); err != nil {
+		return err
+	}
 	if err := validateSessionSnapshot(decoded.Sessions); err != nil {
 		return err
 	}
