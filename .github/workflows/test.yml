@@ -50,7 +50,7 @@ jobs:
         run: go test ./...
 
       - name: Synthetic native-adapter race checks
-        run: go test -race ./internal/nativevalidation
+        run: go test -race ./internal/nativevalidation ./internal/nativework
 
       - name: Compile opt-in native acceptance without executing
         run: go test -c -tags=nativevalidation -o "$RUNNER_TEMP/native-validation.test" ./server
