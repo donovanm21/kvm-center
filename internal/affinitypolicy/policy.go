@@ -257,7 +257,8 @@ func (s *State) UnmarshalJSON(raw []byte) error {
 	if !utf8.Valid(raw) {
 		return errors.New("invalid affinity JSON UTF-8")
 	}
-	if len(raw) > 2*MaxBytes {
+	// Allow bounded formatting overhead; Rules applies the compact semantic limit.
+	if len(raw) > 4*MaxBytes {
 		return errors.New("affinity state too large")
 	}
 	if err := uniqueJSON(raw); err != nil {

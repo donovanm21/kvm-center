@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"go.mongodb.org/mongo-driver/bson"
 	"kvm-center/internal/affinitypolicy"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -175,5 +179,76 @@ func TestAffinityDrainPreparedRefusal(t *testing.T) {
 	}
 	if calls.Load() != 0 || s.affinity.Reservation != nil || len(s.affinity.Aborted) != 1 || len(s.GetMigrations()) != 0 {
 		t.Fatal("drain refusal failed to abort before grants/dispatch")
+	}
+}
+
+func TestAffinityIndentedBackendBoundaryRoundTrip(t *testing.T) {
+	state := affinityFixtureState(t)
+	state.Version = 2
+	state.Aborted = map[string]affinitypolicy.Reservation{}
+	escaped := "x" + strings.Repeat("\x01", 250) + "x"
+	for i := 0; i < 128; i++ {
+		q := affinityReservationFor(fmt.Sprintf("%03d", i) + escaped)
+		q.Name = escaped
+		q.Source = escaped
+		q.Destination = "z" + escaped
+		state.Aborted[q.RequestID] = q
+	}
+	var key string
+	for k := range state.Originals {
+		key = k
+		break
+	}
+	var original bson.D
+	if err := bson.Unmarshal(state.Originals[key], &original); err != nil {
+		t.Fatal(err)
+	}
+	setPadding := func(n int) {
+		found := false
+		for i := range original {
+			if original[i].Key == "createdat" {
+				original[i].Value = strings.Repeat("x", n)
+				found = true
+			}
+		}
+		if !found {
+			original = append(original, bson.E{Key: "createdat", Value: strings.Repeat("x", n)})
+		}
+		state.Originals[key], _ = bson.Marshal(original)
+	}
+	// Search the semantic boundary, leaving room only for compact JSON, not indentation.
+	lo, hi := 0, affinitypolicy.MaxBytes-10000
+	for lo < hi {
+		mid := (lo + hi + 1) / 2
+		setPadding(mid)
+		if state.Validate() == nil {
+			lo = mid
+		} else {
+			hi = mid - 1
+		}
+	}
+	setPadding(lo)
+	compact, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pretty, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(compact) > 2*affinitypolicy.MaxBytes || len(pretty) <= 2*affinitypolicy.MaxBytes {
+		t.Fatalf("boundary fixture ineffective compact=%d pretty=%d", len(compact), len(pretty))
+	}
+	backend := NewJSONBackend(filepath.Join(t.TempDir(), "boundary.json"))
+	d := &persistData{Affinity: state}
+	if err = backend.Save(context.Background(), d); err != nil {
+		t.Fatal(err)
+	}
+	got, err := backend.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.Affinity, state) {
+		t.Fatal("formatted backend changed ledger")
 	}
 }

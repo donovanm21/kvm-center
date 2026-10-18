@@ -31,6 +31,13 @@ func TestReconciliationTransitions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	empty := old.Clone()
+	empty.Version = 2
+	rawEmpty, _ := json.Marshal(empty)
+	var parsed State
+	if json.Unmarshal(append(rawEmpty[:len(rawEmpty)-1], []byte(`,"reservation_phase":null}`)...), &parsed) == nil {
+		t.Fatal("null reservation phase accepted")
+	}
 	legacy := old.Clone()
 	legacy.Reservation = &q
 	for _, pair := range [][2]*State{{old, dispatched}, {dispatched, aborted}, {dispatched, prepared}, {aborted, old}, {aborted, prepared}, {legacy, prepared}, {legacy, old}, {prepared, old}} {
