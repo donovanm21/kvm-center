@@ -35,7 +35,7 @@ func TestEntityOverlayJSONRoundTripAndDeletion(t *testing.T) {
 		t.Fatal("typed edit or opaque value lost")
 	}
 	features, err := snapshotFeatureSchemas(raw)
-	if err != nil || features["entity_bson_overlay"] != 6 {
+	if err != nil || features["entity_bson_overlay"] != 7 {
 		t.Fatal("missing overlay requirement")
 	}
 	path := filepath.Join(t.TempDir(), "state.json")
@@ -73,8 +73,8 @@ func TestEntityOverlayRefusals(t *testing.T) {
 	for name, raw := range map[string][]byte{
 		"null":               []byte(`{"entity_bson_overlay":null}`),
 		"case":               []byte(`{"ENTITY_BSON_OVERLAY":null}`),
-		"version":            bytes.Replace(valid, []byte(`"version":6`), []byte(`"version":99`), 1),
-		"duplicate":          bytes.Replace(valid, []byte(`"version":6`), []byte(`"version":6,"version":6`), 1),
+		"version":            bytes.Replace(valid, []byte(`"version":7`), []byte(`"version":99`), 1),
+		"duplicate":          bytes.Replace(valid, []byte(`"version":7`), []byte(`"version":6,"version":6`), 1),
 		"unknown collection": bytes.Replace(valid, []byte(`"collections":{"api_tokens"`), []byte(`"collections":{"unsupported"`), 1),
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -246,7 +246,7 @@ func TestOverlayV1ManifestRequirementsRemainV1(t *testing.T) {
 	if err := json.Unmarshal(raw, &upgraded); err != nil {
 		t.Fatal(err)
 	}
-	if upgraded.EntityOverlay.Version != 6 {
+	if upgraded.EntityOverlay.Version != 7 {
 		t.Fatal("validated v1 failed upgrade")
 	}
 }

@@ -82,6 +82,9 @@ func preflightCollections(ctx context.Context, db *mongo.Database) error {
 	if _, err := loadAuditRecords(ctx, db); err != nil {
 		return err
 	}
+	if _, err := loadSessionRecords(ctx, db); err != nil {
+		return err
+	}
 	if _, err := loadTokenRecords(ctx, db); err != nil {
 		return err
 	}

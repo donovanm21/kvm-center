@@ -52,7 +52,7 @@ func TestTokenPreservationWire(t *testing.T) {
 	if !equalRaw(got.Lookup("opaque"), raw.Lookup("opaque")) || !back.APITokens[token.ID].Revoked {
 		t.Fatal("token recovery lost values")
 	}
-	if json.Unmarshal(bytes.Replace(wire, []byte(`"version":6`), []byte(`"version":5`), 1), &back) == nil {
+	if json.Unmarshal(bytes.Replace(wire, []byte(`"version":7`), []byte(`"version":5`), 1), &back) == nil {
 		t.Fatal("old overlay accepted tokens")
 	}
 	for _, value := range []map[string]*models.APIToken{{"nil": nil}, {"wrong": &token}} {

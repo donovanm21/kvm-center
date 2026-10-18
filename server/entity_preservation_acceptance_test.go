@@ -240,6 +240,7 @@ func TestHistoryAcceptanceOverlayV2ArchiveRestore(t *testing.T) { priorOverlayAr
 func TestHistoryAcceptanceOverlayV3ArchiveRestore(t *testing.T) { priorOverlayArchiveRestore(t, 3) }
 func TestHistoryAcceptanceOverlayV4ArchiveRestore(t *testing.T) { priorOverlayArchiveRestore(t, 4) }
 func TestHistoryAcceptanceOverlayV5ArchiveRestore(t *testing.T) { priorOverlayArchiveRestore(t, 5) }
+func TestHistoryAcceptanceOverlayV6ArchiveRestore(t *testing.T) { priorOverlayArchiveRestore(t, 6) }
 func priorOverlayArchiveRestore(t *testing.T, version int) {
 	d := overlayFixture(t)
 	d.EntityOverlay.Version = version
@@ -271,14 +272,24 @@ func priorOverlayArchiveRestore(t *testing.T, version int) {
 		d.Audit = []*models.AuditEvent{&ev}
 		d.EntityOverlay.Collections[mcoAuditEvents] = map[string][]byte{ev.ID: raw}
 	}
+	if version >= 6 {
+		raw, _ := tokenFixture(t, "12345678")
+		var token models.APIToken
+		if err := bson.Unmarshal(raw, &token); err != nil {
+			t.Fatal(err)
+		}
+		d.APITokens = map[string]*models.APIToken{token.ID: &token}
+		d.EntityOverlay.Collections[mcoAPITokens] = map[string][]byte{token.ID: raw}
+	}
 	raw, err := json.Marshal(struct {
+		APITokens    map[string]*models.APIToken      `json:"api_tokens,omitempty"`
 		Audit        []*models.AuditEvent             `json:"audit,omitempty"`
 		GuestData    map[string]*guestEntry           `json:"guest_data,omitempty"`
 		RemovedHosts map[string]*models.RemovedHost   `json:"removed_hosts,omitempty"`
 		Groups       map[string]*models.Group         `json:"groups"`
 		Storage      map[string][]*models.StoragePool `json:"storage,omitempty"`
 		Overlay      *entityOverlay                   `json:"entity_bson_overlay"`
-	}{d.Audit, d.GuestData, d.RemovedHosts, d.Groups, d.Storage, d.EntityOverlay})
+	}{d.APITokens, d.Audit, d.GuestData, d.RemovedHosts, d.Groups, d.Storage, d.EntityOverlay})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,5 +351,11 @@ func priorOverlayArchiveRestore(t *testing.T, version int) {
 			t.Fatal("v5 audit overlay lost", err)
 		}
 	}
-	emitAcceptance(t, fmt.Sprintf("overlay_v%d_archive_restore", version), map[string]any{"backend": "mongo", "original_wire_version": version, "validated_manifest_version": version, "upgraded_version": 6, "fresh_restore": true, "opaque_preserved": true})
+	if version >= 6 {
+		var got bson.Raw
+		if err := b.db.Collection(mcoAPITokens).FindOne(t.Context(), bson.D{}).Decode(&got); err != nil || got.Lookup("opaque").Type == 0 {
+			t.Fatal("v6 token overlay lost", err)
+		}
+	}
+	emitAcceptance(t, fmt.Sprintf("overlay_v%d_archive_restore", version), map[string]any{"backend": "mongo", "original_wire_version": version, "validated_manifest_version": version, "upgraded_version": 7, "fresh_restore": true, "opaque_preserved": true})
 }

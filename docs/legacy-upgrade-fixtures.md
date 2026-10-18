@@ -196,3 +196,33 @@ second backup/restart. Mint/revoke retain existing asynchronous persistence;
 crash-durable acknowledgement is not claimed. Token UI, rotation and permission
 redesign are separate work. Full-schema activation, original-snapshot rollback,
 post-upgrade-write accounting and release/UI gates remain incomplete.
+
+## Bounded session compatibility (overlay v7)
+
+The five deployed session fields now participate in strict bounded load/write
+preservation and private backup recovery. `_id`, token and snapshot key must
+agree; owner identity must be nonempty. Canonical BSON uses `userid`, `createdat`,
+`expires_at` and `useragent`; the exact historical `expiresat` alias is accepted
+only through the existing strict decoder. Conflicting/case-variant aliases,
+incorrect types, null records and oversized inputs refuse before indexes/writes.
+Absent or zero expiry retains the historical expired behavior, never an unlimited
+session. Orphan/disabled-owner records cannot authenticate.
+
+Local password login, cookie authentication, sliding seven-day expiry, logout,
+graceful restart, backup/fresh restore and second backup are exercised by the
+native synthetic acceptance. Renewal, expiry deletion, periodic purge and logout
+schedule saves explicitly. Creation checks admission before inserting or changing
+LastLoginAt and returns a detached copy. The limits remain 10,000 sessions within
+the shared 10,000 non-audit records and 16 MiB overlay bound; Mongo admission
+includes raw opaque bytes. Original v1–v6 archive manifests remain supported.
+
+Logout, expired access, periodic purge and user deletion intentionally remove
+active sessions. Backup reconciliation excludes removed identities, preventing
+resurrection in a later restore. These active lifecycle removals do not delete the
+separately retained immutable originals. TTL scanning remains disabled during
+preservation acceptance, independently of application expiry logic. Private
+backups retain session tokens needed for recovery; public evidence omits them.
+
+Asynchronous saves do not establish crash-durable acknowledgement. LDAP/OIDC/TOTP
+flows are outside this bounded local-password/session claim. Full-schema recovery,
+post-upgrade-write accounting, native quiescence, UI and promotion gates remain HOLD.

@@ -126,7 +126,7 @@ func TestHistoryAcceptanceTokenLifecycle(t *testing.T) {
 	p.stop(t, false)
 	restoreRoot := t.TempDir()
 	snapshot := unpackAcceptance(t, archive, restoreRoot, 0)
-	if snapshot.EntityOverlay.Version != 6 || len(snapshot.APITokens) != 9 {
+	if snapshot.EntityOverlay.Version != 7 || len(snapshot.APITokens) != 9 {
 		t.Fatal("token backup incomplete")
 	}
 	wire, _ := json.Marshal(snapshot)
