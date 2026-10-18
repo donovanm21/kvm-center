@@ -31,6 +31,9 @@ func mutationFixture(t *testing.T, body string) (Virsh, *nativework.Journal, str
 	}
 	t.Cleanup(func() { os.RemoveAll(socketRoot) })
 	socket := filepath.Join(socketRoot, "socket")
+	oldEndpoint := powerEndpoint
+	powerEndpoint = socket
+	t.Cleanup(func() { powerEndpoint = oldEndpoint })
 	l, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatal(err)
@@ -360,7 +363,7 @@ func TestHiddenOrAbsentReadinessCannotActivateConsumers(t *testing.T) {
 	noSpawn(t, v)
 }
 
-func TestMutationDigestBindsOwnerIdentity(t *testing.T) {
+func TestMutationOwnerChangeCannotReplaceCanonicalJournal(t *testing.T) {
 	v, j, _ := mutationFixture(t, "exit 0")
 	first, m1 := tracked(t, v, j, "req", "start")
 	_ = first.Start(context.Background(), testID.UUID)
@@ -378,8 +381,13 @@ func TestMutationDigestBindsOwnerIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = second.Start(context.Background(), testID.UUID)
-	if !m1.Receipt().Registered || !m2.Receipt().Registered || m1.Receipt().Writer.Request.ParamsSHA256 == m2.Receipt().Writer.Request.ParamsSHA256 {
-		t.Fatal("owner omitted from immutable digest")
+	err = second.Start(context.Background(), testID.UUID)
+	if err == nil || !m1.Receipt().Registered || m2.Receipt().Registered {
+		t.Fatal("owner change replaced canonical predecessor", err)
+	}
+	unresolved(t, j, 2)
+	raw, readErr := os.ReadFile(filepath.Join(v.Home, "spawns"))
+	if readErr != nil || string(raw) != "start\n" {
+		t.Fatal("alternate journal spawned", string(raw), readErr)
 	}
 }

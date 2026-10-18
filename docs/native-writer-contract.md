@@ -161,3 +161,82 @@ The lab matrix above remains mandatory; current production paths, affinity
 reconciliation, UI execution, deployment and release remain on hold. Retain the
 journal and raw originals indefinitely; deleting or replacing it cannot authorize
 a retry or cleanup.
+
+## Finite power-operation epochs (synthetic implementation)
+
+`PowerCoordinator` implements operation-specific completion for canonical fixture
+Define, Start, Destroy and **inactive-only** Undefine. It uses an application scope
+fixed centrally to the supported local libvirt endpoint and domain UUID; Home,
+request IDs and journal paths do not choose another lock. Every legacy tracked
+Virsh mutation takes the same OS lock and refuses a managed scope. This excludes
+these application routes, not unrelated administrators or every production agent
+route. No native profile is currently qualified, and `Execute` refuses native
+execution through its public constructor. Test-only drivers exercise the state
+machine and the actual subprocess execution seam.
+
+A drained PR103 predecessor is handed off by retaining adoption intent first and
+then permanently sealing its exact revision. Unknown writers or an unrelated
+existing seal refuse adoption. The successor retains an immutable scope marker
+and rechecks the predecessor and all history on each operation. It never reopens
+old seals, completes old unknown writers, or creates a new authority when a
+managed ledger is missing. Changing Home or predecessor journal cannot bypass the
+centrally fixed managed scope.
+
+Each operation retains immutable request/attempt, action, full ownership identity,
+execution/profile digests and a monotonically increasing epoch. Its phases are:
+
+`registered -> invocation_possible -> native_ack -> observed -> completed`
+
+The domain lock spans the whole sequence. A successful qualified synchronous
+native response is persisted before post-observation or completion. Define checks
+owned persistent inactive XML; Start checks the supported running state; Destroy
+checks persistent inactive state; Undefine requires inactivity before execution
+and complete UUID/name absence afterward. Managed-save, autostart, unsupported
+XML/flags and ambiguous observations refuse. This proves the named operation in
+its declared scope, not guest readiness or universal native quiescence. Successful
+completion permits the next distinct request without discarding history.
+
+Recovery is finite and explicit:
+
+- A completed request replays its historical outcome without executing again.
+- A retained registration before `invocation_possible` can be recorded aborted;
+  another distinct request may proceed.
+- A durable `native_ack` permits observation-only recovery under the same domain
+  lock. The history records `recovery_observed`, then completion. No old lease is
+  reconstructed and no native mutation is retried.
+- Missing native acknowledgement, including timeout/cancellation, returns one
+  target-scoped `recovery_required` incident. Other domains remain usable. No
+  current-state query, sleep, process return or new request clears that incident.
+- Partial file replacement, missing history, changed ownership/provenance or an
+  inconsistent chain refuses and preserves the files for explicit recovery.
+
+History is logically append-only: atomic replacement retains all prior events,
+fsyncs the file and parent directory, and never prunes. The 256-operation bound
+refuses at capacity. Canonical scope storage and its predecessor are authoritative;
+deleting, moving or restoring stale copies cannot be used to manufacture admission.
+STOP, RESTART, power-cycle, migration and production agent routes remain separate
+profiles. The existing adapter/watchdog activation guard remains closed.
+
+### Installed-profile dependency and bounded handoff
+
+Read-only provenance identifies libvirt/virsh 10.10 and QEMU 9.1, but the installed
+custom prepare/begin hook synchronously contacts an agent handler whose executable
+is not tied to verified source. Inherited routing/config behavior is also
+unverified. Reference source is not installed proof. This is **not a hook-free
+profile**, and successful synthetic tests do not qualify it. Do not inspect secrets,
+change the installed hook/agent/security configuration, or run native acceptance
+under this change.
+
+The next handoff needs a separately approved controlled fixture profile: either
+an isolated test service with pinned hook/handler/config behavior, or an explicitly
+reviewed fixture-only hook path. Neither option is applied or authorized here.
+Once that scope is approved, pin its exact artifacts and supported normalized XML,
+review qualification, and run three bounded owned-fixture
+Define/Start/Destroy/Undefine cycles, replay and crash-after-durable-ack recovery.
+Unknown-native-ack injection needs an agreed retained-fixture recovery plan first.
+Acceptance requires subsequent requests to succeed after verified completion,
+uncertainty to remain target-scoped, and final exact fixture absence for completed
+cycles. All originals and unresolved incidents remain retained. Native execution,
+UI validation, release and deployment remain HOLD pending those dependencies.
+
+The canonical scope also retains an immutable predecessor-journal binding before any legacy registration or managed adoption. A different empty journal cannot replace unresolved legacy evidence. The complete case-sensitive history schema is mandatory: null, omitted, unknown, or aliased fields refuse admission. The scope directory chain is synced before native effects.
