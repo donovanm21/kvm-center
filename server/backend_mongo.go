@@ -138,7 +138,7 @@ func (b *MongoBackend) dial(ctx context.Context) (*mongo.Database, error) {
 	db := cli.Database(b.dbName)
 	// Refuse known legacy representations before creating any indexes. TTL
 	// activation is a write-side effect even when Load later returns an error.
-	if err := rejectLegacyCollections(ctx, db); err != nil {
+	if err := preflightCollections(ctx, db); err != nil {
 		closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
 		_ = cli.Disconnect(closeCtx)
 		closeCancel()
@@ -334,7 +334,7 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 
 	// Strictly load passive inventory; malformed or duplicate records must not
 	// disappear when the typed snapshot is later saved.
-	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts} {
+	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData} {
 		cur, err := db.Collection(col).Find(ctx, bson.D{})
 		if err != nil {
 			return nil, err
@@ -378,6 +378,9 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 			if col == mcoStorage {
 				pool := model.(*models.StoragePool)
 				pd.Storage[pool.HostID] = append(pd.Storage[pool.HostID], pool)
+			} else if col == mcoGuestData {
+				report := model.(*entityGuestReport)
+				pd.GuestData[report.UUID] = &report.Entry
 			} else if col == mcoRemovedHosts {
 				record := model.(*models.RemovedHost)
 				pd.RemovedHosts[strings.ToLower(record.HostID)] = record
@@ -393,28 +396,6 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 		}
 	}
 	if err := validateEntitySnapshot(pd); err != nil {
-		return nil, err
-	}
-
-	// Guest data
-	if err := func() error {
-		cur, err := db.Collection(mcoGuestData).Find(ctx, bson.D{})
-		if err != nil {
-			return err
-		}
-		defer cur.Close(ctx)
-		for cur.Next(ctx) {
-			var doc struct {
-				UUID  string     `bson:"vm_uuid"`
-				Entry guestEntry `bson:"entry,inline"`
-			}
-			if err := cur.Decode(&doc); err == nil && doc.UUID != "" {
-				e := doc.Entry
-				pd.GuestData[doc.UUID] = &e
-			}
-		}
-		return cur.Err()
-	}(); err != nil {
 		return nil, err
 	}
 
@@ -694,7 +675,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	}
 	passivePlans := map[string][]any{}
 	candidates := overlayCandidates(d)
-	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts} {
+	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData} {
 		prepared, err := prepareEntityDocumentsFrom(ctx, db, col, candidates[col], restoreEntityRecords(d, col))
 		if err != nil {
 			return fmt.Errorf("%s preservation preflight: %w", col, err)
@@ -715,17 +696,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 		return err
 	}
 
-	// Guest data (updated_at drives the TTL index)
-	var gdDocs []any
-	for uuid, entry := range d.GuestData {
-		gdDocs = append(gdDocs, bson.M{
-			"_id":        uuid,
-			"vm_uuid":    uuid,
-			"updated_at": entry.UpdatedAt,
-			"entry":      entry,
-		})
-	}
-	if err := replaceMap(ctx, db, mcoGuestData, gdDocs); err != nil {
+	if err := replaceMap(ctx, db, mcoGuestData, passivePlans[mcoGuestData]); err != nil {
 		return err
 	}
 

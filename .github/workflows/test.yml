@@ -283,6 +283,13 @@ jobs:
         with:
           node-version: '20'
           package-manager-cache: false
+      - name: Keep synthetic preservation TTL inactive
+        env:
+          MONGO_CONTAINER: ${{ job.services.mongo.id }}
+        run: |
+          docker exec "$MONGO_CONTAINER" mongosh --quiet --eval '
+            if (!db.adminCommand({setParameter:1, ttlMonitorEnabled:false}).ok) quit(1);
+            if (db.adminCommand({getParameter:1, ttlMonitorEnabled:1}).ttlMonitorEnabled !== false) quit(1);'
       - name: Validate capped history and native artifact recovery
         run: python3 scripts/validate-history.py
       - name: Verify fixture database cleanup

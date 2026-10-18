@@ -58,3 +58,37 @@ The `synthetic-passive-inventory-bson-v3` component acceptance adds storage and 
 Version 3 adds `removed_hosts` to the scoped overlay. Versions 1 and 2 retain their original collection allowlists and wire manifest requirements. Retirement `_id` and typed `HostID` spelling remain exact; in-memory lookup keys are lowercase. Case-colliding identities, mismatched fields and unsupported underscored BSON aliases refuse before replacement writes. Updates preserve the original persisted spelling. Short-name/FQDN matching remains lookup behavior, never identity merging.
 
 The `synthetic-retirement-entity-bson-v4` fixture retains nine original documents across eight collections, including two retirement records. Actual API acceptance lists records, refuses synthetic telemetry without creating inventory, preserves one record through backup/fresh restore/restart, and un-retires the other with a database durability check, restart and backup-overlay deletion check. It never calls host-delete, enrollment, certificate, command or agent endpoints. No host decommission or certificate behavior is claimed. All original/raw full-schema fixtures and refusal gates remain intact; rollback startup fixtures and runtime execution remain separately held.
+
+
+### Guest report preservation (overlay version 4)
+
+Guest cache records use a nested `entry` document, containing `payload` and
+`updatedat`, with a separate root `updated_at` used by Mongo TTL. The former
+inline loader did not match that writer. The strict nested loader now checks
+identities, exact types, canonical BSON spellings and equal timestamps, refusing
+malformed records before index initialization. Root/map identities are lowercase;
+the payload UUID may retain letter case only when its lowercase value agrees.
+Whitespace, cross-format aliases and conflicting representations are refused.
+
+`Arch` and `GrowResult` round-trip as guest-reported data. This does not implement
+architecture-aware guest updates, growth dispatch or the old guest identity and
+cache eviction policies. A new report replaces known fields, including clearing
+an omitted grow result. Unknown root fields remain opaque; a typed edit inside a
+container with opaque descendants is refused rather than dropping its values.
+
+The separate `synthetic-guest-report-bson-v1` acceptance retains two expired
+synthetic originals, proves they are not refreshed or treated as fresh, receives
+one current report, reads it through the VM API, restarts, creates an application
+backup, restores into a fresh database, creates a second backup and restarts again.
+The second expired report retains an opaque nested entry unchanged throughout.
+The disposable history CI Mongo service has its TTL monitor explicitly disabled,
+and the test verifies that condition. It never dispatches a guest update or grow
+operation. Original source files remain unchanged. Overlay versions 1–3 retain
+their original allowlists and manifest versions while upgrading in memory to v4.
+
+This is conditional preservation evidence, not a cache-retention redesign:
+ordinary Mongo TTL still expires guest records after 300 seconds, and the current
+in-memory cache may subsequently rewrite an expired record. Stale VM guest fields
+also have separate lifetime behavior. A migration must keep legacy TTL/jobs
+inactive and retain raw originals indefinitely; full-schema activation remains
+blocked until those and remaining semantic gates are addressed.

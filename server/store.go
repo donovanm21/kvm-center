@@ -641,7 +641,7 @@ func (s *Store) QueuedKVMToolsUpdates() []string {
 // (classic cloned-VM footgun where two VMs share UUID + MAC) the server resolves by
 // NIC MAC and returns the corrected UUID so the guest can pin itself
 // for subsequent reports.
-func (s *Store) ApplyGuestTelemetry(p *models.GuestTelemetryPayload) string {
+func (s *Store) ApplyGuestTelemetry(p *models.GuestTelemetryPayload) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if p.Timestamp.IsZero() {
@@ -649,6 +649,14 @@ func (s *Store) ApplyGuestTelemetry(p *models.GuestTelemetryPayload) string {
 	}
 	canonical := s.resolveCanonicalUUID(p)
 	originalLower := strings.ToLower(p.VMUUID)
+	candidate := *p
+	if !strings.EqualFold(canonical, candidate.VMUUID) {
+		candidate.VMUUID = canonical
+	}
+	entry := &guestEntry{Payload: candidate, UpdatedAt: time.Now()}
+	if err := s.preflightGuestUpdateLocked(strings.ToLower(canonical), entry); err != nil {
+		return "", err
+	}
 	if !strings.EqualFold(canonical, p.VMUUID) {
 		log.Printf("guest-telemetry: UUID collision — payload %s resolved to %s (MAC match)", p.VMUUID, canonical)
 		// Evict the stale slot this payload claimed so VMs that share
@@ -657,7 +665,7 @@ func (s *Store) ApplyGuestTelemetry(p *models.GuestTelemetryPayload) string {
 		p.VMUUID = canonical
 	}
 	key := strings.ToLower(canonical)
-	s.guestData[key] = &guestEntry{Payload: *p, UpdatedAt: time.Now()}
+	s.guestData[key] = entry
 	// Also clear any stale fields on the VM whose UUID the payload was
 	// previously misattributed to — otherwise it keeps showing the
 	// impostor hostname/IPs until the 5-minute freshness window expires.
@@ -670,7 +678,7 @@ func (s *Store) ApplyGuestTelemetry(p *models.GuestTelemetryPayload) string {
 			}
 		}
 	}
-	return canonical
+	return canonical, nil
 }
 
 // clearStaleGuestData wipes fields that came from a misattributed

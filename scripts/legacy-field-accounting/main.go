@@ -107,10 +107,10 @@ func main() {
 				}
 			}
 			switch n {
-			case "HostPCIDevice", "VMNetwork", "VMDisk", "VMPCIDevice", "GuestFS", "GuestInterface":
+			case "GuestTelemetryPayload", "GuestGrowResult", "guestEntry", "HostPCIDevice", "VMNetwork", "VMDisk", "VMPCIDevice", "GuestFS", "GuestInterface":
 				if exists && a.Type == b.Type && a.BSON == b.BSON {
 					status = "nested_preservation_conditional"
-					reason = "Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified"
+					reason = "Host/VM/guest-report container retained when known projection unchanged; edits with opaque descendants refuse; guest TTL must remain inactive for preservation; operational behavior unverified"
 				}
 			}
 			if a.BSON == "-" {
