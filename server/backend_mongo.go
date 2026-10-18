@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -330,43 +331,60 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 		return nil, err
 	}
 
-	// Storage — same pattern
-	if err := func() error {
-		cur, err := db.Collection(mcoStorage).Find(ctx, bson.D{})
+	// Strictly load passive inventory; malformed or duplicate records must not
+	// disappear when the typed snapshot is later saved.
+	for _, col := range []string{mcoStorage, mcoVMNotes} {
+		cur, err := db.Collection(col).Find(ctx, bson.D{})
 		if err != nil {
-			return err
+			return nil, err
 		}
-		defer cur.Close(ctx)
-		var pools []*models.StoragePool
-		if err := cur.All(ctx, &pools); err != nil {
-			return err
-		}
-		for _, p := range pools {
-			pd.Storage[p.HostID] = append(pd.Storage[p.HostID], p)
-		}
-		return nil
-	}(); err != nil {
-		return nil, err
-	}
-
-	// VM notes
-	if err := func() error {
-		cur, err := db.Collection(mcoVMNotes).Find(ctx, bson.D{})
-		if err != nil {
-			return err
-		}
-		defer cur.Close(ctx)
+		seen := map[string]bool{}
 		for cur.Next(ctx) {
-			var doc struct {
-				UUID string `bson:"vm_uuid"`
-				Text string `bson:"notes"`
+			raw := cur.Current
+			id, err := entityIdentity(raw, col)
+			if err != nil {
+				cur.Close(ctx)
+				return nil, err
 			}
-			if err := cur.Decode(&doc); err == nil && doc.UUID != "" {
-				pd.VMNotes[doc.UUID] = doc.Text
+			if seen[id] {
+				cur.Close(ctx)
+				return nil, errors.New("duplicate passive entity identity")
+			}
+			seen[id] = true
+			typ, aliases, _ := entitySchema(col)
+			// Use the typed projection as candidate, validating all original
+			// values without silently interpreting an opaque alias.
+			model := reflect.New(typ).Interface()
+			if err := bson.Unmarshal(raw, model); err != nil {
+				cur.Close(ctx)
+				return nil, err
+			}
+			projection, _ := bson.Marshal(model)
+			es, _ := bson.Raw(projection).Elements()
+			doc := bson.D{{Key: "_id", Value: id}}
+			for _, el := range es {
+				doc = append(doc, bson.E{Key: el.Key(), Value: el.Value()})
+			}
+			candidate, _ := bson.Marshal(doc)
+			if _, err := preserveEntityBSON(raw, candidate, typ, aliases); err != nil {
+				cur.Close(ctx)
+				return nil, err
+			}
+			if col == mcoStorage {
+				pool := model.(*models.StoragePool)
+				pd.Storage[pool.HostID] = append(pd.Storage[pool.HostID], pool)
+			} else {
+				note := model.(*entityVMNote)
+				pd.VMNotes[note.UUID] = note.Text
 			}
 		}
-		return cur.Err()
-	}(); err != nil {
+		err = cur.Err()
+		cur.Close(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := validateEntitySnapshot(pd); err != nil {
 		return nil, err
 	}
 
@@ -674,6 +692,15 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	if err != nil {
 		return fmt.Errorf("roles preservation preflight: %w", err)
 	}
+	passivePlans := map[string][]any{}
+	candidates := overlayCandidates(d)
+	for _, col := range []string{mcoStorage, mcoVMNotes} {
+		prepared, err := prepareEntityDocumentsFrom(ctx, db, col, candidates[col], restoreEntityRecords(d, col))
+		if err != nil {
+			return fmt.Errorf("%s preservation preflight: %w", col, err)
+		}
+		passivePlans[col] = prepared
+	}
 	if err := replaceMap(ctx, db, mcoHosts, hostDocs); err != nil {
 		return err
 	}
@@ -681,26 +708,10 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 		return err
 	}
 
-	// Storage — same pattern
-	var poolDocs []any
-	for hostID, pools := range d.Storage {
-		for _, p := range pools {
-			poolDocs = append(poolDocs, struct {
-				ID                  string `bson:"_id"`
-				*models.StoragePool `bson:",inline"`
-			}{hostID + "|" + p.Name, p})
-		}
-	}
-	if err := replaceMap(ctx, db, mcoStorage, poolDocs); err != nil {
+	if err := replaceMap(ctx, db, mcoStorage, passivePlans[mcoStorage]); err != nil {
 		return err
 	}
-
-	// VM notes
-	var noteDocs []any
-	for uuid, text := range d.VMNotes {
-		noteDocs = append(noteDocs, bson.M{"_id": uuid, "vm_uuid": uuid, "notes": text})
-	}
-	if err := replaceMap(ctx, db, mcoVMNotes, noteDocs); err != nil {
+	if err := replaceMap(ctx, db, mcoVMNotes, passivePlans[mcoVMNotes]); err != nil {
 		return err
 	}
 

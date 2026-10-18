@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"go.mongodb.org/mongo-driver/bson"
+	"kvm-center/internal/models"
 	"os"
 	"path/filepath"
 	"testing"
@@ -87,5 +88,88 @@ func TestMongoIntegrationEntityOverlayBootstrapRefusesBeforeIndexes(t *testing.T
 	}
 	if len(indexes) != 1 {
 		t.Fatal("refusal initialized indexes")
+	}
+}
+
+func TestMongoIntegrationPassiveEntityRefusalAndNotesDeletion(t *testing.T) {
+	b := newMongoIntegrationBackend(t)
+	ctx := t.Context()
+	for name, doc := range map[string]bson.D{
+		"note type":      {{Key: "_id", Value: "vm"}, {Key: "vm_uuid", Value: "vm"}, {Key: "notes", Value: int32(1)}},
+		"note identity":  {{Key: "_id", Value: "vm"}, {Key: "vm_uuid", Value: "different"}, {Key: "notes", Value: "text"}},
+		"note duplicate": {{Key: "_id", Value: "vm"}, {Key: "vm_uuid", Value: "vm"}, {Key: "notes", Value: "a"}, {Key: "notes", Value: "b"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			raw, _ := bson.Marshal(doc)
+			if _, err := b.db.Collection(mcoVMNotes).InsertOne(ctx, bson.Raw(raw)); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := b.Load(ctx); err == nil {
+				t.Fatal("malformed note silently loaded")
+			}
+			if _, err := b.db.Collection(mcoVMNotes).DeleteMany(ctx, bson.D{}); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	raw, _ := bson.Marshal(bson.D{{Key: "_id", Value: "vm"}, {Key: "vm_uuid", Value: "vm"}, {Key: "notes", Value: "old"}, {Key: "opaque", Value: []byte{7, 8}}})
+	if _, err := b.db.Collection(mcoVMNotes).InsertOne(ctx, bson.Raw(raw)); err != nil {
+		t.Fatal(err)
+	}
+	d, err := b.Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.VMNotes["vm"] = "new"
+	if err := b.Save(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	var got bson.Raw
+	if err := b.db.Collection(mcoVMNotes).FindOne(ctx, bson.D{}).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Lookup("notes").StringValue() != "new" || !equalRaw(got.Lookup("opaque"), bson.Raw(raw).Lookup("opaque")) {
+		t.Fatal("note write lost raw values")
+	}
+	delete(d.VMNotes, "vm")
+	if err := b.Save(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	d.VMNotes["vm"] = "recreated"
+	if err := b.Save(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.db.Collection(mcoVMNotes).FindOne(ctx, bson.D{}).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Lookup("opaque").Type != 0 {
+		t.Fatal("deleted note resurrected opaque data")
+	}
+}
+
+func TestMongoIntegrationPassivePreflightBeforeEntityWrites(t *testing.T) {
+	b := newMongoIntegrationBackend(t)
+	ctx := t.Context()
+	seed, _ := bson.Marshal(bson.D{{Key: "_id", Value: "host"}, {Key: "id", Value: "host"}, {Key: "os", Value: "original"}})
+	if _, err := b.db.Collection(mcoHosts).InsertOne(ctx, bson.Raw(seed)); err != nil {
+		t.Fatal(err)
+	}
+	malformed, _ := bson.Marshal(bson.D{{Key: "_id", Value: "host|Pool"}, {Key: "hostid", Value: "host"}, {Key: "host_id", Value: "other"}, {Key: "name", Value: "Pool"}})
+	if _, err := b.db.Collection(mcoStorage).InsertOne(ctx, bson.Raw(malformed)); err != nil {
+		t.Fatal(err)
+	}
+	d := &persistData{Hosts: map[string]*models.Host{"host": {ID: "host", OS: "edited"}}, Storage: map[string][]*models.StoragePool{"host": {{HostID: "host", Name: "Pool"}}}}
+	if err := b.Save(ctx, d); err == nil {
+		t.Fatal("ambiguous storage alias accepted")
+	}
+	var got bson.Raw
+	if err := b.db.Collection(mcoHosts).FindOne(ctx, bson.D{}).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, seed) {
+		t.Fatal("host changed before passive preflight refusal")
+	}
+	if _, err := b.Load(ctx); err == nil {
+		t.Fatal("ambiguous storage alias loaded")
 	}
 }

@@ -35,7 +35,7 @@ func TestEntityOverlayJSONRoundTripAndDeletion(t *testing.T) {
 		t.Fatal("typed edit or opaque value lost")
 	}
 	features, err := snapshotFeatureSchemas(raw)
-	if err != nil || features["entity_bson_overlay"] != 1 {
+	if err != nil || features["entity_bson_overlay"] != 2 {
 		t.Fatal("missing overlay requirement")
 	}
 	path := filepath.Join(t.TempDir(), "state.json")
@@ -73,8 +73,8 @@ func TestEntityOverlayRefusals(t *testing.T) {
 	for name, raw := range map[string][]byte{
 		"null":               []byte(`{"entity_bson_overlay":null}`),
 		"case":               []byte(`{"ENTITY_BSON_OVERLAY":null}`),
-		"version":            bytes.Replace(valid, []byte(`"version":1`), []byte(`"version":2`), 1),
-		"duplicate":          bytes.Replace(valid, []byte(`"version":1`), []byte(`"version":1,"version":1`), 1),
+		"version":            bytes.Replace(valid, []byte(`"version":2`), []byte(`"version":99`), 1),
+		"duplicate":          bytes.Replace(valid, []byte(`"version":2`), []byte(`"version":2,"version":2`), 1),
 		"unknown collection": bytes.Replace(valid, []byte(`"collections":{"groups"`), []byte(`"collections":{"unsupported"`), 1),
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -97,7 +97,7 @@ func TestEntityOverlayRefusals(t *testing.T) {
 }
 func TestBSONPreservationDeployedStartupEntities(t *testing.T) {
 	f := legacyfixture.GenerateDeployed()
-	for _, col := range []string{mcoUsers, mcoGroups, mcoRoles} {
+	for _, col := range []string{mcoUsers, mcoGroups, mcoRoles, mcoStorage} {
 		t.Run(col, func(t *testing.T) {
 			typ, aliases, err := entitySchema(col)
 			if err != nil {
@@ -114,6 +114,10 @@ func TestBSONPreservationDeployedStartupEntities(t *testing.T) {
 			}
 			changed := "description"
 			field := "Description"
+			if col == mcoStorage {
+				changed = "path"
+				field = "Path"
+			}
 			if col == mcoUsers {
 				changed = "email"
 				field = "Email"
@@ -176,5 +180,69 @@ func TestEntityOverlayRejectsTypedJSONCaseAmbiguity(t *testing.T) {
 	var d persistData
 	if err := json.Unmarshal([]byte(`{"groups":{"A":{"id":"A"},"a":{"id":"a"}}}`), &d); err != nil || len(d.Groups) != 2 {
 		t.Fatal("identity keys treated as struct fields")
+	}
+}
+
+func TestPassiveOverlayVersionsAndIdentity(t *testing.T) {
+	raw, _ := bson.Marshal(bson.D{{Key: "_id", Value: "host|Pool"}, {Key: "hostid", Value: "host"}, {Key: "name", Value: "Pool"}, {Key: "opaque", Value: primitive.NewDecimal128(23, 29)}})
+	d := &persistData{Storage: map[string][]*models.StoragePool{"host": {{HostID: "host", Name: "Pool", AllocationGB: 25}}}, VMNotes: map[string]string{"vm": "edited"}, EntityOverlay: &entityOverlay{Version: 2, Collections: map[string]map[string][]byte{mcoStorage: {"host|Pool": raw}}}}
+	encoded, err := json.Marshal(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back persistData
+	if err = json.Unmarshal(encoded, &back); err != nil {
+		t.Fatal(err)
+	}
+	got := bson.Raw(back.EntityOverlay.Collections[mcoStorage]["host|Pool"])
+	if got.Lookup("allocationgb").Double() != 25 || !equalRaw(got.Lookup("opaque"), bson.Raw(raw).Lookup("opaque")) {
+		t.Fatal("passive overlay lost values")
+	}
+	d.EntityOverlay.Version = 1
+	if _, err = json.Marshal(d); err == nil {
+		t.Fatal("v1 accepted v2 collection")
+	}
+	d.EntityOverlay.Version = 2
+	for name, mutate := range map[string]func(){
+		"host mismatch": func() { d.Storage["host"][0].HostID = "other" },
+		"delimiter":     func() { d.Storage["host"][0].Name = "a|b" },
+		"duplicate":     func() { d.Storage["host"] = append(d.Storage["host"], d.Storage["host"][0]) },
+		"nil":           func() { d.Storage["host"][0] = nil },
+		"note case":     func() { d.VMNotes["VM"] = "ambiguous" },
+		"note conflict": func() { d.VMs = map[string][]*models.VM{"host": {{UUID: "vm", Notes: "different"}}} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			var fresh persistData
+			if err := json.Unmarshal(encoded, &fresh); err != nil {
+				t.Fatal(err)
+			}
+			d = &fresh
+			mutate()
+			if _, err := json.Marshal(d); err == nil {
+				t.Fatal("ambiguous passive entity accepted")
+			}
+		})
+	}
+}
+
+func TestOverlayV1ManifestRequirementsRemainV1(t *testing.T) {
+	d := overlayFixture(t)
+	raw, err := json.Marshal(struct {
+		Groups  map[string]*models.Group `json:"groups"`
+		Overlay *entityOverlay           `json:"entity_bson_overlay"`
+	}{d.Groups, d.EntityOverlay})
+	if err != nil {
+		t.Fatal(err)
+	}
+	features, err := snapshotFeatureSchemas(raw)
+	if err != nil || features["entity_bson_overlay"] != 1 {
+		t.Fatal("v1 manifest rejected", features, err)
+	}
+	var upgraded persistData
+	if err := json.Unmarshal(raw, &upgraded); err != nil {
+		t.Fatal(err)
+	}
+	if upgraded.EntityOverlay.Version != 2 {
+		t.Fatal("validated v1 failed upgrade")
 	}
 }

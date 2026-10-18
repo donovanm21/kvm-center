@@ -17,12 +17,12 @@ spec.loader.exec_module(history)
 class HistoryEvidenceTests(unittest.TestCase):
     def fixture(self):
         return [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': kind, 'data': {'backend': backend}}) + '\n'})
-                for kind in ('cap_costs', 'artifact_cap', 'artifact_lifecycle') for backend in ('json', 'mongo')] + [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': extra, 'data': {'backend': 'mongo'}}) + '\n'}) for extra in ('deployed_legacy_refusal', 'entity_opaque_lifecycle')]
+                for kind in ('cap_costs', 'artifact_cap', 'artifact_lifecycle') for backend in ('json', 'mongo')] + [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': extra, 'data': {'backend': 'mongo'}}) + '\n'}) for extra in ('deployed_legacy_refusal', 'entity_opaque_lifecycle', 'overlay_v1_archive_restore')]
 
     def test_requires_every_backend_and_phase_once(self):
         rows = self.fixture()
         rows.append(json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind':'legacy_refusal','data':{'backend':'mongo'}}) + '\n'}))
-        self.assertEqual(len(history.measurements('\n'.join(rows))), 9)
+        self.assertEqual(len(history.measurements('\n'.join(rows))), 10)
         for bad in (rows[:-1], rows + [rows[0]], []):
             with self.assertRaises(ValueError):
                 history.measurements('\n'.join(bad))
@@ -37,7 +37,7 @@ class HistoryEvidenceTests(unittest.TestCase):
             rows.append(json.dumps({'Package': 'server', 'Test': 'legacy', 'Output': chunk}))
             rows.append(json.dumps({'Package': 'server', 'Test': 'other', 'Output': 'noise\n'}))
         result = history.measurements('\n'.join(rows))
-        self.assertEqual(len(result), 9)
+        self.assertEqual(len(result), 10)
         self.assertEqual(len(result[-1]['data']['checksums']), 60)
         with self.assertRaises(ValueError):
             history.measurements('\n'.join(rows[:-2]))
