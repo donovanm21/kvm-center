@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"kvm-center/internal/affinitypolicy"
 	"kvm-center/internal/models"
 )
 
@@ -96,11 +97,11 @@ func drainHost(ctx context.Context, store *Store, sourceID, mode, actorID string
 		if string(vm.State) != "running" && mode == "live" {
 			continue
 		}
-		target := pickDrainTarget(store, sourceID, vm)
+		target, placementReason := pickDrainTargetReason(store, sourceID, vm)
 		if target == nil {
 			auditSystem(store, AuditMigrationStart, "vm/"+vm.UUID, map[string]string{
-				"reason": "drain", "source": sourceID, "skipped": "no eligible target",
-			}, false, "no eligible destination host")
+				"reason": "drain", "source": sourceID, "skipped": placementReason,
+			}, false, placementReason)
 			continue
 		}
 		if err := drainOneVM(ctx, store, sourceID, vm, target, mode); err != nil {
@@ -120,7 +121,13 @@ func drainHost(ctx context.Context, store *Store, sourceID, mode, actorID string
 // pickDrainTarget returns the least-loaded online host that's not the
 // source and not in maintenance. Load = current memory usage %; ties
 // broken by CPU usage. Returns nil when no candidate exists.
-func pickDrainTarget(store *Store, sourceID string, _ *models.VM) *models.Host {
+func pickDrainTarget(store *Store, sourceID string, vm *models.VM) *models.Host {
+	h, _ := pickDrainTargetReason(store, sourceID, vm)
+	return h
+}
+func pickDrainTargetReason(store *Store, sourceID string, vm *models.VM) (*models.Host, string) {
+	reason := "no eligible destination host"
+
 	hosts := store.GetHosts()
 	var best *models.Host
 	for _, h := range hosts {
@@ -129,6 +136,19 @@ func pickDrainTarget(store *Store, sourceID string, _ *models.VM) *models.Host {
 		}
 		if h.Status != models.HostOnline {
 			continue
+		}
+		if store.affinityActive() {
+			if vm == nil {
+				reason = "affinity requires a VM identity"
+				continue
+			}
+			store.mu.RLock()
+			_, err := store.affinityViewLocked(affinitypolicy.Reservation{RequestID: "drain-preview", UUID: vm.UUID, Name: vm.Name, Source: sourceID, Destination: h.ID, DestinationAddress: h.IP}, time.Now())
+			store.mu.RUnlock()
+			if err != nil {
+				reason = err.Error()
+				continue
+			}
 		}
 		if best == nil {
 			cp := *h
@@ -140,7 +160,7 @@ func pickDrainTarget(store *Store, sourceID string, _ *models.VM) *models.Host {
 			best = &cp
 		}
 	}
-	return best
+	return best, reason
 }
 
 // drainOneVM kicks the agent's MIGRATE/OFFLINE_MIGRATE for a single
@@ -162,6 +182,17 @@ func drainOneVM(ctx context.Context, store *Store, sourceID string, vm *models.V
 		}
 	}
 
+	q := affinitypolicy.Reservation{RequestID: NewRequestID(), UUID: vm.UUID, Name: vm.Name, Source: sourceID, Destination: dest.ID, DestinationAddress: dest.IP}
+	warnings, err := store.reserveAffinity(q)
+	if err != nil {
+		return err
+	}
+	if len(warnings) > 0 {
+		auditSystem(store, AuditMigrationStart, "vm/"+vm.UUID, map[string]string{"affinity_warnings": strings.Join(warnings, "; "), "via": "drain"}, true, "")
+	}
+	if err := store.recheckAffinity(q); err != nil {
+		return err
+	}
 	rec := &models.MigrationRecord{
 		ID:         fmt.Sprintf("drain-%s-%d", vm.Name, time.Now().UnixNano()),
 		VMName:     vm.Name,
@@ -227,10 +258,11 @@ func drainOneVM(ctx context.Context, store *Store, sourceID string, vm *models.V
 		params["migration_transport"] = "ssh"
 	}
 	body, _ := json.Marshal(models.CommandRequest{
-		Action: action,
-		VMName: vm.Name,
-		VMUUID: vm.UUID,
-		Params: params,
+		RequestID: q.RequestID,
+		Action:    action,
+		VMName:    vm.Name,
+		VMUUID:    vm.UUID,
+		Params:    params,
 	})
 	// Bound the migration call with a context-based deadline so a
 	// caller-cancellation (e.g. server shutdown) propagates promptly
@@ -242,6 +274,12 @@ func drainOneVM(ctx context.Context, store *Store, sourceID string, vm *models.V
 	client := store.newAgentClient(sourceID, 0)
 	req, _ := http.NewRequestWithContext(reqCtx, http.MethodPost, "http://"+agentAddr+"/command", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	if err := store.recheckAffinity(q); err != nil {
+		return err
+	}
+	if store.affinityActive() && store.GetHostAgentAddr(sourceID) != agentAddr {
+		return errors.New("affinity source address changed before dispatch")
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		finalizeMigration(store, rec, "failed", "agent unreachable: "+err.Error())

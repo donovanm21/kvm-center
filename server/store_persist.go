@@ -27,7 +27,7 @@ func snapshotHashes(raw []byte) (map[string]uint64, error) {
 		return nil, err
 	}
 	names := []string{
-		"entity_bson_overlay", "legacy_history_state", "host_history_state", "vm_tag_state", "users", "groups", "roles", "idps", "sessions", "features",
+		"affinity_state", "entity_bson_overlay", "legacy_history_state", "host_history_state", "vm_tag_state", "users", "groups", "roles", "idps", "sessions", "features",
 		"notifications", "audit_shipping", "backup_schedule", "discord_gateway",
 		"removed_hosts", "pending_enrollments", "api_tokens", "snapshot_policies",
 		"hypervisor_certs", "command_log", "metrics", "console_secret",
@@ -203,6 +203,7 @@ func (s *Store) persistDataLocked() persistData {
 		Alarms:             s.alarms,
 		EntityOverlay:      s.entityOverlay,
 		HostHistory:        s.historyStateLocked(),
+		Affinity:           s.affinity,
 		LegacyHistory:      s.legacyHistory,
 		VMTagState:         s.tagStateLocked(),
 		Hosts:              s.hosts,
@@ -259,6 +260,11 @@ func (s *Store) load() {
 		s.saveGateOpen = true
 		return
 	}
+	if err := d.Affinity.Validate(); err != nil {
+		log.Printf("store: affinity state rejected")
+		return
+	}
+	s.affinity = d.Affinity.Clone()
 	if err := d.LegacyHistory.Validate(); err != nil {
 		log.Printf("store: legacy history load rejected")
 		return

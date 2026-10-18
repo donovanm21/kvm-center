@@ -21,6 +21,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"log"
+	"maps"
 	"net/http"
 	"sort"
 	"strconv"
@@ -81,12 +82,15 @@ func (l *CommandLog) Record(entry *models.CommandLogEntry) (*models.CommandLogEn
 	defer l.mu.Unlock()
 	if existing, ok := l.entries[entry.RequestID]; ok {
 		snapshot := *existing
+		snapshot.Params = maps.Clone(existing.Params)
 		return &snapshot, true
 	}
 	cp := *entry
+	cp.Params = maps.Clone(entry.Params)
 	l.entries[entry.RequestID] = &cp
 	l.enforceCap()
 	snapshot := cp
+	snapshot.Params = maps.Clone(cp.Params)
 	return &snapshot, false
 }
 

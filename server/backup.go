@@ -288,6 +288,9 @@ func snapshotFeatureSchemas(raw []byte) (map[string]int, error) {
 		}
 		features["entity_bson_overlay"] = wire.Overlay.Version
 	}
+	if d.Affinity != nil {
+		features["affinity_state"] = d.Affinity.Version
+	}
 	if d.VMTagState != nil {
 		features["vm_tag_state"] = d.VMTagState.Version
 	}

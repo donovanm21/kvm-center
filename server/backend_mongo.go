@@ -292,7 +292,12 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 	if err != nil {
 		return nil, err
 	}
+	affinity, err := loadAffinityState(ctx, db)
+	if err != nil {
+		return nil, err
+	}
 	pd := &persistData{
+		Affinity:      affinity,
 		VMTagState:    tags,
 		HostHistory:   history,
 		LegacyHistory: legacy,
@@ -596,6 +601,14 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	}
 
 	if err := preflightLegacyHistorySave(ctx, db, d, d.restoreLegacyHistory); err != nil {
+		return err
+	}
+	if err := preflightAffinitySave(ctx, db, d); err != nil {
+		return err
+	}
+	// Persist the reservation before other mutable records. A later failure is
+	// uncertain and remains blocking; it is never rolled back into permission.
+	if err := saveAffinityState(ctx, db, d); err != nil {
 		return err
 	}
 	// Hosts. Every embed below uses bson:",inline" so the entity's
