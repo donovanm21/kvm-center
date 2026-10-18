@@ -30,7 +30,7 @@ func (s *Store) guestVMView(v *models.VM, now time.Time) *models.VM {
 		s.applyVMSideDataAt(&cp, now)
 	}
 	// Queue visibility is independent of report availability. This never consumes it.
-	cp.KVMToolsUpdateQueued = s.kvmToolsUpdateQueue[strings.ToLower(v.UUID)]
+	cp.KVMToolsUpdateQueued = s.guestUpdateQueuedLocked(strings.ToLower(v.UUID))
 	cp.GuestIPs = append([]string(nil), cp.GuestIPs...)
 	cp.GuestFS = append([]models.GuestFS(nil), cp.GuestFS...)
 	cp.GuestInterfaces = append([]models.GuestInterface(nil), cp.GuestInterfaces...)

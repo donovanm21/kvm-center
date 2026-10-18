@@ -477,6 +477,7 @@ type GuestGrowResult struct {
 // GuestTelemetryPayload is sent by the kvm-tools daemon running inside a VM
 // directly to POST /api/guest-telemetry on the kvm-center server.
 type GuestTelemetryPayload struct {
+	UpdateOS        string           `json:"update_os,omitempty"`
 	Arch            string           `json:"arch,omitempty"`
 	GrowResult      *GuestGrowResult `json:"grow_result,omitempty"`
 	VMUUID          string           `json:"vm_uuid"`

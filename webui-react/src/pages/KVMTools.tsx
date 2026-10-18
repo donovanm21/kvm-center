@@ -114,13 +114,13 @@ export function KVMTools() {
   };
 
   const queueUpdate = useMutation({
-    mutationFn: (uuids: string[]) => apiPost<{ status: string; count: number }>('/api/kvm-tools/update', { uuids }),
-    onSuccess: (d, uuids) => {
-      toast('success', `Queued ${d.count} update${d.count === 1 ? '' : 's'} — will run on next telemetry tick (~30 s)`);
+    mutationFn: (request: { request_id: string; uuids: string[] }) => apiPost<{ status: string; count: number }>('/api/kvm-tools/update', request),
+    onSuccess: (d, request) => {
+      toast('success', `Retained ${d.count} update request${d.count === 1 ? '' : 's'}; delivery and installation are unconfirmed`);
       // Drop them from the local selection now that they're queued.
       setSelected((cur) => {
         const next = new Set(cur);
-        for (const u of uuids) next.delete(u);
+        for (const u of request.uuids) next.delete(u);
         return next;
       });
       qc.invalidateQueries({ queryKey: qk.vms() });
@@ -134,7 +134,7 @@ export function KVMTools() {
   const onUpdateSelected = () => {
     const uuids = Array.from(selected);
     if (uuids.length === 0) return;
-    queueUpdate.mutate(uuids);
+    queueUpdate.mutate({ request_id: crypto.randomUUID(), uuids });
   };
 
   return (

@@ -39,7 +39,7 @@ func TestGuestProjectionExpiryReadRestartPreservesRetainedData(t *testing.T) {
 		t.Fatal(err)
 	}
 	vm := &models.VM{UUID: report.UUID, HostID: "fixture", GuestAgent: true, GuestSource: "kvm-tools", GuestHostname: "stale", GuestOS: "old", GuestIPs: []string{"192.0.2.40"}, KVMToolsVersion: "old", KVMToolsUpdateQueued: true}
-	s := &Store{vms: map[string][]*models.VM{"fixture": {vm}}, guestData: map[string]*guestEntry{report.UUID: &report.Entry}, kvmToolsUpdateQueue: map[string]bool{report.UUID: true}, entityOverlay: &entityOverlay{Version: 8, Collections: map[string]map[string][]byte{mcoGuestData: {report.UUID: raw}}}}
+	s := &Store{vms: map[string][]*models.VM{"fixture": {vm}}, guestData: map[string]*guestEntry{report.UUID: &report.Entry}, guestUpdates: &guestUpdateState{Version: 1, Requests: []guestUpdateRequest{{ID: "projection", Version: "fixture", Revision: "fixture", Targets: []guestUpdateTarget{{UUID: report.UUID, Phase: "queued"}}}}}, guestUpdateOwners: map[string]bool{"projection/" + report.UUID: true}, entityOverlay: &entityOverlay{Version: 8, Collections: map[string]map[string][]byte{mcoGuestData: {report.UUID: raw}}}}
 	before, _ := json.Marshal(s.guestData)
 	vmBefore, _ := json.Marshal(vm)
 	for _, view := range []*models.VM{s.GetVMs("")[0], s.GetVMs("fixture")[0], s.GetVMByUUID(report.UUID)} {
@@ -49,7 +49,7 @@ func TestGuestProjectionExpiryReadRestartPreservesRetainedData(t *testing.T) {
 	}
 	after, _ := json.Marshal(s.guestData)
 	vmAfter, _ := json.Marshal(vm)
-	if string(before) != string(after) || string(vmBefore) != string(vmAfter) || !s.kvmToolsUpdateQueue[report.UUID] {
+	if string(before) != string(after) || string(vmBefore) != string(vmAfter) || !s.guestUpdateQueuedLocked(report.UUID) {
 		t.Fatal("projection mutated retained data")
 	}
 	// A backup/restore of the cached projection must not make it current.

@@ -292,11 +292,16 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 	if err != nil {
 		return nil, err
 	}
+	updates, err := loadGuestUpdateState(ctx, db)
+	if err != nil {
+		return nil, err
+	}
 	affinity, err := loadAffinityState(ctx, db)
 	if err != nil {
 		return nil, err
 	}
 	pd := &persistData{
+		GuestUpdates:  updates,
 		Affinity:      affinity,
 		VMTagState:    tags,
 		HostHistory:   history,
@@ -603,7 +608,13 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	if err := preflightLegacyHistorySave(ctx, db, d, d.restoreLegacyHistory); err != nil {
 		return err
 	}
+	if err := preflightGuestUpdates(ctx, db, d); err != nil {
+		return err
+	}
 	if err := preflightAffinitySave(ctx, db, d); err != nil {
+		return err
+	}
+	if err := saveGuestUpdates(ctx, db, d); err != nil {
 		return err
 	}
 	// Persist the reservation before other mutable records. A later failure is
