@@ -7,8 +7,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -48,7 +51,26 @@ func TestHistoryAcceptanceCachedBackupNamespaceRefusal(t *testing.T) {
 			t.Fatal("unsupported cached backup returned archive or wrong refusal")
 		}
 	}
-	p.stop(t, false)
+	// The unsupported record must also refuse the final checkpoint. A clean
+	// drain would incorrectly claim this now-incompatible store was persisted.
+	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal("signal refusal shutdown")
+	}
+	select {
+	case err := <-p.done:
+		p.stopped = true
+		exit, ok := err.(*exec.ExitError)
+		if !ok || exit.ExitCode() != 1 {
+			t.Fatal("expected refused checkpoint exit status")
+		}
+	case <-time.After(25 * time.Second):
+		t.Fatal("refusal shutdown exceeded budget")
+	}
+	p.client.CloseIdleConnections()
+	log, err := os.ReadFile(filepath.Join(root, "process.log"))
+	if err != nil || !bytes.Contains(log, []byte("shutdown status=incomplete backup_consistent=false error=final persistence:")) || !bytes.Contains(log, []byte(`unsupported Mongo collection "alarms"`)) {
+		t.Fatal("shutdown did not report refused final checkpoint")
+	}
 	var got bson.Raw
 	if err := b.db.Collection("alarms").FindOne(t.Context(), bson.D{}).Decode(&got); err != nil || !bytes.Equal(original, got) {
 		t.Fatal("refusal modified unsupported BSON", err)
@@ -58,5 +80,5 @@ func TestHistoryAcceptanceCachedBackupNamespaceRefusal(t *testing.T) {
 		t.Fatal("original changed")
 	}
 	sum := sha256.Sum256(original)
-	emitAcceptance(t, "cached_namespace_backup_refusal", map[string]any{"backend": "mongo", "same_process_initial_backup_readable": true, "unsupported_backup_refused": true, "no_partial_archive": true, "originals_unchanged": true, "original_sha256": hex.EncodeToString(sum[:]), "active_compatible": false})
+	emitAcceptance(t, "cached_namespace_backup_refusal", map[string]any{"backend": "mongo", "same_process_initial_backup_readable": true, "unsupported_backup_refused": true, "no_partial_archive": true, "final_checkpoint_refused": true, "originals_unchanged": true, "original_sha256": hex.EncodeToString(sum[:]), "active_compatible": false})
 }

@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"kvm-center/internal/legacyfixture"
+	"kvm-center/internal/offlinestaging"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -35,4 +39,37 @@ func unsupportedNamespaceFixture(t *testing.T, name string) legacyfixture.Bundle
 		}
 	}
 	return b
+}
+
+func TestUnsupportedNamespaceOfflinePreservation(t *testing.T) {
+	for _, name := range []string{"alarms", "affinity_rules", "future_feature"} {
+		t.Run(name, func(t *testing.T) {
+			fixture := unsupportedNamespaceFixture(t, name)
+			root, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			src, stage := filepath.Join(root, "originals"), filepath.Join(root, "stage")
+			if err := os.Mkdir(src, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := legacyfixture.Write(src, fixture); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := offlinestaging.Convert(src, stage); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := offlinestaging.Verify(stage); err != nil {
+				t.Fatal(err)
+			}
+			for col, original := range fixture.Documents {
+				for _, path := range []string{filepath.Join(src, col+".bson"), filepath.Join(stage, "normalized-"+col+".bson")} {
+					got, err := os.ReadFile(path)
+					if err != nil || !bytes.Equal(got, original) {
+						t.Fatal("offline preservation changed BSON", err)
+					}
+				}
+			}
+		})
+	}
 }
