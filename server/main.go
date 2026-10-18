@@ -469,6 +469,7 @@ func main() {
 	// command_log row to "cancelled" so the SPA reflects intent
 	// even if the agent's reconciliation hasn't landed yet.
 	mux.Handle("/api/command/cancel", requirePerm(store, models.PermVMLifecycle, http.HandlerFunc(handleCommandCancel(store))))
+	mux.Handle("/api/guest-grow", requirePerm(store, "vm.edit", http.HandlerFunc(handleGuestGrow(store))))
 	mux.HandleFunc("/api/guest-telemetry", handleGuestTelemetry(store))
 	mux.HandleFunc("/api/migrations", handleGetMigrations(store))
 	mux.HandleFunc("/api/migrations/record", handlePostMigration(store))

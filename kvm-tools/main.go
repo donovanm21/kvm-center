@@ -10,12 +10,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"kvm-center/internal/growguest"
+	"kvm-center/internal/growprotocol"
 	"log"
 	"net"
 	"net/http"
@@ -41,7 +44,7 @@ var Version = strings.TrimSpace(versionRaw)
 var GitSHA = "dev"
 
 // GuestFS mirrors models.GuestFS. Defined locally to keep this binary free of
-// internal package imports so it can be built and distributed standalone.
+// server model imports; the grow protocol contract is shared explicitly.
 type GuestFS struct {
 	Mountpoint string  `json:"mountpoint"`
 	FSType     string  `json:"fstype"`
@@ -57,21 +60,22 @@ type GuestInterface struct {
 }
 
 type GuestTelemetryPayload struct {
-	Arch            string           `json:"arch,omitempty"`
-	UpdateOS        string           `json:"update_os,omitempty"`
-	VMUUID          string           `json:"vm_uuid"`
-	Hostname        string           `json:"hostname"`
-	OS              string           `json:"os"`
-	Kernel          string           `json:"kernel"`
-	Uptime          string           `json:"uptime"`
-	CPUCount        int              `json:"cpu_count"`
-	MemTotalMB      uint64           `json:"mem_total_mb"`
-	MemUsedMB       uint64           `json:"mem_used_mb"`
-	IPs             []string         `json:"ips"`
-	Interfaces      []GuestInterface `json:"interfaces,omitempty"`
-	FS              []GuestFS        `json:"fs"`
-	KVMToolsVersion string           `json:"kvm_tools_version,omitempty"`
-	Timestamp       time.Time        `json:"timestamp"`
+	GrowV1          *growprotocol.Report `json:"grow_v1,omitempty"`
+	Arch            string               `json:"arch,omitempty"`
+	UpdateOS        string               `json:"update_os,omitempty"`
+	VMUUID          string               `json:"vm_uuid"`
+	Hostname        string               `json:"hostname"`
+	OS              string               `json:"os"`
+	Kernel          string               `json:"kernel"`
+	Uptime          string               `json:"uptime"`
+	CPUCount        int                  `json:"cpu_count"`
+	MemTotalMB      uint64               `json:"mem_total_mb"`
+	MemUsedMB       uint64               `json:"mem_used_mb"`
+	IPs             []string             `json:"ips"`
+	Interfaces      []GuestInterface     `json:"interfaces,omitempty"`
+	FS              []GuestFS            `json:"fs"`
+	KVMToolsVersion string               `json:"kvm_tools_version,omitempty"`
+	Timestamp       time.Time            `json:"timestamp"`
 }
 
 // TelemetryReply is the server's response to a telemetry POST.
@@ -82,10 +86,14 @@ type GuestTelemetryPayload struct {
 //     daemon caches it to /var/lib/kvm-tools/uuid and uses that from
 //     then on, surviving reboots.
 type TelemetryReply struct {
-	Status        string `json:"status"`
-	UpdateURL     string `json:"update_url,omitempty"`
-	CanonicalUUID string `json:"canonical_uuid,omitempty"`
+	GrowRequestV1 *growprotocol.Request `json:"grow_request_v1,omitempty"`
+	LegacyGrow    json.RawMessage       `json:"grow_filesystem,omitempty"`
+	Status        string                `json:"status"`
+	UpdateURL     string                `json:"update_url,omitempty"`
+	CanonicalUUID string                `json:"canonical_uuid,omitempty"`
 }
+
+var growGuest *growguest.Guest
 
 const uuidCacheFile = "/var/lib/kvm-tools/uuid"
 
@@ -135,6 +143,16 @@ func main() {
 	}
 	log.Printf("kvm-tools %s: vm_uuid=%s  os=%s  server=%s  interval=%s", Version, uuid, runtime.GOOS, *serverURL, *interval)
 
+	if runtime.GOOS == "linux" {
+		if err := os.MkdirAll("/var/lib/kvm-tools", 0700); err == nil {
+			growGuest, err = growguest.OpenGuest("/var/lib/kvm-tools/grow-v1.sqlite", uuid)
+			if err != nil {
+				log.Printf("kvm-tools: grow protocol unavailable: %v", err)
+			} else {
+				defer growGuest.Close()
+			}
+		}
+	}
 	initHTTPClient(*serverURL)
 
 	uuid = send(*serverURL, uuid)
@@ -206,6 +224,11 @@ func initHTTPClient(serverURL string) {
 // DMI UUID collision.
 func send(serverURL, uuid string) string {
 	p := collect(uuid)
+	if growGuest != nil && growGuest.VMUUID() == uuid {
+		if report, err := growGuest.Report(context.Background()); err == nil {
+			p.GrowV1 = &report
+		}
+	}
 	p.Arch = runtime.GOARCH
 	p.UpdateOS = runtime.GOOS
 	body, err := json.Marshal(p)
@@ -224,11 +247,13 @@ func send(serverURL, uuid string) string {
 		return uuid
 	}
 	var reply TelemetryReply
-	if err := json.NewDecoder(resp.Body).Decode(&reply); err != nil {
+	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
+	if readErr != nil || len(raw) > 1<<20 || growprotocol.Envelope(raw, "grow_request_v1") != nil || json.Unmarshal(raw, &reply) != nil {
 		// Older server versions returned a flat {status:"ok"} — that's
 		// still fine, just no update / canonical signal.
 		return uuid
 	}
+	processGrowReply(uuid, reply)
 	next := uuid
 	if reply.CanonicalUUID != "" && !strings.EqualFold(reply.CanonicalUUID, uuid) {
 		log.Printf("kvm-tools: server corrected UUID %s → %s (likely cloned DMI); caching to %s", uuid, reply.CanonicalUUID, uuidCacheFile)
@@ -547,4 +572,22 @@ func formatUptime(secs float64) string {
 
 func round2(f float64) float64 {
 	return float64(int64(f*100+0.5)) / 100
+}
+
+// Production deliberately supplies no filesystem adapter. The durable refusal
+// is replayable, correlated evidence, never a claim of filesystem completion.
+func processGrowReply(vm string, reply TelemetryReply) {
+	if len(reply.LegacyGrow) > 0 {
+		log.Printf("kvm-tools: unsupported legacy grow request refused")
+	}
+	if reply.GrowRequestV1 == nil {
+		return
+	}
+	if growGuest == nil || reply.GrowRequestV1.Target.VMUUID != vm || (reply.CanonicalUUID != "" && reply.CanonicalUUID != vm) {
+		log.Printf("kvm-tools: grow identity/protocol refused")
+		return
+	}
+	if _, err := growGuest.Run(context.Background(), *reply.GrowRequestV1, nil); err != nil {
+		log.Printf("kvm-tools: grow request refused: %v", err)
+	}
 }

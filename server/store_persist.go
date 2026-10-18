@@ -27,7 +27,7 @@ func snapshotHashes(raw []byte) (map[string]uint64, error) {
 		return nil, err
 	}
 	names := []string{
-		"guest_update_state", "affinity_state", "entity_bson_overlay", "legacy_history_state", "host_history_state", "vm_tag_state", "users", "groups", "roles", "idps", "sessions", "features",
+		"guest_grow_state", "guest_update_state", "affinity_state", "entity_bson_overlay", "legacy_history_state", "host_history_state", "vm_tag_state", "users", "groups", "roles", "idps", "sessions", "features",
 		"notifications", "audit_shipping", "backup_schedule", "discord_gateway",
 		"removed_hosts", "pending_enrollments", "api_tokens", "snapshot_policies",
 		"hypervisor_certs", "command_log", "metrics", "console_secret",
@@ -200,6 +200,7 @@ func (s *Store) snapshotBytes() ([]byte, map[string]uint64, error) {
 // and backups. Caller must hold s.mu while using its pointer-valued fields.
 func (s *Store) persistDataLocked() persistData {
 	d := persistData{
+		GuestGrows:         s.guestGrows,
 		GuestUpdates:       s.guestUpdates,
 		Alarms:             s.alarms,
 		EntityOverlay:      s.entityOverlay,
@@ -269,6 +270,13 @@ func (s *Store) load() {
 	if err := d.GuestUpdates.Validate(); err != nil {
 		return
 	}
+	if err := validateGuestGrows(d.GuestGrows); err != nil {
+		return
+	}
+	s.guestGrows = d.GuestGrows
+	s.guestGrowOwners = nil
+	s.guestGrowUncertain = false
+	s.growSessions = nil
 	s.guestUpdates = d.GuestUpdates
 	s.guestUpdateOwners = nil
 	s.guestUpdateUncertain = nil

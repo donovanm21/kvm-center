@@ -36,6 +36,9 @@ type persistWire struct {
 }
 
 func (d persistData) MarshalJSON() ([]byte, error) {
+	if err := validateGuestGrows(d.GuestGrows); err != nil {
+		return nil, err
+	}
 	if err := d.GuestUpdates.Validate(); err != nil {
 		return nil, err
 	}
@@ -122,6 +125,9 @@ func (d *persistData) UnmarshalJSON(raw []byte) error {
 		return errors.New("VM tag state must be absent or a versioned object, not null")
 	}
 
+	if value, ok := fields["guest_grow_state"]; ok && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		return errors.New("null guest grow state")
+	}
 	if value, ok := fields["guest_update_state"]; ok && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 		return errors.New("null guest update state")
 	}
@@ -184,6 +190,9 @@ func (d *persistData) UnmarshalJSON(raw []byte) error {
 		return err
 	}
 	decoded.EntityOverlay = overlay
+	if err := validateGuestGrows(decoded.GuestGrows); err != nil {
+		return err
+	}
 	*d = decoded
 	return nil
 }

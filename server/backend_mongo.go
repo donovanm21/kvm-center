@@ -292,6 +292,10 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 	if err != nil {
 		return nil, err
 	}
+	grows, err := loadGuestGrowState(ctx, db)
+	if err != nil {
+		return nil, err
+	}
 	updates, err := loadGuestUpdateState(ctx, db)
 	if err != nil {
 		return nil, err
@@ -301,6 +305,7 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 		return nil, err
 	}
 	pd := &persistData{
+		GuestGrows:    grows,
 		GuestUpdates:  updates,
 		Affinity:      affinity,
 		VMTagState:    tags,
@@ -608,10 +613,16 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	if err := preflightLegacyHistorySave(ctx, db, d, d.restoreLegacyHistory); err != nil {
 		return err
 	}
+	if err := preflightGuestGrows(ctx, db, d); err != nil {
+		return err
+	}
 	if err := preflightGuestUpdates(ctx, db, d); err != nil {
 		return err
 	}
 	if err := preflightAffinitySave(ctx, db, d); err != nil {
+		return err
+	}
+	if err := saveGuestGrows(ctx, db, d); err != nil {
 		return err
 	}
 	if err := saveGuestUpdates(ctx, db, d); err != nil {

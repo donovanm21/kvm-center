@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"kvm-center/internal/growprotocol"
 	"time"
 )
 
@@ -477,22 +478,23 @@ type GuestGrowResult struct {
 // GuestTelemetryPayload is sent by the kvm-tools daemon running inside a VM
 // directly to POST /api/guest-telemetry on the kvm-center server.
 type GuestTelemetryPayload struct {
-	UpdateOS        string           `json:"update_os,omitempty"`
-	Arch            string           `json:"arch,omitempty"`
-	GrowResult      *GuestGrowResult `json:"grow_result,omitempty"`
-	VMUUID          string           `json:"vm_uuid"`
-	Hostname        string           `json:"hostname"`
-	OS              string           `json:"os"`
-	Kernel          string           `json:"kernel"`
-	Uptime          string           `json:"uptime"`
-	CPUCount        int              `json:"cpu_count"`
-	MemTotalMB      uint64           `json:"mem_total_mb"`
-	MemUsedMB       uint64           `json:"mem_used_mb"`
-	IPs             []string         `json:"ips"`
-	Interfaces      []GuestInterface `json:"interfaces,omitempty"`
-	FS              []GuestFS        `json:"fs"`
-	KVMToolsVersion string           `json:"kvm_tools_version,omitempty"`
-	Timestamp       time.Time        `json:"timestamp"`
+	GrowV1          *growprotocol.Report `json:"grow_v1,omitempty"`
+	UpdateOS        string               `json:"update_os,omitempty"`
+	Arch            string               `json:"arch,omitempty"`
+	GrowResult      *GuestGrowResult     `json:"grow_result,omitempty"`
+	VMUUID          string               `json:"vm_uuid"`
+	Hostname        string               `json:"hostname"`
+	OS              string               `json:"os"`
+	Kernel          string               `json:"kernel"`
+	Uptime          string               `json:"uptime"`
+	CPUCount        int                  `json:"cpu_count"`
+	MemTotalMB      uint64               `json:"mem_total_mb"`
+	MemUsedMB       uint64               `json:"mem_used_mb"`
+	IPs             []string             `json:"ips"`
+	Interfaces      []GuestInterface     `json:"interfaces,omitempty"`
+	FS              []GuestFS            `json:"fs"`
+	KVMToolsVersion string               `json:"kvm_tools_version,omitempty"`
+	Timestamp       time.Time            `json:"timestamp"`
 }
 
 // Snapshot represents a libvirt domain snapshot.
