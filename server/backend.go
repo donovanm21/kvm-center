@@ -180,7 +180,19 @@ func migrateBackend(ctx context.Context, src, dst Backend) error {
 	if d == nil {
 		d = &persistData{}
 	}
-	if err := dst.Save(ctx, d); err != nil {
+	if source, ok := src.(*MongoBackend); ok {
+		d.EntityOverlay, err = source.captureEntityOverlay(ctx, d)
+		if err != nil {
+			return err
+		}
+	}
+	var saveErr error
+	if target, ok := dst.(*MongoBackend); ok && d.EntityOverlay != nil {
+		saveErr = target.restoreEntitySnapshot(ctx, d)
+	} else {
+		saveErr = dst.Save(ctx, d)
+	}
+	if err := saveErr; err != nil {
 		return fmt.Errorf("save to %s: %w", dst.Name(), err)
 	}
 	if err := verifyBackendRoundTrip(ctx, d, dst); err != nil {
@@ -257,4 +269,16 @@ func verifyBackendRoundTrip(ctx context.Context, src *persistData, dst Backend) 
 		}
 	}
 	return nil
+}
+
+// Serialize the persisted checkpoint capture against application saves. This
+// does not claim a transaction against external database clients.
+func (s *Store) migrateSnapshot(ctx context.Context, dst Backend) error {
+	if err := s.saveMu.LockContext(ctx); err != nil {
+		return err
+	}
+	defer s.saveMu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return migrateBackend(ctx, s.backend, dst)
 }

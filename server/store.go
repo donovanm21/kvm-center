@@ -20,6 +20,9 @@ func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
 
 // persistData is the on-disk JSON structure.
 type persistData struct {
+	EntityOverlay  *entityOverlay `json:"entity_bson_overlay,omitempty"`
+	restoreOverlay *entityOverlay
+
 	HostHistory      *historyState                       `json:"host_history_state,omitempty"`
 	VMTagState       *vmTagState                         `json:"vm_tag_state,omitempty"`
 	Hosts            map[string]*models.Host             `json:"hosts"`
@@ -210,7 +213,8 @@ type Store struct {
 	// backend is the pluggable persistence layer (JSON file or Mongo).
 	// Wired post-construction by NewStoreWithBackend; NewStore still
 	// works for tests and falls back to JSONBackend on dataFile.
-	backend Backend
+	backend       Backend
+	entityOverlay *entityOverlay
 
 	// hub is the SSE fan-out. Optional — nil is a no-op via SSEHub.Publish,
 	// which keeps the store usable in tests and by "go run" without the
