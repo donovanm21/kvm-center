@@ -1,0 +1,460 @@
+legacy_field,legacy_bson,legacy_type,current_bson,current_type,accounting,behavior_or_blocker
+APIToken.CreatedAt,createdat,time.Time,createdat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+APIToken.ExpiresAt,expiresat,time.Time,expiresat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+APIToken.Hash,hash,string,hash,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+APIToken.ID,id,string,id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+APIToken.Kind,kind,string,kind,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+APIToken.LastUsedAt,lastusedat,time.Time,lastusedat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+APIToken.Name,name,string,name,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+APIToken.OwnerID,ownerid,string,ownerid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+APIToken.Revoked,revoked,bool,revoked,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+APIToken.Scopes,scopes,[]string,scopes,[]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AffinityRule.CreatedAt,createdat,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+AffinityRule.Enabled,enabled,bool,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+AffinityRule.ID,id,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+AffinityRule.Kind,kind,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+AffinityRule.Name,name,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+AffinityRule.Strength,strength,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+AffinityRule.UpdatedAt,updatedat,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+AffinityRule.VMs,vms,[]string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+Alarm.CreatedAt,createdat,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+Alarm.Enabled,enabled,bool,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+Alarm.FiringOn,-,[]string,,,not_persisted_bson,Excluded by legacy BSON contract; no persisted-field conversion claimed
+Alarm.ForSeconds,forseconds,int,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+Alarm.Hosts,hosts,[]string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+Alarm.ID,id,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+Alarm.Metric,metric,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+Alarm.Name,name,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+Alarm.Severity,severity,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+Alarm.Threshold,threshold,float64,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+Alarm.UpdatedAt,updatedat,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+Alarm.VMs,vms,[]string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+AuditEvent.Action,action,string,action,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditEvent.ActorID,actor_id,string,actor_id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditEvent.ActorIP,actorip,string,actorip,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditEvent.ActorName,actorname,string,actorname,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditEvent.At,at,time.Time,at,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditEvent.Detail,detail,map[string]string,detail,map[string]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditEvent.Error,error,string,error,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditEvent.ID,id,string,id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditEvent.Resource,resource,string,resource,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditEvent.Success,success,bool,success,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditShipping.BasicAuth,basicauth,string,basicauth,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditShipping.BatchSize,batchsize,int,batchsize,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditShipping.BearerToken,bearertoken,string,bearertoken,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditShipping.Enabled,enabled,bool,enabled,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditShipping.Endpoint,endpoint,string,endpoint,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditShipping.FlushSeconds,flushseconds,int,flushseconds,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditShipping.LastShipAt,lastshipat,string,lastshipat,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditShipping.LastShipCount,lastshipcount,int64,lastshipcount,int64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditShipping.LastShipError,lastshiperror,string,lastshiperror,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditShipping.SyslogAppName,syslogappname,string,syslogappname,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditShipping.SyslogFacility,syslogfacility,int,syslogfacility,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditShipping.Type,type,string,type,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+BackupSchedule.CronExpr,cronexpr,string,cronexpr,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+BackupSchedule.DestPath,destpath,string,destpath,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+BackupSchedule.Enabled,enabled,bool,enabled,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+BackupSchedule.EncryptionPassphrase,encryptionpassphrase,string,encryptionpassphrase,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+BackupSchedule.EveryHours,everyhours,int,everyhours,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+BackupSchedule.LastRunAt,lastrunat,time.Time,lastrunat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+BackupSchedule.LastRunErr,lastrunerr,string,lastrunerr,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+BackupSchedule.LastRunSize,lastrunsize,int64,lastrunsize,int64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+BackupSchedule.NextRunAt,nextrunat,time.Time,nextrunat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+BackupSchedule.RetainCount,retaincount,int,retaincount,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.Action,action,string,action,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.ActorID,actor_id,string,actor_id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.AppliedAt,applied_at,*time.Time,applied_at,*time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.ExpiresAt,expires_at,*time.Time,expires_at,*time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.HostID,host_id,string,host_id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.InflightUntil,inflight_until,time.Time,inflight_until,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.LastPolledAt,last_polled_at,time.Time,last_polled_at,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.LastProgress,last_progress,*CommandProgressFrame,last_progress,*CommandProgressFrame,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.Message,message,string,message,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.Outcome,outcome,string,outcome,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.Params,params,map[string]string,params,map[string]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.Replayed,replayed,bool,replayed,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.RequestID,_id,string,_id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.StatusCode,status_code,int,status_code,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.SubmittedAt,submitted_at,time.Time,submitted_at,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.VMName,vm_name,string,vm_name,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandLogEntry.VMUUID,vm_uuid,string,vm_uuid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandProgressFrame.Action,action,string,action,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandProgressFrame.Detail,detail,string,detail,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandProgressFrame.HostID,hostid,string,hostid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandProgressFrame.Phase,phase,string,phase,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandProgressFrame.ProgressPct,progresspct,int32,progresspct,int32,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandProgressFrame.ReportedAt,reportedat,int64,reportedat,int64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandProgressFrame.RequestID,requestid,string,requestid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandProgressFrame.VMName,vmname,string,vmname,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+CommandProgressFrame.VMUUID,vmuuid,string,vmuuid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.DroppedEvents,droppedevents,int64,droppedevents,int64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.Enabled,enabled,bool,enabled,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.Host,host,string,host,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.LastHealthAt,lasthealthat,string,lasthealthat,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.LastHealthError,lasthealtherror,string,lasthealtherror,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.LastSendAt,lastsendat,string,lastsendat,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.LastSendCount,lastsendcount,int64,lastsendcount,int64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.LastSendError,lastsenderror,string,lastsenderror,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.PendingSince,pendingsince,string,pendingsince,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.Port,port,int,port,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.RegistrationID,registrationid,string,registrationid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.ShipAuditEvents,shipauditevents,bool,shipauditevents,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.ShipAuditFailedOnly,shipauditfailedonly,bool,shipauditfailedonly,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.Status,status,string,status,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.TLS,tls,bool,tls,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.Token,token,string,token,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.VerifyTLS,verifytls,bool,verifytls,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+DiscordGateway.WebhookID,webhookid,string,webhookid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+ExternalIdentity.Email,email,string,email,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+ExternalIdentity.LinkedAt,linkedat,time.Time,linkedat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+ExternalIdentity.ProviderID,providerid,string,providerid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+ExternalIdentity.Subject,subject,string,subject,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.DisableConsole,disableconsole,bool,disableconsole,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.DisableMigrations,disablemigrations,bool,disablemigrations,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.DisableSnapshots,disablesnapshots,bool,disablesnapshots,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.DisableStorageDelete,disablestoragedelete,bool,disablestoragedelete,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.DisableStorageUpload,disablestorageupload,bool,disablestorageupload,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.DisableVMCreate,disablevmcreate,bool,disablevmcreate,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.DisableVMDelete,disablevmdelete,bool,disablevmdelete,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.GRPCRequireClientCert,grpcrequireclientcert,bool,grpcrequireclientcert,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.NotifyOnTaskFailure,notifyontaskfailure,bool,notifyontaskfailure,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.PhantomHostPruneAfterDays,phantomhostpruneafterdays,int,phantomhostpruneafterdays,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.PublicURL,publicurl,string,publicurl,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.SSHKnownHosts,sshknownhosts,string,sshknownhosts,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.SSHStrictHostKeyChecking,sshstricthostkeychecking,bool,sshstricthostkeychecking,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.SetupComplete,setupcomplete,bool,setupcomplete,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Features.SetupCompletedAt,setupcompletedat,time.Time,setupcompletedat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Group.CreatedAt,createdat,time.Time,createdat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Group.Description,description,string,description,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Group.ID,id,string,id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Group.Name,name,string,name,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Group.RoleIDs,roleids,[]string,roleids,[]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+GuestFS.FSType,fstype,string,fstype,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+GuestFS.Mountpoint,mountpoint,string,mountpoint,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+GuestFS.TotalGB,totalgb,float64,totalgb,float64,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+GuestFS.UsedGB,usedgb,float64,usedgb,float64,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+GuestGrowResult.Device,device,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+GuestGrowResult.Error,error,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+GuestGrowResult.Result,result,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+GuestInterface.Addrs,addrs,[]string,addrs,[]string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+GuestInterface.Kind,kind,string,kind,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+GuestInterface.MAC,mac,string,mac,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+GuestInterface.Name,name,string,name,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+GuestTelemetryPayload.Arch,arch,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+GuestTelemetryPayload.CPUCount,cpucount,int,cpucount,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+GuestTelemetryPayload.FS,fs,[]GuestFS,fs,[]GuestFS,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+GuestTelemetryPayload.GrowResult,growresult,*GuestGrowResult,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+GuestTelemetryPayload.Hostname,hostname,string,hostname,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+GuestTelemetryPayload.IPs,ips,[]string,ips,[]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+GuestTelemetryPayload.Interfaces,interfaces,[]GuestInterface,interfaces,[]GuestInterface,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+GuestTelemetryPayload.KVMToolsVersion,kvmtoolsversion,string,kvmtoolsversion,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+GuestTelemetryPayload.Kernel,kernel,string,kernel,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+GuestTelemetryPayload.MemTotalMB,memtotalmb,uint64,memtotalmb,uint64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+GuestTelemetryPayload.MemUsedMB,memusedmb,uint64,memusedmb,uint64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+GuestTelemetryPayload.OS,os,string,os,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+GuestTelemetryPayload.Timestamp,timestamp,time.Time,timestamp,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+GuestTelemetryPayload.Uptime,uptime,string,uptime,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+GuestTelemetryPayload.VMUUID,vmuuid,string,vmuuid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Host.AgentPort,agentport,int,agentport,int,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.AgentTLSPort,agent_tls_port,int,,,opaque_preserved_behavior_blocked,Raw root field retained through host/VM writes; no interpretation or operational compatibility claimed
+Host.AgentVersion,agentversion,string,agentversion,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.CPUCount,cpucount,int,cpucount,int,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.CPUModel,cpumodel,string,cpumodel,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.CPUUsage,cpuusage,float64,cpuusage,float64,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.CoresPerSocket,corespersocket,int,corespersocket,int,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.ExpectedDown,expecteddown,bool,expecteddown,bool,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.ExpectedDownBy,expecteddownby,string,expecteddownby,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.ExpectedDownReason,expecteddownreason,string,expecteddownreason,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.ExpectedDownSetAt,expecteddownsetat,time.Time,expecteddownsetat,time.Time,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.ExpectedReturnAt,expectedreturnat,time.Time,expectedreturnat,time.Time,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.GPUs,gpus,[]string,gpus,[]string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.ID,id,string,id,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.IP,ip,string,ip,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.KernelVer,kernelver,string,kernelver,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.LastSeen,lastseen,time.Time,lastseen,time.Time,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.LibvirtVer,libvirtver,string,libvirtver,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.MTLSReady,mtlsready,bool,mtlsready,bool,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.MaintenanceBy,maintenanceby,string,maintenanceby,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.MaintenanceEnteredAt,maintenanceenteredat,time.Time,maintenanceenteredat,time.Time,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.MaintenanceMode,maintenancemode,bool,maintenancemode,bool,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.MaintenanceReason,maintenancereason,string,maintenancereason,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.MemFreeMB,memfreemb,uint64,memfreemb,uint64,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.MemTotalMB,memtotalmb,uint64,memtotalmb,uint64,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.MemUsage,memusage,float64,memusage,float64,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.MigratorPubkey,migratorpubkey,string,migratorpubkey,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.NUMANodes,numanodes,int,numanodes,int,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.OS,os,string,os,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.PCIDevices,pcidevices,[]HostPCIDevice,pcidevices,[]HostPCIDevice,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.SSHHostKeys,sshhostkeys,[]string,sshhostkeys,[]string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.Sockets,sockets,int,sockets,int,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.Status,status,HostStatus,status,HostStatus,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.ThreadsPerCore,threadspercore,int,threadspercore,int,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.Uptime,uptime,string,uptime,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+Host.VMCount,vmcount,int,vmcount,int,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+HostPCIDevice.Address,address,string,address,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+HostPCIDevice.Description,description,string,description,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+HostPCIDevice.IOMMUGroup,iommugroup,int,iommugroup,int,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+HostPCIDevice.InUseByVM,inusebyvm,string,inusebyvm,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+HostPCIDevice.Type,type,string,type,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+HypervisorCert.Fingerprint,fingerprint,string,fingerprint,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+HypervisorCert.HostID,hostid,string,hostid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+HypervisorCert.IssuedAt,issuedat,time.Time,issuedat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+HypervisorCert.IssuedBy,issuedby,string,issuedby,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+HypervisorCert.NotAfter,notafter,time.Time,notafter,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+HypervisorCert.NotBefore,notbefore,time.Time,notbefore,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+HypervisorCert.RevokeReason,revokereason,string,revokereason,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+HypervisorCert.RevokedAt,revokedat,time.Time,revokedat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+HypervisorCert.RevokedBy,revokedby,string,revokedby,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+HypervisorCert.SerialHex,serialhex,string,serialhex,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+HypervisorCert.Subject,subject,string,subject,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.AuthURL,authurl,string,authurl,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.ClientID,clientid,string,clientid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.ClientSecret,clientsecret,string,clientsecret,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.CreatedAt,createdat,time.Time,createdat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.DefaultRoleID,defaultroleid,string,defaultroleid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.EmailClaim,emailclaim,string,emailclaim,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.Enabled,enabled,bool,enabled,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.ID,id,string,id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.Issuer,issuer,string,issuer,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.Kind,kind,string,kind,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.LDAP,ldap,*LDAPConfig,ldap,*LDAPConfig,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.Name,name,string,name,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.SAML,saml,*SAMLConfig,saml,*SAMLConfig,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.Scopes,scopes,string,scopes,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.SubjectClaim,subjectclaim,string,subjectclaim,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.TokenURL,tokenurl,string,tokenurl,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.UserinfoURL,userinfourl,string,userinfourl,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+IdentityProvider.UsernameClaim,usernameclaim,string,usernameclaim,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+LDAPConfig.BindDN,binddn,string,binddn,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+LDAPConfig.BindPassword,bindpassword,string,bindpassword,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+LDAPConfig.EmailAttr,emailattr,string,emailattr,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+LDAPConfig.InsecureSkipVerify,insecureskipverify,bool,insecureskipverify,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+LDAPConfig.StartTLS,starttls,bool,starttls,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+LDAPConfig.URL,url,string,url,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+LDAPConfig.UserBaseDN,userbasedn,string,userbasedn,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+LDAPConfig.UserFilter,userfilter,string,userfilter,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+LDAPConfig.UsernameAttr,usernameattr,string,usernameattr,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MetricsConfig.BatchSize,batchsize,int,batchsize,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MetricsConfig.Bucket,bucket,string,bucket,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MetricsConfig.Enabled,enabled,bool,enabled,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MetricsConfig.FlushSeconds,flushseconds,int,flushseconds,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MetricsConfig.LastWriteAt,lastwriteat,string,lastwriteat,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MetricsConfig.LastWriteCount,lastwritecount,int64,lastwritecount,int64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MetricsConfig.LastWriteError,lastwriteerror,string,lastwriteerror,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MetricsConfig.MeasurementPrefix,measurementprefix,string,measurementprefix,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MetricsConfig.Org,org,string,org,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MetricsConfig.Token,token,string,token,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MetricsConfig.URL,url,string,url,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.CompletedAt,completedat,int64,completedat,int64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.DestHost,desthost,string,desthost,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.Detail,detail,string,detail,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.DiskSizeMB,disksizemb,int64,disksizemb,int64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.ElapsedSec,elapsedsec,int64,elapsedsec,int64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.Error,error,string,error,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.ID,id,string,id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.Mode,mode,string,mode,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.Phase,phase,string,phase,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.Progress,progress,int,progress,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.RequestID,requestid,string,requestid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.SourceHost,sourcehost,string,sourcehost,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.StartedAt,started_at,int64,started_at,int64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.Status,status,string,status,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.Transport,transport,string,transport,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+MigrationRecord.VMName,vmname,string,vmname,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationChannel.EmailFrom,emailfrom,string,emailfrom,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationChannel.EmailTo,emailto,string,emailto,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationChannel.Enabled,enabled,bool,enabled,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationChannel.EventTypes,eventtypes,map[string]bool,eventtypes,map[string]bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationChannel.ID,id,string,id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationChannel.Kind,kind,string,kind,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationChannel.LastSendAt,lastsendat,string,lastsendat,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationChannel.LastSendCount,lastsendcount,int64,lastsendcount,int64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationChannel.LastSendError,lastsenderror,string,lastsenderror,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationChannel.Name,name,string,name,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationChannel.WebhookFormat,webhookformat,string,webhookformat,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationChannel.WebhookSecret,webhooksecret,string,webhooksecret,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationChannel.WebhookURL,webhookurl,string,webhookurl,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationConfig.Channels,channels,[]*NotificationChannel,channels,[]*NotificationChannel,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationConfig.EventTypes,eventtypes,map[string]bool,eventtypes,map[string]bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationConfig.SMTPFrom,smtpfrom,string,smtpfrom,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationConfig.SMTPHost,smtphost,string,smtphost,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationConfig.SMTPPassword,smtppassword,string,smtppassword,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationConfig.SMTPPort,smtpport,int,smtpport,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationConfig.SMTPStartTLS,smtpstarttls,bool,smtpstarttls,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+NotificationConfig.SMTPUser,smtpuser,string,smtpuser,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.ApprovedAt,approvedat,time.Time,approvedat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.ApprovedBy,approvedby,string,approvedby,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.AutoApproved,autoapproved,bool,autoapproved,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.CSR,csr,string,csr,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.DeliveredAt,deliveredat,time.Time,deliveredat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.ExpiresAt,expiresat,time.Time,expiresat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.Fingerprint,fingerprint,string,fingerprint,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.HostID,hostid,string,hostid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.ID,id,string,id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.IssuedCAPEM,issued_ca_pem,string,issued_ca_pem,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.IssuedCertPEM,issued_cert_pem,string,issued_cert_pem,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.IssuedNotAfter,issuednotafter,time.Time,issuednotafter,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.IssuedSerial,issuedserial,string,issuedserial,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.PollTokenHash,poll_token_hash,string,poll_token_hash,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.Reason,reason,string,reason,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.RejectedAt,rejectedat,time.Time,rejectedat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.RejectedBy,rejectedby,string,rejectedby,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.SourceIP,sourceip,string,sourceip,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.SourceVersion,sourceversion,string,sourceversion,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.Status,status,string,status,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.SubmittedAt,submittedat,time.Time,submittedat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+PendingEnrollment.SystemInfo,systeminfo,map[string]string,systeminfo,map[string]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+RemovedHost.HostID,hostid,string,hostid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+RemovedHost.Reason,reason,string,reason,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+RemovedHost.RemovedAt,removedat,time.Time,removedat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+RemovedHost.RemovedBy,removedby,string,removedby,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Role.BuiltIn,builtin,bool,builtin,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Role.CreatedAt,createdat,time.Time,createdat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Role.Description,description,string,description,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Role.ID,id,string,id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Role.Name,name,string,name,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Role.Permissions,permissions,[]string,permissions,[]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SAMLConfig.Certificate,certificate,string,certificate,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SAMLConfig.EmailAttr,emailattr,string,emailattr,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SAMLConfig.IDPEntityID,idpentityid,string,idpentityid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SAMLConfig.MetadataURL,metadataurl,string,metadataurl,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SAMLConfig.SPEntityID,spentityid,string,spentityid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SAMLConfig.SSOURL,ssourl,string,ssourl,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SAMLConfig.SubjectAttr,subjectattr,string,subjectattr,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SAMLConfig.UsernameAttr,usernameattr,string,usernameattr,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Session.CreatedAt,createdat,time.Time,createdat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Session.ExpiresAt,expires_at,time.Time,expires_at,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Session.Token,token,string,token,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Session.UserAgent,useragent,string,useragent,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Session.UserID,userid,string,userid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Snapshot.CreationTime,creationtime,string,creationtime,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Snapshot.Domain,domain,string,domain,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Snapshot.IsCurrent,iscurrent,bool,iscurrent,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Snapshot.Name,name,string,name,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Snapshot.Parent,parent,string,parent,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+Snapshot.State,state,string,state,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SnapshotPolicy.CreatedAt,createdat,time.Time,createdat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SnapshotPolicy.Enabled,enabled,bool,enabled,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SnapshotPolicy.EveryMinutes,everyminutes,int,everyminutes,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SnapshotPolicy.ID,id,string,id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SnapshotPolicy.LastRunAt,lastrunat,time.Time,lastrunat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SnapshotPolicy.LastRunCount,lastruncount,int,lastruncount,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SnapshotPolicy.LastRunError,lastrunerror,string,lastrunerror,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SnapshotPolicy.Name,name,string,name,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SnapshotPolicy.RetentionKeep,retentionkeep,int,retentionkeep,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+SnapshotPolicy.VMUUIDs,vmuuids,[]string,vmuuids,[]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+StoragePool.AllocationGB,allocationgb,float64,allocationgb,float64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+StoragePool.AvailableGB,availablegb,float64,availablegb,float64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+StoragePool.CapacityGB,capacitygb,float64,capacitygb,float64,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+StoragePool.HostID,hostid,string,hostid,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+StoragePool.Name,name,string,name,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+StoragePool.Path,path,string,path,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+StoragePool.PoolType,pooltype,string,pooltype,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+StoragePool.State,state,string,state,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+User.CreatedAt,createdat,time.Time,createdat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+User.Email,email,string,email,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+User.Enabled,enabled,bool,enabled,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+User.ExternalIDs,externalids,[]ExternalIdentity,externalids,[]ExternalIdentity,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+User.GroupIDs,groupids,[]string,groupids,[]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+User.ID,id,string,id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+User.LastLoginAt,lastloginat,time.Time,lastloginat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+User.NotifyTaskSuccessActions,notifytasksuccessactions,[]string,notifytasksuccessactions,[]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+User.PasswordHash,passwordhash,string,passwordhash,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+User.RoleIDs,roleids,[]string,roleids,[]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+User.TOTPEnabled,totpenabled,bool,totpenabled,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+User.TOTPSecret,totpsecret,string,totpsecret,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+User.Username,username,string,username,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+VM.AllDisks,alldisks,[]VMDisk,alldisks,[]VMDisk,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.Autostart,autostart,bool,autostart,bool,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.BootDev,bootdev,string,bootdev,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.CPUCount,cpucount,int,cpucount,int,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.CPUMode,cpumode,string,cpumode,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.CPUUsage,cpuusage,float64,cpuusage,float64,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.DiskPath,diskpath,string,diskpath,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.DiskTotalGB,disktotalgb,float64,disktotalgb,float64,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.DiskType,disktype,string,disktype,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.DiskUsageGB,diskusagegb,float64,diskusagegb,float64,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.Firmware,firmware,string,firmware,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.GuestAgent,guestagent,bool,guestagent,bool,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.GuestFS,guestfs,[]GuestFS,guestfs,[]GuestFS,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.GuestHostname,guesthostname,string,guesthostname,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.GuestIPs,guestips,[]string,guestips,[]string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.GuestInterfaces,guestinterfaces,[]GuestInterface,guestinterfaces,[]GuestInterface,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.GuestKernel,guestkernel,string,guestkernel,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.GuestOS,guestos,string,guestos,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.GuestSource,guestsource,string,guestsource,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.GuestUptime,guestuptime,string,guestuptime,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.HasPassthrough,haspassthrough,bool,,,opaque_preserved_behavior_blocked,Raw root field retained through host/VM writes; no interpretation or operational compatibility claimed
+VM.HasTPM,hastpm,bool,hastpm,bool,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.HostID,host_id,string,host_id,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.KVMToolsUpdateQueued,kvmtoolsupdatequeued,bool,kvmtoolsupdatequeued,bool,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.KVMToolsVersion,kvmtoolsversion,string,kvmtoolsversion,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.MachineType,machinetype,string,machinetype,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.MemTotalMB,memtotalmb,uint64,memtotalmb,uint64,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.MemUsageMB,memusagemb,uint64,memusagemb,uint64,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.Name,name,string,name,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.Networks,networks,[]VMNetwork,networks,[]VMNetwork,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.Notes,notes,string,notes,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.PCIDevices,pcidevices,[]VMPCIDevice,pcidevices,[]VMPCIDevice,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.SnapshotCount,snapshotcount,int,snapshotcount,int,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.SnapshotsBlockedReason,snapshotsblockedreason,string,snapshotsblockedreason,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.State,state,VMState,state,VMState,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.TPMVersion,tpmversion,string,tpmversion,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.UUID,uuid,string,uuid,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VM.VideoModel,videomodel,string,videomodel,string,known_write_preserved,Retained-identity Mongo host/VM known-field write preservation tested; operational behavior remains current implementation
+VMDisk.AllocGB,allocgb,float64,allocgb,float64,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+VMDisk.Bus,bus,string,bus,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+VMDisk.CapacityGB,capacitygb,float64,capacitygb,float64,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+VMDisk.Device,device,string,device,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+VMDisk.DiskType,disktype,string,disktype,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+VMDisk.Path,path,string,path,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+VMDisk.Target,target,string,target,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+VMNetwork.Bridge,bridge,string,bridge,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+VMNetwork.Interface,interface,string,interface,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+VMNetwork.MAC,mac,string,mac,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+VMNetwork.RxBytes,rxbytes,uint64,rxbytes,uint64,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+VMNetwork.TxBytes,txbytes,uint64,txbytes,uint64,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+VMPCIDevice.HostDesc,hostdesc,string,hostdesc,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+VMPCIDevice.SourceAddr,sourceaddr,string,sourceaddr,string,nested_preservation_conditional,Host/VM container retained when known projection unchanged; edits with opaque descendants refuse; other collection contexts remain unverified
+guestEntry.Payload,payload,GuestTelemetryPayload,payload,GuestTelemetryPayload,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+guestEntry.UpdatedAt,updatedat,time.Time,updatedat,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+historyPoint.CPUAvg,cpu_avg,float64,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+historyPoint.CPUMax,cpu_max,float64,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+historyPoint.MemAvg,mem_avg,float64,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+historyPoint.MemMax,mem_max,float64,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+historyPoint.N,n,int,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+historyPoint.StorageAvg,storage_avg,float64,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+historyPoint.StorageMax,storage_max,float64,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+historyPoint.T,t,int64,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+historyPoint.VMs,vms,int,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+persistData.APITokens,apitokens,map[string]*APIToken,apitokens,map[string]*APIToken,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.AffinityRules,affinityrules,[]*AffinityRule,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+persistData.Alarms,alarms,[]*Alarm,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+persistData.Audit,audit,[]*AuditEvent,audit,[]*AuditEvent,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.AuditShipping,auditshipping,*AuditShipping,auditshipping,*AuditShipping,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.BackupSchedule,backupschedule,*BackupSchedule,backupschedule,*BackupSchedule,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.CommandLog,commandlog,map[string]*CommandLogEntry,commandlog,map[string]*CommandLogEntry,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.ConsoleSecret,consolesecret,string,consolesecret,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.Dirty,-,map[string]bool,-,map[string]bool,not_persisted_bson,Excluded by legacy BSON contract; no persisted-field conversion claimed
+persistData.DiscordGateway,discordgateway,*DiscordGateway,discordgateway,*DiscordGateway,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.Features,features,*Features,features,*Features,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.Groups,groups,map[string]*Group,groups,map[string]*Group,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.GuestData,guestdata,map[string]*guestEntry,guestdata,map[string]*guestEntry,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.History,history,[]persistedHistory,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+persistData.Hosts,hosts,map[string]*Host,hosts,map[string]*Host,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.HypervisorCerts,hypervisorcerts,map[string]*HypervisorCert,hypervisorcerts,map[string]*HypervisorCert,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.IDPs,idps,map[string]*IdentityProvider,idps,map[string]*IdentityProvider,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.Metrics,metrics,*MetricsConfig,metrics,*MetricsConfig,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.Migrations,migrations,[]*MigrationRecord,migrations,[]*MigrationRecord,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.Notifications,notifications,*NotificationConfig,notifications,*NotificationConfig,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.PendingEnrollments,pendingenrollments,map[string]*PendingEnrollment,pendingenrollments,map[string]*PendingEnrollment,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.RemovedHosts,removedhosts,map[string]*RemovedHost,removedhosts,map[string]*RemovedHost,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.Roles,roles,map[string]*Role,roles,map[string]*Role,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.Sessions,sessions,map[string]*Session,sessions,map[string]*Session,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.SnapshotPolicies,snapshotpolicies,map[string]*SnapshotPolicy,snapshotpolicies,map[string]*SnapshotPolicy,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.Storage,storage,map[string][]*StoragePool,storage,map[string][]*StoragePool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.Users,users,map[string]*User,users,map[string]*User,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.VMNotes,vmnotes,map[string]string,vmnotes,map[string]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistData.VMs,vms,map[string][]*VM,vms,map[string][]*VM,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+persistedHistory.Host,host,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
+persistedHistory.Tiers,tiers,map[string][]historyPoint,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
