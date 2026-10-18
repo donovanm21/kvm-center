@@ -122,3 +122,53 @@ This closes namespace omission paths under the single-application-writer contrac
 Inspection is not atomic against an external concurrent writer, and an allowlisted
 collection does not establish compatibility of all its fields, indexes or behavior.
 Alarms/affinity implementation and complete legacy activation remain unmet.
+
+## Audit events: bounded active component (overlay v5)
+
+The audit component supports canonical legacy `audit_events` records through
+read/filter, application-generated append, chronological retention, restart,
+application backup, fresh restore, second backup and restart. The native
+acceptance fixture contains all ten deployed declared fields plus an opaque
+Decimal128 value. Unknown action strings are displayable historical data;
+interpreting or replaying their original operations is not supported.
+
+Admission requires nonempty matching `_id`/`id`, nonzero BSON dates, exact declared
+field types, and at most 10,000 events. Ambiguous aliases, duplicate identities,
+and oversized input refuse before indexes or writes; no newest-only query or
+silent deduplication approves partial input. Offline conversion can normalize
+unambiguous `actorid` to `actor_id`; originals remain immutable.
+
+Ordering is explicit: ascending BSON millisecond time, then ID, with newest-first
+reads. Appends use the same ordering before trimming the oldest events to 10,000;
+JSON and Mongo restart therefore agree for tied or out-of-order timestamps.
+Retained events preserve opaque BSON. Active-ring eviction is deliberate and
+never deletes retained offline originals. Audit TTL remains disabled for legacy
+preservation acceptance; this is not approval to activate the archived TTL index.
+Overlay v5 reserves 10,000 audit records independently of the existing 10,000
+other-record allowance, within the unchanged 16 MiB total raw-data bound. Original
+v1–v4 backup manifests remain readable and are tested without rewriting them.
+
+### Essential acceptance before this component is complete
+
+- Strict, bounded BSON/JSON admission; byte-preserved originals and opaque values.
+- Deterministic ordering and cap-boundary retention, including a full-ring backup
+  with other inventory; no resurrection after intentional eviction.
+- Actual application read/filter and durable generated append across restart.
+- Backup/fresh restore/second backup/restart and original v1–v4 archive support.
+- Independent exact-head review, passing exact-head CI and post-merge verification.
+
+### Remaining activation and release blockers
+
+Full-schema activation still requires per-collection field/reference/operation
+semantics and full-fixture recovery. Alarms, affinity, legacy history/tag routing,
+guest expiry/projections and routing/passthrough remain unresolved. The intentional
+unknown namespace in the full fixture must receive an explicit supported meaning
+or remain inactive; it cannot be deleted merely to obtain a passing boot. Legacy
+jobs and TTL stay inactive. The archived writer loses five known opaque values,
+so rollback remains separate original-snapshot recovery with explicit accounting
+for later writes, not a lossless ongoing writer. Native quiescence, authorized UI
+acceptance and the separate promotion gates remain release blockers.
+
+Audit shipping/Discord delivery, new filtering features, indefinite active audit
+retention and replay of historical actions are optional or separate components;
+none is required to establish this bounded local audit reader/append/recovery path.

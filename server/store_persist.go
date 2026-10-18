@@ -322,6 +322,7 @@ func (s *Store) load() {
 	}
 	if d.Audit != nil {
 		s.audit = d.Audit
+		sortAudit(s.audit)
 	}
 	if d.AuditShipping != nil {
 		s.auditShipping = d.AuditShipping

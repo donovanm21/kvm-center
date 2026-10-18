@@ -87,6 +87,28 @@ func unknownBelow(old, projected bson.RawValue, t reflect.Type) (bool, error) {
 	if old.Type != projected.Type {
 		return false, errors.New("unsupported BSON type conversion")
 	}
+	if old.Type == bsontype.EmbeddedDocument && t.Kind() == reflect.Map {
+		if t.Key().Kind() != reflect.String || t.Elem().Kind() != reflect.String {
+			return false, errors.New("unsupported BSON map schema")
+		}
+		a, err := rawFields(bson.Raw(old.Value))
+		if err != nil {
+			return false, err
+		}
+		b, err := rawFields(bson.Raw(projected.Value))
+		if err != nil {
+			return false, err
+		}
+		if len(a) != len(b) {
+			return false, errors.New("BSON string map projection changed")
+		}
+		for key, value := range a {
+			if value.Type != bsontype.String || !equalRaw(value, b[key]) {
+				return false, errors.New("BSON string map value changed type or value")
+			}
+		}
+		return false, nil
+	}
 	if old.Type == bsontype.EmbeddedDocument {
 		fields, err := bsonFields(t)
 		if err != nil {

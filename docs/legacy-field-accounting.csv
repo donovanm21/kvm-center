@@ -29,16 +29,16 @@ Alarm.Severity,severity,string,,,blocked,Current declaration absent; raw offline
 Alarm.Threshold,threshold,float64,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
 Alarm.UpdatedAt,updatedat,string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
 Alarm.VMs,vms,[]string,,,blocked,Current declaration absent; raw offline originals retained; active semantics unsupported
-AuditEvent.Action,action,string,action,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-AuditEvent.ActorID,actor_id,string,actor_id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-AuditEvent.ActorIP,actorip,string,actorip,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-AuditEvent.ActorName,actorname,string,actorname,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-AuditEvent.At,at,time.Time,at,time.Time,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-AuditEvent.Detail,detail,map[string]string,detail,map[string]string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-AuditEvent.Error,error,string,error,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-AuditEvent.ID,id,string,id,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-AuditEvent.Resource,resource,string,resource,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
-AuditEvent.Success,success,bool,success,bool,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
+AuditEvent.Action,action,string,action,string,audit_read_append_recovery_bounded,"Canonical audit read/filter/append/chronological retention/recovery; at most 10000 records, TTL inactive, raw originals retained; shipping and historical replay excluded"
+AuditEvent.ActorID,actor_id,string,actor_id,string,audit_read_append_recovery_bounded,"Canonical audit read/filter/append/chronological retention/recovery; at most 10000 records, TTL inactive, raw originals retained; shipping and historical replay excluded"
+AuditEvent.ActorIP,actorip,string,actorip,string,audit_read_append_recovery_bounded,"Canonical audit read/filter/append/chronological retention/recovery; at most 10000 records, TTL inactive, raw originals retained; shipping and historical replay excluded"
+AuditEvent.ActorName,actorname,string,actorname,string,audit_read_append_recovery_bounded,"Canonical audit read/filter/append/chronological retention/recovery; at most 10000 records, TTL inactive, raw originals retained; shipping and historical replay excluded"
+AuditEvent.At,at,time.Time,at,time.Time,audit_read_append_recovery_bounded,"Canonical audit read/filter/append/chronological retention/recovery; at most 10000 records, TTL inactive, raw originals retained; shipping and historical replay excluded"
+AuditEvent.Detail,detail,map[string]string,detail,map[string]string,audit_read_append_recovery_bounded,"Canonical audit read/filter/append/chronological retention/recovery; at most 10000 records, TTL inactive, raw originals retained; shipping and historical replay excluded"
+AuditEvent.Error,error,string,error,string,audit_read_append_recovery_bounded,"Canonical audit read/filter/append/chronological retention/recovery; at most 10000 records, TTL inactive, raw originals retained; shipping and historical replay excluded"
+AuditEvent.ID,id,string,id,string,audit_read_append_recovery_bounded,"Canonical audit read/filter/append/chronological retention/recovery; at most 10000 records, TTL inactive, raw originals retained; shipping and historical replay excluded"
+AuditEvent.Resource,resource,string,resource,string,audit_read_append_recovery_bounded,"Canonical audit read/filter/append/chronological retention/recovery; at most 10000 records, TTL inactive, raw originals retained; shipping and historical replay excluded"
+AuditEvent.Success,success,bool,success,bool,audit_read_append_recovery_bounded,"Canonical audit read/filter/append/chronological retention/recovery; at most 10000 records, TTL inactive, raw originals retained; shipping and historical replay excluded"
 AuditShipping.BasicAuth,basicauth,string,basicauth,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
 AuditShipping.BatchSize,batchsize,int,batchsize,int,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified
 AuditShipping.BearerToken,bearertoken,string,bearertoken,string,declared_unverified,Current declaration exists; complete active semantics and unknown-field write/backup retention not verified

@@ -468,17 +468,9 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 		return nil, err
 	}
 
-	// Audit events — loaded in chronological order so the ring-buffer
-	// trim in Store behaves identically to the JSON backend path.
-	if err := func() error {
-		auditOpts := options.Find().SetSort(bson.D{{Key: "at", Value: 1}})
-		cur, err := db.Collection(mcoAuditEvents).Find(ctx, bson.D{}, auditOpts)
-		if err != nil {
-			return err
-		}
-		defer cur.Close(ctx)
-		return cur.All(ctx, &pd.Audit)
-	}(); err != nil {
+	// Audit admission is bounded and strict before typed records can be rewritten.
+	pd.Audit, err = loadAuditRecords(ctx, db)
+	if err != nil {
 		return nil, err
 	}
 
@@ -682,7 +674,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	}
 	passivePlans := map[string][]any{}
 	candidates := overlayCandidates(d)
-	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData} {
+	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData, mcoAuditEvents} {
 		prepared, err := prepareEntityDocumentsFrom(ctx, db, col, candidates[col], restoreEntityRecords(d, col))
 		if err != nil {
 			return fmt.Errorf("%s preservation preflight: %w", col, err)
@@ -787,28 +779,8 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 		}
 	}
 
-	// Audit events — always write (hot collection). Dedup by ID
-	// (v5.53.1) — a clock skew or re-issue path occasionally produces
-	// two entries with the same ID in the in-memory ring buffer,
-	// which then fails the bulk insert. Keep the first occurrence;
-	// the buffer is FIFO so first == oldest and the duplicate (if
-	// it differs at all) is a re-emission.
-	var auditDocs []any
-	seenAudit := map[string]bool{}
-	for _, ev := range d.Audit {
-		if ev == nil || ev.ID == "" {
-			continue
-		}
-		if seenAudit[ev.ID] {
-			continue
-		}
-		seenAudit[ev.ID] = true
-		auditDocs = append(auditDocs, struct {
-			ID         string             `bson:"_id"`
-			AuditEvent *models.AuditEvent `bson:",inline"`
-		}{ev.ID, ev})
-	}
-	if err := replaceMap(ctx, db, mcoAuditEvents, auditDocs); err != nil {
+	// Audit events use the strict, preservation-aware plan prepared before writes.
+	if err := replaceMap(ctx, db, mcoAuditEvents, passivePlans[mcoAuditEvents]); err != nil {
 		return err
 	}
 

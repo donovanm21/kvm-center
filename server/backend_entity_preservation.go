@@ -32,6 +32,8 @@ func entitySchema(collection string) (reflect.Type, map[string]string, error) {
 		value = entityVMNote{}
 	case mcoGuestData:
 		value = entityGuestReport{}
+	case mcoAuditEvents:
+		value = models.AuditEvent{}
 	case mcoRemovedHosts:
 		value = models.RemovedHost{}
 	default:
@@ -106,6 +108,10 @@ func entityIdentity(raw bson.Raw, collection string) (string, error) {
 		if retired.HostID != id || strings.TrimSpace(id) != id {
 			return "", errors.New("retirement identity mismatch")
 		}
+	case mcoAuditEvents:
+		if err := validateAuditBSON(raw); err != nil {
+			return "", err
+		}
 	case mcoUsers, mcoGroups, mcoRoles:
 		typ, _, err := entitySchema(collection)
 		if err != nil {
@@ -133,6 +139,11 @@ func prepareEntityDocuments(ctx context.Context, db *mongo.Database, collection 
 }
 
 func prepareEntityDocumentsFrom(ctx context.Context, db *mongo.Database, collection string, docs []any, source map[string][]byte) ([]any, error) {
+	if collection == mcoAuditEvents {
+		if _, err := loadAuditRecords(ctx, db); err != nil {
+			return nil, err
+		}
+	}
 	t, aliases, err := entitySchema(collection)
 	if err != nil {
 		return nil, err
