@@ -14,12 +14,12 @@ import (
 )
 
 func TestSnapshotUnknownNamespaceRefusalPreservesOriginal(t *testing.T) {
-	for _, name := range []string{"alarms", "affinity_rules", "future_feature", "ALARMS"} {
+	for _, name := range []string{"affinity_rules", "future_feature", "ALARMS"} {
 		for _, value := range []string{`null`, `[]`, `{}`, `[{"id":"synthetic","enabled":true}]`} {
 			raw := []byte(`{"hosts":{},"` + name + `":` + value + `}`)
 			original := persistData{Hosts: map[string]*models.Host{"sentinel": {ID: "sentinel"}}}
 			before, _ := json.Marshal(original)
-			if err := json.Unmarshal(raw, &original); err == nil || !strings.Contains(err.Error(), name) {
+			if err := json.Unmarshal(raw, &original); err == nil || (!strings.Contains(err.Error(), name) && !(name == "ALARMS" && strings.Contains(err.Error(), "noncanonical typed JSON field"))) {
 				t.Fatal("unknown snapshot namespace accepted", name, err)
 			}
 			after, _ := json.Marshal(original)

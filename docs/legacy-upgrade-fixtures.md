@@ -226,3 +226,36 @@ backups retain session tokens needed for recovery; public evidence omits them.
 Asynchronous saves do not establish crash-durable acknowledgement. LDAP/OIDC/TOTP
 flows are outside this bounded local-password/session claim. Full-schema recovery,
 post-upgrade-write accounting, native quiescence, UI and promotion gates remain HOLD.
+
+
+## Bounded CPU/memory alarm compatibility (overlay v8)
+
+Canonical per-ID `alarms` records preserve all eleven persisted deployed fields
+and opaque BSON. Admission supports only `host.cpu_percent` and
+`host.memory_percent`, at most 256 definitions within the shared non-audit record
+and 16 MiB raw-overlay limits. Thresholds must be finite and in (5,100], duration
+0–86400 seconds, and severity info/warning/critical. Incorrect types, ambiguous
+aliases, mismatched identities and persisted derived firing state refuse before
+indexes or mutation. Other metrics refuse even when disabled.
+
+The 30-second worker evaluates stored telemetry, including offline hosts, with
+case-insensitive host scopes (empty means all). VM scopes are retained but do not
+filter these host metrics, matching the pinned source. A continuous breach at or
+above threshold fires once after the hold; a value at or below threshold minus
+five clears it. Edited, disabled and deleted definitions discard their transient
+state. Restart reconstructs episodes from telemetry; firing state is never backed
+up. Unchanged definitions retain their current episode across PUT.
+
+Synthetic native acceptance exercises actual worker timing, CPU and memory,
+scope exclusion, duration and hysteresis, API creation/edit/disable/delete,
+graceful restart, backup/fresh restore and second backup/restart. Original BSON
+remains immutable and unknown BSON survives known-field edits. Removed active
+records cannot resurrect through backups. Original v1–v7 archive manifests
+remain readable. Saves remain asynchronous, without crash-durable acknowledgement.
+Notification events enter the existing dispatcher; remote delivery is unverified.
+
+`host.offline`, `pool.used_percent`, `vm.unexpectedly_stopped` and
+`agent.version_mismatch`, affinity, legacy history/tag representations and the
+remaining full-schema semantics/recovery gates remain unsupported. Legacy jobs
+and TTL remain inactive. Original-snapshot rollback and subsequent-write accounting,
+native quiescence, UI execution and promotion gates remain HOLD.

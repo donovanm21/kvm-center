@@ -61,8 +61,9 @@ const (
 	mcoDiscordGateway   = "discord_gateway"     // singleton _id:"singleton" (v5.52.0)
 	mcoRemovedHosts     = "removed_hosts"       // keyed by host_id (v5.54.0)
 	mcoPendingEnrol     = "pending_enrollments" // keyed by enrolment ID (v5.55.0)
-	mcoAPITokens        = "api_tokens"          // keyed by token ID
-	mcoHypervisorCerts  = "hypervisor_certs"    // keyed by host ID
+	mcoAlarms           = "alarms"
+	mcoAPITokens        = "api_tokens"       // keyed by token ID
+	mcoHypervisorCerts  = "hypervisor_certs" // keyed by host ID
 )
 
 func NewMongoBackend(uri, dbName string) *MongoBackend {
@@ -415,6 +416,10 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 		return nil, err
 	}
 
+	if pd.Alarms, err = loadAlarmRecords(ctx, db); err != nil {
+		return nil, err
+	}
+
 	// Users / Groups / Roles / IDPs
 	if err := loadMapByID[models.User](ctx, db, mcoUsers, pd.Users, func(u *models.User) string { return u.ID }); err != nil {
 		return nil, err
@@ -659,7 +664,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	}
 	passivePlans := map[string][]any{}
 	candidates := overlayCandidates(d)
-	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData, mcoAuditEvents, mcoAPITokens, mcoSessions} {
+	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData, mcoAuditEvents, mcoAPITokens, mcoSessions, mcoAlarms} {
 		prepared, err := prepareEntityDocumentsFrom(ctx, db, col, candidates[col], restoreEntityRecords(d, col))
 		if err != nil {
 			return fmt.Errorf("%s preservation preflight: %w", col, err)
@@ -723,6 +728,9 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 		return err
 	}
 
+	if err := replaceMap(ctx, db, mcoAlarms, passivePlans[mcoAlarms]); err != nil {
+		return err
+	}
 	if err := replaceMap(ctx, db, mcoSessions, passivePlans[mcoSessions]); err != nil {
 		return err
 	}

@@ -40,7 +40,7 @@ func TestAuditPreservationWire(t *testing.T) {
 	if !equalRaw(bson.Raw(back.EntityOverlay.Collections[mcoAuditEvents][ev.ID]).Lookup("opaque"), raw.Lookup("opaque")) {
 		t.Fatal("opaque value lost")
 	}
-	old := bytes.Replace(wire, []byte(`"version":7`), []byte(`"version":4`), 1)
+	old := bytes.Replace(wire, []byte(`"version":8`), []byte(`"version":4`), 1)
 	if json.Unmarshal(old, &back) == nil {
 		t.Fatal("old overlay accepted audit")
 	}

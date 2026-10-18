@@ -157,7 +157,7 @@ func TestHistoryAcceptanceGuestReportLifecycle(t *testing.T) {
 	p.stop(t, false)
 	restoreRoot := t.TempDir()
 	snapshot := unpackAcceptance(t, archive, restoreRoot, 0)
-	if snapshot.EntityOverlay == nil || snapshot.EntityOverlay.Version != 7 {
+	if snapshot.EntityOverlay == nil || snapshot.EntityOverlay.Version != 8 {
 		t.Fatal("guest overlay absent")
 	}
 	b = newMongoIntegrationBackend(t)

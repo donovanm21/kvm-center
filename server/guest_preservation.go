@@ -79,6 +79,9 @@ func preflightCollections(ctx context.Context, db *mongo.Database) error {
 	if err := rejectLegacyCollections(ctx, db); err != nil {
 		return err
 	}
+	if _, err := loadAlarmRecords(ctx, db); err != nil {
+		return err
+	}
 	if _, err := loadAuditRecords(ctx, db); err != nil {
 		return err
 	}

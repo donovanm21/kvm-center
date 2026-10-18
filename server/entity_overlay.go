@@ -29,18 +29,21 @@ type entityVMNote struct {
 	Text string `bson:"notes"`
 }
 
-var overlayCollections = []string{mcoHosts, mcoVMs, mcoUsers, mcoGroups, mcoRoles, mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData, mcoAuditEvents, mcoAPITokens, mcoSessions}
+var overlayCollections = []string{mcoHosts, mcoVMs, mcoUsers, mcoGroups, mcoRoles, mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData, mcoAuditEvents, mcoAPITokens, mcoSessions, mcoAlarms}
 
 func (o *entityOverlay) validate() error {
 	if o == nil {
 		return nil
 	}
-	if (o.Version < 1 || o.Version > 7) || o.Collections == nil || len(o.Collections) > len(overlayCollections) {
+	if (o.Version < 1 || o.Version > 8) || o.Collections == nil || len(o.Collections) > len(overlayCollections) {
 		return errors.New("unsupported entity overlay schema")
 	}
 	size := 0
 	count := 0
 	for col, records := range o.Collections {
+		if o.Version < 8 && col == mcoAlarms {
+			return errors.New("alarms require entity overlay version 8")
+		}
 		if o.Version < 7 && col == mcoSessions {
 			return errors.New("sessions require entity overlay version 7")
 		}
@@ -121,6 +124,12 @@ func overlayCandidates(d *persistData) map[string][]any {
 	out := map[string][]any{}
 	for _, name := range overlayCollections {
 		out[name] = nil
+	}
+	for _, a := range d.Alarms {
+		out[mcoAlarms] = append(out[mcoAlarms], struct {
+			ID            string `bson:"_id"`
+			*models.Alarm `bson:",inline"`
+		}{a.ID, a})
 	}
 	out[mcoSessions] = mapToDocs(d.Sessions, func(v *models.Session) any {
 		return struct {
@@ -219,7 +228,7 @@ func reconcileOverlay(d *persistData, old *entityOverlay) (*entityOverlay, error
 	if err := old.validate(); err != nil {
 		return nil, err
 	}
-	next := &entityOverlay{Version: 7, Collections: map[string]map[string][]byte{}}
+	next := &entityOverlay{Version: 8, Collections: map[string]map[string][]byte{}}
 	for col, docs := range overlayCandidates(d) {
 		typ, aliases, _ := entitySchema(col)
 		records := map[string][]byte{}
@@ -259,7 +268,7 @@ func (b *MongoBackend) captureEntityOverlay(ctx context.Context, d *persistData)
 	if err := rejectLegacyCollections(ctx, db); err != nil {
 		return nil, err
 	}
-	o := &entityOverlay{Version: 7, Collections: map[string]map[string][]byte{}}
+	o := &entityOverlay{Version: 8, Collections: map[string]map[string][]byte{}}
 	for col, docs := range overlayCandidates(d) {
 		prepared, err := prepareEntityDocuments(ctx, db, col, docs)
 		if err != nil {
@@ -320,6 +329,9 @@ func restoreEntityRecords(d *persistData, col string) map[string][]byte {
 func validateEntitySnapshot(d *persistData) error {
 	if d == nil {
 		return errors.New("missing entity snapshot")
+	}
+	if err := validateAlarmSnapshot(d.Alarms); err != nil {
+		return err
 	}
 	if err := validateSessionSnapshot(d.Sessions); err != nil {
 		return err

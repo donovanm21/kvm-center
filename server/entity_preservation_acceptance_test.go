@@ -241,6 +241,7 @@ func TestHistoryAcceptanceOverlayV3ArchiveRestore(t *testing.T) { priorOverlayAr
 func TestHistoryAcceptanceOverlayV4ArchiveRestore(t *testing.T) { priorOverlayArchiveRestore(t, 4) }
 func TestHistoryAcceptanceOverlayV5ArchiveRestore(t *testing.T) { priorOverlayArchiveRestore(t, 5) }
 func TestHistoryAcceptanceOverlayV6ArchiveRestore(t *testing.T) { priorOverlayArchiveRestore(t, 6) }
+func TestHistoryAcceptanceOverlayV7ArchiveRestore(t *testing.T) { priorOverlayArchiveRestore(t, 7) }
 func priorOverlayArchiveRestore(t *testing.T, version int) {
 	d := overlayFixture(t)
 	d.EntityOverlay.Version = version
@@ -281,7 +282,17 @@ func priorOverlayArchiveRestore(t *testing.T, version int) {
 		d.APITokens = map[string]*models.APIToken{token.ID: &token}
 		d.EntityOverlay.Collections[mcoAPITokens] = map[string][]byte{token.ID: raw}
 	}
+	if version >= 7 {
+		raw := sessionFixture(t, "prior-session")
+		var session models.Session
+		if err := bson.Unmarshal(raw, &session); err != nil {
+			t.Fatal(err)
+		}
+		d.Sessions = map[string]*models.Session{session.Token: &session}
+		d.EntityOverlay.Collections[mcoSessions] = map[string][]byte{session.Token: raw}
+	}
 	raw, err := json.Marshal(struct {
+		Sessions     map[string]*models.Session       `json:"sessions,omitempty"`
 		APITokens    map[string]*models.APIToken      `json:"api_tokens,omitempty"`
 		Audit        []*models.AuditEvent             `json:"audit,omitempty"`
 		GuestData    map[string]*guestEntry           `json:"guest_data,omitempty"`
@@ -289,7 +300,7 @@ func priorOverlayArchiveRestore(t *testing.T, version int) {
 		Groups       map[string]*models.Group         `json:"groups"`
 		Storage      map[string][]*models.StoragePool `json:"storage,omitempty"`
 		Overlay      *entityOverlay                   `json:"entity_bson_overlay"`
-	}{d.APITokens, d.Audit, d.GuestData, d.RemovedHosts, d.Groups, d.Storage, d.EntityOverlay})
+	}{d.Sessions, d.APITokens, d.Audit, d.GuestData, d.RemovedHosts, d.Groups, d.Storage, d.EntityOverlay})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,5 +368,11 @@ func priorOverlayArchiveRestore(t *testing.T, version int) {
 			t.Fatal("v6 token overlay lost", err)
 		}
 	}
-	emitAcceptance(t, fmt.Sprintf("overlay_v%d_archive_restore", version), map[string]any{"backend": "mongo", "original_wire_version": version, "validated_manifest_version": version, "upgraded_version": 7, "fresh_restore": true, "opaque_preserved": true})
+	if version >= 7 {
+		var got bson.Raw
+		if err := b.db.Collection(mcoSessions).FindOne(t.Context(), bson.D{}).Decode(&got); err != nil || got.Lookup("opaque").Type == 0 {
+			t.Fatal("v7 session overlay lost", err)
+		}
+	}
+	emitAcceptance(t, fmt.Sprintf("overlay_v%d_archive_restore", version), map[string]any{"backend": "mongo", "original_wire_version": version, "validated_manifest_version": version, "upgraded_version": 8, "fresh_restore": true, "opaque_preserved": true})
 }

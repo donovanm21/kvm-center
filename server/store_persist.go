@@ -200,6 +200,7 @@ func (s *Store) snapshotBytes() ([]byte, map[string]uint64, error) {
 // and backups. Caller must hold s.mu while using its pointer-valued fields.
 func (s *Store) persistDataLocked() persistData {
 	d := persistData{
+		Alarms:             s.alarms,
 		EntityOverlay:      s.entityOverlay,
 		HostHistory:        s.historyStateLocked(),
 		VMTagState:         s.tagStateLocked(),
@@ -265,6 +266,8 @@ func (s *Store) load() {
 		log.Printf("store: host history load rejected: %v", err)
 		return
 	}
+	s.alarms = cloneAlarms(d.Alarms)
+	s.alarmStates = nil
 	s.entityOverlay = d.EntityOverlay
 	s.history = cloneHistory(d.HostHistory)
 	pruneHistory(s.history, time.Now().Unix())

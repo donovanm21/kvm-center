@@ -106,6 +106,10 @@ func main() {
 					reason = "Raw root field retained through host/VM writes; no interpretation or operational compatibility claimed"
 				}
 			}
+			if (n == "Alarm" || (n == "persistData" && name == "Alarms")) && exists && a.Type == b.Type && a.BSON == b.BSON {
+				status = "resource_alarm_cpu_memory_bounded"
+				reason = "CPU/memory only: scoped duration/hysteresis evaluation, edits, restart and recovery; opaque retained definitions; other metrics refuse; firing state transient; remote delivery unverified"
+			}
 			if n == "Session" && exists && a.Type == b.Type && a.BSON == b.BSON {
 				status = "session_auth_recovery_bounded"
 				reason = "Canonical session local login/cookie auth/renewal/logout/graceful restart/recovery; opaque retained records; explicit active deletion without resurrection; immutable originals; TTL inactive; asynchronous acknowledgement"

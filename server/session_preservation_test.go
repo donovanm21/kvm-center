@@ -41,7 +41,7 @@ func TestSessionPreservationWire(t *testing.T) {
 	if !equalRaw(got.Lookup("opaque"), raw.Lookup("opaque")) || got.Lookup("expires_at").DateTime() != raw.Lookup("expiresat").DateTime() {
 		t.Fatal("session preservation failed")
 	}
-	if json.Unmarshal(bytes.Replace(wire, []byte(`"version":7`), []byte(`"version":6`), 1), &back) == nil {
+	if json.Unmarshal(bytes.Replace(wire, []byte(`"version":8`), []byte(`"version":6`), 1), &back) == nil {
 		t.Fatal("old overlay accepted sessions")
 	}
 	delete(d.Sessions, sess.Token)

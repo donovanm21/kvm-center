@@ -174,7 +174,7 @@ func TestHistoryAcceptanceSessionLifecycle(t *testing.T) {
 	p.stop(t, false)
 	restoreRoot := t.TempDir()
 	snapshot := unpackAcceptance(t, archive, restoreRoot, 0)
-	if snapshot.EntityOverlay.Version != 7 || len(snapshot.Sessions) != 4 || snapshot.Sessions[originalToken] == nil {
+	if snapshot.EntityOverlay.Version != 8 || len(snapshot.Sessions) != 4 || snapshot.Sessions[originalToken] == nil {
 		t.Fatal("session backup incomplete or deleted identity retained")
 	}
 	b = newMongoIntegrationBackend(t)
