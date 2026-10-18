@@ -50,7 +50,7 @@ func TestPersistenceFiles_UsePrivateExclusiveTemporaryFiles(t *testing.T) {
 					old := serverBackupPaths
 					serverBackupPaths = backupPaths{}
 					defer func() { serverBackupPaths = old }()
-					s := &Store{commandLog: NewCommandLog()}
+					s := &Store{saveGateOpen: true, commandLog: NewCommandLog()}
 					if _, err := s.runScheduledBackup(&models.BackupSchedule{DestPath: dir}, ts); err != nil {
 						t.Fatal(err)
 					}
@@ -94,7 +94,7 @@ func TestPersistenceFiles_FailedRenameCleansTemporaryFiles(t *testing.T) {
 				old := serverBackupPaths
 				serverBackupPaths = backupPaths{}
 				defer func() { serverBackupPaths = old }()
-				s := &Store{commandLog: NewCommandLog()}
+				s := &Store{saveGateOpen: true, commandLog: NewCommandLog()}
 				_, err = s.runScheduledBackup(&models.BackupSchedule{DestPath: dir}, ts)
 			}
 			if err == nil {
