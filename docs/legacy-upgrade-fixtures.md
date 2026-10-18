@@ -259,3 +259,12 @@ Notification events enter the existing dispatcher; remote delivery is unverified
 remaining full-schema semantics/recovery gates remain unsupported. Legacy jobs
 and TTL remain inactive. Original-snapshot rollback and subsequent-write accounting,
 native quiescence, UI execution and promotion gates remain HOLD.
+
+
+The cached-backup unknown-namespace acceptance uses the immutable
+`future_feature` fixture. It deliberately avoids inserting into a supported
+collection while the application's post-backup audit save may still be running.
+Malformed alarms remain covered by pre-index startup refusal and synchronous
+cached-backend save/export refusal. This does not establish safe concurrent
+external database writers; native quiescence remains a separate required gate.
+The earlier cached-alarm fixture and reports remain retained as historical evidence.
