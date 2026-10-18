@@ -407,6 +407,15 @@ func unpackAcceptance(t *testing.T, raw []byte, root string, schema int) *persis
 	if err := json.Unmarshal(entries["store.json"], &d); err != nil {
 		t.Fatal(err)
 	}
+	expectedFeatures, err := snapshotFeatureSchemas(entries["store.json"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedWire, _ := json.Marshal(expectedFeatures)
+	actualWire, _ := json.Marshal(manifest.FeatureSchemas)
+	if !bytes.Equal(expectedWire, actualWire) && !(len(expectedFeatures) == 0 && len(manifest.FeatureSchemas) == 0) {
+		t.Fatal("backup feature requirements do not match payload")
+	}
 	return &d
 }
 
@@ -538,9 +547,8 @@ func TestHistoryAcceptanceArtifactLifecycle(t *testing.T) {
 			var restoreBackend Backend = NewJSONBackend(filepath.Join(restoredRoot, "state.json"))
 			if mode == "mongo" {
 				restoreBackend = newMongoIntegrationBackend(t)
-				if err := restoreBackend.Save(context.Background(), snapshot); err != nil {
-					t.Fatal(err)
-				}
+				// The actual server bootstrap consumes the verified backup in
+				// this fresh destination; do not pre-populate it via Save.
 			}
 			restored := startAcceptance(t, binary, restoredRoot, restoreBackend, token, true)
 			for id, h := range snapshot.HostHistory.Hosts {

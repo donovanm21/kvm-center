@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -57,9 +58,42 @@ func bootstrapBackendWith(ctx context.Context, mongoURL, dataFile string, newMon
 		}
 		return NewJSONBackend(dataFile), nil
 	}
+	// A backup overlay requests explicit fresh-destination restore. Detect it
+	// before Info/Load can initialize indexes on an existing destination.
+	var overlayRestore bool
+	if raw, err := os.ReadFile(dataFile); err == nil {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return nil, errors.New("invalid existing recovery JSON; startup stopped before database initialization")
+		}
+		{
+			for key := range fields {
+				if strings.EqualFold(key, "entity_bson_overlay") {
+					overlayRestore = true
+				}
+			}
+		}
+		if overlayRestore {
+			if _, err := NewJSONBackend(dataFile).Load(ctx); err != nil {
+				return nil, errors.New("invalid entity overlay recovery source")
+			}
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, errors.New("recovery source inaccessible")
+	}
 	var mb Backend
 	for attempt := 1; attempt <= mongoBootAttempts; attempt++ {
 		mb = newMongo()
+		if overlayRestore {
+			target, ok := mb.(*MongoBackend)
+			if !ok {
+				return nil, errors.New("entity overlay recovery requires Mongo destination")
+			}
+			if err := target.requireEmptyRestoreTarget(ctx); err != nil {
+				closeBootBackend(mb)
+				return nil, errors.New("entity overlay recovery target is not an empty accessible destination")
+			}
+		}
 		readyCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		info := mb.Info(readyCtx)
 		cancel()

@@ -27,7 +27,7 @@ func snapshotHashes(raw []byte) (map[string]uint64, error) {
 		return nil, err
 	}
 	names := []string{
-		"host_history_state", "vm_tag_state", "users", "groups", "roles", "idps", "sessions", "features",
+		"entity_bson_overlay", "host_history_state", "vm_tag_state", "users", "groups", "roles", "idps", "sessions", "features",
 		"notifications", "audit_shipping", "backup_schedule", "discord_gateway",
 		"removed_hosts", "pending_enrollments", "api_tokens", "snapshot_policies",
 		"hypervisor_certs", "command_log", "metrics", "console_secret",
@@ -172,6 +172,9 @@ func (s *Store) saveCheckedContext(ctx context.Context) error {
 		s.lastSavedHashes = nil
 		return err
 	}
+	s.mu.Lock()
+	s.entityOverlay = snap.EntityOverlay
+	s.mu.Unlock()
 	s.lastSavedHashes = hashes
 	return nil
 }
@@ -197,6 +200,7 @@ func (s *Store) snapshotBytes() ([]byte, map[string]uint64, error) {
 // and backups. Caller must hold s.mu while using its pointer-valued fields.
 func (s *Store) persistDataLocked() persistData {
 	d := persistData{
+		EntityOverlay:      s.entityOverlay,
 		HostHistory:        s.historyStateLocked(),
 		VMTagState:         s.tagStateLocked(),
 		Hosts:              s.hosts,
@@ -261,6 +265,7 @@ func (s *Store) load() {
 		log.Printf("store: host history load rejected: %v", err)
 		return
 	}
+	s.entityOverlay = d.EntityOverlay
 	s.history = cloneHistory(d.HostHistory)
 	pruneHistory(s.history, time.Now().Unix())
 	if d.VMTagState != nil {

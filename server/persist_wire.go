@@ -9,6 +9,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"reflect"
+	"strings"
 	"time"
 )
 
@@ -32,6 +34,11 @@ type persistWire struct {
 }
 
 func (d persistData) MarshalJSON() ([]byte, error) {
+	overlay, err := reconcileOverlay(&d, d.EntityOverlay)
+	if err != nil {
+		return nil, err
+	}
+	d.EntityOverlay = overlay
 	private := &persistPrivate{}
 	if d.DiscordGateway != nil {
 		private.GatewayToken = d.DiscordGateway.Token
@@ -61,9 +68,20 @@ func (d persistData) MarshalJSON() ([]byte, error) {
 }
 
 func (d *persistData) UnmarshalJSON(raw []byte) error {
+	if err := uniqueJSONKeys(raw); err != nil {
+		return err
+	}
+	if err := validateTypedJSONKeys(raw, reflect.TypeOf(persistWire{})); err != nil {
+		return err
+	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return err
+	}
+	for key := range fields {
+		if strings.EqualFold(key, "entity_bson_overlay") && key != "entity_bson_overlay" {
+			return errors.New("noncanonical entity overlay field")
+		}
 	}
 	if err := validateHistorySnapshotFields(raw); err != nil {
 		return err
@@ -76,6 +94,10 @@ func (d *persistData) UnmarshalJSON(raw []byte) error {
 	}
 	if value, present := fields["vm_tag_state"]; present && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 		return errors.New("VM tag state must be absent or a versioned object, not null")
+	}
+
+	if value, ok := fields["entity_bson_overlay"]; ok && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		return errors.New("null entity overlay")
 	}
 
 	// Decode into a fresh value so absent legacy fields cannot retain stale
@@ -102,6 +124,11 @@ func (d *persistData) UnmarshalJSON(raw []byte) error {
 			}
 		}
 	}
+	overlay, err := reconcileOverlay(&decoded, decoded.EntityOverlay)
+	if err != nil {
+		return err
+	}
+	decoded.EntityOverlay = overlay
 	*d = decoded
 	return nil
 }

@@ -32,6 +32,7 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -90,9 +91,22 @@ type backupManifest struct {
 // closure as Save(). Backup endpoints are infrequent so the
 // exclusive read window doesn't matter.
 func (s *Store) ExportSnapshot() ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := s.saveMu.LockContext(ctx); err != nil {
+		return nil, err
+	}
+	defer s.saveMu.Unlock()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	d := s.persistDataLocked()
+	if b, ok := s.backend.(*MongoBackend); ok {
+		var err error
+		d.EntityOverlay, err = b.captureEntityOverlay(ctx, &d)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return json.MarshalIndent(&d, "", "  ")
 }
 
@@ -260,6 +274,9 @@ func snapshotFeatureSchemas(raw []byte) (map[string]int, error) {
 		return nil, err
 	}
 	features := map[string]int{}
+	if d.EntityOverlay != nil {
+		features["entity_bson_overlay"] = d.EntityOverlay.Version
+	}
 	if d.VMTagState != nil {
 		features["vm_tag_state"] = d.VMTagState.Version
 	}

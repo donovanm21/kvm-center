@@ -71,7 +71,7 @@ func TestMongoIntegrationHistoryTelemetryAPIReload(t *testing.T) {
 		t.Fatal(err)
 	}
 	destination := newMongoIntegrationBackend(t)
-	if err := destination.Save(ctx, &snapshot); err != nil {
+	if err := destination.restoreEntitySnapshot(ctx, &snapshot); err != nil {
 		t.Fatal(err)
 	}
 	if err := verifyBackendRoundTrip(ctx, &snapshot, destination); err != nil {

@@ -98,7 +98,7 @@ func handleDatabaseMigrate(store *Store) http.HandlerFunc {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 		defer cancel()
-		if err := migrateBackend(ctx, store.backend, dst); err != nil {
+		if err := store.migrateSnapshot(ctx, dst); err != nil {
 			audit(store, r, AuditDBMigrate, "backend", map[string]string{"from": store.backend.Name(), "to": body.To}, false, err.Error())
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return

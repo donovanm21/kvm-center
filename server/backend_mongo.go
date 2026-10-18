@@ -570,8 +570,14 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 // a crash-atomic checkpoint across records or collections.
 func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	defer func() { b.invalidateOnTransientError(err) }()
+	if d != nil && d.EntityOverlay != nil {
+		return errors.New("entity overlay requires explicit fresh-destination restore")
+	}
 	if d == nil {
 		return errors.New("missing persistence snapshot")
+	}
+	if err := validateEntitySnapshot(d); err != nil {
+		return err
 	}
 	if err := d.HostHistory.validate(); err != nil {
 		return err
@@ -628,15 +634,45 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 			}{id, v})
 		}
 	}
-	// Validate both plans before any replacement or deletion. A rejected VM
-	// container must not follow a successful host write.
-	hostDocs, err = prepareEntityDocuments(ctx, db, mcoHosts, hostDocs)
+	// Validate all supported entity plans before any replacement or deletion,
+	// including username-owner retirement.
+	hostDocs, err = prepareEntityDocumentsFrom(ctx, db, mcoHosts, hostDocs, restoreEntityRecords(d, mcoHosts))
 	if err != nil {
 		return fmt.Errorf("host preservation preflight: %w", err)
 	}
-	vmDocs, err = prepareEntityDocuments(ctx, db, mcoVMs, vmDocs)
+	vmDocs, err = prepareEntityDocumentsFrom(ctx, db, mcoVMs, vmDocs, restoreEntityRecords(d, mcoVMs))
 	if err != nil {
 		return fmt.Errorf("VM preservation preflight: %w", err)
+	}
+	usersDocs := mapToDocs(d.Users, func(v *models.User) any {
+		return struct {
+			ID           string `bson:"_id"`
+			*models.User `bson:",inline"`
+		}{v.ID, v}
+	})
+	usersDocs, err = prepareEntityDocumentsFrom(ctx, db, mcoUsers, usersDocs, restoreEntityRecords(d, mcoUsers))
+	if err != nil {
+		return fmt.Errorf("users preservation preflight: %w", err)
+	}
+	groupsDocs := mapToDocs(d.Groups, func(v *models.Group) any {
+		return struct {
+			ID            string `bson:"_id"`
+			*models.Group `bson:",inline"`
+		}{v.ID, v}
+	})
+	groupsDocs, err = prepareEntityDocumentsFrom(ctx, db, mcoGroups, groupsDocs, restoreEntityRecords(d, mcoGroups))
+	if err != nil {
+		return fmt.Errorf("groups preservation preflight: %w", err)
+	}
+	rolesDocs := mapToDocs(d.Roles, func(v *models.Role) any {
+		return struct {
+			ID           string `bson:"_id"`
+			*models.Role `bson:",inline"`
+		}{v.ID, v}
+	})
+	rolesDocs, err = prepareEntityDocumentsFrom(ctx, db, mcoRoles, rolesDocs, restoreEntityRecords(d, mcoRoles))
+	if err != nil {
+		return fmt.Errorf("roles preservation preflight: %w", err)
 	}
 	if err := replaceMap(ctx, db, mcoHosts, hostDocs); err != nil {
 		return err
@@ -703,28 +739,13 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 		return err
 	}
 
-	if err := replaceMapIfDirty(ctx, db, mcoUsers, "users", d, mapToDocs(d.Users, func(u *models.User) any {
-		return struct {
-			ID           string `bson:"_id"`
-			*models.User `bson:",inline"`
-		}{u.ID, u}
-	})); err != nil {
+	if err := replaceMapIfDirty(ctx, db, mcoUsers, "users", d, usersDocs); err != nil {
 		return err
 	}
-	if err := replaceMapIfDirty(ctx, db, mcoGroups, "groups", d, mapToDocs(d.Groups, func(g *models.Group) any {
-		return struct {
-			ID            string `bson:"_id"`
-			*models.Group `bson:",inline"`
-		}{g.ID, g}
-	})); err != nil {
+	if err := replaceMapIfDirty(ctx, db, mcoGroups, "groups", d, groupsDocs); err != nil {
 		return err
 	}
-	if err := replaceMapIfDirty(ctx, db, mcoRoles, "roles", d, mapToDocs(d.Roles, func(r *models.Role) any {
-		return struct {
-			ID           string `bson:"_id"`
-			*models.Role `bson:",inline"`
-		}{r.ID, r}
-	})); err != nil {
+	if err := replaceMapIfDirty(ctx, db, mcoRoles, "roles", d, rolesDocs); err != nil {
 		return err
 	}
 	if err := replaceMapIfDirty(ctx, db, mcoIDPs, "idps", d, mapToDocs(d.IDPs, func(i *models.IdentityProvider) any {
