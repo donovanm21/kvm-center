@@ -32,6 +32,9 @@ func entitySchema(collection string) (reflect.Type, map[string]string, error) {
 		value = entityVMNote{}
 	case mcoGuestData:
 		value = entityGuestReport{}
+	case mcoSessions:
+		value = models.Session{}
+		aliases["expiresat"] = "expires_at"
 	case mcoAPITokens:
 		value = models.APIToken{}
 	case mcoAuditEvents:
@@ -111,6 +114,10 @@ func entityIdentity(raw bson.Raw, collection string) (string, error) {
 		if retired.HostID != id || strings.TrimSpace(id) != id {
 			return "", errors.New("retirement identity mismatch")
 		}
+	case mcoSessions:
+		if err := validateSessionBSON(raw); err != nil {
+			return "", err
+		}
 	case mcoAPITokens:
 		if err := validateTokenBSON(raw); err != nil {
 			return "", err
@@ -146,6 +153,11 @@ func prepareEntityDocuments(ctx context.Context, db *mongo.Database, collection 
 }
 
 func prepareEntityDocumentsFrom(ctx context.Context, db *mongo.Database, collection string, docs []any, source map[string][]byte) ([]any, error) {
+	if collection == mcoSessions {
+		if _, err := loadSessionRecords(ctx, db); err != nil {
+			return nil, err
+		}
+	}
 	if collection == mcoAPITokens {
 		if _, err := loadTokenRecords(ctx, db); err != nil {
 			return nil, err

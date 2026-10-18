@@ -16,7 +16,7 @@ import (
 // Entity overlays are private backup data, never public model/API fields.
 // Version 1 supports five startup collections; version 2 adds storage and notes.
 // Version 3 adds retirement records; version 4 adds cached guest reports.
-// Version 5 adds bounded audit read/append/retention and recovery.
+// Version 5 adds audit recovery; version 6 adds API tokens; version 7 adds sessions.
 // None establishes full legacy activation or authorizes TTL expiry of originals.
 type entityOverlay struct {
 	Version     int                          `json:"version"`
@@ -29,18 +29,21 @@ type entityVMNote struct {
 	Text string `bson:"notes"`
 }
 
-var overlayCollections = []string{mcoHosts, mcoVMs, mcoUsers, mcoGroups, mcoRoles, mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData, mcoAuditEvents, mcoAPITokens}
+var overlayCollections = []string{mcoHosts, mcoVMs, mcoUsers, mcoGroups, mcoRoles, mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData, mcoAuditEvents, mcoAPITokens, mcoSessions}
 
 func (o *entityOverlay) validate() error {
 	if o == nil {
 		return nil
 	}
-	if (o.Version < 1 || o.Version > 6) || o.Collections == nil || len(o.Collections) > len(overlayCollections) {
+	if (o.Version < 1 || o.Version > 7) || o.Collections == nil || len(o.Collections) > len(overlayCollections) {
 		return errors.New("unsupported entity overlay schema")
 	}
 	size := 0
 	count := 0
 	for col, records := range o.Collections {
+		if o.Version < 7 && col == mcoSessions {
+			return errors.New("sessions require entity overlay version 7")
+		}
 		if o.Version < 6 && col == mcoAPITokens {
 			return errors.New("API tokens require entity overlay version 6")
 		}
@@ -119,6 +122,12 @@ func overlayCandidates(d *persistData) map[string][]any {
 	for _, name := range overlayCollections {
 		out[name] = nil
 	}
+	out[mcoSessions] = mapToDocs(d.Sessions, func(v *models.Session) any {
+		return struct {
+			ID              string `bson:"_id"`
+			*models.Session `bson:",inline"`
+		}{v.Token, v}
+	})
 	out[mcoHosts] = mapToDocs(d.Hosts, func(v *models.Host) any {
 		return struct {
 			ID           string `bson:"_id"`
@@ -210,7 +219,7 @@ func reconcileOverlay(d *persistData, old *entityOverlay) (*entityOverlay, error
 	if err := old.validate(); err != nil {
 		return nil, err
 	}
-	next := &entityOverlay{Version: 6, Collections: map[string]map[string][]byte{}}
+	next := &entityOverlay{Version: 7, Collections: map[string]map[string][]byte{}}
 	for col, docs := range overlayCandidates(d) {
 		typ, aliases, _ := entitySchema(col)
 		records := map[string][]byte{}
@@ -250,7 +259,7 @@ func (b *MongoBackend) captureEntityOverlay(ctx context.Context, d *persistData)
 	if err := rejectLegacyCollections(ctx, db); err != nil {
 		return nil, err
 	}
-	o := &entityOverlay{Version: 6, Collections: map[string]map[string][]byte{}}
+	o := &entityOverlay{Version: 7, Collections: map[string]map[string][]byte{}}
 	for col, docs := range overlayCandidates(d) {
 		prepared, err := prepareEntityDocuments(ctx, db, col, docs)
 		if err != nil {
@@ -311,6 +320,9 @@ func restoreEntityRecords(d *persistData, col string) map[string][]byte {
 func validateEntitySnapshot(d *persistData) error {
 	if d == nil {
 		return errors.New("missing entity snapshot")
+	}
+	if err := validateSessionSnapshot(d.Sessions); err != nil {
+		return err
 	}
 	if err := validateTokenSnapshot(d.APITokens); err != nil {
 		return err

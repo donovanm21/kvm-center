@@ -429,22 +429,7 @@ func (b *MongoBackend) Load(ctx context.Context) (_ *persistData, err error) {
 		return nil, err
 	}
 
-	// Sessions (session token is the _id; TTL cleans expired)
-	if err := func() error {
-		cur, err := db.Collection(mcoSessions).Find(ctx, bson.D{})
-		if err != nil {
-			return err
-		}
-		defer cur.Close(ctx)
-		var sessions []*models.Session
-		if err := cur.All(ctx, &sessions); err != nil {
-			return err
-		}
-		for _, s := range sessions {
-			pd.Sessions[s.Token] = s
-		}
-		return nil
-	}(); err != nil {
+	if pd.Sessions, err = loadSessionRecords(ctx, db); err != nil {
 		return nil, err
 	}
 
@@ -674,7 +659,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	}
 	passivePlans := map[string][]any{}
 	candidates := overlayCandidates(d)
-	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData, mcoAuditEvents, mcoAPITokens} {
+	for _, col := range []string{mcoStorage, mcoVMNotes, mcoRemovedHosts, mcoGuestData, mcoAuditEvents, mcoAPITokens, mcoSessions} {
 		prepared, err := prepareEntityDocumentsFrom(ctx, db, col, candidates[col], restoreEntityRecords(d, col))
 		if err != nil {
 			return fmt.Errorf("%s preservation preflight: %w", col, err)
@@ -738,18 +723,8 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 		return err
 	}
 
-	// Sessions — keyed by token; TTL index auto-expires.
-	if isDirty(d, "sessions") {
-		var sessDocs []any
-		for tok, s := range d.Sessions {
-			sessDocs = append(sessDocs, struct {
-				ID      string          `bson:"_id"`
-				Session *models.Session `bson:",inline"`
-			}{tok, s})
-		}
-		if err := replaceMap(ctx, db, mcoSessions, sessDocs); err != nil {
-			return err
-		}
+	if err := replaceMap(ctx, db, mcoSessions, passivePlans[mcoSessions]); err != nil {
+		return err
 	}
 
 	// Features singleton upsert

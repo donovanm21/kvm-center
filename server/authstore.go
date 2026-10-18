@@ -369,12 +369,47 @@ func (s *Store) CreateSession(userID, userAgent string) (*models.Session, error)
 		UserAgent: userAgent,
 	}
 	s.mu.Lock()
+	if err := validateSession(sess); err != nil {
+		s.mu.Unlock()
+		return nil, err
+	}
+	if len(s.sessions) >= sessionAdmissionMax {
+		s.mu.Unlock()
+		return nil, errors.New("session admission exceeds bound")
+	}
+	if _, exists := s.sessions[tok]; exists {
+		s.mu.Unlock()
+		return nil, errors.New("session identity collision")
+	}
+	candidate := s.persistDataLocked()
+	candidate.Sessions = make(map[string]*models.Session, len(s.sessions)+1)
+	for key, value := range s.sessions {
+		candidate.Sessions[key] = value
+	}
+	candidate.Sessions[tok] = sess
+	overlay := candidate.EntityOverlay
+	if overlay == nil {
+		overlay = &entityOverlay{Version: 7, Collections: map[string]map[string][]byte{}}
+	}
+	var admissionErr error
+	if mongoBackend, ok := s.backend.(*MongoBackend); ok {
+		ctx, cancel := contextWithTimeout(15 * time.Second)
+		_, admissionErr = mongoBackend.captureEntityOverlay(ctx, &candidate)
+		cancel()
+	} else {
+		_, admissionErr = reconcileOverlay(&candidate, overlay)
+	}
+	if admissionErr != nil {
+		s.mu.Unlock()
+		return nil, admissionErr
+	}
 	s.sessions[tok] = sess
 	if u, ok := s.users[userID]; ok {
 		u.LastLoginAt = now
 	}
+	result := *sess
 	s.mu.Unlock()
-	return sess, nil
+	return &result, nil
 }
 
 func (s *Store) GetSession(token string) *models.Session {
@@ -384,7 +419,7 @@ func (s *Store) GetSession(token string) *models.Session {
 	if !ok {
 		return nil
 	}
-	if time.Now().After(sess.ExpiresAt) {
+	if !time.Now().Before(sess.ExpiresAt) {
 		return nil
 	}
 	cp := *sess
@@ -396,20 +431,28 @@ func (s *Store) GetSession(token string) *models.Session {
 // nil if it no longer exists. Safe to call on every authenticated request.
 func (s *Store) TouchSession(token string) *models.Session {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	changed := false
+	defer func() {
+		s.mu.Unlock()
+		if changed {
+			s.AsyncSave()
+		}
+	}()
 	sess, ok := s.sessions[token]
 	if !ok {
 		return nil
 	}
 	now := time.Now()
-	if now.After(sess.ExpiresAt) {
+	if !now.Before(sess.ExpiresAt) {
 		delete(s.sessions, token)
+		changed = true
 		return nil
 	}
 	// Only extend when less than half the window remains — avoids a write
 	// on every single request.
 	if sess.ExpiresAt.Sub(now) < sessionLifetime/2 {
 		sess.ExpiresAt = now.Add(sessionLifetime)
+		changed = true
 	}
 	cp := *sess
 	return &cp
@@ -417,18 +460,29 @@ func (s *Store) TouchSession(token string) *models.Session {
 
 func (s *Store) DeleteSession(token string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	_, existed := s.sessions[token]
 	delete(s.sessions, token)
+	s.mu.Unlock()
+	if existed {
+		s.AsyncSave()
+	}
 }
 
 // PurgeExpiredSessions is called periodically by a background goroutine.
 func (s *Store) PurgeExpiredSessions() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	changed := false
+	defer func() {
+		s.mu.Unlock()
+		if changed {
+			s.AsyncSave()
+		}
+	}()
 	now := time.Now()
 	for tok, sess := range s.sessions {
-		if now.After(sess.ExpiresAt) {
+		if !now.Before(sess.ExpiresAt) {
 			delete(s.sessions, tok)
+			changed = true
 		}
 	}
 }

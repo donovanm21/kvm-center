@@ -35,7 +35,7 @@ func TestMongoIntegrationCanonicalBSONStaging(t *testing.T) {
 				direction                int32
 			}{
 				{mcoVMs, "host_id", "hostid", "fixture-vm", "fixture-host", bsontype.String, bson.D{{Key: "uuid", Value: "fixture-vm"}}, &vm, 1},
-				{mcoSessions, "expires_at", "expiresat", "fixture-session", expiry, bsontype.DateTime, bson.D{{Key: "token", Value: "fixture-session"}}, &session, 1},
+				{mcoSessions, "expires_at", "expiresat", "fixture-session", expiry, bsontype.DateTime, bson.D{{Key: "token", Value: "fixture-session"}, {Key: "userid", Value: "synthetic-owner"}}, &session, 1},
 				{mcoMigrations, "started_at", "startedat", "fixture-migration", int64(1792108800), bsontype.Int64, bson.D{{Key: "id", Value: "fixture-migration"}, {Key: "status", Value: "running"}}, &migration, -1},
 				{mcoAuditEvents, "actor_id", "actorid", "fixture-audit", "fixture-actor", bsontype.String, bson.D{{Key: "id", Value: "fixture-audit"}, {Key: "at", Value: expiry}}, &audit, 1},
 			}

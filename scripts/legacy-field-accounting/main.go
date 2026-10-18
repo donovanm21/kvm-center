@@ -106,6 +106,10 @@ func main() {
 					reason = "Raw root field retained through host/VM writes; no interpretation or operational compatibility claimed"
 				}
 			}
+			if n == "Session" && exists && a.Type == b.Type && a.BSON == b.BSON {
+				status = "session_auth_recovery_bounded"
+				reason = "Canonical session local login/cookie auth/renewal/logout/graceful restart/recovery; opaque retained records; explicit active deletion without resurrection; immutable originals; TTL inactive; asynchronous acknowledgement"
+			}
 			if n == "APIToken" && exists && a.Type == b.Type && a.BSON == b.BSON {
 				status = "token_auth_recovery_bounded"
 				reason = "Canonical token mint/auth/scopes/expiry/revoke/graceful restart/recovery; immutable opaque originals; bounded admission; asynchronous persistence is not crash-durable acknowledgement"
