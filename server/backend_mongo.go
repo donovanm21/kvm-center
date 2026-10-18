@@ -597,25 +597,19 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 	// fields land at the document root rather than nested under the
 	// Go struct's field name — otherwise the default decoder can't
 	// hydrate the Host back from a "host" sub-object.
-	if err := replaceMap(ctx, db, mcoHosts, mapToDocs(d.Hosts, func(h *models.Host) any {
+	hostDocs := mapToDocs(d.Hosts, func(h *models.Host) any {
 		return struct {
 			ID           string `bson:"_id"`
 			*models.Host `bson:",inline"`
 		}{h.ID, h}
-	})); err != nil {
-		return err
-	}
+	})
 
 	// VMs — flatten nested map. Fall back to host|name for the _id when
 	// the UUID field is empty (pre-v4 data) so docs don't collide.
 	//
-	// v5.53.1: dedup by `_id` across host slices. A VM that straddles
-	// two host entries (e.g. stale post-migration record on the source
-	// + live record on the destination) used to trip the unique _id
-	// index and fail the entire bulk insert with E11000 every save
-	// tick — leaving the persisted state stuck at whatever the prior
-	// successful save wrote and silently dropping all subsequent
-	// changes (RAM edits, telemetry refreshes, etc.).
+	// Refuse duplicate identities before writes. Picking an arbitrary host
+	// entry could discard conflicting state or attach opaque fields to the
+	// wrong VM during migration.
 	var vmDocs []any
 	seenVM := map[string]bool{}
 	for hostID, vms := range d.VMs {
@@ -625,7 +619,7 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 				id = hostID + "|" + v.Name
 			}
 			if seenVM[id] {
-				continue
+				return errors.New("duplicate VM identity in persistence snapshot")
 			}
 			seenVM[id] = true
 			vmDocs = append(vmDocs, struct {
@@ -633,6 +627,19 @@ func (b *MongoBackend) Save(ctx context.Context, d *persistData) (err error) {
 				VM *models.VM `bson:",inline"`
 			}{id, v})
 		}
+	}
+	// Validate both plans before any replacement or deletion. A rejected VM
+	// container must not follow a successful host write.
+	hostDocs, err = prepareEntityDocuments(ctx, db, mcoHosts, hostDocs)
+	if err != nil {
+		return fmt.Errorf("host preservation preflight: %w", err)
+	}
+	vmDocs, err = prepareEntityDocuments(ctx, db, mcoVMs, vmDocs)
+	if err != nil {
+		return fmt.Errorf("VM preservation preflight: %w", err)
+	}
+	if err := replaceMap(ctx, db, mcoHosts, hostDocs); err != nil {
+		return err
 	}
 	if err := replaceMap(ctx, db, mcoVMs, vmDocs); err != nil {
 		return err
