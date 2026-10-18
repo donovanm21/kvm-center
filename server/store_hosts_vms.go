@@ -229,12 +229,15 @@ func (s *Store) GetVMs(hostID string) []*models.VM {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if hostID != "" {
-		return append([]*models.VM(nil), s.vms[hostID]...)
-	}
+	now := time.Now()
 	var out []*models.VM
-	for _, vms := range s.vms {
-		out = append(out, vms...)
+	for host, vms := range s.vms {
+		if hostID != "" && host != hostID {
+			continue
+		}
+		for _, v := range vms {
+			out = append(out, s.guestVMView(v, now))
+		}
 	}
 	return out
 }
@@ -253,8 +256,7 @@ func (s *Store) GetVMByUUID(uuid string) *models.VM {
 	for _, vms := range s.vms {
 		for _, v := range vms {
 			if v != nil && strings.ToLower(v.UUID) == want {
-				cp := *v
-				return &cp
+				return s.guestVMView(v, time.Now())
 			}
 		}
 	}

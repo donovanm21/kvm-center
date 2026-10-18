@@ -552,16 +552,17 @@ func (s *Store) ApplyTelemetry(p *models.TelemetryPayload) error {
 // applyVMSideData rehydrates notes and merges guest-tools data onto a VM record.
 // Called under the write lock.
 func (s *Store) applyVMSideData(v *models.VM) {
+	s.applyVMSideDataAt(v, time.Now())
+}
+
+func (s *Store) applyVMSideDataAt(v *models.VM, now time.Time) {
 	uuid := strings.ToLower(v.UUID)
 	if notes, ok := s.vmNotes[uuid]; ok {
 		v.Notes = notes
 	}
 	entry, ok := s.guestData[uuid]
-	if !ok {
-		return
-	}
-	if time.Since(entry.UpdatedAt) > guestToolsFreshness {
-		return // stale — don't report tools as present
+	if !ok || !guestReportFresh(entry, now) {
+		return // absent, expired or unsupported clock — do not project tools as present
 	}
 	// Prefer the richer kvm-tools source over qemu-ga when both are present.
 	p := entry.Payload
