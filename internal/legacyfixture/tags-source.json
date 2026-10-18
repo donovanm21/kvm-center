@@ -1,0 +1,10 @@
+{
+  "fixture_schema": "synthetic-legacy-tags-c018b31-v1",
+  "source_revision": "c018b31b74d7d75ed8c49921dc0812bf5999d81f",
+  "writer": "server/backend_mongo.go: vm_tags records {_id,tags}",
+  "semantics": "server/tags.go: normalized lowercase sorted unique assignments keyed by lowercased VM UUID",
+  "boundary": "Canonical assignments only; current strict UUID/count/size bounds refuse unsupported records. Saved tag-based alarm/affinity selectors and missing-VM pruning are not covered.",
+  "deployed_profile": "6db8c7237bd7cf507532391c0dc0c2e36a70f696 predates vm_tags",
+  "originals": "Separate immutable offline bundle retains exact BSON, indexes and provenance; application backups retain edited assignments only.",
+  "synthetic_only": true
+}

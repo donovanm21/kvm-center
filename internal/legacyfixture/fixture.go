@@ -16,6 +16,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 	"kvm-center/internal/offlinestaging"
 )
 
@@ -284,7 +285,17 @@ func Write(dir string, s Bundle) error {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		m.Collections = append(m.Collections, offlinestaging.Collection{Name: n, Documents: 1, DataSHA256: hash(s.Documents[n]), IndexSHA256: hash(s.Indexes[n])})
+		count := 0
+		remaining := s.Documents[n]
+		for len(remaining) > 0 {
+			doc, rest, ok := bsoncore.ReadDocument(remaining)
+			if !ok || bson.Raw(doc).Validate() != nil {
+				return fmt.Errorf("invalid generated BSON for %s", n)
+			}
+			count++
+			remaining = rest
+		}
+		m.Collections = append(m.Collections, offlinestaging.Collection{Name: n, Documents: count, DataSHA256: hash(s.Documents[n]), IndexSHA256: hash(s.Indexes[n])})
 		if err := os.WriteFile(filepath.Join(dir, n+".bson"), s.Documents[n], 0600); err != nil {
 			return err
 		}
