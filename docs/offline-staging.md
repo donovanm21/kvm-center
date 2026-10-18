@@ -247,7 +247,10 @@ provenance separately and indefinitely. Full-schema fixtures are not filtered.
 
 The application shares a durable, conservative reservation gate across direct
 migration and drain; see [the affinity contract](../server/docs/affinity.md).
-Reservations survive backup/fresh restore and never clear automatically. Names,
-tag selectors, rule edits, creation admission, reservation reconciliation and
+Version 2 distinguishes prepared and dispatch-possible reservations. Only the
+owning handler can durably abort a preparation before grant exposure, retaining
+its request identity indefinitely. Backup/fresh restore preserves the ledger;
+recovered reservations never gain an abort owner. Names, tag selectors, rule
+edits, creation admission, post-dispatch reservation reconciliation and
 native migration success remain unsupported or unproven. Existing archive
 versions 1–8 and the pinned rollback package retain their previous contracts.

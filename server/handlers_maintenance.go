@@ -183,14 +183,22 @@ func drainOneVM(ctx context.Context, store *Store, sourceID string, vm *models.V
 	}
 
 	q := affinitypolicy.Reservation{RequestID: NewRequestID(), UUID: vm.UUID, Name: vm.Name, Source: sourceID, Destination: dest.ID, DestinationAddress: dest.IP}
-	warnings, err := store.reserveAffinity(q)
+	warnings, lease, err := store.reserveAffinity(q)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err := lease.abortPrepared(); err != nil {
+			log.Printf("affinity abort: %v", err)
+		}
+	}()
 	if len(warnings) > 0 {
 		auditSystem(store, AuditMigrationStart, "vm/"+vm.UUID, map[string]string{"affinity_warnings": strings.Join(warnings, "; "), "via": "drain"}, true, "")
 	}
 	if err := store.recheckAffinity(q); err != nil {
+		return err
+	}
+	if err := lease.dispatchPossible(); err != nil {
 		return err
 	}
 	rec := &models.MigrationRecord{

@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"io"
 	"net"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -37,10 +38,12 @@ type Reservation struct {
 	DestinationAddress string `json:"destination_address"`
 }
 type State struct {
-	Version        int               `json:"version"`
-	SourceContract string            `json:"source_contract"`
-	Originals      map[string][]byte `json:"originals"`
-	Reservation    *Reservation      `json:"reservation,omitempty"`
+	Version          int                    `json:"version"`
+	SourceContract   string                 `json:"source_contract"`
+	Originals        map[string][]byte      `json:"originals"`
+	Reservation      *Reservation           `json:"reservation,omitempty"`
+	ReservationPhase string                 `json:"reservation_phase,omitempty"`
+	Aborted          map[string]Reservation `json:"aborted,omitempty"`
 }
 type wire State
 
@@ -131,7 +134,7 @@ func (s *State) Rules() ([]Rule, error) {
 	if s == nil {
 		return nil, nil
 	}
-	if s.Version != 1 || s.SourceContract != Source || len(s.Originals) == 0 || len(s.Originals) > 128 {
+	if (s.Version != 1 && s.Version != 2) || s.SourceContract != Source || len(s.Originals) == 0 || len(s.Originals) > 128 {
 		return nil, errors.New("unsupported affinity state contract")
 	}
 	keys := make([]string, 0, len(s.Originals))
@@ -189,6 +192,36 @@ func (s *State) Rules() ([]Rule, error) {
 			return nil, errors.New("invalid affinity reservation")
 		}
 	}
+	if s.Version == 1 && (s.ReservationPhase != "" || len(s.Aborted) != 0) {
+		return nil, errors.New("v1 affinity cannot claim reconciliation evidence")
+	}
+	if s.Version == 2 {
+		if len(s.Aborted) > 256 {
+			return nil, errors.New("affinity aborted ledger full")
+		}
+		if s.Reservation == nil && s.ReservationPhase != "" {
+			return nil, errors.New("phase without reservation")
+		}
+		if s.Reservation != nil && s.ReservationPhase != "prepared" && s.ReservationPhase != "dispatch_possible" {
+			return nil, errors.New("invalid reservation phase")
+		}
+		for id, q := range s.Aborted {
+			if id != q.RequestID || !validReservation(q) {
+				return nil, errors.New("invalid aborted reservation")
+			}
+			if s.Reservation != nil && id == s.Reservation.RequestID {
+				return nil, errors.New("aborted request cannot be reserved again")
+			}
+		}
+	}
+	// A state admitted for persistence must always fit the strict decoder.
+	encoded, err := json.Marshal(wire(*s))
+	if err != nil {
+		return nil, err
+	}
+	if len(encoded) > 2*MaxBytes {
+		return nil, errors.New("encoded affinity state too large")
+	}
 	return rules, nil
 }
 func (s *State) Validate() error { _, err := s.Rules(); return err }
@@ -197,6 +230,13 @@ func (s *State) Clone() *State {
 		return nil
 	}
 	n := *s
+	n.Aborted = nil
+	if s.Aborted != nil {
+		n.Aborted = map[string]Reservation{}
+		for k, v := range s.Aborted {
+			n.Aborted[k] = v
+		}
+	}
 	n.Originals = map[string][]byte{}
 	for k, v := range s.Originals {
 		n.Originals[k] = append([]byte(nil), v...)
@@ -217,7 +257,8 @@ func (s *State) UnmarshalJSON(raw []byte) error {
 	if !utf8.Valid(raw) {
 		return errors.New("invalid affinity JSON UTF-8")
 	}
-	if len(raw) > 2*MaxBytes {
+	// Allow bounded formatting overhead; Rules applies the compact semantic limit.
+	if len(raw) > 4*MaxBytes {
 		return errors.New("affinity state too large")
 	}
 	if err := uniqueJSON(raw); err != nil {
@@ -228,11 +269,11 @@ func (s *State) UnmarshalJSON(raw []byte) error {
 		return err
 	}
 	for k := range fields {
-		if k != "version" && k != "source_contract" && k != "originals" && k != "reservation" {
+		if k != "version" && k != "source_contract" && k != "originals" && k != "reservation" && k != "reservation_phase" && k != "aborted" {
 			return errors.New("unsupported affinity JSON field or alias")
 		}
 	}
-	if r, ok := fields["reservation"]; ok {
+	checkReservation := func(r json.RawMessage) error {
 		if bytes.Equal(bytes.TrimSpace(r), []byte("null")) {
 			return errors.New("null affinity reservation")
 		}
@@ -247,6 +288,29 @@ func (s *State) UnmarshalJSON(raw []byte) error {
 				return errors.New("unsupported reservation field or alias")
 			}
 		}
+		return nil
+	}
+	if r, ok := fields["reservation"]; ok {
+		if err := checkReservation(r); err != nil {
+			return err
+		}
+	}
+	if raw, ok := fields["reservation_phase"]; ok && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return errors.New("null reservation phase")
+	}
+	if raw, ok := fields["aborted"]; ok {
+		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return errors.New("null aborted ledger")
+		}
+		var entries map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &entries); err != nil {
+			return err
+		}
+		for _, r := range entries {
+			if err := checkReservation(r); err != nil {
+				return err
+			}
+		}
 	}
 	var w wire
 	d := json.NewDecoder(bytes.NewReader(raw))
@@ -255,6 +319,13 @@ func (s *State) UnmarshalJSON(raw []byte) error {
 		return err
 	}
 	n := State(w)
+	if n.Version == 1 {
+		for _, key := range []string{"reservation_phase", "aborted"} {
+			if _, ok := fields[key]; ok {
+				return errors.New("v1 state cannot carry v2 fields")
+			}
+		}
+	}
 	if err := n.Validate(); err != nil {
 		return err
 	}
@@ -316,6 +387,12 @@ func (s *State) Check(in []Placement, q Reservation) ([]string, error) {
 	}
 	if s.Reservation != nil {
 		return nil, errors.New("unresolved affinity placement reservation; reconciliation required")
+	}
+	if _, ok := s.Aborted[q.RequestID]; ok {
+		return nil, errors.New("aborted affinity request cannot replay; use a new request identity")
+	}
+	if len(s.Aborted) >= 256 {
+		return nil, errors.New("affinity aborted ledger full; no records may be discarded")
 	}
 	byID := map[string]Placement{}
 	names := map[string]string{}
@@ -379,4 +456,61 @@ func (s *State) Check(in []Placement, q Reservation) ([]string, error) {
 		}
 	}
 	return warnings, nil
+}
+
+func validReservation(q Reservation) bool {
+	return textOK(q.RequestID) && uuid.MatchString(q.UUID) && textOK(q.Name) && textOK(q.Source) && textOK(q.Destination) && q.Source != q.Destination && net.ParseIP(q.DestinationAddress) != nil
+}
+
+// ValidateTransition prevents ordinary persistence from discarding originals,
+// aborted identities, or any reservation that may have dispatched. A prepared
+// abort is authorized only by the process-local owner in the server.
+func ValidateTransition(old, next *State) error {
+	if err := next.Validate(); err != nil {
+		return err
+	}
+	if old == nil {
+		return nil
+	}
+	if next == nil || !reflect.DeepEqual(old.Originals, next.Originals) {
+		return errors.New("immutable affinity originals changed")
+	}
+	if reflect.DeepEqual(old, next) {
+		return nil
+	}
+	if old.Version == 1 && old.Reservation != nil {
+		return errors.New("legacy reservation has unknown dispatch phase")
+	}
+	if next.Version != 2 {
+		return errors.New("affinity ledger downgrade refused")
+	}
+	expected := old.Clone()
+	expected.Version = 2
+	if old.Reservation == nil {
+		if next.Reservation == nil || next.ReservationPhase != "prepared" {
+			return errors.New("new reservation must be prepared")
+		}
+		if _, ok := old.Aborted[next.Reservation.RequestID]; ok {
+			return errors.New("aborted request replay")
+		}
+		expected.Reservation = next.Reservation
+		expected.ReservationPhase = "prepared"
+	} else if old.ReservationPhase == "prepared" {
+		if next.Reservation != nil {
+			expected.ReservationPhase = "dispatch_possible"
+		} else {
+			if expected.Aborted == nil {
+				expected.Aborted = map[string]Reservation{}
+			}
+			expected.Aborted[old.Reservation.RequestID] = *old.Reservation
+			expected.Reservation = nil
+			expected.ReservationPhase = ""
+		}
+	} else {
+		return errors.New("dispatch-possible reservation cannot be cleared or replaced")
+	}
+	if !reflect.DeepEqual(expected, next) {
+		return errors.New("invalid affinity ledger transition")
+	}
+	return nil
 }

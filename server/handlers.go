@@ -455,13 +455,22 @@ func handleCommand(store *Store) http.HandlerFunc {
 				return
 			}
 			q := affinitypolicy.Reservation{RequestID: req.RequestID, UUID: req.VMUUID, Name: req.VMName, Source: req.HostID, Destination: dest, DestinationAddress: req.Params["destination"]}
-			warnings, err := store.reserveAffinity(q)
+			warnings, lease, err := store.reserveAffinity(q)
 			if err != nil {
 				auditMessage = err.Error()
 				writeError(w, http.StatusConflict, err.Error())
 				return
 			}
+			defer func() {
+				if err := lease.abortPrepared(); err != nil {
+					log.Printf("affinity abort: %v", err)
+				}
+			}()
 			if err := store.recheckAffinity(q); err != nil {
+				writeError(w, http.StatusConflict, err.Error())
+				return
+			}
+			if err := lease.dispatchPossible(); err != nil {
 				writeError(w, http.StatusConflict, err.Error())
 				return
 			}
