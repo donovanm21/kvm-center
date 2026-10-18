@@ -304,6 +304,7 @@ func (p *acceptanceProcess) request(t *testing.T, method, path string, body []by
 		t.Fatal(err)
 	}
 	if response.StatusCode != want {
+		t.Log("HISTORY_FAILURE request_status_mismatch")
 		t.Fatalf("%s %s returned%d want%d", method, path, response.StatusCode, want)
 	}
 	return raw

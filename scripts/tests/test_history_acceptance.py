@@ -42,6 +42,20 @@ class HistoryEvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             history.measurements('\n'.join(rows[:-2]))
 
+    def test_assertion_diagnostics_redacts_arbitrary_output(self):
+        secret = 'PRIVATE-DO-NOT-EXPORT'
+        rows = [json.dumps({'Test': 'TestHistoryAcceptanceCachedBackupNamespaceRefusal',
+                 'Output': '    namespace_gate_acceptance_test.go:51: ' + secret}),
+                json.dumps({'Test': 'TestHistoryAcceptanceResourceAlarmLifecycle',
+                 'Output': '    alarm_preservation_acceptance_test.go:80: HISTORY_FAILURE request_status_mismatch\n'}),
+                json.dumps({'Test': secret, 'Output': 'history_acceptance_test.go:99: ' + secret}),
+                json.dumps({'Output': secret}), 'not json', '[]']
+        result = history.assertion_diagnostics('\n'.join(rows))
+        self.assertEqual(result, [
+            {'test':'TestHistoryAcceptanceCachedBackupNamespaceRefusal', 'file':'namespace_gate_acceptance_test.go', 'line':51},
+            {'test':'TestHistoryAcceptanceResourceAlarmLifecycle', 'file':'alarm_preservation_acceptance_test.go', 'line':80, 'code':'request_status_mismatch'}])
+        self.assertNotIn(secret, json.dumps(result))
+
     @unittest.skipUnless(sys.platform == 'linux', 'owned Linux process-group regression runs in hosted CI')
     def test_nonzero_leader_cleans_owned_descendant(self):
         with tempfile.TemporaryDirectory() as tmp:

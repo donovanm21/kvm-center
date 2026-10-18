@@ -21,6 +21,32 @@ from validate import ROOT, source_identity, local_test_url, go_test_evidence, mi
 PRIOR = 'b8bdcbc5bbd72f4799f5ec14d80d8805601cd12c'
 
 
+def assertion_diagnostics(text):
+    """Retain locations and allowlisted codes, never arbitrary assertion text."""
+    out = []
+    for line in text.splitlines():
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(item, dict):
+            continue
+        test = item.get('Test', '')
+        if not isinstance(test, str) or not re.fullmatch(r'TestHistoryAcceptance[A-Za-z0-9_/]+', test):
+            continue
+        output = item.get('Output', '')
+        if not isinstance(output, str):
+            continue
+        match = re.search(r'\b([a-z_]*acceptance_test\.go):(\d+):', output)
+        if match:
+            entry = {'test': test, 'file': match[1], 'line': int(match[2])}
+            if re.search(r'HISTORY_FAILURE request_status_mismatch(?:\s|$)', output):
+                entry['code'] = 'request_status_mismatch'
+            if entry not in out:
+                out.append(entry)
+    return out
+
+
 def measurements(text):
     result = []
     # test2json may split a long output line across multiple events. Keep
@@ -136,9 +162,7 @@ def main():
                             if item.get('Test') and item.get('Action') in ('pass', 'fail', 'skip'):
                                 events.append({k: item[k] for k in ('Test', 'Action', 'Elapsed') if k in item})
                         report['test_outcomes'] = events
-                        report['assertion_diagnostics'] = [json.loads(line).get('Output', '').strip() for line in log.read_text().splitlines()
-                            if line.startswith('{') and re.search(r'history_acceptance_test.go:\d+:', json.loads(line).get('Output', ''))
-                            and 'HISTORY_EVIDENCE ' not in json.loads(line).get('Output', '')]
+                        report['assertion_diagnostics'] = assertion_diagnostics(log.read_text())
                 report['tests'] = go_test_evidence(log.read_text(), 'TestHistoryAcceptance', True)
                 report['measurements'] = measurements(log.read_text())
             finally:
