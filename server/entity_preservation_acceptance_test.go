@@ -230,5 +230,5 @@ func TestHistoryAcceptanceOverlayV1ArchiveRestore(t *testing.T) {
 	if got.Lookup("name").StringValue() != "edited" || got.Lookup("opaque").Type == 0 {
 		t.Fatal("v1 archive restore lost values")
 	}
-	emitAcceptance(t, "overlay_v1_archive_restore", map[string]any{"original_wire_version": 1, "validated_manifest_version": 1, "upgraded_version": 2, "fresh_restore": true, "opaque_preserved": true})
+	emitAcceptance(t, "overlay_v1_archive_restore", map[string]any{"backend": "mongo", "original_wire_version": 1, "validated_manifest_version": 1, "upgraded_version": 2, "fresh_restore": true, "opaque_preserved": true})
 }
