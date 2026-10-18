@@ -265,6 +265,9 @@ func (b *MongoBackend) captureEntityOverlay(ctx context.Context, d *persistData)
 	if err != nil {
 		return nil, err
 	}
+	if err := preflightAffinitySave(ctx, db, d); err != nil {
+		return nil, err
+	}
 	if err := preflightLegacyHistorySave(ctx, db, d, false); err != nil {
 		return nil, err
 	}
@@ -343,6 +346,9 @@ func restoreEntityRecords(d *persistData, col string) map[string][]byte {
 func validateEntitySnapshot(d *persistData) error {
 	if d == nil {
 		return errors.New("missing entity snapshot")
+	}
+	if err := d.Affinity.Validate(); err != nil {
+		return err
 	}
 	if err := d.LegacyHistory.Validate(); err != nil {
 		return err

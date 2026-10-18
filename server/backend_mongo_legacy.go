@@ -12,6 +12,9 @@ import (
 // Collection membership is a necessary gate, not full-schema approval. Keep
 // checks at load/save/export too: cached connections cannot approve new data.
 func rejectLegacyCollections(ctx context.Context, db *mongo.Database) error {
+	if _, err := loadAffinityState(ctx, db); err != nil {
+		return err
+	}
 	if _, err := loadLegacyHistory(ctx, db); err != nil {
 		return err
 	}
@@ -53,5 +56,5 @@ var supportedMongoCollections = map[string]bool{
 	mcoSnapshotPolicies: true, mcoNotifications: true, mcoMetrics: true, mcoAuditShipping: true,
 	mcoBackupSchedule: true, mcoDiscordGateway: true, mcoRemovedHosts: true, mcoPendingEnrol: true,
 	mcoLegacyHistory: true, mcoLegacyHistoryContract: true,
-	mcoAlarms: true, mcoAPITokens: true, mcoHypervisorCerts: true, mcoHostHistory: true, mcoVMTagState: true,
+	mcoAlarms: true, mcoAPITokens: true, mcoHypervisorCerts: true, mcoHostHistory: true, mcoVMTagState: true, "affinity_state": true,
 }

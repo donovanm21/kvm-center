@@ -235,3 +235,19 @@ and affinity selectors are not enabled or verified. Saved-source missing-VM
 pruning is not resumed: current tags deliberately survive inventory omission.
 It does not prove full saved-source behavior, full-schema activation, UI/native
 operations or lossless post-upgrade-write rollback. Existing holds remain.
+
+### Bounded affinity rules and placement reservations
+
+The separate `synthetic-legacy-affinity-6db8c723-v1` fixture and
+`legacy-affinity-state` export preserve original rule BSON while supporting only
+canonical UUID-based `must`/`should` together/separate rules. The exported
+`affinity_state` is an explicit current snapshot namespace, not permission to
+load ordinary legacy `affinity_rules`. Preserve original BSON, indexes and
+provenance separately and indefinitely. Full-schema fixtures are not filtered.
+
+The application shares a durable, conservative reservation gate across direct
+migration and drain; see [the affinity contract](../server/docs/affinity.md).
+Reservations survive backup/fresh restore and never clear automatically. Names,
+tag selectors, rule edits, creation admission, reservation reconciliation and
+native migration success remain unsupported or unproven. Existing archive
+versions 1–8 and the pinned rollback package retain their previous contracts.

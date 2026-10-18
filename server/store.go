@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"kvm-center/internal/affinitypolicy"
 	"kvm-center/internal/models"
 )
 
@@ -20,8 +21,9 @@ func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
 
 // persistData is the on-disk JSON structure.
 type persistData struct {
-	Alarms         []*models.Alarm `json:"alarms,omitempty"`
-	EntityOverlay  *entityOverlay  `json:"entity_bson_overlay,omitempty"`
+	Affinity       *affinitypolicy.State `json:"affinity_state,omitempty"`
+	Alarms         []*models.Alarm       `json:"alarms,omitempty"`
+	EntityOverlay  *entityOverlay        `json:"entity_bson_overlay,omitempty"`
 	restoreOverlay *entityOverlay
 
 	LegacyHistory        *legacyHistoryState                 `json:"legacy_history_state,omitempty"`
@@ -94,6 +96,8 @@ const guestToolsFreshness = 5 * time.Minute
 
 // Store is the in-memory data store backed by a JSON file.
 type Store struct {
+	affinity       *affinitypolicy.State
+	affinityMu     sync.Mutex
 	legacyHistory  *legacyHistoryState
 	alarms         []*models.Alarm
 	alarmStates    map[alarmTarget]*alarmState

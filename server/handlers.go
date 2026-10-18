@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"kvm-center/internal/affinitypolicy"
 	"kvm-center/internal/models"
 )
 
@@ -440,6 +441,35 @@ func handleCommand(store *Store) http.HandlerFunc {
 			return
 		}
 
+		var affinityReservation *affinitypolicy.Reservation
+		if (action == "MIGRATE" || action == "OFFLINE_MIGRATE") && store.affinityActive() {
+			if action == "MIGRATE" {
+				if err := store.liveMigrationSource(req, time.Now()); err != nil {
+					writeError(w, http.StatusConflict, err.Error())
+					return
+				}
+			}
+			dest, err := store.affinityDestination(req.Params["destination"])
+			if err != nil {
+				writeError(w, http.StatusConflict, err.Error())
+				return
+			}
+			q := affinitypolicy.Reservation{RequestID: req.RequestID, UUID: req.VMUUID, Name: req.VMName, Source: req.HostID, Destination: dest, DestinationAddress: req.Params["destination"]}
+			warnings, err := store.reserveAffinity(q)
+			if err != nil {
+				auditMessage = err.Error()
+				writeError(w, http.StatusConflict, err.Error())
+				return
+			}
+			if err := store.recheckAffinity(q); err != nil {
+				writeError(w, http.StatusConflict, err.Error())
+				return
+			}
+			affinityReservation = &q
+			if len(warnings) > 0 {
+				w.Header().Set("X-Affinity-Warnings", strings.Join(warnings, "; "))
+			}
+		}
 		// v5.10.1 + v5.11.4: prefer qemu+tls:// (+ signed grants) when
 		// both source and destination have an active hypervisor cert.
 		// Applies to BOTH live (MIGRATE) and offline (OFFLINE_MIGRATE)
@@ -595,6 +625,13 @@ func handleCommand(store *Store) http.HandlerFunc {
 			}
 		}
 
+		if affinityReservation != nil {
+			if err := store.recheckAffinity(*affinityReservation); err != nil {
+				auditMessage = err.Error()
+				writeError(w, http.StatusConflict, err.Error())
+				return
+			}
+		}
 		url := fmt.Sprintf("http://%s/command", agentAddr)
 		log.Printf("command: %s → %s  vm=%s  req_id=%s", action, agentAddr, req.VMName, req.RequestID)
 
@@ -694,6 +731,16 @@ func handleCommand(store *Store) http.HandlerFunc {
 			}
 		}
 		client := store.newAgentClient(req.HostID, timeout)
+		if affinityReservation != nil {
+			if err := store.recheckAffinity(*affinityReservation); err != nil {
+				writeError(w, http.StatusConflict, err.Error())
+				return
+			}
+			if store.GetHostAgentAddr(req.HostID) != agentAddr {
+				writeError(w, http.StatusConflict, "affinity source address changed before dispatch")
+				return
+			}
+		}
 		resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 		if err != nil {
 			// Transport / deadline failures don't tell us whether the
@@ -1325,6 +1372,10 @@ func handleVMCreate(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		if store.affinityActive() {
+			writeError(w, http.StatusConflict, "VM creation is unsupported while bounded affinity policy is active")
 			return
 		}
 		if featureBlocked(w, store, "vm_create", "creating VMs") {
