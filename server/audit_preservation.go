@@ -52,7 +52,7 @@ func validateAuditBSON(raw bson.Raw) error {
 	elements, _ := raw.Elements()
 	for _, element := range elements {
 		for _, alias := range []string{"actorid", "actor_name", "actor_ip"} {
-			if strings.EqualFold(element.Key(), alias) {
+			if strings.EqualFold(element.Key(), alias) && !(element.Key() == "actorid" && alias == "actorid") {
 				return errors.New("unsupported audit BSON alias")
 			}
 		}
@@ -75,7 +75,7 @@ func validateAuditBSON(raw bson.Raw) error {
 	if err != nil {
 		return err
 	}
-	_, err = preserveEntityBSON(raw, candidate, reflect.TypeOf(ev), nil)
+	_, err = preserveEntityBSON(raw, candidate, reflect.TypeOf(ev), map[string]string{"actorid": "actor_id"})
 	return err
 }
 func loadAuditRecords(ctx context.Context, db *mongo.Database) ([]*models.AuditEvent, error) {

@@ -135,8 +135,9 @@ interpreting or replaying their original operations is not supported.
 Admission requires nonempty matching `_id`/`id`, nonzero BSON dates, exact declared
 field types, and at most 10,000 events. Ambiguous aliases, duplicate identities,
 and oversized input refuse before indexes or writes; no newest-only query or
-silent deduplication approves partial input. Offline conversion can normalize
-unambiguous `actorid` to `actor_id`; originals remain immutable.
+silent deduplication approves partial input. The exact historical `actorid` alias is explicitly canonicalized to `actor_id`
+through the existing strict decoder; conflicting, mistyped or mixed-case aliases
+refuse. Offline originals remain immutable.
 
 Ordering is explicit: ascending BSON millisecond time, then ID, with newest-first
 reads. Appends use the same ordering before trimming the oldest events to 10,000;

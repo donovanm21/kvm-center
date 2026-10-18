@@ -19,6 +19,9 @@ func TestMongoIntegrationAuditPreservation(t *testing.T) {
 	var doc bson.D
 	bson.Unmarshal(raw, &doc)
 	for i := range doc {
+		if doc[i].Key == "detail" {
+			doc[i].Value = bson.D{{Key: "z", Value: "last"}, {Key: "a", Value: "first"}, {Key: "m", Value: "middle"}}
+		}
 		if doc[i].Key == "at" {
 			doc[i].Value = time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
 		}
@@ -47,14 +50,16 @@ func TestMongoIntegrationAuditPreservation(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.EntityOverlay = overlay
-	fresh := newMongoIntegrationBackend(t)
-	if err := fresh.restoreEntitySnapshot(t.Context(), d); err != nil {
-		t.Fatal(err)
-	}
-	var restored bson.Raw
-	fresh.db.Collection(mcoAuditEvents).FindOne(t.Context(), bson.D{{Key: "_id", Value: "original"}}).Decode(&restored)
-	if !bytes.Equal(got, restored) {
-		t.Fatal("fresh restore changed record")
+	for i := 0; i < 3; i++ {
+		fresh := newMongoIntegrationBackend(t)
+		if err := fresh.restoreEntitySnapshot(t.Context(), d); err != nil {
+			t.Fatal(err)
+		}
+		var restored bson.Raw
+		fresh.db.Collection(mcoAuditEvents).FindOne(t.Context(), bson.D{{Key: "_id", Value: "original"}}).Decode(&restored)
+		if !bytes.Equal(got, restored) {
+			t.Fatal("fresh restore changed record")
+		}
 	}
 }
 

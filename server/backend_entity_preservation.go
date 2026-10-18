@@ -34,6 +34,7 @@ func entitySchema(collection string) (reflect.Type, map[string]string, error) {
 		value = entityGuestReport{}
 	case mcoAuditEvents:
 		value = models.AuditEvent{}
+		aliases["actorid"] = "actor_id"
 	case mcoRemovedHosts:
 		value = models.RemovedHost{}
 	default:

@@ -154,3 +154,41 @@ func TestAuditAliasCaseOnlyAndConflict(t *testing.T) {
 		}
 	}
 }
+
+func TestAuditLegacyAliasAndRawMapOrder(t *testing.T) {
+	var doc bson.D
+	bson.Unmarshal(auditFixture(t, "original"), &doc)
+	for i := range doc {
+		if doc[i].Key == "actor_id" {
+			doc[i].Key = "actorid"
+		}
+		if doc[i].Key == "detail" {
+			doc[i].Value = bson.D{{Key: "z", Value: "last"}, {Key: "a", Value: "first"}, {Key: "m", Value: "middle"}}
+		}
+	}
+	original, _ := bson.Marshal(doc)
+	if err := validateAuditBSON(original); err != nil {
+		t.Fatal("strict historical alias refused", err)
+	}
+	var event models.AuditEvent
+	if err := bson.Unmarshal(original, &event); err != nil {
+		t.Fatal(err)
+	}
+	overlay := &entityOverlay{Version: 5, Collections: map[string]map[string][]byte{mcoAuditEvents: {event.ID: original}}}
+	for i := 0; i < 30; i++ {
+		d := &persistData{Audit: []*models.AuditEvent{&event}, EntityOverlay: overlay}
+		wire, err := json.Marshal(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var back persistData
+		if err := json.Unmarshal(wire, &back); err != nil {
+			t.Fatal(err)
+		}
+		raw := bson.Raw(back.EntityOverlay.Collections[mcoAuditEvents][event.ID])
+		if raw.Lookup("actorid").Type != 0 || raw.Lookup("actor_id").StringValue() != event.ActorID || !equalRaw(raw.Lookup("detail"), bson.Raw(original).Lookup("detail")) {
+			t.Fatal("alias/map preservation changed")
+		}
+		overlay = back.EntityOverlay
+	}
+}

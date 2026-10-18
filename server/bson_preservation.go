@@ -236,6 +236,13 @@ func preserveEntityBSON(old, candidate bson.Raw, entity reflect.Type, aliases ma
 		if err != nil {
 			return nil, err
 		}
+		// An unchanged string map keeps its original raw order. Re-marshalling
+		// Go maps may reorder entries and break exact restore verification.
+		if ft.Kind() == reflect.Map && ft.Key().Kind() == reflect.String && ft.Elem().Kind() == reflect.String && value.Type == bsontype.EmbeddedDocument {
+			if _, same := unknownBelow(value, b[name], ft); same == nil {
+				retained[name] = value
+			}
+		}
 		if u {
 			if !equalRaw(b[name], p[name]) {
 				return nil, errors.New("ambiguous mutation of opaque BSON container")
