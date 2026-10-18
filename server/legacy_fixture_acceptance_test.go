@@ -20,14 +20,14 @@ import (
 )
 
 func TestHistoryAcceptanceLegacyFixtureRefusal(t *testing.T) {
-	testLegacyFixtureRefusal(t, legacyfixture.Generate(), "legacy_refusal")
+	testLegacyFixtureRefusal(t, legacyfixture.Generate(), "legacy_refusal", "legacy perf_history collection requires explicit offline conversion")
 }
 
 func TestHistoryAcceptanceDeployedLegacyFixtureRefusal(t *testing.T) {
-	testLegacyFixtureRefusal(t, legacyfixture.GenerateDeployed(), "deployed_legacy_refusal")
+	testLegacyFixtureRefusal(t, legacyfixture.GenerateDeployed(), "deployed_legacy_refusal", "legacy perf_history collection requires explicit offline conversion")
 }
 
-func testLegacyFixtureRefusal(t *testing.T, fixture legacyfixture.Bundle, kind string) {
+func testLegacyFixtureRefusal(t *testing.T, fixture legacyfixture.Bundle, kind, expectedReason string) {
 	binary := os.Getenv("KVMC_HISTORY_BINARY")
 	if binary == "" {
 		t.Fatal("pinned current binary required")
@@ -70,7 +70,7 @@ func testLegacyFixtureRefusal(t *testing.T, fixture legacyfixture.Bundle, kind s
 			t.Fatal(err)
 		}
 	}
-	if _, err := b.Load(ctx); err == nil || !strings.Contains(err.Error(), "legacy perf_history collection requires explicit offline conversion") {
+	if _, err := b.Load(ctx); err == nil || !strings.Contains(err.Error(), expectedReason) {
 		t.Fatalf("backend did not identify legacy representation: %v", err)
 	}
 	runCtx, stop := context.WithTimeout(ctx, 20*time.Second)
