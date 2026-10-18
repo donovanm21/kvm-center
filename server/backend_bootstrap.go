@@ -68,7 +68,7 @@ func bootstrapBackendWith(ctx context.Context, mongoURL, dataFile string, newMon
 		}
 		{
 			for key := range fields {
-				if strings.EqualFold(key, "entity_bson_overlay") || strings.EqualFold(key, "legacy_history_state") || strings.EqualFold(key, "affinity_state") {
+				if strings.EqualFold(key, "entity_bson_overlay") || strings.EqualFold(key, "legacy_history_state") || strings.EqualFold(key, "affinity_state") || strings.EqualFold(key, "guest_update_state") {
 					overlayRestore = true
 				}
 			}

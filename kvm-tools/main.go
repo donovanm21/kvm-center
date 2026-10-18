@@ -57,6 +57,8 @@ type GuestInterface struct {
 }
 
 type GuestTelemetryPayload struct {
+	Arch            string           `json:"arch,omitempty"`
+	UpdateOS        string           `json:"update_os,omitempty"`
 	VMUUID          string           `json:"vm_uuid"`
 	Hostname        string           `json:"hostname"`
 	OS              string           `json:"os"`
@@ -204,6 +206,8 @@ func initHTTPClient(serverURL string) {
 // DMI UUID collision.
 func send(serverURL, uuid string) string {
 	p := collect(uuid)
+	p.Arch = runtime.GOARCH
+	p.UpdateOS = runtime.GOOS
 	body, err := json.Marshal(p)
 	if err != nil {
 		log.Printf("kvm-tools: marshal error: %v", err)

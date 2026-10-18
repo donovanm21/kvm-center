@@ -265,6 +265,9 @@ func (b *MongoBackend) captureEntityOverlay(ctx context.Context, d *persistData)
 	if err != nil {
 		return nil, err
 	}
+	if err := preflightGuestUpdates(ctx, db, d); err != nil {
+		return nil, err
+	}
 	if err := preflightAffinitySave(ctx, db, d); err != nil {
 		return nil, err
 	}

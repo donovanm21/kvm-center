@@ -1088,14 +1088,19 @@ func handleGuestTelemetry(store *Store) http.HandlerFunc {
 			return
 		}
 		log.Printf("guest-telemetry: uuid=%s host=%s os=%q kvm-tools=%s", canonical, p.Hostname, p.OS, p.KVMToolsVersion)
-		// If the operator queued a kvm-tools self-update for this VM,
-		// hand back the binary URL so the in-guest daemon downloads it
-		// and re-execs. The queue clears immediately.
 		reply := map[string]string{"status": "ok"}
-		if store.ConsumeKVMToolsUpdate(canonical) {
-			reply["update_url"] = kvmToolsBinaryURL(r, p.OS)
-			log.Printf("kvm-tools-update: signalled %s (os=%q) → %s", canonical, p.OS, reply["update_url"])
+		updateID, offer, offerErr := store.OfferGuestUpdate(canonical, p.UpdateOS, p.Arch, kvmToolsBinaryURL(r, p.UpdateOS))
+		if updateID != "" {
+			reply["update_request_id"] = updateID
 		}
+		if offerErr != nil {
+			reply["update_status"] = "unconfirmed_or_recovery_fenced"
+		}
+		if offer != "" {
+			reply["update_url"] = offer
+			reply["update_status"] = "offered_unconfirmed"
+		}
+
 		// Echo the canonical UUID when it differs from what the guest
 		// claimed — the client caches this to local disk and pins it
 		// for subsequent reports, fixing cloned-VM DMI UUID collisions
@@ -1107,24 +1112,9 @@ func handleGuestTelemetry(store *Store) http.HandlerFunc {
 	}
 }
 
-// kvmToolsBinaryURL returns the URL the in-guest daemon should pull
-// its self-update from. Picks the right binary based on the guest
-// OS string carried in the telemetry payload:
-//
-//   - Any OS string containing "windows" → kvm-tools-windows-amd64.exe
-//   - everything else → kvm-tools-linux-amd64
-//
-// We default to linux/amd64 because that's >95% of the fleet; arm64
-// guests still get the amd64 binary (harmless — arm64 Linux guests
-// have binfmt_misc or qemu-user configured by default on most
-// distros, but this is a known limitation). A future
-// GuestTelemetryPayload extension will ship goos+goarch explicitly
-// so we can pick precisely. Tier S item, tracked in the Windows
-// kvm-tools update bug memory.
-//
-// Since v5.16 downloads live on the server itself under
-// /downloads/*, so the URL is same-origin with whatever port the
-// guest originally registered against.
+// kvmToolsBinaryURL constructs the server download URL. Guest update offers
+// separately require explicit linux/windows and amd64 telemetry before delivery.
+// The install-information endpoint retains the default Linux URL.
 func kvmToolsBinaryURL(r *http.Request, guestOS string) string {
 	if env := os.Getenv("KVM_TOOLS_BINARY_URL"); env != "" {
 		return env
@@ -1153,31 +1143,46 @@ func handleKVMToolsVersion(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// POST /api/kvm-tools/update — accepts {"uuids": [...]} and queues each
-// VM for a self-update on its next telemetry POST. Idempotent.
+// POST admits a durable request; GET inspects it without repeating an offer.
 func handleKVMToolsUpdate(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			result, err := store.GuestUpdateStatus(r.URL.Query().Get("request_id"))
+			if err != nil {
+				writeError(w, http.StatusNotFound, "unknown update request")
+				return
+			}
+			writeJSON(w, http.StatusOK, result)
+			return
+		}
 		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, "POST only")
+			writeError(w, http.StatusMethodNotAllowed, "GET or POST only")
+			return
+		}
+		raw, err := io.ReadAll(io.LimitReader(r.Body, 8193))
+		if err != nil || len(raw) > 8192 || uniqueJSONKeys(raw) != nil {
+			writeError(w, 400, "invalid update request")
+			return
+		}
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) != nil || len(fields) != 2 || fields["request_id"] == nil || fields["uuids"] == nil {
+			writeError(w, 400, "request_id and uuids required")
 			return
 		}
 		var req struct {
+			ID    string   `json:"request_id"`
 			UUIDs []string `json:"uuids"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		if json.Unmarshal(raw, &req) != nil {
+			writeError(w, 400, "invalid update request types")
 			return
 		}
-		if len(req.UUIDs) == 0 {
-			writeError(w, http.StatusBadRequest, "uuids must be non-empty")
+		result, err := store.QueueGuestUpdate(req.ID, req.UUIDs)
+		if err != nil {
+			writeError(w, 409, "update request refused or persistence uncertain; inspect the same request_id before retrying")
 			return
 		}
-		store.QueueKVMToolsUpdate(req.UUIDs)
-		audit(store, r, AuditKVMToolsQueue, "kvm-tools", map[string]string{"uuids": strings.Join(req.UUIDs, ",")}, true, "")
-		writeJSON(w, http.StatusOK, map[string]any{
-			"status": "queued",
-			"count":  len(req.UUIDs),
-		})
+		writeJSON(w, http.StatusOK, result)
 	}
 }
 

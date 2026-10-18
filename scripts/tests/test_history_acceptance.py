@@ -17,12 +17,12 @@ spec.loader.exec_module(history)
 class HistoryEvidenceTests(unittest.TestCase):
     def fixture(self):
         return [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': kind, 'data': {'backend': backend}}) + '\n'})
-                for kind in ('cap_costs', 'artifact_cap', 'artifact_lifecycle') for backend in ('json', 'mongo')] + [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': kind, 'data': {'backend': backend}}) + '\n'}) for kind in ('affinity_placement_lifecycle','affinity_drain_lifecycle') for backend in ('json','mongo')] + [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': 'legacy_tag_lifecycle', 'data': {'backend': backend}}) + '\n'}) for backend in ('json', 'mongo')] + [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': 'legacy_history_reader', 'data': {'backend': 'offline'}}) + '\n'})] + [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': extra, 'data': {'backend': 'mongo'}}) + '\n'}) for extra in ('active_legacy_history_lifecycle', 'deployed_legacy_refusal', 'entity_opaque_lifecycle', 'overlay_v1_archive_restore', 'overlay_v2_archive_restore', 'overlay_v3_archive_restore', 'overlay_v4_archive_restore', 'overlay_v5_archive_restore', 'overlay_v6_archive_restore', 'overlay_v7_archive_restore', 'overlay_v8_archive_restore', 'remaining_alarm_metrics_lifecycle', 'resource_alarm_lifecycle', 'session_lifecycle', 'token_lifecycle', 'audit_lifecycle', 'guest_report_lifecycle', 'guest_expired_projection', 'alarm_namespace_refusal', 'affinity_namespace_refusal', 'unknown_namespace_refusal', 'cached_namespace_backup_refusal')]
+                for kind in ('cap_costs', 'artifact_cap', 'artifact_lifecycle', 'guest_update_offer_lifecycle') for backend in ('json', 'mongo')] + [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': kind, 'data': {'backend': backend}}) + '\n'}) for kind in ('affinity_placement_lifecycle','affinity_drain_lifecycle') for backend in ('json','mongo')] + [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': 'legacy_tag_lifecycle', 'data': {'backend': backend}}) + '\n'}) for backend in ('json', 'mongo')] + [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': 'legacy_history_reader', 'data': {'backend': 'offline'}}) + '\n'})] + [json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind': extra, 'data': {'backend': 'mongo'}}) + '\n'}) for extra in ('active_legacy_history_lifecycle', 'deployed_legacy_refusal', 'entity_opaque_lifecycle', 'overlay_v1_archive_restore', 'overlay_v2_archive_restore', 'overlay_v3_archive_restore', 'overlay_v4_archive_restore', 'overlay_v5_archive_restore', 'overlay_v6_archive_restore', 'overlay_v7_archive_restore', 'overlay_v8_archive_restore', 'remaining_alarm_metrics_lifecycle', 'resource_alarm_lifecycle', 'session_lifecycle', 'token_lifecycle', 'audit_lifecycle', 'guest_report_lifecycle', 'guest_expired_projection', 'alarm_namespace_refusal', 'affinity_namespace_refusal', 'unknown_namespace_refusal', 'cached_namespace_backup_refusal')]
 
     def test_requires_every_backend_and_phase_once(self):
         rows = self.fixture()
         rows.append(json.dumps({'Output': 'HISTORY_EVIDENCE ' + json.dumps({'kind':'legacy_refusal','data':{'backend':'mongo'}}) + '\n'}))
-        self.assertEqual(len(history.measurements('\n'.join(rows))), 36)
+        self.assertEqual(len(history.measurements('\n'.join(rows))), 38)
         for bad in (rows[:-1], rows + [rows[0]], []):
             with self.assertRaises(ValueError):
                 history.measurements('\n'.join(bad))
@@ -37,7 +37,7 @@ class HistoryEvidenceTests(unittest.TestCase):
             rows.append(json.dumps({'Package': 'server', 'Test': 'legacy', 'Output': chunk}))
             rows.append(json.dumps({'Package': 'server', 'Test': 'other', 'Output': 'noise\n'}))
         result = history.measurements('\n'.join(rows))
-        self.assertEqual(len(result), 36)
+        self.assertEqual(len(result), 38)
         self.assertEqual(len(result[-1]['data']['checksums']), 60)
         with self.assertRaises(ValueError):
             history.measurements('\n'.join(rows[:-2]))

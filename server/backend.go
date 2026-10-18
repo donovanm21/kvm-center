@@ -104,6 +104,15 @@ func (b *JSONBackend) Save(_ context.Context, d *persistData) error {
 // The sync seam lets tests verify errors after rename are reported instead
 // of claiming durability when the directory entry has not reached disk.
 func (b *JSONBackend) saveWithDirSync(d *persistData, syncDir func(string) error) error {
+	old, err := b.Load(context.Background())
+	if err != nil {
+		return err
+	}
+	if old != nil {
+		if err = guestUpdateTransition(old.GuestUpdates, d.GuestUpdates); err != nil {
+			return err
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(b.Path), 0o755); err != nil {
 		return err
 	}
@@ -187,7 +196,7 @@ func migrateBackend(ctx context.Context, src, dst Backend) error {
 		}
 	}
 	var saveErr error
-	if target, ok := dst.(*MongoBackend); ok && (d.EntityOverlay != nil || d.LegacyHistory != nil || d.Affinity != nil) {
+	if target, ok := dst.(*MongoBackend); ok && (d.EntityOverlay != nil || d.LegacyHistory != nil || d.Affinity != nil || d.GuestUpdates != nil) {
 		saveErr = target.restoreEntitySnapshot(ctx, d)
 	} else {
 		saveErr = dst.Save(ctx, d)
@@ -215,6 +224,15 @@ func verifyBackendRoundTrip(ctx context.Context, src *persistData, dst Backend) 
 	}
 	if back == nil {
 		return errors.New("read-back returned nil persistData")
+	}
+	if err := src.GuestUpdates.Validate(); err != nil {
+		return err
+	}
+	if err := back.GuestUpdates.Validate(); err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(src.GuestUpdates, back.GuestUpdates) {
+		return errors.New("guest update ledger round-trip mismatch")
 	}
 	if err := src.Affinity.Validate(); err != nil {
 		return err

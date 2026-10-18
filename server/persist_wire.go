@@ -36,6 +36,9 @@ type persistWire struct {
 }
 
 func (d persistData) MarshalJSON() ([]byte, error) {
+	if err := d.GuestUpdates.Validate(); err != nil {
+		return nil, err
+	}
 	if err := d.Affinity.Validate(); err != nil {
 		return nil, err
 	}
@@ -119,6 +122,9 @@ func (d *persistData) UnmarshalJSON(raw []byte) error {
 		return errors.New("VM tag state must be absent or a versioned object, not null")
 	}
 
+	if value, ok := fields["guest_update_state"]; ok && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		return errors.New("null guest update state")
+	}
 	if value, ok := fields["affinity_state"]; ok && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 		return errors.New("null affinity state")
 	}

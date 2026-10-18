@@ -99,6 +99,9 @@ func (s *Store) ExportSnapshot() ([]byte, error) {
 	defer s.saveMu.Unlock()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if len(s.guestUpdateUncertain) > 0 {
+		return nil, fmt.Errorf("guest update durability uncertain; export refused")
+	}
 	if !s.saveGateOpen {
 		return nil, fmt.Errorf("snapshot export is blocked until the initial backend load succeeds")
 	}
@@ -277,6 +280,9 @@ func snapshotFeatureSchemas(raw []byte) (map[string]int, error) {
 		return nil, err
 	}
 	features := map[string]int{}
+	if d.GuestUpdates != nil {
+		features[guestUpdateCollection] = d.GuestUpdates.Version
+	}
 	if d.EntityOverlay != nil {
 		// Decoding persistData may upgrade a supported overlay. The manifest
 		// describes the original archive bytes, not that upgraded snapshot.

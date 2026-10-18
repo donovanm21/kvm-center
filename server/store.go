@@ -21,6 +21,7 @@ func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
 
 // persistData is the on-disk JSON structure.
 type persistData struct {
+	GuestUpdates   *guestUpdateState     `json:"guest_update_state,omitempty"`
 	Affinity       *affinitypolicy.State `json:"affinity_state,omitempty"`
 	Alarms         []*models.Alarm       `json:"alarms,omitempty"`
 	EntityOverlay  *entityOverlay        `json:"entity_bson_overlay,omitempty"`
@@ -96,15 +97,19 @@ const guestToolsFreshness = 5 * time.Minute
 
 // Store is the in-memory data store backed by a JSON file.
 type Store struct {
-	affinity       *affinitypolicy.State
-	affinityMu     sync.Mutex
-	legacyHistory  *legacyHistoryState
-	alarms         []*models.Alarm
-	alarmStates    map[alarmTarget]*alarmState
-	history        *historyState // guarded by mu; never shared across Stores
-	historyEnabled bool          // collection only; persisted state is always preserved
-	vmTags         map[string][]string
-	mu             sync.RWMutex
+	guestUpdates         *guestUpdateState
+	guestUpdateMu        sync.Mutex
+	guestUpdateOwners    map[string]bool
+	guestUpdateUncertain map[string]bool
+	affinity             *affinitypolicy.State
+	affinityMu           sync.Mutex
+	legacyHistory        *legacyHistoryState
+	alarms               []*models.Alarm
+	alarmStates          map[alarmTarget]*alarmState
+	history              *historyState // guarded by mu; never shared across Stores
+	historyEnabled       bool          // collection only; persisted state is always preserved
+	vmTags               map[string][]string
+	mu                   sync.RWMutex
 	// saveWG tracks in-flight async Save goroutines so tests can
 	// wait for persistence before tearing down TempDir. Production
 	// shutdown uses saves to seal admission and drain without Add/Wait races.
@@ -143,10 +148,7 @@ type Store struct {
 	roles      map[string]*models.Role             // keyed by role ID
 	sessions   map[string]*models.Session          // keyed by session token (memory-only)
 	idps       map[string]*models.IdentityProvider // keyed by provider ID
-	// kvmToolsUpdateQueue marks VM UUIDs that should be told to self-
-	// update on their next telemetry POST. The next /api/guest-telemetry
-	// reply for that UUID returns an update_url and the entry clears.
-	kvmToolsUpdateQueue map[string]bool
+
 	// consoleSecret is loaded from the JSON store and re-persisted on
 	// first access; see GetOrCreateConsoleSecret in console_token.go.
 	consoleSecret string
@@ -262,27 +264,26 @@ func NewStore(dataFile string) *Store {
 // knows where the legacy file lives).
 func NewStoreWithBackend(backend Backend, dataFile string) *Store {
 	s := &Store{
-		hosts:               make(map[string]*models.Host),
-		vms:                 make(map[string][]*models.VM),
-		storage:             make(map[string][]*models.StoragePool),
-		vmNotes:             make(map[string]string),
-		guestData:           make(map[string]*guestEntry),
-		users:               make(map[string]*models.User),
-		groups:              make(map[string]*models.Group),
-		roles:               make(map[string]*models.Role),
-		sessions:            make(map[string]*models.Session),
-		idps:                make(map[string]*models.IdentityProvider),
-		kvmToolsUpdateQueue: make(map[string]bool),
-		snapshotPolicies:    make(map[string]*models.SnapshotPolicy),
-		vmStatePrev:         make(map[string]models.VMState),
-		hostOnlinePrev:      make(map[string]bool),
-		apiTokens:           make(map[string]*models.APIToken),
-		hypervisorCerts:     make(map[string]*models.HypervisorCert),
-		caEnrollTokens:      make(map[string]*caEnrollEntry),
-		hostMetrics:         make(map[string]*hostMetricRing),
-		commandLog:          NewCommandLog(),
-		dataFile:            dataFile,
-		backend:             backend,
+		hosts:            make(map[string]*models.Host),
+		vms:              make(map[string][]*models.VM),
+		storage:          make(map[string][]*models.StoragePool),
+		vmNotes:          make(map[string]string),
+		guestData:        make(map[string]*guestEntry),
+		users:            make(map[string]*models.User),
+		groups:           make(map[string]*models.Group),
+		roles:            make(map[string]*models.Role),
+		sessions:         make(map[string]*models.Session),
+		idps:             make(map[string]*models.IdentityProvider),
+		snapshotPolicies: make(map[string]*models.SnapshotPolicy),
+		vmStatePrev:      make(map[string]models.VMState),
+		hostOnlinePrev:   make(map[string]bool),
+		apiTokens:        make(map[string]*models.APIToken),
+		hypervisorCerts:  make(map[string]*models.HypervisorCert),
+		caEnrollTokens:   make(map[string]*caEnrollEntry),
+		hostMetrics:      make(map[string]*hostMetricRing),
+		commandLog:       NewCommandLog(),
+		dataFile:         dataFile,
+		backend:          backend,
 	}
 	s.load()
 	s.ensureBuiltInRoles()
@@ -592,7 +593,7 @@ func (s *Store) applyVMSideDataAt(v *models.VM, now time.Time) {
 	if p.KVMToolsVersion != "" {
 		v.KVMToolsVersion = p.KVMToolsVersion
 	}
-	v.KVMToolsUpdateQueued = s.kvmToolsUpdateQueue[strings.ToLower(p.VMUUID)]
+	v.KVMToolsUpdateQueued = s.guestUpdateQueuedLocked(strings.ToLower(p.VMUUID))
 }
 
 // SetVMNotes updates the note for the given VM UUID and rewrites any in-memory copies.
@@ -612,43 +613,6 @@ func (s *Store) SetVMNotes(uuid, notes string) {
 			}
 		}
 	}
-}
-
-// QueueKVMToolsUpdate marks a set of VM UUIDs to be told to self-update
-// on their next telemetry POST. UUIDs are lowercased for the lookup.
-func (s *Store) QueueKVMToolsUpdate(uuids []string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, u := range uuids {
-		s.kvmToolsUpdateQueue[strings.ToLower(strings.TrimSpace(u))] = true
-	}
-	s.hub.Publish(EventInventory, nil)
-}
-
-// ConsumeKVMToolsUpdate returns and clears the queued flag for one
-// VM UUID — called from handleGuestTelemetry on each report.
-func (s *Store) ConsumeKVMToolsUpdate(uuid string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	key := strings.ToLower(uuid)
-	if !s.kvmToolsUpdateQueue[key] {
-		return false
-	}
-	delete(s.kvmToolsUpdateQueue, key)
-	return true
-}
-
-// QueuedKVMToolsUpdates returns the set of UUIDs currently queued for
-// self-update — used by the UI's Update Center to render the
-// pending state.
-func (s *Store) QueuedKVMToolsUpdates() []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]string, 0, len(s.kvmToolsUpdateQueue))
-	for k := range s.kvmToolsUpdateQueue {
-		out = append(out, k)
-	}
-	return out
 }
 
 // ApplyGuestTelemetry stores a kvm-tools report and re-merges it onto any
