@@ -46,8 +46,8 @@ func compositionAccountingInput(t *testing.T, d *persistData, revision, artifact
 
 // Verify the exact documented writes and generated bookkeeping before reporting
 // their byte-level deltas. Every other application snapshot section must match.
+// Keep assertion locations in this helper: public CI records file/line only.
 func checkCompositionWriteAccounting(t *testing.T, before, after *persistData, a, b rollbackaccounting.Input, started, finished time.Time) *rollbackaccounting.Report {
-	t.Helper()
 	encoded, e := json.Marshal(before)
 	if e != nil {
 		t.Fatal(e)
