@@ -113,3 +113,21 @@ func TestGuestProjectionCopiesNestedReportSlices(t *testing.T) {
 		}
 	}
 }
+
+func TestGuestProjectionNotesIndependentOfGuestFreshness(t *testing.T) {
+	now := time.Now()
+	for _, stamp := range []time.Time{{}, now.Add(-time.Hour), now.Add(time.Hour), now} {
+		vm := &models.VM{UUID: "FIXTURE", Notes: "cached note"}
+		s := &Store{vmNotes: map[string]string{"fixture": "retained note"}, guestData: map[string]*guestEntry{"fixture": {UpdatedAt: stamp}}}
+		if got := s.guestVMView(vm, now); got.Notes != "retained note" {
+			t.Fatal("retained note depends on guest freshness")
+		}
+		delete(s.guestData, "fixture")
+		if got := s.guestVMView(vm, now); got.Notes != "retained note" {
+			t.Fatal("missing guest hides retained note")
+		}
+		if vm.Notes != "cached note" {
+			t.Fatal("read mutated stored VM")
+		}
+	}
+}

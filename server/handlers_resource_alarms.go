@@ -29,9 +29,26 @@ func handleResourceAlarms(s *Store) http.HandlerFunc {
 				return
 			}
 			for _, record := range records {
-				if _, err := historyObject(record, "id", "name", "enabled", "metric", "threshold", "for_seconds", "severity", "hosts", "vms", "created_at", "updated_at"); err != nil {
-					writeError(w, 400, "unsupported alarm JSON fields")
+				var fields map[string]json.RawMessage
+				if json.Unmarshal(record, &fields) != nil || fields == nil {
+					writeError(w, 400, "alarm must be an object")
 					return
+				}
+				for _, key := range []string{"name", "enabled", "metric", "threshold", "for_seconds", "severity"} {
+					if _, ok := fields[key]; !ok {
+						writeError(w, 400, "missing alarm definition field")
+						return
+					}
+				}
+				// Optional timestamps/scopes may be absent; nil scopes mean all
+				// targets. Scalar nulls are rejected by Alarm.UnmarshalJSON.
+				for key := range fields {
+					switch key {
+					case "id", "name", "enabled", "metric", "threshold", "for_seconds", "severity", "hosts", "vms", "created_at", "updated_at":
+					default:
+						writeError(w, 400, "unsupported alarm JSON fields")
+						return
+					}
 				}
 			}
 			var in []*models.Alarm

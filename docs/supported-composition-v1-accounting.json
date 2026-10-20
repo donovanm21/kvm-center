@@ -1,0 +1,1126 @@
+[
+  {
+    "Part": "affinity",
+    "Schema": "synthetic-legacy-affinity-6db8c723-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "affinity_rules",
+    "DataSHA256": "0d4bf91b87d6feab26a75a014989f5f24b1788ba4fb4368f9b8671b0e1e5e71d",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "synthetic-preference",
+      "synthetic-separate"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "createdat",
+        "BSONType": "string",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "enabled",
+        "BSONType": "boolean",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "id",
+        "BSONType": "string",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "kind",
+        "BSONType": "string",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "name",
+        "BSONType": "string",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "strength",
+        "BSONType": "string",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "updatedat",
+        "BSONType": "string",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "vms",
+        "BSONType": "array",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "vms[]",
+        "BSONType": "string",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "Part": "entities",
+    "Schema": "synthetic-supported-composition-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "alarms",
+    "DataSHA256": "0e0667fe0176404e88ad2b57f3c62fbcde046bdb87ab8663a3d52f9351d4afe4",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "composition-alarm"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "enabled",
+        "BSONType": "boolean",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "forseconds",
+        "BSONType": "32-bit integer",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "hosts",
+        "BSONType": "array",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "hosts[]",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "metric",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "name",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "opaque",
+        "BSONType": "128-bit decimal",
+        "Treatment": "opaque byte preservation; no behavioral meaning"
+      },
+      {
+        "Path": "severity",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "threshold",
+        "BSONType": "double",
+        "Treatment": "typed component projection; only documented operations qualified"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "Part": "entities",
+    "Schema": "synthetic-supported-composition-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "api_tokens",
+    "DataSHA256": "1cf6812da30d7cb0a962f99b3171ed2910e42b2f752f28236ef4ffc013503836",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "composition-token"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "createdat",
+        "BSONType": "UTC datetime",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "hash",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "kind",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "name",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "opaque",
+        "BSONType": "128-bit decimal",
+        "Treatment": "opaque byte preservation; no behavioral meaning"
+      },
+      {
+        "Path": "ownerid",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "revoked",
+        "BSONType": "boolean",
+        "Treatment": "typed component projection; only documented operations qualified"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "Part": "entities",
+    "Schema": "synthetic-supported-composition-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "audit_events",
+    "DataSHA256": "0b4ac07e43cf8cf40fbccd295bd61d6d8687810b847f48396a1567fff9262c80",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "composition-audit"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "action",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "actor_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "at",
+        "BSONType": "UTC datetime",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "opaque",
+        "BSONType": "128-bit decimal",
+        "Treatment": "opaque byte preservation; no behavioral meaning"
+      },
+      {
+        "Path": "success",
+        "BSONType": "boolean",
+        "Treatment": "typed component projection; only documented operations qualified"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "Part": "entities",
+    "Schema": "synthetic-supported-composition-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "groups",
+    "DataSHA256": "276e7603559a274a66eb46ffbc45b864311c8c585cae3c3cba96c21bc4ba6236",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "fixture-group"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "name",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "opaque",
+        "BSONType": "128-bit decimal",
+        "Treatment": "opaque byte preservation; no behavioral meaning"
+      },
+      {
+        "Path": "roleids",
+        "BSONType": "array",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "roleids[]",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "Part": "entities",
+    "Schema": "synthetic-supported-composition-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "guest_data",
+    "DataSHA256": "c18913e0146ead47ceed8b21f7346186f541bcfc477ee667ac09ee0c3348e274",
+    "IndexSHA256": "e232b3ffef0627d3e44d92cea662fae67ee982ac9281ae3798382a062ae72799",
+    "DocumentIDs": [
+      "11111111-1111-4111-8111-111111111111"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "entry",
+        "BSONType": "embedded document",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "entry.payload",
+        "BSONType": "embedded document",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "entry.payload.arch",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "entry.payload.hostname",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "entry.payload.vmuuid",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "entry.updatedat",
+        "BSONType": "UTC datetime",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "opaque",
+        "BSONType": "128-bit decimal",
+        "Treatment": "opaque byte preservation; no behavioral meaning"
+      },
+      {
+        "Path": "updated_at",
+        "BSONType": "UTC datetime",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "vm_uuid",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      },
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "updated_at_1",
+        "key": {
+          "updated_at": {
+            "$numberInt": "1"
+          }
+        },
+        "expireAfterSeconds": {
+          "$numberInt": "300"
+        }
+      }
+    ]
+  },
+  {
+    "Part": "entities",
+    "Schema": "synthetic-supported-composition-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "hosts",
+    "DataSHA256": "80da2de91afe714be96dadfe3ec87421c07bc395b1e7a56222eccb1e5cd05064",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "composition-peer",
+      "synthetic-host"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "opaque",
+        "BSONType": "128-bit decimal",
+        "Treatment": "opaque byte preservation; no behavioral meaning"
+      },
+      {
+        "Path": "status",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "Part": "entities",
+    "Schema": "synthetic-supported-composition-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "removed_hosts",
+    "DataSHA256": "6f4d2eb27d03c828cf8cb5a9f9fa4850ed4c95edbf12599c5ee2c9aa661fa90c",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "composition-retired"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "hostid",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "opaque",
+        "BSONType": "128-bit decimal",
+        "Treatment": "opaque byte preservation; no behavioral meaning"
+      },
+      {
+        "Path": "reason",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "removedat",
+        "BSONType": "UTC datetime",
+        "Treatment": "typed component projection; only documented operations qualified"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "Part": "entities",
+    "Schema": "synthetic-supported-composition-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "roles",
+    "DataSHA256": "2c65bb2e8144e16e605cdbb76326f3bba5314aed14aae2a7c1cacad76232d420",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "fixture-role"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "name",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "opaque",
+        "BSONType": "128-bit decimal",
+        "Treatment": "opaque byte preservation; no behavioral meaning"
+      },
+      {
+        "Path": "permissions",
+        "BSONType": "array",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "permissions[]",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "Part": "entities",
+    "Schema": "synthetic-supported-composition-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "sessions",
+    "DataSHA256": "1bd351886c604554bb83b02a0fb62ca4745f7fec6f58ca49d0d45d5466a75d42",
+    "IndexSHA256": "7461a0205ee25888c78cb7677564591f3de7152a6698df1c68dfdec4f6b30e1d",
+    "DocumentIDs": [
+      "composition-session"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "createdat",
+        "BSONType": "UTC datetime",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "expiresat",
+        "BSONType": "UTC datetime",
+        "Treatment": "explicit canonical alias conversion to expires_at; datetime bytes retained"
+      },
+      {
+        "Path": "opaque",
+        "BSONType": "128-bit decimal",
+        "Treatment": "opaque byte preservation; no behavioral meaning"
+      },
+      {
+        "Path": "token",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "userid",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      },
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "expires_at_1",
+        "key": {
+          "expires_at": {
+            "$numberInt": "1"
+          }
+        },
+        "expireAfterSeconds": {
+          "$numberInt": "0"
+        }
+      }
+    ]
+  },
+  {
+    "Part": "entities",
+    "Schema": "synthetic-supported-composition-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "storage",
+    "DataSHA256": "fedb7a4824236a462938795fa26b18046048695562a6a0be9ceac71988ad2fb5",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "synthetic-host|CompositionPool"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "capacitygb",
+        "BSONType": "double",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "hostid",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "name",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "opaque",
+        "BSONType": "128-bit decimal",
+        "Treatment": "opaque byte preservation; no behavioral meaning"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "Part": "entities",
+    "Schema": "synthetic-supported-composition-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "users",
+    "DataSHA256": "6a6b7fd5dee26e48438f74b6a6ab034a6c8e692cbb0786d39aa5a935f949a9f2",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "fixture-reader"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "enabled",
+        "BSONType": "boolean",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "opaque",
+        "BSONType": "128-bit decimal",
+        "Treatment": "opaque byte preservation; no behavioral meaning"
+      },
+      {
+        "Path": "roleids",
+        "BSONType": "array",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "roleids[]",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "username",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "Part": "entities",
+    "Schema": "synthetic-supported-composition-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "vm_notes",
+    "DataSHA256": "7a22e546f392ba1bf788c494d89a27f5209e3eb1443921d47146da91df5579b1",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "11111111-1111-4111-8111-111111111111"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "notes",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "opaque",
+        "BSONType": "128-bit decimal",
+        "Treatment": "opaque byte preservation; no behavioral meaning"
+      },
+      {
+        "Path": "vm_uuid",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "Part": "entities",
+    "Schema": "synthetic-supported-composition-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "vms",
+    "DataSHA256": "ff9fbce7cfba26e97c1dc6d3b6132a4a3af54d5e2f5314e26262b493bfc14e68",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+      "33333333-3333-4333-8333-333333333333"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "host_id",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "name",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "opaque",
+        "BSONType": "128-bit decimal",
+        "Treatment": "opaque byte preservation; no behavioral meaning"
+      },
+      {
+        "Path": "state",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      },
+      {
+        "Path": "uuid",
+        "BSONType": "string",
+        "Treatment": "typed component projection; only documented operations qualified"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "Part": "history",
+    "Schema": "synthetic-legacy-history-reader-v1",
+    "Source": "6db8c7237bd7cf507532391c0dc0c2e36a70f696",
+    "Collection": "perf_history",
+    "DataSHA256": "cb4e6edc389417fc9bf493b528d24a41d38730e164d50c12d05dbe7cf80d3ac2",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "synthetic-host"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "host",
+        "BSONType": "string",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers",
+        "BSONType": "embedded document",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1d",
+        "BSONType": "array",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1d[]",
+        "BSONType": "embedded document",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1d[].cpu_avg",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1d[].cpu_max",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1d[].mem_avg",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1d[].mem_max",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1d[].n",
+        "BSONType": "32-bit integer",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1d[].storage_avg",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1d[].storage_max",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1d[].t",
+        "BSONType": "64-bit integer",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1d[].vms",
+        "BSONType": "32-bit integer",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1h",
+        "BSONType": "array",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1h[]",
+        "BSONType": "embedded document",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1h[].cpu_avg",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1h[].cpu_max",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1h[].mem_avg",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1h[].mem_max",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1h[].n",
+        "BSONType": "32-bit integer",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1h[].storage_avg",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1h[].storage_max",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1h[].t",
+        "BSONType": "64-bit integer",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.1h[].vms",
+        "BSONType": "32-bit integer",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.5m",
+        "BSONType": "array",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.5m[]",
+        "BSONType": "embedded document",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.5m[].cpu_avg",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.5m[].cpu_max",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.5m[].mem_avg",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.5m[].mem_max",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.5m[].n",
+        "BSONType": "32-bit integer",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.5m[].storage_avg",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.5m[].storage_max",
+        "BSONType": "double",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.5m[].t",
+        "BSONType": "64-bit integer",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tiers.5m[].vms",
+        "BSONType": "32-bit integer",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "Part": "tags",
+    "Schema": "synthetic-legacy-tags-c018b31-v1",
+    "Source": "c018b31b74d7d75ed8c49921dc0812bf5999d81f",
+    "Collection": "vm_tags",
+    "DataSHA256": "91afe8c116b1d6b51855bbda7e4b9e1f5b0d5b8a1b845d4b672d4777ae4369a4",
+    "IndexSHA256": "44d49651768495c7d37103dc9db759da2335ec4de93e5d82eb82058131a736e0",
+    "DocumentIDs": [
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222"
+    ],
+    "Fields": [
+      {
+        "Path": "_id",
+        "BSONType": "string",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tags",
+        "BSONType": "array",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      },
+      {
+        "Path": "tags[]",
+        "BSONType": "string",
+        "Treatment": "explicit pinned offline conversion; original BSON retained"
+      }
+    ],
+    "Indexes": [
+      {
+        "v": {
+          "$numberInt": "2"
+        },
+        "name": "_id_",
+        "key": {
+          "_id": {
+            "$numberInt": "1"
+          }
+        }
+      }
+    ]
+  }
+]

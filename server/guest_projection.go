@@ -21,6 +21,10 @@ func (s *Store) guestVMView(v *models.VM, now time.Time) *models.VM {
 		return nil
 	}
 	cp := *v
+	// Notes are independent retained metadata, even without a fresh guest report.
+	if notes, ok := s.vmNotes[strings.ToLower(v.UUID)]; ok {
+		cp.Notes = notes
+	}
 	entry := s.guestData[strings.ToLower(v.UUID)]
 	if cp.GuestSource == "kvm-tools" {
 		clearStaleGuestData(&cp)
