@@ -21,6 +21,7 @@ import (
 	"kvm-center/internal/legacyfixture"
 	"kvm-center/internal/models"
 	"kvm-center/internal/offlinestaging"
+	"kvm-center/internal/rollbackaccounting"
 )
 
 func TestHistoryAcceptanceSupportedComposition(t *testing.T) {
@@ -302,6 +303,24 @@ func TestHistoryAcceptanceSupportedComposition(t *testing.T) {
 	checkReads(false)
 	verifyEntities(false)
 	initialIndexes := indexes()
+	accountingStarted := time.Now().UTC().Truncate(time.Second)
+	baseline := unpackAcceptance(t, p.request(t, "GET", "/api/admin/backup", nil, 200), t.TempDir(), 0)
+	artifact, e := os.ReadFile(binary)
+	if e != nil {
+		t.Fatal(e)
+	}
+	indexBytes := func(in map[string][]bson.M) map[string][]byte {
+		out := map[string][]byte{}
+		for name, definitions := range in {
+			raw, e := json.Marshal(definitions)
+			if e != nil {
+				t.Fatal(e)
+			}
+			out[name] = raw
+		}
+		return out
+	}
+	baselineAccounting := compositionAccountingInput(t, baseline, os.Getenv("KVMC_HISTORY_SHA"), rollbackaccounting.Hash(artifact), sums, indexBytes(initialIndexes))
 	p.request(t, "POST", "/api/vms/notes", []byte(`{"uuid":"11111111-1111-4111-8111-111111111111","notes":"composition durable note"}`), 200)
 	p.request(t, "PUT", "/api/groups/fixture-group", []byte(`{"description":"composition durable group"}`), 200)
 	alarms := cloneAlarms(d.Alarms)
@@ -318,6 +337,22 @@ func TestHistoryAcceptanceSupportedComposition(t *testing.T) {
 	restoreRoot := t.TempDir()
 	snapshot := unpackAcceptance(t, backup, restoreRoot, 0)
 	checkSnapshot(snapshot)
+	afterAccounting := compositionAccountingInput(t, snapshot, os.Getenv("KVMC_HISTORY_SHA"), rollbackaccounting.Hash(artifact), sums, indexBytes(indexes()))
+	writeAccounting := checkCompositionWriteAccounting(t, baseline, snapshot, baselineAccounting, afterAccounting, accountingStarted, time.Now().UTC())
+	writeAccountingJSON, e := json.Marshal(writeAccounting)
+	if e != nil {
+		t.Fatal(e)
+	}
+	// Canonical map-key ordering makes the public report hash independently verifiable.
+	var accountingObject map[string]any
+	if e = json.Unmarshal(writeAccountingJSON, &accountingObject); e != nil {
+		t.Fatal(e)
+	}
+	writeAccountingJSON, e = json.Marshal(accountingObject)
+	if e != nil {
+		t.Fatal(e)
+	}
+
 	b = newMongoIntegrationBackend(t)
 	requireInactiveGuestTTL(t, b)
 	names, e := b.db.ListCollectionNames(t.Context(), bson.D{})
@@ -353,5 +388,6 @@ func TestHistoryAcceptanceSupportedComposition(t *testing.T) {
 	accountingRaw, _ := json.MarshalIndent(accounting, "", "  ")
 	accountingRaw = append(accountingRaw, '\n')
 	accountingSum := sha256.Sum256(accountingRaw)
+	emitAcceptance(t, "supported_composition_write_accounting", map[string]any{"backend": "mongo", "schema": rollbackaccounting.Schema, "report": writeAccounting, "report_sha256": rollbackaccounting.Hash(writeAccountingJSON), "original_checksums": sums, "scope": "two verified current-format composition backups; original-to-current conversion delta excluded", "current_snapshot_sections_accounted": len(writeAccounting.SectionInventory), "entity_collections_accounted": 13, "requested_edits_accounted": 4, "generated_audit_records_accounted": 4, "generated_operator_tasks_accounted": 1, "unexplained_differences": 0, "activation": false, "replay_supported": false, "rollback_safe": false})
 	emitAcceptance(t, "supported_composition_lifecycle", map[string]any{"schema": legacyfixture.CompositionSchema, "backend": "mongo", "entity_collections": 13, "converted_components": []string{"deployed-history", "deployed-affinity", "saved-tags"}, "field_index_accounting_sha256": hex.EncodeToString(accountingSum[:]), "original_checksums": sums, "runtime_indexes": initialIndexes, "boot_read_write_restart": true, "application_backup_fresh_restore": true, "second_backup_and_restart": true, "originals_unchanged": true, "opaque_values_preserved": true, "converted_states_preserved": true, "tag_state_preserved": true, "ttl_monitor_disabled": true, "legacy_jobs_present": false, "native_operations_executed": false, "full_arbitrary_schema_compatible": false, "legacy_rollback_verified": false})
 }
