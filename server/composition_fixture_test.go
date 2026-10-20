@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"kvm-center/internal/offlinestaging"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -157,6 +158,54 @@ func TestSupportedCompositionEntityWire(t *testing.T) {
 			if !equalRaw(bson.Raw(old).Lookup("opaque"), bson.Raw(got).Lookup("opaque")) {
 				t.Fatalf("opaque lost %s", col)
 			}
+		}
+	}
+	statePath := filepath.Join(root, "state.json")
+	backend := NewJSONBackend(statePath)
+	if err := backend.Save(t.Context(), d); err != nil {
+		t.Fatal(err)
+	}
+	store := NewStoreWithBackend(backend, statePath)
+	t.Cleanup(func() { store.saveWG.Wait() })
+	store.SetVMNotes(legacyfixture.VMID, "composition durable note")
+	alarms := cloneAlarms(d.Alarms)
+	alarms[0].Name = "composition durable alarm"
+	requestBody, _ := json.Marshal(alarms)
+	response := httptest.NewRecorder()
+	handleResourceAlarms(store)(response, httptest.NewRequest("PUT", "/api/alarms", bytes.NewReader(requestBody)))
+	if response.Code != 200 {
+		t.Fatalf("composition alarm edit: %d %s", response.Code, response.Body.String())
+	}
+	for _, field := range []string{"name", "enabled", "metric", "threshold", "for_seconds", "severity"} {
+		for _, missing := range []bool{false, true} {
+			var records []map[string]json.RawMessage
+			if err := json.Unmarshal(requestBody, &records); err != nil {
+				t.Fatal(err)
+			}
+			if missing {
+				delete(records[0], field)
+			} else {
+				records[0][field] = json.RawMessage("null")
+			}
+			invalid, _ := json.Marshal(records)
+			w := httptest.NewRecorder()
+			handleResourceAlarms(store)(w, httptest.NewRequest("PUT", "/api/alarms", bytes.NewReader(invalid)))
+			if w.Code != 400 {
+				t.Fatalf("ambiguous alarm %s accepted", field)
+			}
+		}
+	}
+	for _, field := range []string{"unknown_future", "firing_on"} {
+		var records []map[string]json.RawMessage
+		if err := json.Unmarshal(requestBody, &records); err != nil {
+			t.Fatal(err)
+		}
+		records[0][field] = json.RawMessage("[]")
+		invalid, _ := json.Marshal(records)
+		w := httptest.NewRecorder()
+		handleResourceAlarms(store)(w, httptest.NewRequest("PUT", "/api/alarms", bytes.NewReader(invalid)))
+		if w.Code != 400 {
+			t.Fatal("unsupported alarm field accepted")
 		}
 	}
 	if bytes.Contains(raw, []byte("unknown_future")) {
