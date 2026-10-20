@@ -168,6 +168,24 @@ func checkCompositionWriteAccounting(t *testing.T, before, after *persistData, a
 		t.Fatal(e)
 	}
 	if !bytes.Equal(x, y) {
+		var expected, actual map[string]json.RawMessage
+		if json.Unmarshal(x, &expected) != nil || json.Unmarshal(y, &actual) != nil {
+			t.Fatal("snapshot diagnostic decode")
+		}
+		keys := map[string]bool{}
+		for key := range expected {
+			keys[key] = true
+		}
+		for key := range actual {
+			keys[key] = true
+		}
+		for key := range keys {
+			if !bytes.Equal(expected[key], actual[key]) {
+				t.Run("snapshot_section_sha256_"+rollbackaccounting.Hash([]byte(key)), func(t *testing.T) {
+					t.Fatal("unexplained application snapshot section delta")
+				})
+			}
+		}
 		t.Fatal("unexplained application snapshot delta")
 	}
 	report, e := rollbackaccounting.Compare(a, b)
