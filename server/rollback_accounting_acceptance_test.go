@@ -14,6 +14,8 @@ import (
 	"kvm-center/internal/legacyfixture"
 	"kvm-center/internal/models"
 	"kvm-center/internal/rollbackaccounting"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 func compositionAccountingInput(t *testing.T, d *persistData, revision, artifact string, originals map[string]string, indexes map[string][]byte) rollbackaccounting.Input {
@@ -55,6 +57,16 @@ func checkCompositionWriteAccounting(t *testing.T, before, after *persistData, a
 	var want persistData
 	if e = json.Unmarshal(encoded, &want); e != nil {
 		t.Fatal(e)
+	}
+	// These three roles are generated on first boot, not legacy records. BSON
+	// persists their creation times at millisecond precision. Account for that
+	// exact restart delta while retaining every other role field unchanged.
+	for _, id := range []string{"role_admin", "role_operator", "role_viewer"} {
+		old, actual := want.Roles[id], after.Roles[id]
+		if old == nil || actual == nil || !old.BuiltIn || old.CreatedAt.IsZero() || !actual.CreatedAt.Equal(old.CreatedAt.Truncate(time.Millisecond)) {
+			t.Fatal("unaccounted generated role timestamp")
+		}
+		old.CreatedAt = actual.CreatedAt
 	}
 	want.VMNotes[legacyfixture.VMID] = "composition durable note"
 	for _, vms := range want.VMs {
@@ -247,4 +259,30 @@ func checkCompositionWriteAccounting(t *testing.T, before, after *persistData, a
 		t.Fatal("audit overlay accounting incomplete")
 	}
 	return report
+}
+
+// Exercise the same BSON model codec used by Mongo persistence. This is a
+// precision-accounting expectation, not permission or role normalization.
+func TestGeneratedRoleBSONTimestampPrecision(t *testing.T) {
+	s := &Store{roles: map[string]*models.Role{}}
+	s.ensureBuiltInRoles()
+	if len(s.roles) != 3 {
+		t.Fatal("generated role inventory")
+	}
+	for _, role := range s.roles {
+		role.CreatedAt = time.Date(2026, 1, 2, 3, 4, 5, 123456789, time.UTC)
+		raw, err := bson.Marshal(role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var decoded models.Role
+		if err = bson.Unmarshal(raw, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		expected := *role
+		expected.CreatedAt = expected.CreatedAt.Truncate(time.Millisecond)
+		if !reflect.DeepEqual(expected, decoded) {
+			t.Fatal("unexpected role codec delta")
+		}
+	}
 }

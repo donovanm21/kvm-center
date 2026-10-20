@@ -51,6 +51,10 @@ post-restart backup. It checks:
 - Exactly four generated audit records: baseline backup export and the note,
   group and tag edits; all previous audit records remain unchanged.
 - Exactly one completed server-side group-update task, with no native dispatch.
+- The three built-in roles generated on first boot retain every field except
+  the precisely accounted BSON millisecond representation of their creation
+  timestamps after restart. Original legacy role fields are not normalized;
+  the raw report still records this typed-section difference.
 - Every other typed snapshot section and raw entity field unchanged, and no
   runtime index changes.
 
