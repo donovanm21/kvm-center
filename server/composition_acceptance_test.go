@@ -129,7 +129,6 @@ func TestHistoryAcceptanceSupportedComposition(t *testing.T) {
 		}
 	}
 	verifyEntities := func(edited bool) {
-		t.Helper()
 		for col, all := range docs {
 			for len(all) > 0 {
 				doc, rest, ok := bsoncore.ReadDocument(all)
@@ -220,7 +219,6 @@ func TestHistoryAcceptanceSupportedComposition(t *testing.T) {
 	}
 	p := startAcceptance(t, binary, root, b, token, false)
 	checkReads := func(edited bool) {
-		t.Helper()
 		affinity, e := loadAffinityState(t.Context(), b.db)
 		if e != nil || !reflect.DeepEqual(affinity, d.Affinity) {
 			t.Fatal("composed affinity state changed", e)
