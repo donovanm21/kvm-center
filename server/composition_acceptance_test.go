@@ -158,6 +158,10 @@ func TestHistoryAcceptanceSupportedComposition(t *testing.T) {
 				}
 				if edited {
 					switch want := wantModel.(type) {
+					case *models.VM:
+						if want.UUID == legacyfixture.VMID {
+							want.Notes = "composition durable note"
+						}
 					case *entityVMNote:
 						want.Text = "composition durable note"
 					case *models.Group:
